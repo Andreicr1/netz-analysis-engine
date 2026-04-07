@@ -10,14 +10,31 @@ Optimized for high-frequency market data:
   - DEBUG-level latency tracing (``ingest_at`` → ``emit_at``) with zero
     overhead in production (guarded by ``logger.isEnabledFor``).
 
+Stability Guardrails (Phase 2 retrofit, §4.1 B1.5/B1.6)
+-------------------------------------------------------
+The manager is now a thin orchestration layer over
+``RateLimitedBroadcaster``. The broadcaster owns one
+``BoundedOutboundChannel`` per connection and performs fan-out via
+non-blocking ``offer()`` calls — a slow client can no longer stall the
+delivery loop for any other client. Connections are keyed by
+``ConnectionId`` (UUID) instead of the legacy ``id(ws)`` (a Python
+identity that is reusable after garbage collection and would silently
+allow cross-talk between recycled WebSocket slots).
+
 Connection lifecycle:
   1. Client opens WS with JWT query param → authenticate_ws() validates.
-  2. Client sends ``{"action": "subscribe", "tickers": ["SPY", "QQQ"]}``
-  3. Manager spawns per-ticker ``_channel_listener`` tasks for each
+  2. ``ConnectionManager.accept()`` mints a fresh ``ConnectionId``,
+     attaches the connection to the broadcaster, and returns the
+     ``ClientConnection`` (with ``conn_id`` field) to the route.
+  3. Client sends ``{"action": "subscribe", "tickers": ["SPY", "QQQ"]}``
+  4. Manager spawns per-ticker ``_channel_listener`` tasks for each
      subscribed ticker.  One asyncio.Task per channel, shared across
      all connections subscribed to that ticker.
-  4. On each Redis message, forward to all connections watching that ticker.
-  5. Heartbeat ping every 15s keeps the connection alive.
+  5. On each Redis message, the listener forwards to all connections
+     watching that ticker via ``broadcaster.fanout()``.
+  6. Heartbeat ping every 15s keeps the connection alive.
+  7. ``disconnect(conn_id)`` detaches the channel and stops any
+     orphaned per-ticker listeners.
 """
 
 from __future__ import annotations
@@ -33,6 +50,13 @@ import redis.asyncio as aioredis
 from fastapi import WebSocket
 
 from app.core.jobs.tracker import get_redis_pool
+from app.core.runtime.broadcaster import (
+    BroadcasterConfig,
+    ConnectionId,
+    RateLimitedBroadcaster,
+    make_connection_id,
+)
+from app.core.runtime.outbound_channel import ChannelConfig, DropPolicy
 from app.core.security.clerk_auth import Actor
 
 logger = logging.getLogger(__name__)
@@ -40,6 +64,22 @@ logger = logging.getLogger(__name__)
 MARKET_CHANNEL_PREFIX = "market:prices:"  # per-ticker: market:prices:SPY
 HEARTBEAT_INTERVAL = 15  # seconds
 _TRACE = logging.DEBUG  # Use DEBUG for latency traces
+
+# ── Tunables for the per-connection outbound channels ──────────
+# These defaults match §2.1 of the design spec: 256 messages queued
+# per client, 2-second send timeout, drop the oldest tick when the
+# queue is full (freshness > completeness for market data), and
+# evict after 3 consecutive failures.
+_DEFAULT_CHANNEL_CFG = ChannelConfig(
+    max_queued=256,
+    send_timeout_s=2.0,
+    drop_policy=DropPolicy.DROP_OLDEST,
+    eviction_threshold=3,
+)
+# Hard cap on simultaneously attached WS clients per process. Matches
+# the §2.2 default and the soak-test budget in §6.5 C18. Raise
+# deliberately for deployments that need more capacity.
+_DEFAULT_BROADCASTER_CFG = BroadcasterConfig(max_connections=64)
 
 
 def _channel_for(ticker: str) -> str:
@@ -49,8 +89,14 @@ def _channel_for(ticker: str) -> str:
 
 @dataclass
 class ClientConnection:
-    """Tracks a single authenticated WebSocket client."""
+    """Tracks a single authenticated WebSocket client.
 
+    ``conn_id`` is the broadcaster identity — every call site that
+    needs to address this connection (send_personal, disconnect,
+    update_subscriptions) uses the UUID, never ``id(ws)``.
+    """
+
+    conn_id: ConnectionId
     ws: WebSocket
     actor: Actor
     tickers: set[str] = field(default_factory=set)
@@ -59,16 +105,32 @@ class ClientConnection:
 class ConnectionManager:
     """Manages WebSocket connections with per-ticker Redis Pub/Sub.
 
-    Thread-safe: all mutations go through asyncio — no threading.Lock needed.
-    One instance per app (stored on ``app.state``).
+    Owns a ``RateLimitedBroadcaster`` for fan-out and a per-ticker
+    Redis channel listener registry. Mutations of the connection /
+    ticker maps are single-threaded by virtue of running on the
+    asyncio event loop — no explicit lock is required because every
+    public mutation is synchronous and the broadcaster handles its
+    own internal serialisation.
+
+    One instance per app (stored on ``app.state.ws_manager``).
     """
 
-    def __init__(self) -> None:
-        self._connections: dict[int, ClientConnection] = {}
-        # ticker -> set of ws ids subscribed to it
-        self._ticker_subs: dict[str, set[int]] = {}
+    def __init__(
+        self,
+        *,
+        channel_cfg: ChannelConfig | None = None,
+        broadcaster_cfg: BroadcasterConfig | None = None,
+    ) -> None:
+        self._connections: dict[ConnectionId, ClientConnection] = {}
+        # ticker -> set of conn_ids subscribed to it
+        self._ticker_subs: dict[str, set[ConnectionId]] = {}
         # ticker -> asyncio.Task running the channel listener
-        self._channel_tasks: dict[str, asyncio.Task] = {}
+        self._channel_tasks: dict[str, asyncio.Task[None]] = {}
+        self._broadcaster = RateLimitedBroadcaster(
+            channel_cfg=channel_cfg or _DEFAULT_CHANNEL_CFG,
+            cfg=broadcaster_cfg or _DEFAULT_BROADCASTER_CFG,
+        )
+        self._started = False
 
     @property
     def active_count(self) -> int:
@@ -78,51 +140,96 @@ class ConnectionManager:
     def active_channels(self) -> int:
         return len(self._channel_tasks)
 
+    @property
+    def broadcaster(self) -> RateLimitedBroadcaster:
+        """Expose the underlying broadcaster (read-only — for metrics/tests)."""
+        return self._broadcaster
+
+    # ── Lifecycle ──────────────────────────────────────────────
+
+    async def start(self) -> None:
+        """Start the broadcaster's eviction sweeper. Idempotent.
+
+        Safe to call multiple times. The lifespan handler in
+        ``main.py`` calls this before any client can connect.
+        """
+        if self._started:
+            return
+        await self._broadcaster.start()
+        self._started = True
+
     async def accept(self, ws: WebSocket, actor: Actor) -> ClientConnection:
-        """Accept a new WebSocket connection and register it."""
+        """Accept a new WebSocket connection and register it.
+
+        Mints a fresh ``ConnectionId``, attaches the connection to the
+        broadcaster (which spawns its drain task), and returns the
+        ``ClientConnection`` so the route can hold the conn_id for the
+        rest of the handler.
+        """
         await ws.accept()
-        conn = ClientConnection(ws=ws, actor=actor)
-        self._connections[id(ws)] = conn
+        # Lazy-start the broadcaster on first accept so test fixtures
+        # that construct a fresh manager don't need to remember to
+        # call start() before exercising the WS endpoint.
+        if not self._started:
+            await self.start()
+
+        conn_id = make_connection_id()
+        await self._broadcaster.attach(conn_id, ws)
+        conn = ClientConnection(conn_id=conn_id, ws=ws, actor=actor)
+        self._connections[conn_id] = conn
         logger.info(
-            "ws_connected actor=%s org=%s active=%d",
+            "ws_connected conn_id=%s actor=%s org=%s active=%d",
+            conn_id,
             actor.actor_id,
             actor.organization_id,
             self.active_count,
         )
         return conn
 
-    def disconnect(self, ws: WebSocket) -> None:
-        """Remove a connection and clean up its ticker subscriptions."""
-        conn = self._connections.pop(id(ws), None)
-        if not conn:
+    async def disconnect(self, conn_id: ConnectionId) -> None:
+        """Remove a connection and clean up its ticker subscriptions.
+
+        Asynchronous because the broadcaster's ``detach`` cancels and
+        joins the per-connection drain task — synchronous teardown
+        would leak the task on busy event loops.
+        """
+        conn = self._connections.pop(conn_id, None)
+        if conn is None:
             return
 
-        ws_id = id(ws)
         # Remove from all ticker subscription sets
         for ticker in list(conn.tickers):
             subs = self._ticker_subs.get(ticker)
             if subs:
-                subs.discard(ws_id)
+                subs.discard(conn_id)
                 if not subs:
                     # No more subscribers — stop the channel listener
                     self._stop_channel(ticker)
 
+        await self._broadcaster.detach(conn_id, drain=False)
+
         logger.info(
-            "ws_disconnected actor=%s active=%d",
+            "ws_disconnected conn_id=%s actor=%s active=%d",
+            conn_id,
             conn.actor.actor_id,
             self.active_count,
         )
 
-    def update_subscriptions(self, ws: WebSocket, new_tickers: set[str]) -> None:
+    def update_subscriptions(
+        self,
+        conn_id: ConnectionId,
+        new_tickers: set[str],
+    ) -> None:
         """Update the ticker subscriptions for a connection.
 
         Starts/stops per-ticker Redis channel listeners as needed.
+        Synchronous — no I/O happens here, only dict mutations and
+        ``asyncio.create_task`` for the listener spawn.
         """
-        conn = self._connections.get(id(ws))
+        conn = self._connections.get(conn_id)
         if not conn:
             return
 
-        ws_id = id(ws)
         old_tickers = conn.tickers
         added = new_tickers - old_tickers
         removed = old_tickers - new_tickers
@@ -131,7 +238,7 @@ class ConnectionManager:
         for ticker in removed:
             subs = self._ticker_subs.get(ticker)
             if subs:
-                subs.discard(ws_id)
+                subs.discard(conn_id)
                 if not subs:
                     self._stop_channel(ticker)
 
@@ -139,17 +246,18 @@ class ConnectionManager:
         for ticker in added:
             if ticker not in self._ticker_subs:
                 self._ticker_subs[ticker] = set()
-            self._ticker_subs[ticker].add(ws_id)
+            self._ticker_subs[ticker].add(conn_id)
             if ticker not in self._channel_tasks:
                 self._channel_tasks[ticker] = asyncio.create_task(
                     self._channel_listener(ticker),
+                    name=f"ws_channel_listener_{ticker}",
                 )
 
-        conn.tickers = new_tickers
+        conn.tickers = set(new_tickers)
 
         logger.debug(
-            "ws_subscriptions_updated actor=%s tickers=%s (+%d -%d)",
-            conn.actor.actor_id,
+            "ws_subscriptions_updated conn_id=%s tickers=%s (+%d -%d)",
+            conn_id,
             new_tickers,
             len(added),
             len(removed),
@@ -212,7 +320,7 @@ class ConnectionManager:
                             # Strip internal field before sending to client
                             message.pop("_ingest_at", None)
 
-                    await self._fanout(message, subs)
+                    self._fanout(message, subs)
 
             except asyncio.CancelledError:
                 logger.debug("channel_listener_cancelled channel=%s", channel)
@@ -229,55 +337,70 @@ class ConnectionManager:
                 except Exception:
                     pass
 
-    async def _fanout(self, message: dict[str, Any], ws_ids: set[int]) -> None:
-        """Send a message to all connections in the subscriber set."""
-        stale: list[WebSocket] = []
+    def _fanout(self, message: dict[str, Any], conn_ids: set[ConnectionId]) -> None:
+        """Offer a serialized message to every subscriber via the broadcaster.
+
+        Non-blocking. Eviction of slow consumers happens in the
+        broadcaster's background sweeper, not on this hot path.
+        """
+        if not conn_ids:
+            return
         payload = orjson.dumps(message)
-
-        for ws_id in list(ws_ids):
-            conn = self._connections.get(ws_id)
-            if not conn:
-                ws_ids.discard(ws_id)
-                continue
-            try:
-                await conn.ws.send_bytes(payload)
-            except Exception:
-                stale.append(conn.ws)
-
-        for ws in stale:
-            self.disconnect(ws)
+        # Snapshot to avoid concurrent-mutation surprises during the
+        # broadcaster's own iteration.
+        targets = list(conn_ids)
+        result = self._broadcaster.fanout(payload, targets)
+        if result.dropped or result.missing:
+            logger.debug(
+                "ws_fanout_partial offered=%d dropped=%d missing=%d",
+                result.offered,
+                result.dropped,
+                result.missing,
+            )
 
     async def broadcast_to_subscribers(self, message: dict[str, Any]) -> None:
         """Send a price message to all connections subscribed to its ticker.
 
-        Kept for backward compatibility with tests and direct-publish scenarios.
-        Prefer per-ticker Redis channels for production traffic.
+        Kept for backward compatibility with the legacy single-channel
+        ``redis_subscriber`` and direct-publish scenarios. Prefer
+        per-ticker Redis channels for production traffic.
         """
-        ticker = message.get("ticker", "")
-        stale: list[WebSocket] = []
-        payload = orjson.dumps(message)
+        ticker = str(message.get("ticker", ""))
+        if not ticker:
+            return
+        subs = self._ticker_subs.get(ticker)
+        if not subs:
+            return
+        self._fanout(message, subs)
 
-        for ws_id, conn in self._connections.items():
-            if ticker in conn.tickers:
-                try:
-                    await conn.ws.send_bytes(payload)
-                except Exception:
-                    stale.append(conn.ws)
+    async def send_personal(
+        self,
+        conn_id: ConnectionId,
+        data: dict[str, Any],
+    ) -> None:
+        """Send a message to a single connection through its outbound channel.
 
-        for ws in stale:
-            self.disconnect(ws)
-
-    async def send_personal(self, ws: WebSocket, data: dict[str, Any]) -> None:
-        """Send a message to a single connection."""
-        try:
-            await ws.send_bytes(orjson.dumps(data))
-        except Exception:
-            self.disconnect(ws)
+        Routed through the broadcaster so a slow client cannot block
+        the caller — the message lands in the per-connection queue
+        and is sent (or dropped) by the drain task.
+        """
+        if conn_id not in self._connections:
+            return
+        payload = orjson.dumps(data)
+        self._broadcaster.fanout(payload, [conn_id])
 
     async def shutdown(self) -> None:
-        """Cancel all channel listeners on app shutdown."""
+        """Cancel all channel listeners and tear down the broadcaster.
+
+        Called from the application lifespan only.
+        """
         for ticker in list(self._channel_tasks):
             self._stop_channel(ticker)
+        # Detach every connection through the broadcaster (drains
+        # in-flight queues up to the per-channel send timeout).
+        await self._broadcaster.close()
+        self._connections.clear()
+        self._started = False
 
 
 # ── Legacy single-channel subscriber (kept for rollback) ───────

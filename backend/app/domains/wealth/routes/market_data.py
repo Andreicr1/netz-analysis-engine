@@ -89,21 +89,26 @@ async def market_data_ws(ws: WebSocket):
     manager = _get_manager(ws)
     bridge = _get_bridge(ws)
     conn = await manager.accept(ws, actor)
+    conn_id = conn.conn_id
 
     # Send confirmation
-    await manager.send_personal(ws, WsServerMessage(
+    await manager.send_personal(conn_id, WsServerMessage(
         type="subscribed",
         data={"message": "Connected", "tickers": []},
     ).model_dump())
 
-    # Heartbeat task — ping every 15s
+    # Heartbeat task — ping every 15s. Routed through the manager so
+    # it shares the per-connection outbound channel with everything
+    # else (no direct ws.send_bytes — that would bypass the bounded
+    # queue and the slow-consumer eviction policy).
     async def heartbeat():
         try:
             while True:
                 await asyncio.sleep(HEARTBEAT_INTERVAL)
-                await ws.send_bytes(orjson.dumps(
-                    WsServerMessage(type="pong", data=None).model_dump(),
-                ))
+                await manager.send_personal(conn_id, WsServerMessage(
+                    type="pong",
+                    data=None,
+                ).model_dump())
         except Exception:
             pass
 
@@ -115,7 +120,7 @@ async def market_data_ws(ws: WebSocket):
             try:
                 msg = orjson.loads(raw)
             except (orjson.JSONDecodeError, ValueError):
-                await manager.send_personal(ws, WsServerMessage(
+                await manager.send_personal(conn_id, WsServerMessage(
                     type="error",
                     data={"message": "Invalid JSON"},
                 ).model_dump())
@@ -126,7 +131,7 @@ async def market_data_ws(ws: WebSocket):
             if action == "subscribe":
                 tickers = msg.get("tickers", [])
                 if not isinstance(tickers, list) or len(tickers) == 0:
-                    await manager.send_personal(ws, WsServerMessage(
+                    await manager.send_personal(conn_id, WsServerMessage(
                         type="error",
                         data={"message": "tickers must be a non-empty list"},
                     ).model_dump())
@@ -135,10 +140,10 @@ async def market_data_ws(ws: WebSocket):
                 normalized = {t.upper() for t in tickers if isinstance(t, str)}
                 # Merge with existing subscriptions
                 current = conn.tickers | normalized
-                manager.update_subscriptions(ws, current)
+                manager.update_subscriptions(conn_id, current)
                 # Also subscribe on Tiingo WS for live IEX prices
                 await bridge.subscribe(list(normalized))
-                await manager.send_personal(ws, WsServerMessage(
+                await manager.send_personal(conn_id, WsServerMessage(
                     type="subscribed",
                     data={"tickers": sorted(current)},
                 ).model_dump())
@@ -147,21 +152,21 @@ async def market_data_ws(ws: WebSocket):
                 tickers = msg.get("tickers", [])
                 normalized = {t.upper() for t in tickers if isinstance(t, str)}
                 current = conn.tickers - normalized
-                manager.update_subscriptions(ws, current)
+                manager.update_subscriptions(conn_id, current)
                 await bridge.unsubscribe(list(normalized))
-                await manager.send_personal(ws, WsServerMessage(
+                await manager.send_personal(conn_id, WsServerMessage(
                     type="subscribed",
                     data={"tickers": sorted(current)},
                 ).model_dump())
 
             elif action == "ping":
-                await manager.send_personal(ws, WsServerMessage(
+                await manager.send_personal(conn_id, WsServerMessage(
                     type="pong",
                     data=None,
                 ).model_dump())
 
             else:
-                await manager.send_personal(ws, WsServerMessage(
+                await manager.send_personal(conn_id, WsServerMessage(
                     type="error",
                     data={"message": f"Unknown action: {action}"},
                 ).model_dump())
@@ -172,7 +177,7 @@ async def market_data_ws(ws: WebSocket):
         logger.exception("ws_unexpected_error actor=%s", actor.actor_id)
     finally:
         heartbeat_task.cancel()
-        manager.disconnect(ws)
+        await manager.disconnect(conn_id)
 
 
 # ── REST: Dashboard Snapshot ────────────────────────────────

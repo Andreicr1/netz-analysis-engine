@@ -4,11 +4,18 @@ Connects to Tiingo's IEX WebSocket and republishes trade ticks to
 per-ticker Redis channels so that ``ConnectionManager`` can forward
 them to frontend WebSocket clients.
 
-Lifecycle:
-  - Created in ``main.py`` lifespan, stored on ``app.state.tiingo_bridge``.
-  - ``subscribe(tickers)`` / ``unsubscribe(tickers)`` called by the WS
-    endpoint when clients change their ticker sets.
-  - ``shutdown()`` called on app teardown.
+Stability Guardrails (Phase 2 retrofit, §4.1 B1.1–B1.4)
+------------------------------------------------------
+The bridge now inherits from ``IdleBridgePolicy``. Demand and
+liveness are decoupled — when no client is subscribed the bridge
+transitions to ``IDLE`` (transport closed but task alive) and resumes
+when demand returns. The only place that may call ``shutdown()`` is
+the application lifespan in ``main.py``, with ``_from_lifespan=True``.
+
+The buffer drain is serialised through a ``SingleFlightLock`` so the
+overflow path (``len(buffer) >= BUFFER_MAX_SIZE``) cannot race with
+the periodic flush loop and corrupt ``self._buffer`` via overlapping
+``self._buffer = []`` swaps.
 
 For mutual funds: Tiingo WS only streams equities/ETFs (IEX exchange).
 MF NAV updates daily via the ``instrument_ingestion`` worker and
@@ -21,10 +28,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 import orjson
 
 from app.core.config.settings import settings
+from app.core.runtime.idle_bridge import IdleBridgeConfig, IdleBridgePolicy
+from app.core.runtime.single_flight import SingleFlightLock
 from app.core.ws.manager import publish_price_ticks_batch
 
 logger = logging.getLogger(__name__)
@@ -45,74 +55,169 @@ WS_THRESHOLD_LEVEL = 0
 
 TIINGO_WS_IEX_URL = "wss://api.tiingo.com/iex"
 
+# How long to keep the WS connection open after the last client
+# unsubscribes before tearing the transport down. Tuned so a user
+# tab-switching back within a minute does not pay the reconnect
+# handshake cost.
+_IDLE_DISCONNECT_DELAY_S = 60.0
 
-class TiingoStreamBridge:
+_DRAIN_KEY = "drain"
+
+
+class TiingoStreamBridge(IdleBridgePolicy):
     """Bridges Tiingo IEX WebSocket to Redis per-ticker channels.
 
-    Thread-safe: all mutations go through asyncio.  One instance per app.
+    State machine inherited from :class:`IdleBridgePolicy`:
+
+        STOPPED → STARTING → RUNNING ⇄ IDLE → STOPPING → STOPPED
+
+    Subclass hooks:
+        - ``_on_start``: open the WS, spawn read + flush loops.
+        - ``_on_resume``: re-open the transport without recreating
+          the policy. Default delegates to ``_on_start``.
+        - ``_on_demand_added`` / ``_on_demand_removed``: forward
+          subscribe/unsubscribe to the live WS.
+        - ``_on_idle_disconnect``: close the WS but keep the bridge
+          alive, waiting for demand to return.
+        - ``_on_shutdown``: terminal cleanup from the lifespan only.
     """
 
     def __init__(self, api_key: str | None = None) -> None:
+        super().__init__(
+            cfg=IdleBridgeConfig(
+                name="tiingo_bridge",
+                idle_disconnect_delay_s=_IDLE_DISCONNECT_DELAY_S,
+            ),
+        )
         self._api_key = api_key or settings.tiingo_api_key
-        self._subscribed: set[str] = set()
-        self._ws: object | None = None  # websockets.WebSocketClientProtocol
-        self._ws_task: asyncio.Task | None = None
-        self._flush_task: asyncio.Task | None = None
-        self._buffer: list[dict] = []
-        self._running = False
+        # ``websockets.WebSocketClientProtocol`` — typed as ``Any`` to
+        # avoid coupling the bridge to the optional ``websockets``
+        # dependency at type-check time.
+        self._ws: Any | None = None
+        self._ws_task: asyncio.Task[None] | None = None
+        self._flush_task: asyncio.Task[None] | None = None
+        self._buffer: list[dict[str, Any]] = []
+        # Single-flight lock for the drain coroutine. The overflow
+        # path and the periodic flush loop both call ``_drain_buffer``;
+        # the lock guarantees only one drain executes at a time and
+        # extra callers join the in-flight one rather than racing on
+        # ``self._buffer = []``.
+        self._drain_lock: SingleFlightLock[str, None] = SingleFlightLock()
 
         if not self._api_key:
             logger.warning("TIINGO_API_KEY not set — TiingoStreamBridge disabled")
 
     @property
     def active_tickers(self) -> set[str]:
-        return self._subscribed.copy()
+        """Snapshot of currently subscribed tickers (the demand set)."""
+        return set(self.demand)
+
+    # ── Public façade — preserves the legacy call sites ───────
 
     async def subscribe(self, tickers: list[str]) -> None:
         """Add tickers to the Tiingo WS subscription.
 
-        Called by the WS endpoint when clients subscribe.
-        Starts the WS connection if not already running.
+        Thin wrapper around ``request_demand`` for backwards
+        compatibility with the WS endpoint. Starts the bridge on
+        first call (or resumes it from IDLE).
         """
         if not self._api_key:
             return
-
-        new = {t.upper() for t in tickers} - self._subscribed
-        if not new:
+        normalized = {t.upper() for t in tickers if t}
+        if not normalized:
             return
-
-        self._subscribed |= new
-        logger.info("tiingo_bridge_subscribe new=%s total=%d", new, len(self._subscribed))
-
-        # Start WS loop if not running
-        if not self._running:
-            self._running = True
-            self._ws_task = asyncio.create_task(self._ws_loop())
-            self._flush_task = asyncio.create_task(self._flush_loop())
-        elif self._ws is not None:
-            # WS already connected — send subscribe for new tickers
-            await self._send_subscribe(list(new))
+        await self.request_demand(normalized)
 
     async def unsubscribe(self, tickers: list[str]) -> None:
-        """Remove tickers from the Tiingo WS subscription."""
-        removed = {t.upper() for t in tickers} & self._subscribed
-        if not removed:
+        """Remove tickers from the Tiingo WS subscription.
+
+        Wrapper around ``release_demand``. When the demand set
+        empties the policy transitions to IDLE and starts the
+        idle-disconnect timer; it does **not** call shutdown — that
+        is reserved for the application lifespan.
+        """
+        normalized = {t.upper() for t in tickers if t}
+        if not normalized:
             return
+        await self.release_demand(normalized)
 
-        self._subscribed -= removed
-        logger.info("tiingo_bridge_unsubscribe removed=%s remaining=%d", removed, len(self._subscribed))
+    # ── IdleBridgePolicy hooks ────────────────────────────────
 
-        # If no more tickers, stop everything
-        if not self._subscribed:
-            await self.shutdown()
+    async def _on_start(self) -> None:
+        """Spawn the WS read loop and the periodic flush loop.
 
-    async def shutdown(self) -> None:
-        """Close Tiingo WS and stop background tasks."""
-        self._running = False
+        Called both on cold start (``STOPPED → RUNNING``) and on
+        resume from IDLE — the legacy bridge had a single ``_running``
+        flag and the same code path served both, so we don't override
+        ``_on_resume`` here either.
+        """
+        if self._ws_task is None or self._ws_task.done():
+            self._ws_task = asyncio.create_task(
+                self._ws_loop(),
+                name="tiingo_bridge_ws_loop",
+            )
+        if self._flush_task is None or self._flush_task.done():
+            self._flush_task = asyncio.create_task(
+                self._flush_loop(),
+                name="tiingo_bridge_flush_loop",
+            )
 
+    async def _on_demand_added(self, items: set[str]) -> None:
+        """Forward new subscriptions to the live WS.
+
+        If the WS is still connecting (``self._ws is None``), the
+        ``_ws_loop`` will pick up the demand set on its initial
+        ``_send_subscribe`` call so nothing is lost.
+        """
+        if self._ws is not None:
+            await self._send_subscribe(sorted(items))
+        logger.info(
+            "tiingo_bridge_subscribe added=%s total=%d",
+            sorted(items),
+            len(self.demand),
+        )
+
+    async def _on_demand_removed(self, items: set[str]) -> None:
+        """Log the unsubscribe event.
+
+        Tiingo's IEX WS does not expose a per-ticker unsubscribe
+        primitive — to remove tickers we would have to drop the WS
+        entirely and re-subscribe to the remaining set. We accept
+        the wasted bandwidth (the per-ticker Redis listener filter
+        downstream is what protects each client) and only log here.
+        """
+        logger.info(
+            "tiingo_bridge_unsubscribe removed=%s remaining=%d",
+            sorted(items),
+            len(self.demand),
+        )
+
+    async def _on_idle_disconnect(self) -> None:
+        """Close the underlying WS but keep the bridge instance alive.
+
+        Triggered ``_IDLE_DISCONNECT_DELAY_S`` seconds after the last
+        client unsubscribes. The next ``request_demand`` call will
+        re-spawn the loops via ``_on_start``.
+        """
+        logger.info("tiingo_bridge_idle_disconnect")
+        await self._teardown_transport(drain_buffer=True)
+
+    async def _on_shutdown(self) -> None:
+        """Terminal teardown — only the lifespan can reach this path."""
+        await self._teardown_transport(drain_buffer=True)
+        logger.info("tiingo_bridge_shutdown")
+
+    async def _teardown_transport(self, *, drain_buffer: bool) -> None:
+        """Close the WS, cancel the read/flush tasks, optionally
+        drain the buffer one last time.
+
+        Used by both ``_on_idle_disconnect`` and ``_on_shutdown`` so
+        the lifecycle policy can keep the bridge object alive while
+        still releasing the underlying transport.
+        """
         if self._ws is not None:
             try:
-                await self._ws.close()  # type: ignore[union-attr]
+                await self._ws.close()
             except Exception:
                 pass
             self._ws = None
@@ -123,7 +228,7 @@ class TiingoStreamBridge:
                 await self._ws_task
             except asyncio.CancelledError:
                 pass
-            self._ws_task = None
+        self._ws_task = None
 
         if self._flush_task and not self._flush_task.done():
             self._flush_task.cancel()
@@ -131,29 +236,45 @@ class TiingoStreamBridge:
                 await self._flush_task
             except asyncio.CancelledError:
                 pass
-            self._flush_task = None
+        self._flush_task = None
 
-        # Final flush
-        await self._drain_buffer()
-        self._subscribed.clear()
-        logger.info("tiingo_bridge_shutdown")
+        if drain_buffer:
+            await self._drain_buffer()
 
     # ── Flush loop ───────────────────────────────────────────
 
     async def _flush_loop(self) -> None:
-        """Drain buffer every BUFFER_WINDOW_S seconds."""
+        """Drain buffer every BUFFER_WINDOW_S seconds.
+
+        Continues until the task is cancelled. Final drain is
+        guaranteed by ``_teardown_transport`` so cancellation here
+        does not need its own flush.
+        """
         try:
-            while self._running:
+            while True:
                 await asyncio.sleep(BUFFER_WINDOW_S)
                 await self._drain_buffer()
         except asyncio.CancelledError:
-            await self._drain_buffer()
+            return
 
     async def _drain_buffer(self) -> None:
-        """Publish accumulated ticks to Redis in a single pipeline."""
+        """Publish accumulated ticks to Redis through a single-flight lock.
+
+        Multiple call sites (the periodic flush loop and the overflow
+        guard in ``_handle_message``) can race here on a busy bridge.
+        ``SingleFlightLock`` ensures only one drain runs at a time —
+        any concurrent caller observes the same coroutine completion
+        and exits without touching the buffer twice.
+        """
+        await self._drain_lock.run(_DRAIN_KEY, self._drain_buffer_inner)
+
+    async def _drain_buffer_inner(self) -> None:
         if not self._buffer:
             return
 
+        # The swap is now race-free because the surrounding
+        # SingleFlightLock guarantees this coroutine is the only one
+        # touching ``self._buffer`` at this instant.
         batch = self._buffer
         self._buffer = []
 
@@ -170,12 +291,15 @@ class TiingoStreamBridge:
             import websockets
         except ImportError:
             logger.error("websockets package not installed — TiingoStreamBridge disabled")
-            self._running = False
             return
 
         reconnect_delay = 1
 
-        while self._running and self._subscribed:
+        # Loop while we have demand. The IdleBridgePolicy state is the
+        # source of truth for "should we be connected" — when demand
+        # drops to zero the policy will fire ``_on_idle_disconnect``,
+        # which cancels this task; until then we keep reconnecting.
+        while self._demand:
             try:
                 async with websockets.connect(
                     TIINGO_WS_IEX_URL,
@@ -199,11 +323,11 @@ class TiingoStreamBridge:
                     logger.info("tiingo_bridge_connected")
 
                     # Subscribe to all current tickers
-                    await self._send_subscribe(list(self._subscribed))
+                    await self._send_subscribe(sorted(self._demand))
 
                     # Read loop
                     async for raw_msg in ws:
-                        if not self._running:
+                        if not self._demand:
                             break
                         try:
                             msg = orjson.loads(
@@ -217,7 +341,7 @@ class TiingoStreamBridge:
                 break
             except Exception as e:
                 self._ws = None
-                if not self._running:
+                if not self._demand:
                     break
                 logger.warning(
                     "tiingo_bridge_disconnected error=%s reconnect=%ds",
@@ -228,53 +352,9 @@ class TiingoStreamBridge:
 
         self._ws = None
 
-    async def subscribe_approved_universe(self) -> int:
-        """Pre-subscribe to every approved instrument across all orgs.
-
-        Used at app startup so the IEX firehose is hot before the first
-        frontend client connects. Free-tier subscription caps are gone, so
-        we can fan out the entire approved universe in one shot.
-
-        Returns the number of new tickers subscribed.
-        """
-        if not self._api_key:
-            return 0
-
-        # Imported here to avoid a circular import on bridge module load.
-        from sqlalchemy import select
-
-        from app.core.db.engine import async_session_factory
-        from app.domains.wealth.models.instrument import Instrument
-        from app.domains.wealth.models.instrument_org import InstrumentOrg
-
-        async with async_session_factory() as db:
-            db.expire_on_commit = False  # type: ignore[attr-defined]
-            stmt = (
-                select(Instrument.ticker)
-                .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
-                .where(InstrumentOrg.approval_status == "approved")
-                .where(Instrument.ticker.isnot(None))
-                .where(Instrument.ticker != "")
-            )
-            result = await db.execute(stmt)
-            tickers = sorted({(t or "").strip().upper() for (t,) in result.all() if t})
-
-        if not tickers:
-            logger.info("tiingo_bridge_universe_empty")
-            return 0
-
-        before = len(self._subscribed)
-        await self.subscribe(tickers)
-        added = len(self._subscribed) - before
-        logger.info(
-            "tiingo_bridge_universe_subscribed total=%d added=%d",
-            len(self._subscribed), added,
-        )
-        return added
-
     async def _send_subscribe(self, tickers: list[str]) -> None:
         """Send subscription message to Tiingo WS."""
-        if self._ws is None:
+        if self._ws is None or not tickers:
             return
         msg = {
             "eventName": "subscribe",
@@ -282,12 +362,12 @@ class TiingoStreamBridge:
             "eventData": {"thresholdLevel": WS_THRESHOLD_LEVEL, "tickers": tickers},
         }
         try:
-            await self._ws.send(orjson.dumps(msg).decode())  # type: ignore[union-attr]
+            await self._ws.send(orjson.dumps(msg).decode())
             logger.info("tiingo_bridge_subscribed tickers=%s", tickers)
         except Exception:
             logger.exception("tiingo_bridge_subscribe_send_error")
 
-    def _handle_message(self, msg: dict) -> None:
+    def _handle_message(self, msg: dict[str, Any]) -> None:
         """Parse Tiingo IEX message and buffer as a Redis-ready tick.
 
         Only trade messages (messageType "A", updateType "T") are processed.
@@ -331,9 +411,15 @@ class TiingoStreamBridge:
         self._buffer.append(tick)
 
         # Backpressure: if firehose floods us between flush ticks, drain
-        # immediately rather than letting the buffer grow unbounded.
+        # immediately rather than letting the buffer grow unbounded. The
+        # SingleFlightLock makes this safe to fire without coordination —
+        # if a drain is already in flight the spawned task will join it
+        # and exit without double-processing the buffer.
         if len(self._buffer) >= BUFFER_MAX_SIZE:
-            asyncio.create_task(self._drain_buffer())
+            asyncio.create_task(
+                self._drain_buffer(),
+                name="tiingo_bridge_overflow_drain",
+            )
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(

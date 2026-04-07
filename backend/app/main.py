@@ -212,19 +212,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.core.ws.tiingo_bridge import TiingoStreamBridge
 
     ws_manager = ConnectionManager()
+    await ws_manager.start()  # spawn broadcaster eviction sweeper
     app.state.ws_manager = ws_manager
     redis_sub_task = asyncio.create_task(redis_subscriber(ws_manager))
 
     # Tiingo WS → Redis bridge (live IEX prices for equities/ETFs).
-    # Institutional plan: pre-subscribe the entire approved universe at boot
-    # so the firehose is hot before the first frontend client connects.
+    # The bridge is demand-driven via IdleBridgePolicy: it stays in
+    # STOPPED state at boot and only connects to Tiingo when the first
+    # client subscribes through the WS endpoint. The legacy
+    # ``subscribe_approved_universe`` boot pre-subscription was removed
+    # by Stability Guardrails Phase 2 (§4.1 B1.2) — it kept the
+    # firehose hot for nobody and made restarts expensive.
     tiingo_bridge = TiingoStreamBridge()
     app.state.tiingo_bridge = tiingo_bridge
-    try:
-        added = await tiingo_bridge.subscribe_approved_universe()
-        logger.info("tiingo_bridge_bootstrap added=%d", added)
-    except Exception:
-        logger.exception("tiingo_bridge_bootstrap_failed")
 
     # Start PgNotifier for config cache invalidation
     from app.core.config.config_service import ConfigService
@@ -249,8 +249,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("PgNotifier started — listening for config changes")
 
     yield
-    # Cleanup
-    await tiingo_bridge.shutdown()
+    # Cleanup. ``IdleBridgePolicy.shutdown`` rejects calls without
+    # ``_from_lifespan=True`` — this is the single sanctioned tear-down
+    # path for the Tiingo bridge.
+    await tiingo_bridge.shutdown(_from_lifespan=True)
     await ws_manager.shutdown()
     redis_sub_task.cancel()
     try:

@@ -23,18 +23,26 @@
  *
  * `createTickBuffer<T>()` is the mandatory primitive for any source
  * that emits more than ~10 events per second. It coalesces writes
- * per key into a single `Map` and flushes a snapshot to a reactive
- * `$state` on a clock (requestAnimationFrame for animated surfaces,
- * `setInterval` for tabular displays at a human-legible cadence).
+ * per key into a single internal `Map` and flushes a snapshot to a
+ * reactive `$state` on a clock (requestAnimationFrame for animated
+ * surfaces, `setInterval` for tabular displays at a human-legible
+ * cadence). The snapshot is owned by this primitive — consumers
+ * just read `buffer.snapshot` and Svelte's reactive graph picks up
+ * the change automatically. No external mirror, no defensive
+ * `flush()`, no second timer.
  *
  * What this primitive guarantees
  * ------------------------------
  * - **Non-blocking `write()`.** Every write is a single `Map.set`
  *   call. No spread, no allocation per tick, no reactive invalidation.
- * - **One reactive update per flush.** The snapshot `$state` changes
- *   exactly once per clock tick. At `intervalMs: 250` (Dashboard
- *   default), 500 writes/sec become 4 updates/sec — legible for
- *   humans and non-pathological for the browser.
+ * - **One reactive update per flush.** The internal snapshot is a
+ *   Svelte 5 `$state(new Map())` and is reassigned exactly once per
+ *   clock tick. At `intervalMs: 250` (Dashboard default), 500
+ *   writes/sec become 4 updates/sec — legible for humans and
+ *   non-pathological for the browser. Consumers reading
+ *   `buffer.snapshot` from inside a Svelte component (or a `.svelte.ts`
+ *   store) get reactivity for free; no external `$state` mirror or
+ *   defensive `flush()` polling is needed.
  * - **Hard key cap.** `maxKeys` is enforced; when exceeded, the
  *   configured `evictionPolicy` removes either the oldest or the
  *   newest entry. `dropped` counter exposes the pressure.
@@ -57,11 +65,15 @@
  *   their own `$derived` views from the exposed snapshot.
  */
 
-// tick-buffer is a shared primitive: depends only on global browser
-// APIs and the runtime types. No Svelte runes are imported here so
-// it can be used outside a Svelte component if needed; however, it
-// expects to be called from a context where `requestAnimationFrame`
-// and `document` are available (i.e. the browser).
+// tick-buffer is a shared primitive: it owns its reactive snapshot
+// state via Svelte 5 runes (`$state`). The `.svelte.ts` extension
+// is what unlocks rune support in non-component files; the file is
+// still safe to import from vitest because Svelte 5's $state proxy
+// works in plain JS contexts when the test runner enables runes
+// (the @investintell/ui vitest config does so via the svelte-vite
+// plugin). Browser globals (`requestAnimationFrame`, `document`)
+// are required for the visibility-aware clock and are gracefully
+// no-op'd under SSR.
 
 export interface TickBufferConfig<T> {
 	/** Extracts the dedup key from an item. Last write wins per key. */
@@ -113,11 +125,11 @@ interface RafLike {
 /**
  * Create a new tick buffer.
  *
- * The returned object exposes a reactive `snapshot` getter. When
- * used inside a Svelte component, wrap the getter in `$state` at
- * the call site or read it through a `$derived` — this module does
- * not import `$state` so it remains usable outside Svelte runtime
- * contexts and in unit tests.
+ * The returned object exposes a reactive `snapshot` getter backed
+ * by a Svelte 5 `$state(new Map())`. Reading `buffer.snapshot` from
+ * inside a `$derived`, `$effect`, or component template is enough
+ * — when the clock fires `flush()` and reassigns the internal
+ * `$state`, the dependent reactive node re-runs automatically.
  */
 export function createTickBuffer<T>(config: TickBufferConfig<T>): TickBuffer<T> {
 	const keyOf = config.keyOf;
@@ -130,7 +142,12 @@ export function createTickBuffer<T>(config: TickBufferConfig<T>): TickBuffer<T> 
 	}
 
 	const internal = new Map<string, T>();
-	let snapshot: Map<string, T> = new Map();
+	// Reactive snapshot — owned by the buffer. The .svelte.ts file
+	// extension authorises the use of Svelte 5 runes here. Reassigning
+	// `snapshot = new Map(internal)` is what propagates the new map
+	// reference through every dependent `$derived`, `$effect`, and
+	// template binding.
+	let snapshot = $state<Map<string, T>>(new Map());
 	let dirty = false;
 	let dropped = 0;
 	let written = 0;

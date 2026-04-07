@@ -162,93 +162,120 @@ def test_ws_subscribe_normalizes_tickers(test_client: TestClient):
 # ── ConnectionManager Unit Tests ────────────────────────────
 
 
+def _make_mock_ws() -> AsyncMock:
+    """Build an AsyncMock that satisfies starlette's WebSocket surface
+    well enough for ``ConnectionManager.accept()`` to attach it to the
+    rate-limited broadcaster.
+
+    The bounded outbound channel reads from ``send_bytes``; ``accept``
+    is awaited by the manager before attach.
+    """
+    ws = AsyncMock()
+    ws.accept = AsyncMock()
+    ws.send_bytes = AsyncMock()
+    return ws
+
+
+async def _flush_drain_loops() -> None:
+    """Yield to the event loop a few times so per-connection drain
+    tasks can pick up queued payloads from the broadcaster.
+
+    Fan-out via ``BoundedOutboundChannel.offer()`` is non-blocking and
+    only sets a wakeup ``Event`` — the actual ``ws.send_bytes`` call
+    runs on the drain task. Tests that observe ``send_bytes`` need to
+    let the loop run after the offer.
+    """
+    import asyncio as _asyncio
+    for _ in range(5):
+        await _asyncio.sleep(0)
+
+
 @pytest.mark.asyncio
 async def test_connection_manager_broadcast():
     """ConnectionManager broadcasts price ticks to subscribed clients only."""
     manager = ConnectionManager()
-
-    # Create mock WebSocket connections
-    ws1 = AsyncMock()
-    ws1.send_bytes = AsyncMock()
-    ws2 = AsyncMock()
-    ws2.send_bytes = AsyncMock()
+    await manager.start()
 
     from app.core.security.clerk_auth import Actor
 
     actor = Actor(actor_id="test", name="Test", email="t@t.com")
 
-    # Register connections manually (bypass accept which needs real WS)
-    from app.core.ws.manager import ClientConnection
+    ws1 = _make_mock_ws()
+    ws2 = _make_mock_ws()
 
-    conn1 = ClientConnection(ws=ws1, actor=actor, tickers={"SPY", "QQQ"})
-    conn2 = ClientConnection(ws=ws2, actor=actor, tickers={"IWM"})
+    conn1 = await manager.accept(ws1, actor)
+    conn2 = await manager.accept(ws2, actor)
 
-    manager._connections[id(ws1)] = conn1
-    manager._connections[id(ws2)] = conn2
+    manager.update_subscriptions(conn1.conn_id, {"SPY", "QQQ"})
+    manager.update_subscriptions(conn2.conn_id, {"IWM"})
 
-    # Broadcast SPY tick — only ws1 should receive
-    tick = {"ticker": "SPY", "price": 450.0, "timestamp": "2026-04-05T12:00:00Z"}
-    await manager.broadcast_to_subscribers(tick)
+    try:
+        # Broadcast SPY tick — only ws1 should receive
+        tick = {"ticker": "SPY", "price": 450.0, "timestamp": "2026-04-05T12:00:00Z"}
+        await manager.broadcast_to_subscribers(tick)
+        await _flush_drain_loops()
 
-    ws1.send_bytes.assert_called_once()
-    # Verify the payload is valid orjson
-    sent = orjson.loads(ws1.send_bytes.call_args[0][0])
-    assert sent["ticker"] == "SPY"
-    assert sent["price"] == 450.0
-    ws2.send_bytes.assert_not_called()
+        ws1.send_bytes.assert_called_once()
+        # Verify the payload is valid orjson
+        sent = orjson.loads(ws1.send_bytes.call_args[0][0])
+        assert sent["ticker"] == "SPY"
+        assert sent["price"] == 450.0
+        ws2.send_bytes.assert_not_called()
+    finally:
+        await manager.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_connection_manager_disconnect_stale():
-    """Stale connections (send_bytes raises) are automatically removed."""
+async def test_connection_manager_disconnect_removes_subscriptions():
+    """``disconnect(conn_id)`` removes the connection and tears down
+    its ticker subscriptions, stopping any orphaned channel listeners.
+    """
     manager = ConnectionManager()
-
-    ws1 = AsyncMock()
-    ws1.send_bytes = AsyncMock(side_effect=Exception("Connection lost"))
+    await manager.start()
 
     from app.core.security.clerk_auth import Actor
-    from app.core.ws.manager import ClientConnection
 
     actor = Actor(actor_id="test", name="Test", email="t@t.com")
-    conn1 = ClientConnection(ws=ws1, actor=actor, tickers={"SPY"})
-    manager._connections[id(ws1)] = conn1
+    ws1 = _make_mock_ws()
+    conn = await manager.accept(ws1, actor)
+    manager.update_subscriptions(conn.conn_id, {"SPY"})
 
     assert manager.active_count == 1
+    assert "SPY" in manager._ticker_subs
 
-    await manager.broadcast_to_subscribers({"ticker": "SPY", "price": 450.0})
+    await manager.disconnect(conn.conn_id)
 
-    # Stale connection should be removed
     assert manager.active_count == 0
+    assert "SPY" not in manager._ticker_subs
+
+    await manager.shutdown()
 
 
 @pytest.mark.asyncio
 async def test_connection_manager_per_ticker_subscriptions():
     """update_subscriptions tracks per-ticker subscriber sets."""
     manager = ConnectionManager()
-
-    ws1 = AsyncMock()
-    ws1.send_bytes = AsyncMock()
+    await manager.start()
 
     from app.core.security.clerk_auth import Actor
-    from app.core.ws.manager import ClientConnection
 
     actor = Actor(actor_id="test", name="Test", email="t@t.com")
-    conn = ClientConnection(ws=ws1, actor=actor)
-    manager._connections[id(ws1)] = conn
+    ws1 = _make_mock_ws()
+    conn = await manager.accept(ws1, actor)
 
     # Subscribe to SPY and QQQ
-    manager.update_subscriptions(ws1, {"SPY", "QQQ"})
+    manager.update_subscriptions(conn.conn_id, {"SPY", "QQQ"})
 
     assert "SPY" in manager._ticker_subs
     assert "QQQ" in manager._ticker_subs
-    assert id(ws1) in manager._ticker_subs["SPY"]
-    assert id(ws1) in manager._ticker_subs["QQQ"]
+    assert conn.conn_id in manager._ticker_subs["SPY"]
+    assert conn.conn_id in manager._ticker_subs["QQQ"]
     # Channel tasks should be started
     assert "SPY" in manager._channel_tasks
     assert "QQQ" in manager._channel_tasks
 
     # Unsubscribe from QQQ
-    manager.update_subscriptions(ws1, {"SPY"})
+    manager.update_subscriptions(conn.conn_id, {"SPY"})
     assert "QQQ" not in manager._ticker_subs
     assert "SPY" in manager._ticker_subs
 
@@ -258,25 +285,46 @@ async def test_connection_manager_per_ticker_subscriptions():
 
 @pytest.mark.asyncio
 async def test_connection_manager_shutdown():
-    """shutdown() cancels all channel listeners."""
+    """shutdown() cancels all channel listeners and detaches connections."""
     manager = ConnectionManager()
-
-    ws1 = AsyncMock()
-    ws1.send_bytes = AsyncMock()
+    await manager.start()
 
     from app.core.security.clerk_auth import Actor
-    from app.core.ws.manager import ClientConnection
 
     actor = Actor(actor_id="test", name="Test", email="t@t.com")
-    conn = ClientConnection(ws=ws1, actor=actor)
-    manager._connections[id(ws1)] = conn
-    manager.update_subscriptions(ws1, {"SPY", "QQQ", "IWM"})
+    ws1 = _make_mock_ws()
+    conn = await manager.accept(ws1, actor)
+    manager.update_subscriptions(conn.conn_id, {"SPY", "QQQ", "IWM"})
 
     assert manager.active_channels == 3
 
     await manager.shutdown()
 
     assert manager.active_channels == 0
+    assert manager.active_count == 0
+
+
+@pytest.mark.asyncio
+async def test_connection_manager_uses_unique_connection_ids():
+    """Each accepted connection gets a fresh ConnectionId — id(ws)
+    collisions across accept/disconnect cycles cannot cause cross-talk.
+    """
+    manager = ConnectionManager()
+    await manager.start()
+
+    from app.core.security.clerk_auth import Actor
+
+    actor = Actor(actor_id="test", name="Test", email="t@t.com")
+
+    seen_ids: set = set()
+    for _ in range(5):
+        ws = _make_mock_ws()
+        conn = await manager.accept(ws, actor)
+        assert conn.conn_id not in seen_ids
+        seen_ids.add(conn.conn_id)
+        await manager.disconnect(conn.conn_id)
+
+    await manager.shutdown()
 
 
 # ── REST Dashboard Snapshot Tests ───────────────────────────

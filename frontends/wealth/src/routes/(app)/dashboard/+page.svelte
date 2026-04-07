@@ -4,8 +4,9 @@
   Holdings + prices from real API (SSR) + WebSocket (live updates).
 -->
 <script lang="ts">
-	import { getContext, onMount } from "svelte";
+	import { getContext, onDestroy, onMount } from "svelte";
 	import { formatNumber, formatPercent, formatCurrency } from "@investintell/ui";
+	import { createMountedGuard, PanelErrorState } from "@investintell/ui/runtime";
 	import type { RiskStore, RegimeData, DriftAlert, BehaviorAlert } from "$lib/stores/risk-store.svelte";
 	import type { MarketDataStore, DashboardSnapshot } from "$lib/stores/market-data.svelte";
 	import type { PortfolioAnalyticsStore } from "$lib/stores/portfolio-analytics.svelte";
@@ -19,8 +20,18 @@
 	const marketStore = getContext<MarketDataStore>("netz:marketDataStore");
 	const analytics = getContext<PortfolioAnalyticsStore>("netz:portfolioAnalytics");
 
-	// Seed risk store with SSR data — layout handles start/destroy lifecycle.
+	// Mount lifecycle guard. Used to gate any deferred callback that
+	// might fire after the dashboard component has been torn down by
+	// a route change — Stability Guardrails §3.3 (P4 Lifecycle).
+	const mounted = createMountedGuard();
+
+	// Seed both stores with SSR data. The marketStore.start()/stop()
+	// pair lives at the (app) layout level — never start/stop the
+	// shared store from a leaf route. The seed itself is synchronous
+	// and lives inside `onMount`, satisfying the lint rule that bans
+	// top-level store mutation.
 	onMount(() => {
+		mounted.start();
 		if (data.riskSummary || data.regime) {
 			riskStore.seedFromSSR({
 				riskSummary: data.riskSummary as Record<string, unknown> | null,
@@ -28,12 +39,22 @@
 				driftAlerts: data.alerts as { dtw_alerts: DriftAlert[]; behavior_change_alerts: BehaviorAlert[] } | null,
 			});
 		}
-
-		// Seed market data store with SSR dashboard snapshot
 		if (data.dashboardSnapshot) {
 			marketStore.seedFromSSR(data.dashboardSnapshot as DashboardSnapshot);
 		}
 	});
+
+	onDestroy(() => {
+		mounted.stop();
+	});
+
+	// Surface live-data unavailability through the same panel-error
+	// path the boundary uses for unexpected render errors. The store
+	// retries five times on its own before tipping into "error";
+	// `reconnect()` is the manual escape hatch the user can pull.
+	function retryMarketData() {
+		mounted.guard(() => marketStore.reconnect());
+	}
 
 	const PROFILES = ["conservative", "moderate", "growth"] as const;
 	type Profile = typeof PROFILES[number];
@@ -164,6 +185,16 @@
 	<!-- ══ Row 1: Total AUM (4 cols) + Portfolio Holdings (8 cols) ══ -->
 
 	<!-- Total AUM — glassmorphism (density-tuned) -->
+	<svelte:boundary>
+	{#if marketStore.status === "error"}
+		<div class="col-span-4 min-h-[170px]">
+			<PanelErrorState
+				title="Live data unavailable"
+				message={marketStore.error ?? "WebSocket connection lost"}
+				onRetry={retryMarketData}
+			/>
+		</div>
+	{:else}
 	<div class="col-span-4 relative rounded-[24px] overflow-hidden bg-[#0d0d0d]/60 backdrop-blur-[11px] border border-white/5 min-h-[170px]">
 		<div class="absolute inset-0 bg-gradient-to-br from-[#0177fb]/15 via-transparent to-transparent pointer-events-none"></div>
 		<div class="relative flex flex-col justify-between h-full px-5 py-4 gap-2">
@@ -201,8 +232,20 @@
 			</div>
 		</div>
 	</div>
+	{/if}
+	{#snippet failed(error, reset)}
+		<div class="col-span-4 min-h-[170px]">
+			<PanelErrorState
+				title="Total AUM panel error"
+				message={error instanceof Error ? error.message : String(error)}
+				onRetry={reset}
+			/>
+		</div>
+	{/snippet}
+	</svelte:boundary>
 
 	<!-- Portfolio Holdings (8 cols) — density-tuned -->
+	<svelte:boundary>
 	<div class="col-span-8 bg-black rounded-[24px] px-5 py-4">
 		<div class="flex items-center justify-between mb-3">
 			<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd]">Portfolio Holdings</span>
@@ -254,8 +297,19 @@
 			{/if}
 		</div>
 	</div>
+	{#snippet failed(error, reset)}
+		<div class="col-span-8">
+			<PanelErrorState
+				title="Portfolio holdings panel error"
+				message={error instanceof Error ? error.message : String(error)}
+				onRetry={reset}
+			/>
+		</div>
+	{/snippet}
+	</svelte:boundary>
 
 	<!-- ══ Row 2: AdvancedMarketChart (8 cols) + LiveNewsFeed (4 cols) ══ -->
+	<svelte:boundary>
 	<div class="col-span-8 bg-black rounded-[24px] px-5 py-4 flex flex-col gap-3">
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<div class="flex flex-wrap items-center gap-3">
@@ -281,7 +335,18 @@
 			<AdvancedMarketChart ticker={activeTicker} height={380} />
 		</div>
 	</div>
+	{#snippet failed(error, reset)}
+		<div class="col-span-8">
+			<PanelErrorState
+				title="Market chart unavailable"
+				message={error instanceof Error ? error.message : String(error)}
+				onRetry={reset}
+			/>
+		</div>
+	{/snippet}
+	</svelte:boundary>
 
+	<svelte:boundary>
 	<div class="col-span-4">
 		<LiveNewsFeed
 			tickers={[activeTicker]}
@@ -290,10 +355,21 @@
 			maxHeight={460}
 		/>
 	</div>
+	{#snippet failed(error, reset)}
+		<div class="col-span-4">
+			<PanelErrorState
+				title="News feed unavailable"
+				message={error instanceof Error ? error.message : String(error)}
+				onRetry={reset}
+			/>
+		</div>
+	{/snippet}
+	</svelte:boundary>
 
-	<!-- ���═ Row 3: Portfolio Overview (8 cols) + Watchlist (4 cols) ══ -->
+	<!-- ══ Row 3: Portfolio Overview (8 cols) + Watchlist (4 cols) ══ -->
 
 	<!-- Portfolio Overview — high-density table -->
+	<svelte:boundary>
 	<div class="col-span-8 bg-black rounded-[24px] px-5 py-4">
 		<div class="flex flex-wrap items-center justify-between gap-3 mb-3">
 			<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd]">Portfolio Overview</span>
@@ -370,8 +446,19 @@
 			</tbody>
 		</table>
 	</div>
+	{#snippet failed(error, reset)}
+		<div class="col-span-8">
+			<PanelErrorState
+				title="Portfolio overview unavailable"
+				message={error instanceof Error ? error.message : String(error)}
+				onRetry={reset}
+			/>
+		</div>
+	{/snippet}
+	</svelte:boundary>
 
 	<!-- Watchlist — high-density list -->
+	<svelte:boundary>
 	<div class="col-span-4 bg-black rounded-[24px] px-5 py-4">
 		<div class="flex items-center justify-between gap-2 mb-3">
 			<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd]">Watchlist</span>
@@ -431,4 +518,14 @@
 			{/each}
 		{/if}
 	</div>
+	{#snippet failed(error, reset)}
+		<div class="col-span-4">
+			<PanelErrorState
+				title="Watchlist unavailable"
+				message={error instanceof Error ? error.message : String(error)}
+				onRetry={reset}
+			/>
+		</div>
+	{/snippet}
+	</svelte:boundary>
 </div>

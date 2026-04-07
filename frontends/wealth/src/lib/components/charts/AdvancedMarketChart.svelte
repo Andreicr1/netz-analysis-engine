@@ -227,7 +227,7 @@
 	let livePrice = $derived.by(() => {
 		const t = ticker?.trim().toUpperCase();
 		if (!t) return null;
-		const tick = marketStore?.priceMap[t];
+		const tick = marketStore?.priceMap.get(t);
 		if (tick?.price) return Number(tick.price);
 		if (bars.length > 0) return bars[bars.length - 1]!.close;
 		return null;
@@ -608,7 +608,7 @@
 		const t = ticker?.trim().toUpperCase();
 		if (!t || bars.length === 0) return;
 
-		const tick = marketStore.priceMap[t];
+		const tick = marketStore.priceMap.get(t);
 		if (!tick || !tick.price) return;
 
 		const last = bars[bars.length - 1]!;

@@ -23,6 +23,12 @@
       "types": "./dist/charts/index.d.ts",
       "svelte": "./dist/charts/index.js"
     },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "svelte": "./dist/runtime/index.js",
+      "import": "./dist/runtime/index.js",
+      "default": "./dist/runtime/index.js"
+    },
     "./charts/echarts-setup": {
       "types": "./dist/charts/echarts-setup.d.ts",
       "svelte": "./dist/charts/echarts-setup.js",

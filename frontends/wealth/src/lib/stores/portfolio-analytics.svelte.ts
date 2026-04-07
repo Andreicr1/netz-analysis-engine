@@ -91,7 +91,7 @@ export function createPortfolioAnalytics(
 		}> = [];
 
 		for (const h of holdings) {
-			const tick = prices[h.ticker];
+			const tick = prices.get((h.ticker || "").toUpperCase());
 			const livePrice = tick?.price ?? h.price;
 			// Previous close = price - change (from SSR or tick)
 			const change = tick?.change ?? h.change;
