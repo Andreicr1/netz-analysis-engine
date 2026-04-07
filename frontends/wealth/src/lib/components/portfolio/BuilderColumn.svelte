@@ -23,11 +23,12 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
 	import { PanelErrorState } from "@investintell/ui/runtime";
+	import { formatPercent } from "@investintell/ui";
 	import Play from "lucide-svelte/icons/play";
 	import BarChart2 from "lucide-svelte/icons/bar-chart-2";
 	import LineChart from "lucide-svelte/icons/line-chart";
 	import Loader2 from "lucide-svelte/icons/loader-2";
-	import PortfolioOverview from "$lib/components/portfolio/PortfolioOverview.svelte";
+	import BuilderTable from "$lib/components/portfolio/BuilderTable.svelte";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import { portfolioDisplayName } from "$lib/constants/blocks";
 
@@ -53,15 +54,33 @@
 			? portfolioDisplayName(workspace.portfolio.display_name)
 			: "Select a portfolio",
 	);
+
+	const totalWeight = $derived(
+		workspace.funds.reduce((s, f) => s + (f.weight ?? 0), 0),
+	);
+
+	const fundCount = $derived(workspace.funds.length);
 </script>
 
 <svelte:boundary>
 	<div class="bc-root">
-		<!-- Header: portfolio name + action bar -->
+		<!--
+		  Header — mirrors UniverseColumn.uc-header geometry exactly:
+		    Row 1: title block + count badge (status pill on the right)
+		    Row 2: action pill group (parity with Universe search row)
+		  Total height matches UniverseColumn so the table headers
+		  below both start at the same Y pixel. This is the "Y-axis
+		  lock" requested in the visual validation feedback.
+		-->
 		<header class="bc-header">
-			<div class="bc-title-block">
-				<span class="bc-kicker">Portfolio</span>
-				<span class="bc-title">{chartTitle}</span>
+			<div class="bc-title-row">
+				<div class="bc-title-block">
+					<span class="bc-kicker">PORTFOLIO</span>
+					<span class="bc-title">{chartTitle}</span>
+				</div>
+				<span class="bc-count">
+					{fundCount} fund{fundCount === 1 ? "" : "s"} · {formatPercent(totalWeight, 2)}
+				</span>
 			</div>
 
 			<div class="bc-actions">
@@ -100,9 +119,9 @@
 			</div>
 		</header>
 
-		<!-- Strategic allocation blocks fill the remaining vertical -->
-		<div class="bc-blocks">
-			<PortfolioOverview />
+		<!-- Continuous tree table — mirror of UniverseTable structure -->
+		<div class="bc-body">
+			<BuilderTable />
 		</div>
 	</div>
 
@@ -134,26 +153,34 @@
 		height: 100%;
 		min-height: 0;
 		background: #141519;
-		border-left: 1px solid rgba(64, 66, 73, 0.4);
 		overflow: hidden;
 	}
 
-	/* ── Header — 16px standard padding & gaps everywhere ───────── */
+	/* ── Header — mirrors UniverseColumn.uc-header geometry ───────
+	 * Two stacked rows (title row + action row) with 16px gap.
+	 * Total header height matches the Universe column so the tables
+	 * below both start at the same Y pixel. */
 	.bc-header {
+		flex-shrink: 0;
+		padding: 16px;
+		border-bottom: 1px solid rgba(64, 66, 73, 0.4);
+		background: #141519;
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	.bc-title-row {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 16px;
-		padding: 16px;
-		border-bottom: 1px solid rgba(64, 66, 73, 0.4);
-		flex-shrink: 0;
-		background: #141519;
 	}
 
 	.bc-title-block {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 2px;
 		min-width: 0;
 	}
 
@@ -167,8 +194,8 @@
 	}
 
 	.bc-title {
-		font-size: 1.0625rem;
-		font-weight: 600;
+		font-size: 0.9375rem;
+		font-weight: 700;
 		color: #ffffff;
 		font-family: "Urbanist", sans-serif;
 		white-space: nowrap;
@@ -176,11 +203,22 @@
 		text-overflow: ellipsis;
 	}
 
+	.bc-count {
+		font-size: 0.6875rem;
+		font-weight: 700;
+		color: #ffffff;
+		background: rgba(255, 255, 255, 0.05);
+		padding: 2px 10px;
+		border-radius: 999px;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+
 	.bc-actions {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		flex-shrink: 0;
+		flex-wrap: wrap;
 	}
 
 	/* ── Pills — Screener .scr-pill pattern (dark, white border, 36px) ── */
@@ -218,37 +256,10 @@
 		to { transform: rotate(360deg); }
 	}
 
-	.bc-blocks {
+	/* ── Body — BuilderTable fills the remaining vertical ───── */
+	.bc-body {
 		flex: 1;
 		min-height: 0;
-		overflow-y: auto;
-		padding: 16px;
-	}
-
-	/* ── Global overrides: flatten PortfolioOverview internal cards
-	 *
-	 * The legacy PortfolioOverview uses rounded-[16px] and rounded-[12px]
-	 * on its asset class groups and block rows. In the flat institutional
-	 * aesthetic of the Flexible Columns Layout those curves clash with
-	 * the Universe table's hard edges, and they do not transition well
-	 * during the grid-template-columns animation of Estado C.
-	 *
-	 * Rather than modify the PortfolioOverview component directly
-	 * (which is 348 lines and shared) we neutralise its rounded
-	 * borders from here using :global(). This is a deliberate
-	 * aesthetic override, not a component fork — documented in the
-	 * design spec polish notes.
-	 */
-	.bc-blocks :global(.rounded-\[16px\]),
-	.bc-blocks :global(.rounded-\[12px\]),
-	.bc-blocks :global([class*="rounded-[16px]"]),
-	.bc-blocks :global([class*="rounded-[12px]"]) {
-		border-radius: 2px !important;
-	}
-
-	/* Keep the chip "pill" shape on smaller badges (count chips,
-	 * status pills) — only the outer card-level radii get flattened. */
-	.bc-blocks :global(.rounded-full) {
-		border-radius: 999px !important;
+		overflow: hidden;
 	}
 </style>
