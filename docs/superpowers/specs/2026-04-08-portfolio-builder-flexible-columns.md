@@ -1,11 +1,12 @@
 # Portfolio Builder — Flexible Columns Layout — Design Spec
 
 **Date:** 2026-04-08
-**Status:** Approved for implementation
+**Status:** Phase A + B shipped and stabilised; Phase C deferred to a future sprint pending deeper layout refactor
 **Owner:** Andrei (Netz)
 **Branch:** `feat/wealth-portfolio-flex-columns`
 **Base:** `main` (post Stability Guardrails + Onda 0 + PR-UX-09 sanitisation)
 **Sprint sizing:** S + L + M + S (4 phases)
+**Actual delivery (Phase B):** 7 commits, 3,634 lines added, 16 files touched
 
 ---
 
@@ -486,11 +487,196 @@ Se qualquer um desses falhar, sprint é **incompleto** → novo ciclo.
 | 2026-04-08 | Container queries (sem Safari < 16) | Andrei | Clientes institucionais em ambiente gerenciado |
 | 2026-04-08 | Reset 3ª coluna ao voltar | Andrei | Default sempre Estado B para visão holística |
 | 2026-04-08 | `<768px` mobile read-only | Andrei | Wealth construction em mobile é anti-padrão |
+| 2026-04-08 | Fase C adiada para sprint separada | Andrei | Após Phase B estabilizar, layout precisa refactor mais profundo para atingir o verdadeiro FCL de 3 colunas — será tratado isoladamente |
+| 2026-04-08 | `<header class="uc-header">` removido | Andrei | Alinhamento Y-axis com BuilderColumn — search fica suspensa até retornar como toolbar nas sub-pills |
+
+---
+
+## §9 — Execution Log (Phase A + B — delivered)
+
+Branch `feat/wealth-portfolio-flex-columns` shipped 7 commits
+between 2026-04-08 morning and 2026-04-08 afternoon, covering the
+foundations + Estado B (2-column workspace) + all visual polish
+rounds the institutional PM flagged during live dev-server review.
+
+### 9.1 — Commit ledger (in execution order)
+
+| # | SHA | Summary |
+|---|---|---|
+| 1 | `ba98678` | **Fase A — Foundations.** Backend correlation service + `/universe` query param + FlexibleColumnsLayout primitive + `selectedAnalyticsFund` on workspace store + `UniverseAssetRead` Decimal field. |
+| 2 | `66fe6b7` | **Fase B — Estado B functional.** UniverseColumn + UniverseTable 12-col density + BuilderColumn wrapper + AnalyticsColumn Estado C placeholder + orchestrator refactor of `/portfolio/+page.svelte`. |
+| 3 | `e1957ac` | **Polish round 1.** Full-bleed opt-out in shell (kills max-w-screen-2xl for /portfolio only), chart moved to AnalyticsColumn, harmonisation attempt on rounded cards, dark hex fallbacks. |
+| 4 | `3600e4b` | **Polish round 2.** Screener palette alignment — `UniverseTable` var() → hex literals (30+ replacements), Screener pill pattern for all buttons, 16px padding standard, grid proportions rebalanced (58% Universe / 42% Builder). |
+| 5 | `a19f8a3` | **3-level tree + reverse drag.** UniverseTable restructured to Asset Class Group → Block/Region → Fund (matching Builder shape). `workspace.removeFund()` added. UniverseColumn becomes drop target for allocated funds. Two-MIME-type drag payload distinguishes add from remove. |
+| 6 | `ab4e7d9` | **Mirror refactor.** New `BuilderTable.svelte` component 1:1 mirrors `UniverseTable` structurally (`<table>` + 3 nested `<tbody>` per group + sticky header). PortfolioOverview unplugged from BuilderColumn (kept on disk as dead code for rollback). Both headers use stacked 2-row layout for Y-axis lock. |
+| 7 | `fe74b88` | **Y-axis alignment.** `<header class="uc-header">` removed from UniverseColumn (title + count + search). Table now starts at top of column. Search functionality temporarily suspended — will return as sub-pills toolbar in a future sprint. |
+
+### 9.2 — What actually shipped (capabilities checklist)
+
+**Backend**
+- [x] `GET /universe?current_holdings=<uuids>` enriches each row with on-the-fly Pearson correlation against the equal-weight synthetic portfolio
+- [x] `quant_engine/portfolio_correlation_service.py` (pure, 45-day overlap floor, fallback to None on insufficient history or degenerate series)
+- [x] `UniverseAssetRead` schema extended with all Tier 1 density fields + `correlation_to_portfolio: Decimal | None`
+- [x] Latest-per-instrument LEFT JOIN against `fund_risk_metrics` + `nav_timeseries` for AUM/return_3y_ann/sharpe_1y/max_drawdown_1y/blended_momentum_score/manager_score
+- [x] Best-effort enrichment: if the batch correlation query or the JOIN raises, route logs warning and serves rows with None density fields
+
+**Frontend — layout primitive**
+- [x] `FlexibleColumnsLayout.svelte`: CSS Grid + `grid-template-columns` reactive via `$derived`
+- [x] Columns always in DOM (zero `{#if}` unmount) — `0fr + overflow hidden + visibility hidden + pointer-events none` on collapsed
+- [x] 240ms cubic-bezier transition with `prefers-reduced-motion` honoured
+- [x] Container queries fallback for narrow viewports (<1100px → 3rd column drawer)
+- [x] Shell opt-out of `max-w-screen-2xl` + `p-6` via `FULL_BLEED_PATHS` list (only `/portfolio`)
+
+**Frontend — Universe column**
+- [x] `UniverseColumn.svelte` wrapper with `<svelte:boundary>` + `PanelErrorState` failed snippet
+- [x] `UniverseTable.svelte` as continuous hierarchical tree: Group → Block → Fund
+- [x] 12 Tier 1 columns (grip, fund+ticker, asset class chip, AUM, expense, 3Y return, risk-adjusted, max drawdown, correlation→portfolio, momentum, liquidity, Netz Score)
+- [x] Ordering: canonical `BLOCK_GROUPS` sequence (Cash → Equities → Fixed Income → Alternatives) with deterministic block order inside each group
+- [x] Per-group AND per-block collapse state (in-memory only)
+- [x] 48px grip padding on fund rows for visual nesting under block header
+- [x] Screener palette hardcoded: #141519, #85a0bd, #cbccd1, #ffffff, #404249, #0177fb
+- [x] Drop target for **reverse drag-drop** (remove fund): `application/x-netz-allocated` MIME marker check, `uc-root--removing` highlight + full-column overlay with `Undo2` icon and *"Drop to return fund to the Universe"* / *"The portfolio is not live — changes are staged for review"* copy
+- [x] `<header class="uc-header">` deliberately removed for Y-axis alignment; search functionality queued for sub-pills toolbar return
+
+**Frontend — Builder column**
+- [x] `BuilderColumn.svelte` wrapper with `<svelte:boundary>` + `PanelErrorState` failed snippet
+- [x] `BuilderTable.svelte` structural mirror of `UniverseTable` (same `<table>` + 3-level tbody pattern)
+- [x] Columns: Grip | Fund+Ticker | Score | Weight | Remove
+- [x] Weight in #11ec79 (brand accent) with tabular-nums
+- [x] Drop target on L2 block header rows (Universe → Builder adds)
+- [x] Drag source on L3 fund rows (Builder → Universe removes) with `application/x-netz-allocated` marker
+- [x] Hover-reveal remove X button on each fund row (secondary interaction path, faster than drag for mouse users)
+- [x] Action pill row in header (View Chart / Construct / Stress Test) matching Screener `.scr-pill` pattern
+- [x] `PortfolioOverview.svelte` unplugged from the BuilderColumn render path; kept on disk as dead code for rollback
+
+**Frontend — Analytics column (Estado C placeholder)**
+- [x] `AnalyticsColumn.svelte` with two explicit modes driven by `workspace.analyticsMode`:
+  - `"fund"` → Fund details placeholder (opened by UniverseTable row click)
+  - `"portfolio"` → inline `MainPortfolioChart` (opened by Builder "View Chart" pill) — relocated from old BuilderColumn top
+- [x] Esc-to-close via window keydown with cleanup `$effect`
+- [x] Close button clears both mode + selected fund atomically
+- [x] `PanelEmptyState` when closed, `PanelErrorState` failed snippet in `<svelte:boundary>`
+- [x] Dark hex hardcoded
+
+**Frontend — state store**
+- [x] `analyticsMode: "fund" | "portfolio" | null` on `PortfolioWorkspaceState`
+- [x] `openAnalyticsForFund(fund)` / `openAnalyticsForPortfolio()` / `clearAnalytics()`
+- [x] `removeFund(instrumentId)` with automatic weight re-equalisation within the affected block
+- [x] `resetBuilderEntry()` called from `onMount` of `/portfolio/+page.svelte` (enforces "reset ao voltar" rule)
+- [x] `loadUniverse()` passes `?current_holdings=<uuids>` derived from `workspace.funds`
+- [x] `layoutState` derived purely from observable facts, never stored
+
+### 9.3 — Visual validation rounds
+
+Three live-browser reviews by Andrei, each producing a targeted
+polish commit:
+
+**Round 1** (commit `e1957ac`) — "O container é muito pequeno e não
+tem ajuste automático" + "O gráfico NAV precisa ir para a terceira
+coluna" + "Bordas arredondadas quebram harmonia" + "Dark mode não
+está aplicado por default". All four addressed.
+
+**Round 2** (commit `3600e4b`) — "As cores ainda não proporcionam
+contraste; use o padrão do Screener" + "Os botões estão fora do
+padrão da página" + "Padding do header praticamente inexistente,
+use 16px" + "A tabela do Builder ocupa mais da metade com só 3
+colunas". Hex palette ported from `.scr-*` rules verbatim, `.bc-pill`
++ `.bld-pill` Screener pattern, 16px everywhere, grid rebalanced.
+
+**Round 3** (commits `a19f8a3` + `ab4e7d9` + `fe74b88`) —
+"Precisa padronizar os componentes da primeira e segunda coluna" +
+"A coluna 2 é feita em 3 níveis — a primeira também deve ser" +
+"Deve haver drag reverso" + "A coluna direita está usando um padrão
+de acordeão com cartões separados — faz a direita ser espelho
+estrutural da esquerda" + "Remove o header da Universe para Y-axis
+lock". Full structural mirror achieved.
+
+### 9.4 — Phase B sign-off
+
+Andrei (2026-04-08): *"Vamos deixar assim por enquanto porque as
+páginas precisam de uma refatoração de layout bem mais profunda,
+para aplicar o verdadeiro conceito de Flexible Column Layout com
+três colunas, mas farei em sprints separadas. Está bom por enquanto."*
+
+Phase B is closed as **stable enough to park**. A deeper
+layout refactor is planned in a future sprint to realise the full
+3-column FCL concept that §1.3 of this spec originally envisaged.
+That sprint will likely touch:
+- Sub-pills placement / consolidation with search toolbar
+- Column header strategy (whether to carry any chrome at all, and
+  where it lives)
+- Shared typography scale across the left shell nav + FCL columns
+- Possibly a ContextSidebar global component (memory
+  `feedback_nav_architecture.md`) that owns the 3-column framing
+  differently
+
+Phase C (LayerChart + AnalyticsColumn tabs Fund/Portfolio/Stress/
+Compare) is **also deferred** until that deeper layout refactor
+lands — it doesn't make sense to build tabs into a column design
+that's about to be reshaped. The `MainPortfolioChart` inline
+placeholder stays in AnalyticsColumn as a serviceable v1.
+
+---
+
+## §10 — Backlog for the follow-up sprint (post-parking)
+
+Explicit items that need to be picked up after the deeper layout
+refactor is planned:
+
+### 10.1 — From Phase B stabilisation debt
+
+1. **Search toolbar return** — reinstate Universe filter input, but
+   in a shared toolbar surface above the FCL columns (likely inside
+   the left-shell sub-pills row `Models | Universe | Policy`), not
+   back inside `UniverseColumn`. The `filtered` $derived inside
+   `UniverseColumn` is ready to consume a shared search state.
+
+2. **Builder column header alignment finalisation** — decide whether
+   `BuilderColumn`'s action pill row (View Chart / Construct /
+   Stress Test) stays on top of the table or moves elsewhere.
+   Currently Y-axis is off by ~112px because the Universe column
+   has no header and the Builder still does.
+
+3. **PortfolioOverview deletion** — the legacy component is
+   unimported dead code on disk. Delete it once the BuilderTable
+   replacement has burnt in and there's no appetite for rollback.
+
+4. **L2 block drop target UX** — the block header row is the drop
+   zone for Universe→Builder adds, but the visual accept/reject
+   feedback is subtle. A follow-up can enlarge the drop target or
+   add a dashed outline on the entire L2 row segment.
+
+### 10.2 — From the original spec §6.4 backlog (still pending)
+
+5. **Estado A (Landing)** — Model picker visual with cards, drift
+   ring, YTD return (still deferred, even lower priority now that
+   Phase B is stable).
+6. **Keyboard drag-drop fallback** — ARIA grab mode, arrow key
+   navigation, Enter to drop. Institutional compliance requirement.
+7. **Reorder intra-block in Builder** — `svelte-dnd-action@0.9.x`
+   evaluation.
+8. **Multi-select Compare** — Ctrl+click in Universe → tab Compare
+   side-by-side.
+9. **Splitter persistente** — column proportions persist within
+   a session.
+10. **`expense_ratio` + `liquidity_tier`** backend enrichment from
+    `instrument.attributes` JSON (currently em-dash in the
+    UniverseTable; schema field exists but is always `None`).
+11. **Correlation cache** — materialised view for inter-fund
+    correlations, daily refresh by the risk metrics worker.
+12. **Guard test** — assert backend `METRIC_LABELS` mirrors frontend
+    `quant-labels.ts` exactly.
+13. **LayerChart migration of existing charts** — opportunistic,
+    when each chart is next touched.
+14. **Phase C (LayerChart install + Analytics tabs)** — reopened
+    after the next-sprint layout refactor is merged.
 
 ---
 
 ## Fim do spec.
 
-Próximo passo após aprovação: execução da Fase A nos commits atômicos
-01-04, base `feat/wealth-portfolio-flex-columns`, com visual validation
-no browser antes de avançar para Fase B.
+Phase A + B delivered on branch `feat/wealth-portfolio-flex-columns`
+(7 commits, validated by Andrei on 2026-04-08). Ready to merge when
+the next sprint consolidates the deeper layout refactor, or to
+merge independently if the team decides to ship the current state
+as an intermediate milestone.
