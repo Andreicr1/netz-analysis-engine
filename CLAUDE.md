@@ -130,6 +130,21 @@ The engine contains only analytical domains. Operational modules were intentiona
 - `cash_management/` (OUT OF SCOPE): gestora's bank accounts, transaction reconciliation, fund transfers — operational
 - `modules/deals/cashflow_service.py` (IN SCOPE): deal cashflow analytics — disbursements, repayments, MOIC, IRR, cash-to-cash — analytical credit module. These are NOT the same thing.
 
+## Stability Guardrails
+
+> Em gestão institucional de patrimônio, imprevisibilidade é risco operacional inaceitável.
+
+Six non-negotiable principles enforced across the stack: **P1 Bounded**, **P2 Batched**, **P3 Isolated**, **P4 Lifecycle**, **P5 Idempotent**, **P6 Fault-Tolerant**. Primitives live in `backend/app/core/runtime/` and `packages/investintell-ui/src/lib/runtime/`. Full charter: **`docs/reference/stability-guardrails.md`**. PR checklist: `.github/PULL_REQUEST_TEMPLATE.md`.
+
+**Mandatory patterns (charter §3):**
+- WebSocket fan-out → `RateLimitedBroadcaster` + `ConnectionId` UUID (never `id(ws)`)
+- Routes with expected p95 > 500ms → **Job-or-Stream** (202 + `/jobs/{id}/stream` SSE)
+- External HTTP → `ExternalProviderGate` (interactive 30s / bulk 5min variants for SEC)
+- Detail pages → `RouteData<T>` load contract (never `throw error()`) + `<svelte:boundary>` + `PanelErrorState`
+- High-frequency client events (> 10/s) → `createTickBuffer<T>` (never `$state` spreads)
+- Mutating routes → `@idempotent` decorator + triple-layer dedup (Redis + SingleFlightLock + `pg_advisory_xact_lock`)
+- Advisory lock keys → **`zlib.crc32`**, never Python built-in `hash()` (non-deterministic across processes)
+
 ## Critical Rules
 
 - **Async-first:** All route handlers use `async def` + `AsyncSession` from `get_db_with_rls`. Never use sync `Session`.
