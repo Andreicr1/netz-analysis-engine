@@ -28,3 +28,19 @@ export {
 	createMountedGuard,
 	type MountedGuard,
 } from "./listener-safe.svelte";
+export {
+	errData,
+	isLoaded,
+	isStale,
+	okData,
+	type RouteData,
+	type RouteError,
+} from "./route-contract";
+
+// Re-export the analytical panel-state components under their Panel*
+// aliases from the design spec. The underlying components live in
+// ../components/analytical/ so every design-system consumer can
+// still import them from the generic path; this barrel adds the
+// charter-named handle.
+export { default as PanelErrorState } from "../components/analytical/PanelErrorState.svelte";
+export { default as PanelEmptyState } from "../components/analytical/EmptyState.svelte";
