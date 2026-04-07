@@ -6,7 +6,7 @@
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
-	import { EmptyState } from "@investintell/ui";
+	import { EmptyState, formatNumber } from "@investintell/ui";
 	import { workspace, type FactorContribution } from "$lib/state/portfolio-workspace.svelte";
 
 	// ── Real API Data Integration ───────────────────────────────────────
@@ -14,41 +14,79 @@
 	let isLoading = $derived(workspace.isLoadingFactorAnalysis);
 	let hasData = $derived(data != null);
 
+	// Theme tokens for ECharts (CSS vars don't work inside option objects).
+	let chartPalette = $state<string[]>(["#3a7bd5", "#ff975a", "#1b365d", "#8b9daf", "#d4e4f7"]);
+	let successColor = $state("#22c55e");
+	let dangerColor = $state("#ef4444");
+	let textMuted = $state("#94a3b8");
+	let textSecondary = $state("#cbccd1");
+	let surfaceColor = $state("#141519");
+	let borderSubtle = $state("rgba(64,66,73,0.3)");
+
+	function readChartTokens() {
+		if (typeof document === "undefined") return;
+		const cs = getComputedStyle(document.documentElement);
+		const get = (n: string, fallback: string) => cs.getPropertyValue(n).trim() || fallback;
+		successColor = get("--ii-success", "#22c55e");
+		dangerColor = get("--ii-danger", "#ef4444");
+		textMuted = get("--ii-text-muted", "#94a3b8");
+		textSecondary = get("--ii-text-secondary", "#cbccd1");
+		surfaceColor = get("--ii-surface", "#141519");
+		borderSubtle = get("--ii-border", "rgba(64,66,73,0.3)");
+		chartPalette = [
+			get("--ii-chart-2", "#3a7bd5"),
+			get("--ii-chart-3", "#ff975a"),
+			get("--ii-chart-1", "#1b365d"),
+			get("--ii-chart-4", "#8b9daf"),
+			get("--ii-chart-5", "#d4e4f7"),
+		];
+	}
+
+	$effect(() => {
+		readChartTokens();
+		if (typeof document === "undefined") return;
+		const obs = new MutationObserver(() => readChartTokens());
+		obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+		return () => obs.disconnect();
+	});
+
 	// ── Risk Decomposition (Donut) ──────────────────────────────────────
+	// Note: donut for 2-5 slices is sub-institutional (FactSet/Bloomberg
+	// would use a stacked-100 horizontal bar). Kept as a donut for now;
+	// chart-type change is queued for the redesign PR. This pass strips
+	// the gradients / drop shadows / border-radius pitch-deck styling.
 	let donutOption = $derived.by(() => {
 		if (!data) return {};
 
 		const systematic = data.systematic_risk_pct * 100;
 		const idiosyncratic = data.specific_risk_pct * 100;
-		// Typically style factors are grouped into systematic in the API response, 
-		// but let's see if we have specific risk vs systematic:
-		const style = 0; // If you want to show it based on `data.factor_contributions` or just use 2 slices.
-		
-		// For the breakdown, let's look at `factor_contributions`:
+
 		const factorSlices = (data.factor_contributions || []).map((fc: FactorContribution) => ({
 			value: fc.pct_contribution * 100,
-			name: fc.factor_label
+			name: fc.factor_label,
 		}));
-		// If the sum is < 100, we might add idiosyncratic or just show the slices.
-		const slices = factorSlices.length > 0 ? factorSlices : [
-			{ value: systematic, name: "Systematic (Market)", itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{offset: 0, color: '#0194ff'}, {offset: 1, color: '#0054c2'}] } } },
-			{ value: idiosyncratic, name: "Idiosyncratic", itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{offset: 0, color: '#ebb94d'}, {offset: 1, color: '#9d6d13'}] } } },
-		];
+		const slices = factorSlices.length > 0
+			? factorSlices
+			: [
+				{ value: systematic, name: "Systematic (Market)" },
+				{ value: idiosyncratic, name: "Idiosyncratic" },
+			];
 
 		return {
 			...globalChartOptions,
+			color: chartPalette,
 			toolbox: { show: false },
 			tooltip: {
 				...globalChartOptions.tooltip,
 				trigger: "item" as const,
 				formatter: (p: { name?: string; value?: number; percent?: number; marker?: string }) =>
-					`${p.marker ?? ""} ${p.name}<br/><strong>${p.percent?.toFixed(1)}%</strong> of total risk`,
+					`${p.marker ?? ""} ${p.name}<br/><strong>${formatNumber(p.percent ?? 0, 1)}%</strong> of total risk`,
 			},
 			legend: {
 				bottom: 0,
 				itemWidth: 10,
 				itemHeight: 10,
-				textStyle: { fontSize: 11, color: '#85a0bd' },
+				textStyle: { fontSize: 11, color: textMuted },
 			},
 			series: [
 				{
@@ -59,31 +97,16 @@
 					avoidLabelOverlap: true,
 					label: { show: false },
 					labelLine: { show: false },
+					// Flat slices: 1px separator border using surface color,
+					// no shadow, no border-radius. Institutional convention.
 					itemStyle: {
-						borderColor: '#141519',
-						borderWidth: 2,
-						borderRadius: 4,
-						shadowBlur: 10,
-						shadowColor: 'rgba(0, 0, 0, 0.5)'
+						borderColor: surfaceColor,
+						borderWidth: 1,
 					},
 					emphasis: {
-						label: { show: true, fontSize: 13, fontWeight: 700, color: '#ffffff' },
+						label: { show: true, fontSize: 13, fontWeight: 700, color: textSecondary },
 					},
-					data: slices.map((slice: { value: number; name: string; itemStyle?: any }, i: number) => {
-						if (slice.itemStyle) return slice; // Keep defined ones
-						const colors = [
-							[{offset: 0, color: '#0194ff'}, {offset: 1, color: '#0054c2'}],
-							[{offset: 0, color: '#1ceba7'}, {offset: 1, color: '#0a8844'}],
-							[{offset: 0, color: '#ebb94d'}, {offset: 1, color: '#9d6d13'}],
-							[{offset: 0, color: '#c418e6'}, {offset: 1, color: '#7a0a91'}],
-							[{offset: 0, color: '#ff4d4d'}, {offset: 1, color: '#cc0000'}],
-						];
-						const color = colors[i % colors.length];
-						return {
-							...slice,
-							itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: color } }
-						}
-					}),
+					data: slices,
 				},
 			],
 		};
@@ -104,26 +127,27 @@
 			tooltip: {
 				...globalChartOptions.tooltip,
 				trigger: "axis" as const,
-				axisPointer: { type: 'shadow' },
+				axisPointer: { type: "shadow" },
 				formatter(params: unknown) {
 					const list = Array.isArray(params) ? params : [params];
 					const p = list[0] as { name?: string; value?: number; marker?: string };
 					if (p.value == null) return "";
-					return `<strong>${p.name}</strong><br/>${p.marker ?? ""} Exposure: ${p.value > 0 ? "+" : ""}${p.value.toFixed(3)}`;
+					const sign = p.value > 0 ? "+" : "";
+					return `<strong>${p.name}</strong><br/>${p.marker ?? ""} Exposure: ${sign}${formatNumber(p.value, 3)}`;
 				},
 			},
 			xAxis: {
 				type: "value" as const,
 				min: -1,
 				max: 1,
-				axisLabel: { formatter: "{value}", fontSize: 10, color: '#85a0bd' },
-				splitLine: { lineStyle: { type: "dashed" as const, color: 'rgba(64,66,73,0.3)' } },
+				axisLabel: { formatter: "{value}", fontSize: 10, color: textMuted },
+				splitLine: { lineStyle: { type: "dashed" as const, color: borderSubtle } },
 			},
 			yAxis: {
 				type: "category" as const,
 				data: categories,
 				inverse: true,
-				axisLabel: { fontSize: 11, fontWeight: 600, color: '#cbccd1' },
+				axisLabel: { fontSize: 11, fontWeight: 600, color: textSecondary },
 				axisTick: { show: false },
 				axisLine: { show: false },
 			},
@@ -133,14 +157,8 @@
 					type: "bar" as const,
 					data: values.map((v) => ({
 						value: v,
-						itemStyle: {
-							color: v >= 0
-									? { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{offset: 0, color: '#09a552'}, {offset: 1, color: '#11ec79'}] }
-									: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{offset: 0, color: '#fc1a1a'}, {offset: 1, color: '#a30c0c'}] },
-							borderRadius: v >= 0 ? [0, 4, 4, 0] : [4, 0, 0, 4],
-							shadowBlur: 8,
-							shadowColor: v >= 0 ? 'rgba(17,236,121,0.2)' : 'rgba(252,26,26,0.2)'
-						},
+						// Flat fill — no gradient, shadow, or border-radius.
+						itemStyle: { color: v >= 0 ? successColor : dangerColor },
 					})),
 					barWidth: "40%",
 					label: {
@@ -148,14 +166,17 @@
 						position: "right" as const,
 						fontSize: 10,
 						fontWeight: 600,
-						color: '#ffffff',
-						formatter: (p: { value: number }) => `${p.value > 0 ? "+" : ""}${p.value.toFixed(2)}`,
+						color: textSecondary,
+						formatter: (p: { value: number }) => {
+							const sign = p.value > 0 ? "+" : "";
+							return `${sign}${formatNumber(p.value, 2)}`;
+						},
 					},
 					markLine: {
 						silent: true,
 						symbol: "none" as const,
 						data: [{ xAxis: 0 }],
-						lineStyle: { color: "var(--ii-text-muted)", type: "solid" as const, width: 1 },
+						lineStyle: { color: textMuted, type: "solid" as const, width: 1 },
 						label: { show: false },
 					},
 				},
@@ -174,9 +195,9 @@
 		/>
 	</div>
 {:else if isLoading}
-	<div class="flex flex-col items-center justify-center p-12 text-[#85a0bd]">
-		<div class="h-8 w-8 animate-spin rounded-full border-2 border-[#0177fb] border-t-transparent mb-4"></div>
-		<p class="text-[13px] font-medium animate-pulse">Running Factor Analysis...</p>
+	<div class="factor-loading">
+		<div class="factor-spinner"></div>
+		<p>Running Factor Analysis…</p>
 	</div>
 {:else if !hasData}
 	<div class="p-6">
@@ -186,17 +207,15 @@
 		/>
 	</div>
 {:else}
-	<div class="flex flex-col gap-6 p-6 h-full">
-		<!-- Header -->
-		<div class="flex items-center gap-3">
-			<span class="text-[16px] font-bold text-white tracking-tight">Factor Analysis</span>
-			<span class="text-[12px] text-[#85a0bd] bg-white/5 border border-white/10 px-2 py-0.5 rounded-full ml-auto">{fundCount} fund{fundCount !== 1 ? "s" : ""}</span>
+	<div class="factor-panel">
+		<div class="factor-header">
+			<span class="factor-title">Factor Analysis</span>
+			<span class="factor-pill">{fundCount} fund{fundCount !== 1 ? "s" : ""}</span>
 		</div>
 
-		<!-- Charts grid -->
-		<div class="grid grid-cols-2 gap-8 flex-1 min-h-0 bg-white/[0.015] rounded-[20px] border border-[#404249]/30 p-5">
-			<div class="flex flex-col gap-3">
-				<span class="text-[11px] font-semibold text-[#85a0bd] uppercase tracking-[0.06em]">Risk Decomposition</span>
+		<div class="factor-grid">
+			<div class="factor-block">
+				<span class="factor-label">Risk Decomposition</span>
 				<ChartContainer
 					option={donutOption}
 					height={240}
@@ -205,8 +224,8 @@
 				/>
 			</div>
 
-			<div class="flex flex-col gap-3">
-				<span class="text-[11px] font-semibold text-[#85a0bd] uppercase tracking-[0.06em]">Style Factor Exposures</span>
+			<div class="factor-block">
+				<span class="factor-label">Style Factor Exposures</span>
 				<ChartContainer
 					option={barOption}
 					height={240}
@@ -217,3 +236,90 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.factor-loading {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 48px;
+		color: var(--ii-text-muted);
+		gap: 16px;
+	}
+
+	.factor-loading p {
+		font-size: 13px;
+		font-weight: 500;
+		animation: pulse 1.5s ease-in-out infinite;
+	}
+
+	.factor-spinner {
+		width: 32px;
+		height: 32px;
+		border: 2px solid var(--ii-brand-primary);
+		border-top-color: transparent;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin { to { transform: rotate(360deg); } }
+	@keyframes pulse { 50% { opacity: 0.5; } }
+
+	.factor-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 24px;
+		padding: 24px;
+		height: 100%;
+	}
+
+	.factor-header {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.factor-title {
+		font-size: 16px;
+		font-weight: 700;
+		color: var(--ii-text-primary);
+		letter-spacing: -0.02em;
+	}
+
+	.factor-pill {
+		font-size: 12px;
+		color: var(--ii-text-muted);
+		background: color-mix(in srgb, var(--ii-text-primary) 5%, transparent);
+		border: 1px solid color-mix(in srgb, var(--ii-text-primary) 10%, transparent);
+		padding: 2px 8px;
+		border-radius: 999px;
+		margin-left: auto;
+	}
+
+	.factor-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 32px;
+		flex: 1;
+		min-height: 0;
+		background: color-mix(in srgb, var(--ii-text-primary) 1.5%, transparent);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: 20px;
+		padding: 20px;
+	}
+
+	.factor-block {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.factor-label {
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--ii-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+	}
+</style>

@@ -133,7 +133,7 @@ export const globalChartOptions = {
 	animation: true,
 	animationDuration: 300,
 	backgroundColor: "transparent",
-	textStyle: { fontFamily: "Geist, system-ui, sans-serif", fontSize: 12 },
+	textStyle: { fontFamily: "Urbanist, system-ui, sans-serif", fontSize: 12 },
 	grid: { containLabel: true, left: 8, right: 8, top: 8, bottom: 8 },
 	tooltip: {
 		trigger: "axis" as const,
