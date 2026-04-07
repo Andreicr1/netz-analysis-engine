@@ -117,13 +117,20 @@
 
 {#if workspace.portfolio}
 	<div class="main-chart-wrap" bind:this={wrapEl}>
-		{#if chartHeight > 0}
+		{#if isLoading}
+			<div class="main-chart-placeholder">
+				<div class="main-chart-spinner"></div>
+				<span>Loading track record...</span>
+			</div>
+		{:else if isEmpty}
+			<div class="main-chart-placeholder">
+				<span class="main-chart-placeholder-title">No track-record data</span>
+				<span>The NAV synthesizer has not generated data for this portfolio yet.</span>
+			</div>
+		{:else if chartHeight > 0}
 			<ChartContainer
 				{option}
 				height={chartHeight}
-				empty={isEmpty && !isLoading}
-				emptyMessage="No track-record data available"
-				loading={isLoading}
 				ariaLabel="Portfolio backtest equity curve"
 			/>
 		{/if}
@@ -138,14 +145,39 @@
 	.main-chart-wrap {
 		flex: 1;
 		min-height: 0;
+		height: 100%;
 	}
 
-	.main-chart-empty {
+	.main-chart-empty,
+	.main-chart-placeholder {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
+		gap: 6px;
 		flex: 1;
-		color: var(--ii-text-muted);
-		font-size: var(--ii-text-small, 0.8125rem);
+		height: 100%;
+		color: #85a0bd;
+		font-size: 13px;
+		font-family: "Urbanist", sans-serif;
+	}
+
+	.main-chart-placeholder-title {
+		font-size: 14px;
+		font-weight: 600;
+		color: #cbccd1;
+	}
+
+	.main-chart-spinner {
+		width: 24px;
+		height: 24px;
+		border: 3px solid rgba(1, 119, 251, 0.2);
+		border-top-color: #0177fb;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
 	}
 </style>

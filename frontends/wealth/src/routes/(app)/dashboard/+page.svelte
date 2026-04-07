@@ -10,6 +10,8 @@
 	import type { MarketDataStore, DashboardSnapshot } from "$lib/stores/market-data.svelte";
 	import type { PortfolioAnalyticsStore } from "$lib/stores/portfolio-analytics.svelte";
 	import { ArrowUpRight, ChevronDown, TrendingUp, TrendingDown } from "lucide-svelte";
+	import AdvancedMarketChart from "$lib/components/charts/AdvancedMarketChart.svelte";
+	import LiveNewsFeed from "$lib/components/dashboard/LiveNewsFeed.svelte";
 
 	let { data } = $props();
 
@@ -72,6 +74,30 @@
 	let overviewFilter = $state("All");
 	let watchlistFilter = $state("Most Viewed");
 
+	// ── Active ticker — drives the central chart + news feed ──────────
+	// Defaults to SPY until the user clicks a holding/watchlist row, or
+	// auto-promotes to the first holding once the SSR snapshot lands.
+	let activeTicker = $state<string>("SPY");
+
+	function selectTicker(ticker: string | null | undefined) {
+		const t = (ticker ?? "").trim().toUpperCase();
+		if (!t) return;
+		activeTicker = t;
+		// Ensure the WS bridge is streaming this symbol — idempotent.
+		marketStore.subscribe([t]);
+	}
+
+	// Once holdings arrive from SSR/snapshot, prefer the largest position
+	// so the user doesn't open the dashboard staring at an unrelated SPY.
+	$effect(() => {
+		if (activeTicker !== "SPY") return;
+		const first = marketStore.holdings[0];
+		if (first?.ticker) {
+			activeTicker = first.ticker.toUpperCase();
+			marketStore.subscribe([activeTicker]);
+		}
+	});
+
 	// Gradient borders — rotate across holdings for visual interest
 	const GRADIENTS = [
 		(pos: boolean) => `linear-gradient(to top, ${pos ? "rgba(17,236,121,0.5)" : "rgba(252,26,26,0.5)"}, ${pos ? "rgba(17,236,121,0.15)" : "rgba(252,26,26,0.15)"} 50%, transparent)`,
@@ -129,158 +155,171 @@
 	let isLoading = $derived(marketStore.status === "connecting" && !hasData);
 </script>
 
-<!-- 12-column master grid -->
-<div class="grid grid-cols-12 gap-6">
+<!-- 12-column master grid — high-density layout, glassmorphism preserved -->
+<div class="grid grid-cols-12 gap-3">
 
 	<!-- ══ Row 1: Total AUM (4 cols) + Portfolio Holdings (8 cols) ══ -->
 
-	<!-- Total AUM — glassmorphism -->
-	<div class="col-span-4 relative rounded-[24px] overflow-hidden bg-[#0d0d0d]/60 backdrop-blur-[11px] border border-white/5 min-h-[261px]">
+	<!-- Total AUM — glassmorphism (density-tuned) -->
+	<div class="col-span-4 relative rounded-[24px] overflow-hidden bg-[#0d0d0d]/60 backdrop-blur-[11px] border border-white/5 min-h-[170px]">
 		<div class="absolute inset-0 bg-gradient-to-br from-[#0177fb]/15 via-transparent to-transparent pointer-events-none"></div>
-		<div class="relative flex flex-col justify-between h-full p-8">
+		<div class="relative flex flex-col justify-between h-full px-5 py-4 gap-2">
 			<div class="flex items-center justify-between">
-				<span class="text-[20px] font-medium text-white">Total AUM</span>
-				<div class="flex items-center">
-					<span class="border border-white rounded-[32px] px-[26px] py-[18px] text-[16px] text-white leading-none">{selectedRange}</span>
-					<span class="border border-white rounded-full p-[17px] leading-none">
-						<ChevronDown size={24} class="text-white" />
+				<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd]">Total AUM</span>
+				<div class="flex items-center gap-1">
+					<span class="border border-white/20 rounded-full px-3 py-1 text-[11px] text-white leading-none">{selectedRange}</span>
+					<span class="border border-white/20 rounded-full p-1.5 leading-none">
+						<ChevronDown size={14} class="text-white" />
 					</span>
 				</div>
 			</div>
 
 			{#if isLoading}
-				<div class="h-[44px] w-48 bg-white/5 rounded-lg animate-pulse"></div>
+				<div class="h-8 w-44 bg-white/5 rounded animate-pulse"></div>
 			{:else}
-				<p class="text-[44px] font-bold text-white tracking-tight tabular-nums leading-none">
+				<p class="text-[32px] font-bold text-white tracking-tight tabular-nums leading-none">
 					{formatCurrency(totalAum)}
 				</p>
 			{/if}
 
-			<div class="flex items-end gap-2">
-				<span class="text-[16px] text-white tracking-[-0.8px]">Return</span>
+			<div class="flex items-end gap-1.5">
+				<span class="text-xs text-[#85a0bd] uppercase tracking-wider">Return</span>
 				{#if totalReturnPct != null}
 					{#if totalReturnPct >= 0}
-						<TrendingUp size={24} class="text-[#11ec79]" />
-						<span class="text-[16px] text-[#11ec79] tracking-[-0.8px]">
+						<TrendingUp size={14} class="text-[#11ec79]" />
+						<span class="text-sm font-semibold text-[#11ec79] tabular-nums">
 							+{formatPercent(totalReturnPct)}{#if totalPnl !== 0} ({formatCurrency(Math.abs(totalPnl))}){/if}
 						</span>
 					{:else}
-						<TrendingDown size={24} class="text-[#fc1a1a]" />
-						<span class="text-[16px] text-[#fc1a1a] tracking-[-0.8px]">
+						<TrendingDown size={14} class="text-[#fc1a1a]" />
+						<span class="text-sm font-semibold text-[#fc1a1a] tabular-nums">
 							{formatPercent(totalReturnPct)}{#if totalPnl !== 0} ({formatCurrency(Math.abs(totalPnl))}){/if}
 						</span>
 					{/if}
 				{:else if isLoading}
-					<div class="h-4 w-24 bg-white/5 rounded animate-pulse"></div>
+					<div class="h-3 w-20 bg-white/5 rounded animate-pulse"></div>
 				{:else}
-					<span class="text-[16px] text-[#85a0bd] tracking-[-0.8px]">—</span>
+					<span class="text-sm text-[#85a0bd]">—</span>
 				{/if}
 			</div>
 		</div>
 	</div>
 
-	<!-- Portfolio Holdings (8 cols) -->
-	<div class="col-span-8 bg-black rounded-[24px] p-8">
-		<div class="flex items-center justify-between mb-6">
-			<span class="text-[20px] font-medium text-white">Portfolio Holdings</span>
-			<div class="flex items-center">
-				<a href="/portfolio/approved" class="border border-white rounded-[32px] px-[26px] py-[18px] text-[16px] text-white leading-none no-underline hover:bg-white/10 transition-colors">See all</a>
-				<a href="/portfolio/approved" class="border border-white rounded-full p-[13px] leading-none no-underline hover:bg-white/10 transition-colors">
-					<ArrowUpRight size={24} class="text-white" />
+	<!-- Portfolio Holdings (8 cols) — density-tuned -->
+	<div class="col-span-8 bg-black rounded-[24px] px-5 py-4">
+		<div class="flex items-center justify-between mb-3">
+			<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd]">Portfolio Holdings</span>
+			<div class="flex items-center gap-1">
+				<a href="/portfolio/approved" class="border border-white/20 rounded-full px-3 py-1 text-[11px] text-white leading-none no-underline hover:bg-white/10 transition-colors">See all</a>
+				<a href="/portfolio/approved" class="border border-white/20 rounded-full p-1.5 leading-none no-underline hover:bg-white/10 transition-colors">
+					<ArrowUpRight size={14} class="text-white" />
 				</a>
 			</div>
 		</div>
 
-		<!-- Cards: 5 cols on wide, stacking below -->
-		<div class="grid grid-cols-5 gap-3">
+		<!-- Cards: 5 across, compact -->
+		<div class="grid grid-cols-5 gap-2">
 			{#if isLoading}
 				{#each Array(5) as _}
-					<div class="rounded-[24px] bg-[#141519] min-h-[149px] animate-pulse"></div>
+					<div class="rounded-[20px] bg-[#141519] min-h-[88px] animate-pulse"></div>
 				{/each}
 			{:else if topHoldings.length > 0}
 				{#each topHoldings as h, i}
 					{@const positive = h.change_pct >= 0}
 					{@const gradFn = GRADIENTS[i % GRADIENTS.length]!}
 					{@const grad = gradFn(positive)}
-					<div class="rounded-[24px] p-[1px]" style:background={grad}>
-						<div class="bg-[#141519] rounded-[23px] p-4 flex flex-col justify-between min-h-[149px] h-full">
-							<div class="flex flex-col gap-1">
-								<span class="text-[18px] font-bold text-white tabular-nums">{formatCurrency(h.price, h.currency)}</span>
-								<span class="text-[12px] {positive ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
+					<button
+						type="button"
+						class="rounded-[20px] p-[1px] text-left w-full transition-transform hover:scale-[1.02]"
+						style:background={grad}
+						onclick={() => selectTicker(h.ticker)}
+					>
+						<div class="bg-[#141519] rounded-[19px] px-3 py-2.5 flex flex-col justify-between min-h-[88px] h-full">
+							<div class="flex flex-col gap-0.5">
+								<span class="text-sm font-bold text-white tabular-nums leading-tight">{formatCurrency(h.price, h.currency)}</span>
+								<span class="text-[10px] tabular-nums {positive ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
 									{positive ? "+" : ""}{formatNumber(h.change, 2)} ({formatNumber(h.change_pct, 1)}%)
 								</span>
 							</div>
-							<div class="flex items-center justify-between mt-auto pt-4">
-								<span class="text-[12px] text-white">{h.ticker || h.name.slice(0, 8)}</span>
+							<div class="flex items-center justify-between mt-auto pt-1.5">
+								<span class="text-xs font-semibold text-white tracking-wide">{h.ticker || h.name.slice(0, 6)}</span>
 								{#if h.weight > 0}
-									<span class="text-[12px] text-[#f3f4f8]">
-										<span class="font-bold text-white">{formatNumber(h.weight * 100, 1)}%</span>
-									</span>
+									<span class="text-[10px] font-bold text-white tabular-nums">{formatNumber(h.weight * 100, 1)}%</span>
 								{/if}
 							</div>
 						</div>
-					</div>
+					</button>
 				{/each}
 			{:else}
-				<div class="col-span-5 flex items-center justify-center h-[149px] text-white/30 border border-dashed border-white/10 rounded-[16px]">
+				<div class="col-span-5 flex items-center justify-center h-[88px] text-xs text-white/30 border border-dashed border-white/10 rounded-[16px]">
 					No holdings in portfolio
 				</div>
 			{/if}
 		</div>
 	</div>
 
-	<!-- ══ Row 2: Portfolio Performance (12 cols) ══ -->
-	<div class="col-span-12 bg-black rounded-[24px] p-8">
-		<div class="flex flex-wrap items-center justify-between gap-4 mb-8">
-			<div class="flex flex-wrap items-center gap-4">
-				<span class="text-[20px] font-medium text-white whitespace-nowrap">Portfolio Performance</span>
-				<div class="flex flex-wrap items-center gap-0">
+	<!-- ══ Row 2: AdvancedMarketChart (8 cols) + LiveNewsFeed (4 cols) ══ -->
+	<div class="col-span-8 bg-black rounded-[24px] px-5 py-4 flex flex-col gap-3">
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div class="flex flex-wrap items-center gap-3">
+				<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd] whitespace-nowrap">Market Chart</span>
+				<div class="flex flex-wrap items-center gap-1">
 					{#each profileFilters as pf}
 						<button
 							type="button"
-							class="h-[55px] px-[26px] rounded-[32px] text-[16px] text-white transition-colors leading-none whitespace-nowrap
+							class="h-7 px-3 rounded-full text-[11px] font-medium text-white transition-colors leading-none whitespace-nowrap
 								{selectedProfile === pf
 									? 'bg-[#0177fb]'
-									: 'border border-white hover:bg-white/10'}"
+									: 'border border-white/20 hover:bg-white/10'}"
 							onclick={() => selectedProfile = pf}
 						>{pf}</button>
 					{/each}
 				</div>
 			</div>
 
-			<div class="flex flex-wrap items-center gap-0">
+			<div class="flex flex-wrap items-center gap-1">
 				{#each timeRanges as tr}
 					<button
 						type="button"
-						class="h-[55px] px-[26px] rounded-[32px] text-[16px] text-white transition-colors leading-none
+						class="h-7 px-3 rounded-full text-[11px] font-medium text-white transition-colors leading-none
 							{selectedRange === tr
 								? 'bg-[#0177fb]'
-								: 'border border-white hover:bg-white/10'}"
+								: 'border border-white/20 hover:bg-white/10'}"
 						onclick={() => selectedRange = tr}
 					>{tr}</button>
 				{/each}
 			</div>
 		</div>
 
-		<div class="h-[260px] flex items-center justify-center text-white/30 border border-dashed border-white/10 rounded-[16px]">
-			Performance chart ({selectedProfile} · {selectedRange})
+		<!-- Chart cola nas bordas internas — sem padding extra -->
+		<div class="-mx-2 -mb-2">
+			<AdvancedMarketChart ticker={activeTicker} height={380} />
 		</div>
+	</div>
+
+	<div class="col-span-4">
+		<LiveNewsFeed
+			tickers={[activeTicker]}
+			limit={20}
+			refreshIntervalMs={60_000}
+			maxHeight={460}
+		/>
 	</div>
 
 	<!-- ���═ Row 3: Portfolio Overview (8 cols) + Watchlist (4 cols) ══ -->
 
-	<!-- Portfolio Overview -->
-	<div class="col-span-8 bg-black rounded-t-[24px] p-8">
-		<div class="flex flex-wrap items-center justify-between gap-4 mb-6">
-			<span class="text-[20px] font-medium text-white">Portfolio Overview</span>
-			<div class="flex flex-wrap items-center gap-0">
+	<!-- Portfolio Overview — high-density table -->
+	<div class="col-span-8 bg-black rounded-[24px] px-5 py-4">
+		<div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+			<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd]">Portfolio Overview</span>
+			<div class="flex flex-wrap items-center gap-1">
 				{#each ["All", "Gainers", "Losers"] as f}
 					<button
 						type="button"
-						class="h-[55px] px-[26px] rounded-[32px] text-[16px] text-white transition-colors leading-none
+						class="h-7 px-3 rounded-full text-[11px] font-medium text-white transition-colors leading-none
 							{overviewFilter === f
 								? 'bg-[#0177fb]'
-								: 'border border-white hover:bg-white/10'}"
+								: 'border border-white/20 hover:bg-white/10'}"
 						onclick={() => overviewFilter = f}
 					>{f}</button>
 				{/each}
@@ -290,112 +329,120 @@
 		<table class="w-full">
 			<thead>
 				<tr class="border-b border-white/10">
-					<th class="text-left text-[17px] font-semibold text-white pb-4 pr-4">Fund</th>
-					<th class="text-left text-[17px] font-semibold text-white pb-4 pr-4">Last Price</th>
-					<th class="text-left text-[17px] font-semibold text-white pb-4 pr-4">Change</th>
-					<th class="text-left text-[17px] font-semibold text-white pb-4 pr-4">AUM</th>
-					<th class="text-left text-[17px] font-semibold text-white pb-4">Trend</th>
+					<th class="text-left text-[10px] font-semibold uppercase tracking-wider text-[#85a0bd] pb-2 pr-3">Fund</th>
+					<th class="text-right text-[10px] font-semibold uppercase tracking-wider text-[#85a0bd] pb-2 pr-3">Last Price</th>
+					<th class="text-right text-[10px] font-semibold uppercase tracking-wider text-[#85a0bd] pb-2 pr-3">Change</th>
+					<th class="text-right text-[10px] font-semibold uppercase tracking-wider text-[#85a0bd] pb-2 pr-3">AUM</th>
+					<th class="text-right text-[10px] font-semibold uppercase tracking-wider text-[#85a0bd] pb-2 w-8"></th>
 				</tr>
 			</thead>
 			<tbody>
 				{#if isLoading}
-					{#each Array(3) as _}
-						<tr class="border-b border-white/10">
-							<td class="py-5 pr-4"><div class="h-4 w-32 bg-white/5 rounded animate-pulse"></div></td>
-							<td class="py-5 pr-4"><div class="h-4 w-24 bg-white/5 rounded animate-pulse"></div></td>
-							<td class="py-5 pr-4"><div class="h-4 w-16 bg-white/5 rounded animate-pulse"></div></td>
-							<td class="py-5 pr-4"><div class="h-4 w-20 bg-white/5 rounded animate-pulse"></div></td>
-							<td class="py-5"><div class="h-4 w-8 bg-white/5 rounded animate-pulse"></div></td>
+					{#each Array(5) as _}
+						<tr class="border-b border-white/5">
+							<td class="py-2 pr-3"><div class="h-3 w-32 bg-white/5 rounded animate-pulse"></div></td>
+							<td class="py-2 pr-3"><div class="h-3 w-20 bg-white/5 rounded animate-pulse ml-auto"></div></td>
+							<td class="py-2 pr-3"><div class="h-3 w-14 bg-white/5 rounded animate-pulse ml-auto"></div></td>
+							<td class="py-2 pr-3"><div class="h-3 w-16 bg-white/5 rounded animate-pulse ml-auto"></div></td>
+							<td class="py-2"><div class="h-3 w-3 bg-white/5 rounded animate-pulse ml-auto"></div></td>
 						</tr>
 					{/each}
 				{:else if overviewRows.length > 0}
 					{#each overviewRows as row}
 						{@const positive = row.changePct >= 0}
-						<tr class="border-b border-white/10">
-							<td class="py-5 text-[16px] text-white pr-4">
-								<div class="flex flex-col">
-									<span>{row.name.length > 30 ? row.name.slice(0, 30) + "…" : row.name}</span>
-									<span class="text-[13px] text-[#85a0bd]">{row.ticker}</span>
+						{@const isActive = activeTicker === (row.ticker || "").toUpperCase()}
+						<tr
+							class="border-b border-white/5 cursor-pointer transition-colors hover:bg-white/5 {isActive ? 'bg-[#0177fb]/10' : ''}"
+							onclick={() => selectTicker(row.ticker)}
+						>
+							<td class="py-2 pr-3">
+								<div class="flex flex-col leading-tight">
+									<span class="text-sm text-white">{row.name.length > 28 ? row.name.slice(0, 28) + "…" : row.name}</span>
+									<span class="text-[10px] text-[#85a0bd] tracking-wide">{row.ticker}</span>
 								</div>
 							</td>
-							<td class="py-5 text-[16px] text-white tabular-nums pr-4">{formatCurrency(row.price, row.currency)}</td>
-							<td class="py-5 text-[16px] tabular-nums pr-4 {positive ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
+							<td class="py-2 text-sm text-white tabular-nums text-right pr-3">{formatCurrency(row.price, row.currency)}</td>
+							<td class="py-2 text-sm tabular-nums text-right pr-3 {positive ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
 								{positive ? "+" : ""}{formatNumber(row.changePct, 2)}%
 							</td>
-							<td class="py-5 text-[16px] text-white tabular-nums pr-4">
+							<td class="py-2 text-sm text-white tabular-nums text-right pr-3">
 								{row.aum ? formatCurrency(row.aum) : "—"}
 							</td>
-							<td class="py-5">
+							<td class="py-2 text-right">
 								{#if positive}
-									<TrendingUp size={20} class="text-[#11ec79]" />
+									<TrendingUp size={14} class="text-[#11ec79] inline" />
 								{:else}
-									<TrendingDown size={20} class="text-[#fc1a1a]" />
+									<TrendingDown size={14} class="text-[#fc1a1a] inline" />
 								{/if}
 							</td>
 						</tr>
 					{/each}
 				{:else}
 					<tr>
-						<td colspan="5" class="py-8 text-center text-white/30">No holdings to display</td>
+						<td colspan="5" class="py-6 text-center text-xs text-white/30">No holdings to display</td>
 					</tr>
 				{/if}
 			</tbody>
 		</table>
 	</div>
 
-	<!-- Watchlist -->
-	<div class="col-span-4 bg-black rounded-t-[24px] p-8">
-		<span class="text-[20px] font-medium text-white mb-6 block">Watchlist</span>
-		<div class="flex flex-wrap items-center gap-0 mb-8">
-			{#each ["Most Viewed", "Gainers", "Losers"] as f}
-				<button
-					type="button"
-					class="h-[55px] px-[21px] rounded-[32px] text-[16px] text-white transition-colors leading-none whitespace-nowrap
-						{watchlistFilter === f
-							? 'bg-[#0177fb]'
-							: 'border border-white hover:bg-white/10'}"
-					onclick={() => watchlistFilter = f}
-				>{f}</button>
-			{/each}
+	<!-- Watchlist — high-density list -->
+	<div class="col-span-4 bg-black rounded-[24px] px-5 py-4">
+		<div class="flex items-center justify-between gap-2 mb-3">
+			<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd]">Watchlist</span>
+			<div class="flex items-center gap-1">
+				{#each ["Most Viewed", "Gainers", "Losers"] as f}
+					<button
+						type="button"
+						class="h-7 px-2.5 rounded-full text-[10px] font-medium text-white transition-colors leading-none whitespace-nowrap
+							{watchlistFilter === f
+								? 'bg-[#0177fb]'
+								: 'border border-white/20 hover:bg-white/10'}"
+						onclick={() => watchlistFilter = f}
+					>{f}</button>
+				{/each}
+			</div>
 		</div>
 
 		{#if isLoading}
-			{#each Array(3) as _}
-				<div class="flex items-center justify-between py-5 border-b border-white/10">
-					<div class="flex flex-col gap-2">
-						<div class="h-4 w-28 bg-white/5 rounded animate-pulse"></div>
-						<div class="h-3 w-16 bg-white/5 rounded animate-pulse"></div>
+			{#each Array(5) as _}
+				<div class="flex items-center justify-between py-2 border-b border-white/5">
+					<div class="flex flex-col gap-1">
+						<div class="h-3 w-24 bg-white/5 rounded animate-pulse"></div>
+						<div class="h-2 w-12 bg-white/5 rounded animate-pulse"></div>
 					</div>
-					<div class="flex flex-col gap-2 items-end">
-						<div class="h-4 w-20 bg-white/5 rounded animate-pulse"></div>
-						<div class="h-3 w-14 bg-white/5 rounded animate-pulse"></div>
+					<div class="flex flex-col gap-1 items-end">
+						<div class="h-3 w-16 bg-white/5 rounded animate-pulse"></div>
+						<div class="h-2 w-10 bg-white/5 rounded animate-pulse"></div>
 					</div>
 				</div>
 			{/each}
 		{:else}
 			{@const watchlistRows = watchlistFilter === "Gainers"
-				? marketStore.holdings.filter(h => h.change_pct > 0).slice(0, 5)
+				? marketStore.holdings.filter(h => h.change_pct > 0).slice(0, 8)
 				: watchlistFilter === "Losers"
-					? marketStore.holdings.filter(h => h.change_pct < 0).slice(0, 5)
-					: marketStore.holdings.slice(0, 5)}
-			{#each watchlistRows as h, i}
-				{#if i > 0}
-					<div class="border-t border-white/10"></div>
-				{/if}
-				<div class="flex items-center justify-between py-5">
-					<div class="flex flex-col gap-1">
-						<span class="text-[16px] text-white">{h.name.length > 20 ? h.name.slice(0, 20) + "…" : h.name}</span>
-						<span class="text-[14px] text-[#c2c2c2]">{h.ticker}</span>
+					? marketStore.holdings.filter(h => h.change_pct < 0).slice(0, 8)
+					: marketStore.holdings.slice(0, 8)}
+			{#each watchlistRows as h (h.ticker || h.name)}
+				{@const isActive = activeTicker === (h.ticker || "").toUpperCase()}
+				<button
+					type="button"
+					class="w-full text-left flex items-center justify-between py-2 px-2 -mx-2 border-b border-white/5 last:border-0 cursor-pointer transition-colors hover:bg-white/5 {isActive ? 'bg-[#0177fb]/10' : ''}"
+					onclick={() => selectTicker(h.ticker)}
+				>
+					<div class="flex flex-col gap-0.5 leading-tight min-w-0">
+						<span class="text-sm text-white truncate">{h.name.length > 22 ? h.name.slice(0, 22) + "…" : h.name}</span>
+						<span class="text-[10px] text-[#85a0bd] tracking-wide">{h.ticker}</span>
 					</div>
-					<div class="flex flex-col gap-1 items-end">
-						<span class="text-[16px] text-white tabular-nums">{formatCurrency(h.price, h.currency)}</span>
-						<span class="text-[14px] tabular-nums {h.change_pct >= 0 ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
+					<div class="flex flex-col gap-0.5 items-end leading-tight tabular-nums">
+						<span class="text-sm text-white">{formatCurrency(h.price, h.currency)}</span>
+						<span class="text-[10px] {h.change_pct >= 0 ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
 							{h.change_pct >= 0 ? "+" : ""}{formatNumber(h.change_pct, 2)}%
 						</span>
 					</div>
-				</div>
+				</button>
 			{:else}
-				<div class="py-8 text-center text-white/30">No items in watchlist</div>
+				<div class="py-6 text-center text-xs text-white/30">No items in watchlist</div>
 			{/each}
 		{/if}
 	</div>

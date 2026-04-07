@@ -31,6 +31,13 @@ TIINGO_BASE_URL = "https://api.tiingo.com"
 TIINGO_WS_IEX_URL = "wss://api.tiingo.com/iex"
 TIINGO_WS_CRYPTO_URL = "wss://api.tiingo.com/crypto"
 
+# Institutional plan: 10,000 req/h, 100k req/day, unlimited symbols, 15y+ history.
+# Concurrency cap chosen to stay well below TCP/connection-pool limits while
+# saturating Tiingo's REST capacity. Free-tier throttling (sleeps, semaphores
+# of 1-2, hourly token buckets) is intentionally absent.
+TIINGO_MAX_CONCURRENT_REQUESTS = 50
+TIINGO_BATCH_SIZE = 100
+
 
 # -- Data Models ---------------------------------------------------------------
 
@@ -82,6 +89,13 @@ class TiingoProvider:
 
     def __init__(self, api_key: str | None = None) -> None:
         self._api_key = api_key or os.environ.get("TIINGO_API_KEY", "")
+        # Fallback: try pydantic-settings (reads .env properly)
+        if not self._api_key:
+            try:
+                from app.core.config.settings import settings
+                self._api_key = settings.tiingo_api_key
+            except Exception:
+                pass
         if not self._api_key:
             logger.warning("TIINGO_API_KEY not set -- all requests will fail")
         self._headers = {
@@ -93,6 +107,14 @@ class TiingoProvider:
         self._ws_task: asyncio.Task | None = None
         self._subscribed_tickers: set[str] = set()
         self._quote_callback: LiveQuoteCallback | None = None
+        # Lazy-init: created in the running event loop, never at module import.
+        self._rest_semaphore: asyncio.Semaphore | None = None
+
+    def _get_rest_semaphore(self) -> asyncio.Semaphore:
+        """Lazy semaphore — must be created inside the running event loop."""
+        if self._rest_semaphore is None:
+            self._rest_semaphore = asyncio.Semaphore(TIINGO_MAX_CONCURRENT_REQUESTS)
+        return self._rest_semaphore
 
     # -- REST: Historical EOD --------------------------------------------------
 
@@ -108,7 +130,8 @@ class TiingoProvider:
             "startDate": start_date.isoformat(),
             "endDate": end_date.isoformat(),
         }
-        async with httpx.AsyncClient(timeout=15) as client:
+        sem = self._get_rest_semaphore()
+        async with sem, httpx.AsyncClient(timeout=15) as client:
             try:
                 resp = await client.get(url, headers=self._headers, params=params)
                 if resp.status_code == 404:
@@ -143,6 +166,42 @@ class TiingoProvider:
                 return None
             except (httpx.HTTPError, KeyError, IndexError, ValueError):
                 return None
+
+    # -- REST: Concurrent Batch Historical -------------------------------------
+
+    async def fetch_batch_history(
+        self,
+        tickers: list[str],
+        start_date: date,
+        end_date: date,
+    ) -> dict[str, List[MarketDataPoint]]:
+        """Fetch EOD history for many tickers concurrently.
+
+        Tiingo REST has no batch endpoint, so we fan out one request per
+        ticker, capped by ``TIINGO_MAX_CONCURRENT_REQUESTS``. With the
+        institutional plan (10k req/h, 100k req/day) this saturates the
+        wire instead of the rate limit. Errors per ticker are isolated:
+        a failed ticker yields ``[]`` and the rest still complete.
+        """
+        # Per-call semaphore is held inside ``get_historical_data`` itself,
+        # so we just gather here — concurrency is naturally bounded.
+        async def _one(ticker: str) -> tuple[str, List[MarketDataPoint]]:
+            points = await self.get_historical_data(ticker, start_date, end_date)
+            return ticker, points
+
+        results = await asyncio.gather(
+            *(_one(t) for t in tickers),
+            return_exceptions=True,
+        )
+
+        out: dict[str, List[MarketDataPoint]] = {}
+        for item in results:
+            if isinstance(item, BaseException):
+                logger.warning("Tiingo batch entry failed: %s", item)
+                continue
+            ticker, points = item
+            out[ticker] = points
+        return out
 
     # -- WebSocket: Real-Time IEX Stream ---------------------------------------
 

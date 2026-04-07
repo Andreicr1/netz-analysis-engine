@@ -2,7 +2,7 @@
 
 > Authoritative reference for market data ingestion and real-time distribution in the Netz Analysis Engine.
 > Supersedes: `market-data-provider-audit-massive-poc.md` (Fase 12 audit).
-> Last updated: 2026-04-05 (Fase 12.2 -- WebSocket infrastructure + Portfolio Holdings + Live Screener Catalog).
+> Last updated: 2026-04-06 (Fase 12.3 -- Tiingo Institutional plan: 15y deep history, IEX Firehose, TimescaleDB compression).
 
 ---
 
@@ -12,9 +12,9 @@
 
 After evaluating 5 providers (YFinance, Massive, Alpaca, Twelve Data, FMP), the engine uses **Tiingo as the single market data provider** for both dev and prod.
 
-| Provider | Equities | ETFs | Mutual Funds | Bonds | WebSocket | Free Tier | Verdict |
+| Provider | Equities | ETFs | Mutual Funds | Bonds | WebSocket | Plan | Verdict |
 |----------|----------|------|--------------|-------|-----------|-----------|---------|
-| **Tiingo** | 37k stocks | 45k ETFs+MFs | **SIM** | Via EOD | **SIM** (IEX) | 50 sym/hr | **SELECTED** |
+| **Tiingo** | 37k stocks | 45k ETFs+MFs | **SIM** | Via EOD | **SIM** (IEX Firehose) | **Institutional** (10k req/h, 100k/day, unlimited symbols, 15y+ history) | **SELECTED** |
 | Alpaca | 5k+ | SIM | NAO | Treasuries | SIM (SIP) | 200 req/min | Rejected -- no MFs |
 | Massive | 32k+ | SIM | NAO | NAO | SIM (25ms) | Unknown | Rejected -- no MFs |
 | Twelve Data | SIM | SIM | So plano Pro ($229/mo) | SIM | SIM | 800/dia, sem MFs | Rejected -- MFs pagas |
@@ -30,7 +30,7 @@ After evaluating 5 providers (YFinance, Massive, Alpaca, Twelve Data, FMP), the 
 - No WebSocket / real-time capability
 - Thread-safety workarounds (token bucket, dedicated ThreadPoolExecutor) add complexity
 
-Tiingo's free tier (50 symbols/hour) exceeds dev needs, and the paid tier (~$10-30/mo) is cheaper than the engineering cost of maintaining yfinance workarounds.
+As of 2026-04-06 the engine runs on Tiingo's **Institutional** plan: 10,000 REST requests/hour, 100,000 requests/day, unlimited symbol coverage (101k+ instruments), 15+ years of EOD history, and unrestricted IEX Firehose subscriptions over WebSocket. All free-tier rate-limit workarounds (per-request `asyncio.sleep`, low-cap semaphores, hourly token buckets) have been removed from the codebase.
 
 ---
 
@@ -70,14 +70,18 @@ class LiveQuote(BaseModel):
 ```python
 class TiingoProvider:
     def __init__(self, api_key: str | None = None) -> None
-    # REST
+    # REST -- single ticker
     async def get_historical_data(ticker, start_date, end_date) -> list[MarketDataPoint]
     async def get_latest_price(ticker) -> float | None
+    # REST -- concurrent batch (institutional plan)
+    async def fetch_batch_history(tickers, start_date, end_date) -> dict[str, list[MarketDataPoint]]
     # WebSocket
     async def subscribe(tickers, callback) -> None
     async def unsubscribe(tickers) -> None
     async def disconnect() -> None
 ```
+
+**Concurrency model:** A single lazy `asyncio.Semaphore(TIINGO_MAX_CONCURRENT_REQUESTS=50)` (created inside the running event loop, never at module import) bounds in-flight REST calls. `get_historical_data()` acquires it directly; `fetch_batch_history()` fans tickers out via `asyncio.gather()` and the semaphore handles the throttling implicitly. With 10k req/h, the cap saturates the wire instead of the rate limit. Per-ticker errors are isolated — failed entries yield `[]` and the rest still complete.
 
 ### 2.4 Factory
 
@@ -168,7 +172,7 @@ Auth is sent in the subscription message (not headers):
 }
 ```
 
-`thresholdLevel: 5` = trade-level updates (most granular). Levels 0-4 provide increasingly aggregated data to reduce bandwidth.
+`thresholdLevel: 0` = **IEX Firehose** — every quote (`Q`) and trade (`T`) update for every subscribed ticker. Used by the institutional plan. Free-tier deployments must use `thresholdLevel: 5` (top-of-book trades only); the constant `WS_THRESHOLD_LEVEL` in `tiingo_bridge.py` is the single source of truth.
 
 ### 4.2 Message Types
 
@@ -235,8 +239,31 @@ await provider.disconnect()
 |------------|-------|
 | Market hours only | IEX trades stream Mon-Fri 9:30-16:00 ET |
 | Mutual fund NAV | **Not available via WS** -- MF NAV updates once daily at 00:00 EST via REST only |
-| Free tier symbols | ~30 concurrent WS symbols (plan-dependent) |
+| Concurrent WS symbols | **Unlimited** on Institutional plan (was ~30 on free tier) |
 | Latency | IEX exchange only (~2.5% of US volume), not full SIP |
+
+### 4.7 Bootstrap & Backpressure (`tiingo_bridge.py`)
+
+The `TiingoStreamBridge` is created in `main.py` lifespan and pre-subscribes the entire approved instrument universe at boot via `subscribe_approved_universe()`. This eliminates the cold-start penalty on the first frontend client connection and only became viable once the per-subscription cap was lifted by the institutional plan.
+
+```python
+# main.py lifespan
+tiingo_bridge = TiingoStreamBridge()
+app.state.tiingo_bridge = tiingo_bridge
+added = await tiingo_bridge.subscribe_approved_universe()
+```
+
+The query joins `instruments_universe` ↔ `instruments_org` filtered by `approval_status = 'approved'` and emits a single batch subscribe message to Tiingo.
+
+**Backpressure controls** (constants in `tiingo_bridge.py`):
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `BUFFER_WINDOW_S` | `0.05` (50 ms) | Periodic flush cadence — keeps user-perceived latency low |
+| `BUFFER_MAX_SIZE` | `5000` ticks | Hard cap — `_handle_message` schedules an immediate `_drain_buffer()` task once exceeded, preventing unbounded memory growth during firehose bursts |
+| `WS_THRESHOLD_LEVEL` | `0` | Firehose mode (Q + T); set to `5` to revert to top-of-book |
+
+The Redis publish path uses `orjson.dumps` for serialization and a single pipelined `publish_price_ticks_batch()` call per flush window.
 
 ---
 
@@ -565,28 +592,45 @@ No feature flags needed -- Tiingo is the only provider. The key is already in `.
 
 ## 9. Rate Limits & Pricing
 
-### 9.1 Free Tier (Current)
+### 9.1 Institutional Plan (Current — 2026-04-06)
 
 | Limit | Value |
 |-------|-------|
-| REST requests | ~50 unique symbols per hour |
-| REST historical depth | 30+ years |
-| WebSocket symbols | ~30 concurrent |
-| Coverage | 82,468 securities (37k stocks + 45k ETFs/MFs) |
+| REST requests/hour | **10,000** (was 50 on free tier — 200× increase) |
+| REST requests/day | **100,000** (was 1,000 on free tier — 100× increase) |
+| Symbol coverage | **Unlimited** (101,000+ instruments; was capped at 500/month on free tier) |
+| Historical depth | **15+ years** (was 5 years on free tier) |
+| WebSocket subscriptions | **IEX Firehose, no per-subscription cap** (was ~30 concurrent) |
 | Update frequency | EOD at 17:30 ET (equities/ETFs), 00:00 ET (MFs) |
 
-### 9.2 Paid Tier (Prod Target)
+### 9.2 Workers Powered by the Institutional Plan
 
-| Plan | Price | REST | WebSocket | Note |
-|------|-------|------|-----------|------|
-| Power | ~$10/mo | 500 sym/hr | 100 symbols | Sufficient for <50 tenants |
-| Commercial | ~$30/mo | 5000 sym/hr | Unlimited | Scale target |
+| Worker | File | Default lookback | Source |
+|--------|------|------------------|--------|
+| `instrument_ingestion` | `workers/instrument_ingestion.py` | `DEFAULT_LOOKBACK_DAYS = 5475` (~15y) → maps to yfinance `"max"` | yfinance (factory still default; Tiingo migration pending) |
+| `benchmark_ingest` | `workers/benchmark_ingest.py` | `DEFAULT_LOOKBACK_DAYS = 5475` (~15y); `_GFC_FLOOR = 2007-01-01` floor enforced | yfinance |
+| `_enrich_missing_prices` | `routes/market_data.py` | latest close only | Tiingo REST, `asyncio.gather` + `Semaphore(50)` |
 
-### 9.3 Cost Comparison
+The 15-year window is critical for `quant_engine/stress_severity` and `vertical_engines/credit/quant/credit_scenarios`: stress tests now use **real GFC 2008** and **Taper Tantrum 2013** bars instead of proxy approximations.
+
+### 9.3 TimescaleDB Compression (Migration `0087`)
+
+The 15-year window inflates `nav_timeseries` and `benchmark_nav` storage roughly 3× relative to the previous 5-year scope. Migration `0087_enable_timescale_compression` enables native columnar compression on both hypertables to recover that footprint and beyond.
+
+| Hypertable | `compress_segmentby` | `compress_orderby` | Policy |
+|------------|----------------------|---------------------|--------|
+| `nav_timeseries` | `instrument_id` | `nav_date DESC` | Compress chunks older than `INTERVAL '30 days'` |
+| `benchmark_nav` | `block_id` | `nav_date DESC` | Compress chunks older than `INTERVAL '30 days'` |
+
+Expected reduction: **90–95%** on time-series NAV columns. The 30-day hot window stays uncompressed for cheap nightly upserts. `downgrade()` removes the policies, decompresses every chunk via `decompress_chunk(c, true)`, and clears `timescaledb.compress = false` — order matters to avoid orphan compressed chunks.
+
+### 9.4 Cost Reference
+
+### 9.5 Cost Comparison
 
 | Solution | Monthly Cost | Coverage |
 |----------|-------------|----------|
-| **Tiingo (selected)** | $0-30 | Equities + ETFs + MFs + WS |
+| **Tiingo Institutional (current)** | Negotiated institutional rate | Equities + ETFs + MFs + IEX Firehose + 15y history + unlimited symbols |
 | Alpaca + Tiingo | $99-129 | Redundant -- Alpaca adds nothing |
 | Bloomberg | ~$2,000 | Overkill |
 | Refinitiv/LSEG | ~$1,000 | Overkill |

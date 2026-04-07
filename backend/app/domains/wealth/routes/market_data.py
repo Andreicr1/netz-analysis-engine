@@ -17,10 +17,11 @@ JWT auth: WebSocket uses query param (``?token=``); REST uses standard Bearer he
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from datetime import date, datetime
 from decimal import Decimal
+
+import orjson
 
 from fastapi import APIRouter, Depends, Path, Query, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy import case as sa_case
@@ -31,8 +32,13 @@ from app.core.security.clerk_auth import Actor, get_actor
 from app.core.tenancy.middleware import get_db_with_rls
 from app.core.ws.auth import authenticate_ws
 from app.core.ws.manager import HEARTBEAT_INTERVAL, ConnectionManager
+from app.core.ws.tiingo_bridge import TiingoStreamBridge
 from app.domains.wealth.schemas.market_data import (
     DashboardSnapshot,
+    HistoricalResponse,
+    NewsItem,
+    NewsResponse,
+    OHLCVBar,
     PortfolioHoldingsResponse,
     PortfolioHoldingSummary,
     Position,
@@ -40,6 +46,7 @@ from app.domains.wealth.schemas.market_data import (
     ScreenerAssetPage,
     WsServerMessage,
 )
+from app.services.providers.tiingo_provider import get_tiingo_provider
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +56,11 @@ router = APIRouter(prefix="/market-data", tags=["market-data"])
 def _get_manager(request_or_ws: Request | WebSocket) -> ConnectionManager:
     """Retrieve the ConnectionManager from app state."""
     return request_or_ws.app.state.ws_manager
+
+
+def _get_bridge(ws: WebSocket) -> TiingoStreamBridge:
+    """Retrieve the TiingoStreamBridge from app state."""
+    return ws.app.state.tiingo_bridge
 
 
 # ── WebSocket Endpoint ──────────────────────────────────────
@@ -75,6 +87,7 @@ async def market_data_ws(ws: WebSocket):
         return  # Socket already closed by authenticate_ws
 
     manager = _get_manager(ws)
+    bridge = _get_bridge(ws)
     conn = await manager.accept(ws, actor)
 
     # Send confirmation
@@ -88,7 +101,9 @@ async def market_data_ws(ws: WebSocket):
         try:
             while True:
                 await asyncio.sleep(HEARTBEAT_INTERVAL)
-                await ws.send_json(WsServerMessage(type="pong", data=None).model_dump())
+                await ws.send_bytes(orjson.dumps(
+                    WsServerMessage(type="pong", data=None).model_dump(),
+                ))
         except Exception:
             pass
 
@@ -98,8 +113,8 @@ async def market_data_ws(ws: WebSocket):
         while True:
             raw = await ws.receive_text()
             try:
-                msg = json.loads(raw)
-            except json.JSONDecodeError:
+                msg = orjson.loads(raw)
+            except (orjson.JSONDecodeError, ValueError):
                 await manager.send_personal(ws, WsServerMessage(
                     type="error",
                     data={"message": "Invalid JSON"},
@@ -121,6 +136,8 @@ async def market_data_ws(ws: WebSocket):
                 # Merge with existing subscriptions
                 current = conn.tickers | normalized
                 manager.update_subscriptions(ws, current)
+                # Also subscribe on Tiingo WS for live IEX prices
+                await bridge.subscribe(list(normalized))
                 await manager.send_personal(ws, WsServerMessage(
                     type="subscribed",
                     data={"tickers": sorted(current)},
@@ -131,6 +148,7 @@ async def market_data_ws(ws: WebSocket):
                 normalized = {t.upper() for t in tickers if isinstance(t, str)}
                 current = conn.tickers - normalized
                 manager.update_subscriptions(ws, current)
+                await bridge.unsubscribe(list(normalized))
                 await manager.send_personal(ws, WsServerMessage(
                     type="subscribed",
                     data={"tickers": sorted(current)},
@@ -290,7 +308,10 @@ async def dashboard_snapshot(
         if row.get("nav_date") and (latest_date is None or row["nav_date"] > latest_date):
             latest_date = row["nav_date"]
 
-    # 5. Total return = weighted sum of individual changes
+    # 5. Enrich holdings with zero prices from Tiingo REST
+    holdings = await _enrich_missing_prices(holdings)
+
+    # 6. Total return = weighted sum of individual changes
     total_return: Decimal | None = None
     if holdings:
         weighted_sum = sum(h.change_pct * h.weight for h in holdings)
@@ -355,12 +376,78 @@ async def _fallback_approved_instruments(
         if row.get("nav_date") and (latest_date is None or row["nav_date"] > latest_date):
             latest_date = row["nav_date"]
 
+    # Enrich holdings with zero prices from Tiingo REST (fallback for empty nav_timeseries)
+    holdings = await _enrich_missing_prices(holdings)
+
     return DashboardSnapshot(
         holdings=holdings,
         total_aum=total_aum,
         total_return_pct=None,
         as_of=(latest_date.isoformat() if latest_date else datetime.utcnow().date().isoformat()),
     )
+
+
+async def _enrich_missing_prices(
+    holdings: list[PortfolioHoldingSummary],
+) -> list[PortfolioHoldingSummary]:
+    """Fetch latest prices from Tiingo REST for holdings with price == 0.
+
+    Called when nav_timeseries has no data for some instruments (e.g., newly
+    approved funds before the instrument_ingestion worker runs).
+    Non-blocking: failures are silently skipped — the holding stays at $0.
+    """
+    import httpx
+
+    from app.core.config.settings import settings as _settings
+
+    api_key = _settings.tiingo_api_key
+    if not api_key:
+        return holdings
+
+    missing = [(i, h) for i, h in enumerate(holdings) if h.price == 0 and h.ticker]
+    if not missing:
+        return holdings
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Token {api_key}",
+    }
+
+    # Institutional plan: 10k req/h. Fan out concurrently with a generous
+    # cap — old free-tier serial loop was throughput-bound, not rate-bound.
+    sem = asyncio.Semaphore(50)
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        async def _fetch_one(idx: int, h: PortfolioHoldingSummary) -> None:
+            async with sem:
+                try:
+                    resp = await client.get(
+                        f"https://api.tiingo.com/tiingo/daily/{h.ticker}/prices",
+                        headers=headers,
+                    )
+                    if resp.status_code != 200:
+                        return
+                    rows_data = resp.json()
+                    if not rows_data:
+                        return
+                    last = rows_data[-1]
+                    close_price = Decimal(
+                        str(last.get("adjClose") or last.get("close", 0)),
+                    )
+                    if close_price > 0:
+                        holdings[idx] = h.model_copy(
+                            update={
+                                "price": close_price,
+                                "change": Decimal("0"),
+                                "change_pct": Decimal("0"),
+                            },
+                        )
+                except Exception:
+                    return
+
+        await asyncio.gather(*(_fetch_one(i, h) for i, h in missing))
+
+    return holdings
 
 
 # ── REST: Portfolio Holdings ───────────────────────────────
@@ -652,4 +739,125 @@ async def screener_catalog(
         page=page,
         page_size=page_size,
         has_next=(page * page_size < total),
+    )
+
+
+# ── REST: News Feed (Tiingo) ───────────────────────────────
+
+
+@router.get(
+    "/news",
+    response_model=NewsResponse,
+    summary="Editorial news feed (Tiingo News) — optionally filtered by tickers",
+)
+async def market_news(
+    tickers: str = Query(
+        "",
+        description="Comma-separated ticker filter (e.g. 'AAPL,MSFT'). Empty = full firehose.",
+    ),
+    limit: int = Query(20, ge=1, le=200, description="Max articles to return"),
+    actor: Actor = Depends(get_actor),
+) -> NewsResponse:
+    """Fetch the latest news headlines from Tiingo's editorial feed.
+
+    No DB cache yet — Tiingo News is the source of truth and the
+    institutional plan rate limit (10k req/h) accommodates the dashboard
+    polling cadence (typ. 1 req / minute / client).
+    """
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()] if tickers else None
+
+    provider = get_tiingo_provider()
+    raw_items = await provider.fetch_news(tickers=ticker_list, limit=limit)
+
+    items = [NewsItem.model_validate(it) for it in raw_items]
+    return NewsResponse(items=items, count=len(items))
+
+
+# ── REST: Historical OHLCV (Tiingo) ────────────────────────
+
+
+@router.get(
+    "/historical/{ticker}",
+    response_model=HistoricalResponse,
+    summary="OHLCV bars for a single ticker (daily or intraday) — Tiingo",
+)
+async def market_historical(
+    ticker: str = Path(..., description="Ticker symbol (e.g. SPY, AAPL)"),
+    interval: str = Query(
+        "daily",
+        description="Bar resolution: daily, 1min, 5min, 15min, 30min, 1hour, 4hour",
+    ),
+    start_date: str | None = Query(
+        None,
+        description="ISO date (YYYY-MM-DD). Defaults to last 6 months for daily, last 5 days for intraday.",
+    ),
+    end_date: str | None = Query(None, description="ISO date (YYYY-MM-DD). Defaults to today."),
+    actor: Actor = Depends(get_actor),
+) -> HistoricalResponse:
+    """Fetch OHLCV history used by the AdvancedMarketChart candlestick view.
+
+    The frontend seeds the chart with this REST snapshot, then folds live
+    Tiingo IEX trade ticks into the rightmost candle via the existing
+    market-data WebSocket store. Mutual funds (no IEX listing) only return
+    data on the ``daily`` interval.
+    """
+    ticker_norm = ticker.strip().upper()
+    if not ticker_norm:
+        return HistoricalResponse(ticker=ticker, interval=interval, bars=[])
+
+    # Defaults — keep payloads bounded to avoid blowing the chart
+    today = datetime.utcnow().date()
+    parsed_start: date | None = None
+    parsed_end: date | None = None
+    try:
+        parsed_start = date.fromisoformat(start_date) if start_date else None
+        parsed_end = date.fromisoformat(end_date) if end_date else None
+    except ValueError:
+        parsed_start = None
+        parsed_end = None
+
+    if parsed_end is None:
+        parsed_end = today
+
+    if parsed_start is None:
+        if interval == "daily":
+            parsed_start = parsed_end.replace(year=parsed_end.year - 1) \
+                if parsed_end.month != 2 or parsed_end.day != 29 \
+                else parsed_end.replace(year=parsed_end.year - 1, day=28)
+        else:
+            from datetime import timedelta as _td
+            parsed_start = parsed_end - _td(days=5)
+
+    provider = get_tiingo_provider()
+    if interval == "daily":
+        raw_bars = await provider.fetch_historical_daily(
+            ticker_norm, start_date=parsed_start, end_date=parsed_end,
+        )
+    else:
+        raw_bars = await provider.fetch_historical_intraday(
+            ticker_norm,
+            start_date=parsed_start,
+            end_date=parsed_end,
+            resample_freq=interval,
+        )
+
+    bars: list[OHLCVBar] = []
+    for b in raw_bars:
+        # Skip incomplete bars (Tiingo occasionally returns nulls on holidays)
+        if b.get("open") is None or b.get("close") is None:
+            continue
+        bars.append(OHLCVBar(
+            timestamp=b["timestamp"],
+            open=Decimal(str(b["open"])),
+            high=Decimal(str(b["high"])) if b.get("high") is not None else Decimal(str(b["close"])),
+            low=Decimal(str(b["low"])) if b.get("low") is not None else Decimal(str(b["open"])),
+            close=Decimal(str(b["close"])),
+            volume=Decimal(str(b.get("volume") or 0)),
+        ))
+
+    return HistoricalResponse(
+        ticker=ticker_norm,
+        interval=interval,
+        bars=bars,
+        source="tiingo",
     )

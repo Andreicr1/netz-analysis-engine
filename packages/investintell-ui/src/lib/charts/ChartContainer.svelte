@@ -16,6 +16,10 @@
 
 	interface ChartContainerProps extends BaseChartProps {
 		option: Record<string, unknown>;
+		/** Bindable echarts instance — exposed so callers can drive live
+		 *  updates via setOption({ replaceMerge }) without triggering the
+		 *  full notMerge replacement done by this component's $effect. */
+		chart?: ReturnType<typeof echarts.init> | undefined;
 	}
 
 	let {
@@ -28,10 +32,10 @@
 		ariaLabel = "Chart visualization",
 		optionsOverride,
 		option,
+		chart = $bindable(),
 	}: ChartContainerProps = $props();
 
 	let containerEl: HTMLDivElement | undefined = $state();
-	let chart: ReturnType<typeof echarts.init> | undefined = $state();
 	// Plain vars (not $state) — avoid proxy equality mismatch causing infinite $effect loop
 	let lastAppliedOption: Record<string, unknown> | null = null;
 	let lastAppliedOverride: Record<string, unknown> | undefined;

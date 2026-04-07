@@ -6,7 +6,9 @@ Covers:
   - WebSocket connection with invalid token → closed 1008
   - Subscribe/unsubscribe protocol
   - Ping/pong heartbeat
-  - Price tick broadcast via ConnectionManager
+  - Price tick broadcast via ConnectionManager (orjson bytes)
+  - Per-ticker channel subscription lifecycle
+  - Batch publish pipeline
   - Dashboard snapshot REST endpoint (auth required)
 """
 
@@ -14,6 +16,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
+import orjson
 import pytest
 from httpx import ASGITransport, AsyncClient
 from starlette.testclient import TestClient
@@ -58,8 +61,9 @@ def test_ws_accepts_dev_token(test_client: TestClient):
     with test_client.websocket_connect(
         "/api/v1/market-data/live/ws?token=dev-token-change-me"
     ) as ws:
-        # Should receive initial subscribed message
-        msg = ws.receive_json()
+        # Should receive initial subscribed message (orjson bytes)
+        raw = ws.receive_bytes()
+        msg = orjson.loads(raw)
         assert msg["type"] == "subscribed"
         assert msg["data"]["message"] == "Connected"
 
@@ -70,11 +74,12 @@ def test_ws_subscribe_protocol(test_client: TestClient):
         "/api/v1/market-data/live/ws?token=dev-token-change-me"
     ) as ws:
         # Consume initial message
-        ws.receive_json()
+        ws.receive_bytes()
 
         # Subscribe to tickers
         ws.send_json({"action": "subscribe", "tickers": ["SPY", "QQQ"]})
-        msg = ws.receive_json()
+        raw = ws.receive_bytes()
+        msg = orjson.loads(raw)
         assert msg["type"] == "subscribed"
         assert set(msg["data"]["tickers"]) == {"SPY", "QQQ"}
 
@@ -84,15 +89,16 @@ def test_ws_unsubscribe_protocol(test_client: TestClient):
     with test_client.websocket_connect(
         "/api/v1/market-data/live/ws?token=dev-token-change-me"
     ) as ws:
-        ws.receive_json()  # initial
+        ws.receive_bytes()  # initial
 
         # Subscribe
         ws.send_json({"action": "subscribe", "tickers": ["SPY", "QQQ", "IWM"]})
-        ws.receive_json()
+        ws.receive_bytes()
 
         # Unsubscribe from one
         ws.send_json({"action": "unsubscribe", "tickers": ["QQQ"]})
-        msg = ws.receive_json()
+        raw = ws.receive_bytes()
+        msg = orjson.loads(raw)
         assert msg["type"] == "subscribed"
         assert "QQQ" not in msg["data"]["tickers"]
         assert "SPY" in msg["data"]["tickers"]
@@ -104,10 +110,11 @@ def test_ws_ping_pong(test_client: TestClient):
     with test_client.websocket_connect(
         "/api/v1/market-data/live/ws?token=dev-token-change-me"
     ) as ws:
-        ws.receive_json()  # initial
+        ws.receive_bytes()  # initial
 
         ws.send_json({"action": "ping"})
-        msg = ws.receive_json()
+        raw = ws.receive_bytes()
+        msg = orjson.loads(raw)
         assert msg["type"] == "pong"
 
 
@@ -116,10 +123,11 @@ def test_ws_invalid_json(test_client: TestClient):
     with test_client.websocket_connect(
         "/api/v1/market-data/live/ws?token=dev-token-change-me"
     ) as ws:
-        ws.receive_json()  # initial
+        ws.receive_bytes()  # initial
 
         ws.send_text("not-json{{{")
-        msg = ws.receive_json()
+        raw = ws.receive_bytes()
+        msg = orjson.loads(raw)
         assert msg["type"] == "error"
         assert "Invalid JSON" in msg["data"]["message"]
 
@@ -129,10 +137,11 @@ def test_ws_unknown_action(test_client: TestClient):
     with test_client.websocket_connect(
         "/api/v1/market-data/live/ws?token=dev-token-change-me"
     ) as ws:
-        ws.receive_json()  # initial
+        ws.receive_bytes()  # initial
 
         ws.send_json({"action": "foobar"})
-        msg = ws.receive_json()
+        raw = ws.receive_bytes()
+        msg = orjson.loads(raw)
         assert msg["type"] == "error"
         assert "Unknown action" in msg["data"]["message"]
 
@@ -142,10 +151,11 @@ def test_ws_subscribe_normalizes_tickers(test_client: TestClient):
     with test_client.websocket_connect(
         "/api/v1/market-data/live/ws?token=dev-token-change-me"
     ) as ws:
-        ws.receive_json()  # initial
+        ws.receive_bytes()  # initial
 
         ws.send_json({"action": "subscribe", "tickers": ["spy", "qqq"]})
-        msg = ws.receive_json()
+        raw = ws.receive_bytes()
+        msg = orjson.loads(raw)
         assert set(msg["data"]["tickers"]) == {"SPY", "QQQ"}
 
 
@@ -159,9 +169,9 @@ async def test_connection_manager_broadcast():
 
     # Create mock WebSocket connections
     ws1 = AsyncMock()
-    ws1.send_json = AsyncMock()
+    ws1.send_bytes = AsyncMock()
     ws2 = AsyncMock()
-    ws2.send_json = AsyncMock()
+    ws2.send_bytes = AsyncMock()
 
     from app.core.security.clerk_auth import Actor
 
@@ -180,17 +190,21 @@ async def test_connection_manager_broadcast():
     tick = {"ticker": "SPY", "price": 450.0, "timestamp": "2026-04-05T12:00:00Z"}
     await manager.broadcast_to_subscribers(tick)
 
-    ws1.send_json.assert_called_once_with(tick)
-    ws2.send_json.assert_not_called()
+    ws1.send_bytes.assert_called_once()
+    # Verify the payload is valid orjson
+    sent = orjson.loads(ws1.send_bytes.call_args[0][0])
+    assert sent["ticker"] == "SPY"
+    assert sent["price"] == 450.0
+    ws2.send_bytes.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_connection_manager_disconnect_stale():
-    """Stale connections (send_json raises) are automatically removed."""
+    """Stale connections (send_bytes raises) are automatically removed."""
     manager = ConnectionManager()
 
     ws1 = AsyncMock()
-    ws1.send_json = AsyncMock(side_effect=Exception("Connection lost"))
+    ws1.send_bytes = AsyncMock(side_effect=Exception("Connection lost"))
 
     from app.core.security.clerk_auth import Actor
     from app.core.ws.manager import ClientConnection
@@ -205,6 +219,64 @@ async def test_connection_manager_disconnect_stale():
 
     # Stale connection should be removed
     assert manager.active_count == 0
+
+
+@pytest.mark.asyncio
+async def test_connection_manager_per_ticker_subscriptions():
+    """update_subscriptions tracks per-ticker subscriber sets."""
+    manager = ConnectionManager()
+
+    ws1 = AsyncMock()
+    ws1.send_bytes = AsyncMock()
+
+    from app.core.security.clerk_auth import Actor
+    from app.core.ws.manager import ClientConnection
+
+    actor = Actor(actor_id="test", name="Test", email="t@t.com")
+    conn = ClientConnection(ws=ws1, actor=actor)
+    manager._connections[id(ws1)] = conn
+
+    # Subscribe to SPY and QQQ
+    manager.update_subscriptions(ws1, {"SPY", "QQQ"})
+
+    assert "SPY" in manager._ticker_subs
+    assert "QQQ" in manager._ticker_subs
+    assert id(ws1) in manager._ticker_subs["SPY"]
+    assert id(ws1) in manager._ticker_subs["QQQ"]
+    # Channel tasks should be started
+    assert "SPY" in manager._channel_tasks
+    assert "QQQ" in manager._channel_tasks
+
+    # Unsubscribe from QQQ
+    manager.update_subscriptions(ws1, {"SPY"})
+    assert "QQQ" not in manager._ticker_subs
+    assert "SPY" in manager._ticker_subs
+
+    # Cleanup
+    await manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_connection_manager_shutdown():
+    """shutdown() cancels all channel listeners."""
+    manager = ConnectionManager()
+
+    ws1 = AsyncMock()
+    ws1.send_bytes = AsyncMock()
+
+    from app.core.security.clerk_auth import Actor
+    from app.core.ws.manager import ClientConnection
+
+    actor = Actor(actor_id="test", name="Test", email="t@t.com")
+    conn = ClientConnection(ws=ws1, actor=actor)
+    manager._connections[id(ws1)] = conn
+    manager.update_subscriptions(ws1, {"SPY", "QQQ", "IWM"})
+
+    assert manager.active_channels == 3
+
+    await manager.shutdown()
+
+    assert manager.active_channels == 0
 
 
 # ── REST Dashboard Snapshot Tests ───────────────────────────

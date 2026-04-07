@@ -169,3 +169,56 @@ class ScreenerAssetPage(BaseModel):
     page: int
     page_size: int
     has_next: bool
+
+
+# ── News Feed ───────────────────────────────────────────────
+
+
+class NewsItem(BaseModel):
+    """Standardized news article (Tiingo News normalization)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int | str | None = None
+    title: str
+    description: str = ""
+    url: str
+    source: str = ""
+    published_at: str = Field(..., description="ISO-8601 publication timestamp")
+    crawled_at: str = ""
+    tickers: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+
+
+class NewsResponse(BaseModel):
+    """Response envelope for GET /market-data/news."""
+
+    items: list[NewsItem]
+    count: int
+    as_of: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+
+
+# ── Historical OHLCV ────────────────────────────────────────
+
+
+class OHLCVBar(BaseModel):
+    """Single OHLCV bar — used by AdvancedMarketChart for candlestick rendering."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    timestamp: str = Field(..., description="ISO-8601 bar start timestamp")
+    open: Decimal | None = None
+    high: Decimal | None = None
+    low: Decimal | None = None
+    close: Decimal | None = None
+    volume: Decimal = Decimal("0")
+
+
+class HistoricalResponse(BaseModel):
+    """Response envelope for GET /market-data/historical/{ticker}."""
+
+    ticker: str
+    interval: str = Field(..., description="Bar resolution: 1min..1hour, daily")
+    bars: list[OHLCVBar]
+    source: str = "tiingo"
+    as_of: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")

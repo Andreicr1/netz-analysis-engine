@@ -98,7 +98,10 @@ export function createMarketDataStore(config: MarketDataStoreConfig): MarketData
 	let priceMap = $state<Record<string, PriceTick>>({});
 	let holdings = $state<HoldingSummary[]>([]);
 	let totalAum = $state(0);
-	let totalReturnPct = $state<number | null>(null);
+	let totalReturnPct = $derived.by(() => {
+		if (holdings.length === 0) return null;
+		return holdings.reduce((sum, h) => sum + (h.change_pct * h.weight), 0);
+	});
 	let asOf = $state<string | null>(null);
 	let subscribedTickers = $state<string[]>([]);
 	let error = $state<string | null>(null);
@@ -332,7 +335,6 @@ export function createMarketDataStore(config: MarketDataStoreConfig): MarketData
 	function seedFromSSR(snapshot: DashboardSnapshot) {
 		holdings = snapshot.holdings;
 		totalAum = snapshot.total_aum;
-		totalReturnPct = snapshot.total_return_pct;
 		asOf = snapshot.as_of;
 
 		// Build initial priceMap from holdings

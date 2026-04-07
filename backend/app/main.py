@@ -209,10 +209,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Start WebSocket connection manager + Redis price subscriber
     from app.core.ws.manager import ConnectionManager, redis_subscriber
+    from app.core.ws.tiingo_bridge import TiingoStreamBridge
 
     ws_manager = ConnectionManager()
     app.state.ws_manager = ws_manager
     redis_sub_task = asyncio.create_task(redis_subscriber(ws_manager))
+
+    # Tiingo WS → Redis bridge (live IEX prices for equities/ETFs).
+    # Institutional plan: pre-subscribe the entire approved universe at boot
+    # so the firehose is hot before the first frontend client connects.
+    tiingo_bridge = TiingoStreamBridge()
+    app.state.tiingo_bridge = tiingo_bridge
+    try:
+        added = await tiingo_bridge.subscribe_approved_universe()
+        logger.info("tiingo_bridge_bootstrap added=%d", added)
+    except Exception:
+        logger.exception("tiingo_bridge_bootstrap_failed")
 
     # Start PgNotifier for config cache invalidation
     from app.core.config.config_service import ConfigService
@@ -238,6 +250,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     yield
     # Cleanup
+    await tiingo_bridge.shutdown()
+    await ws_manager.shutdown()
     redis_sub_task.cancel()
     try:
         await redis_sub_task

@@ -4,10 +4,12 @@
   Supports base-100 normalization, time range selectors, view mode toggle, benchmark overlay.
 -->
 <script lang="ts">
+	import { getContext } from "svelte";
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions, echarts } from "@investintell/ui/charts/echarts-setup";
 	import { formatPercent, formatNumber } from "@investintell/ui";
 	import type { NAVPoint } from "$lib/types/model-portfolio";
+	import type { MarketDataStore } from "$lib/stores/market-data.svelte";
 
 	interface Props {
 		navSeries: NAVPoint[];
@@ -26,6 +28,14 @@
 		loading = false,
 		baseIndex = 100,
 	}: Props = $props();
+
+	// ── Live market data store (Tiingo IEX firehose → WebSocket) ──────────
+	// Optional: chart still works without it (e.g., in storybook).
+	const marketStore = getContext<MarketDataStore | undefined>("netz:marketDataStore");
+
+	// Bindable echarts instance — drives live setOption() with replaceMerge
+	// so the user's current zoom/pan state is preserved between ticks.
+	let chart = $state<ReturnType<typeof echarts.init> | undefined>();
 
 	let isEmpty = $derived(!navSeries || navSeries.length === 0);
 
@@ -84,6 +94,94 @@
 		if (firstBm.nav === 0) return filtered;
 		const base = firstBm.nav;
 		return filtered.map(p => ({ ...p, nav: (p.nav / base) * baseIndex }));
+	});
+
+	// ── Live tick state ───────────────────────────────────────────────────
+	// Today's date in YYYY-MM-DD (local) — used to decide whether a live
+	// tick should patch the last bar of the visible series.
+	const todayISO = new Date().toISOString().slice(0, 10);
+
+	// Live-overlaid value for the rightmost point. Reactive: updated by the
+	// $effect below whenever totalReturnPct shifts off the WebSocket.
+	let livePoint = $state<{ date: string; nav: number } | null>(null);
+
+	// ── Live update effect — driven by the WebSocket-backed store ─────────
+	// Reads ``marketStore.totalReturnPct`` so Svelte 5 wires this $effect to
+	// the rune; every IEX tick that moves the portfolio return triggers a
+	// surgical setOption() call instead of a full chart re-render.
+	$effect(() => {
+		if (!marketStore || !chart) return;
+		if (visibleSeries.length === 0) return;
+
+		const liveReturn = marketStore.totalReturnPct;
+		if (liveReturn == null) return;
+
+		const lastVisible = visibleSeries[visibleSeries.length - 1]!;
+		// Only patch the last bar when the underlying data is actually for
+		// today — historical days are immutable, never overwrite them.
+		if (lastVisible.date !== todayISO) return;
+
+		// Recompute today's NAV from the previous close × (1 + liveReturn).
+		// We can't trust ``lastVisible.nav`` directly because base-100 mode
+		// already rebased it relative to the visible window start.
+		const prev = visibleSeries.length > 1
+			? visibleSeries[visibleSeries.length - 2]!.nav
+			: lastVisible.nav;
+		if (prev === 0) return;
+
+		const liveNav = prev * (1 + liveReturn);
+
+		// Skip if nothing meaningful changed (avoids triggering ECharts on
+		// every duplicate tick — common during heavy firehose bursts).
+		if (livePoint && Math.abs(livePoint.nav - liveNav) < 1e-9) return;
+
+		livePoint = { date: lastVisible.date, nav: liveNav };
+
+		// replaceMerge: ['series'] swaps the series array wholesale but
+		// leaves dataZoom / xAxis / yAxis untouched — preserves user zoom.
+		const navSeriesPatched = displaySeries.map((d, i) =>
+			i === displaySeries.length - 1 ? [d.date, liveNav] : [d.date, d.nav],
+		);
+
+		const liveSeries: Record<string, unknown>[] = [
+			{
+				name: viewMode === "base100" && baseIndex ? `NAV (Base ${baseIndex})` : "NAV",
+				type: "line",
+				yAxisIndex: 0,
+				data: navSeriesPatched,
+				smooth: true,
+				symbol: "none",
+				sampling: "lttb",
+				lineStyle: { width: 2 },
+			},
+			{
+				// Pulsing live marker — anchored to the last (today) coordinate.
+				// Visual signal to the user that the feed is hot.
+				name: "Live",
+				type: "effectScatter",
+				yAxisIndex: 0,
+				coordinateSystem: "cartesian2d",
+				data: [[lastVisible.date, liveNav]],
+				symbolSize: 10,
+				rippleEffect: { period: 3, scale: 3.5, brushType: "stroke" },
+				showEffectOn: "render",
+				zlevel: 2,
+				itemStyle: {
+					color: liveReturn >= 0 ? "#22c55e" : "#ef4444",
+					shadowBlur: 8,
+					shadowColor: liveReturn >= 0
+						? "rgba(34, 197, 94, 0.6)"
+						: "rgba(239, 68, 68, 0.6)",
+				},
+				silent: true,
+				animation: false,
+			},
+		];
+
+		chart.setOption(
+			{ series: liveSeries },
+			{ replaceMerge: ["series"] },
+		);
 	});
 
 	// ── Cumulative return label ───────────────────────────────────────────
@@ -294,6 +392,7 @@
 			empty={isEmpty}
 			emptyMessage="No NAV data available"
 			ariaLabel="Portfolio NAV time-series chart"
+			bind:chart
 		/>
 	</div>
 {/if}
