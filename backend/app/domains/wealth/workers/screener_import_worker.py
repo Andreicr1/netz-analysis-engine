@@ -168,11 +168,23 @@ async def run_import_job(
 
         async with async_session_factory() as db:
             # Bind the org for RLS — services downstream join
-            # ``instruments_org`` which has RLS policies. ``SET LOCAL``
-            # is transaction-scoped, lost on commit/rollback.
+            # ``instruments_org`` which has RLS policies.
+            #
+            # IMPORTANT: ``SET LOCAL <param> = $1`` is invalid SQL —
+            # PostgreSQL's ``SET`` command does not accept bind
+            # parameters. We use ``set_config(name, value, is_local)``
+            # instead, which is the parameter-friendly equivalent and
+            # is just as transaction-scoped (third arg ``true``).
+            #
+            # Reproducible failure mode this guards against: the
+            # original ``SET LOCAL`` form silently broke every worker
+            # invocation under PostgreSQL — ``import_instrument``
+            # never ran, no rows were inserted, the SSE done event
+            # was never published. Detected by the Phase 4 reproducible
+            # benchmark in ``backend/scripts/benchmark_stability_phase4.py``.
             await db.execute(
                 text(
-                    "SET LOCAL app.current_organization_id = :org_id",
+                    "SELECT set_config('app.current_organization_id', :org_id, true)",
                 ),
                 {"org_id": str(organization_id)},
             )
