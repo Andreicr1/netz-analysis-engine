@@ -30,6 +30,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import uuid
+import zlib
 from dataclasses import dataclass
 from enum import StrEnum
 from re import compile as _re_compile
@@ -123,10 +124,19 @@ async def import_instrument(
 
     # Per-identifier advisory lock — held until transaction end. Two
     # concurrent imports of the same payload will serialise here.
-    # Use ``pg_try_advisory_xact_lock`` so we don't deadlock if the
-    # caller is already holding the lock; failure to acquire is rare
-    # (Redis idempotency catches the common case).
-    lock_key = abs(hash((str(organization_id), normalized, block_id or ""))) % (2**31)
+    #
+    # IMPORTANT: the lock key MUST be deterministic across processes.
+    # Python's built-in ``hash()`` is seeded per-interpreter by default
+    # (PEP 456, PYTHONHASHSEED=random), so two uvicorn workers would
+    # compute different keys for the same (org, identifier, block)
+    # triple and the DB-level layer of the triple-layer dedup would
+    # silently degrade to "no dedup" — defeating the whole point of
+    # the advisory lock. ``zlib.crc32`` is stable across the stdlib
+    # and across interpreter invocations; 32-bit output fits the
+    # postgres ``integer`` range required by
+    # ``pg_advisory_xact_lock(int, int)``.
+    lock_input = f"{organization_id}:{normalized}:{block_id or ''}".encode("utf-8")
+    lock_key = zlib.crc32(lock_input) & 0x7FFFFFFF  # strip sign bit → positive int32
     await db.execute(
         text(
             "SELECT pg_advisory_xact_lock(:cls, :key)",
