@@ -27,80 +27,37 @@
 		});
 	}
 
-	// ── Portfolio impact chart ────────────────────────────────────────────
-	let chartOption = $derived.by(() => {
-		const stress = workspace.localStress;
-		if (!stress) return {};
+	// ECharts series colors must be resolved hex (CSS vars don't work
+	// inside the option object). Read from CSS at mount + on theme change.
+	let successColor = $state("#22c55e");
+	let dangerColor = $state("#ef4444");
+	let textMuted = $state("#94a3b8");
+	let textSecondary = $state("#cbccd1");
+	let borderColor = $state("rgba(64,66,73,0.3)");
 
-		const value = stress.portfolioDrop;
+	function readChartTokens() {
+		if (typeof document === "undefined") return;
+		const cs = getComputedStyle(document.documentElement);
+		const get = (n: string, fallback: string) => cs.getPropertyValue(n).trim() || fallback;
+		successColor = get("--ii-success", "#22c55e");
+		dangerColor = get("--ii-danger", "#ef4444");
+		textMuted = get("--ii-text-muted", "#94a3b8");
+		textSecondary = get("--ii-text-secondary", "#cbccd1");
+		borderColor = get("--ii-border", "rgba(64,66,73,0.3)");
+	}
 
-		return {
-			...globalChartOptions,
-			toolbox: { show: false },
-			grid: { left: 100, right: 40, top: 24, bottom: 24, containLabel: false },
-			tooltip: {
-				...globalChartOptions.tooltip,
-				trigger: "axis" as const,
-				axisPointer: { type: 'shadow' },
-				formatter(params: unknown) {
-					const list = Array.isArray(params) ? params : [params];
-					const p = list[0] as { name?: string; value?: number; marker?: string };
-					if (p.value == null) return "";
-					return `<strong>${p.name}</strong><br/>${p.marker ?? ""} Impact: ${p.value > 0 ? "+" : ""}${p.value.toFixed(2)}%`;
-				},
-			},
-			xAxis: {
-				type: "value" as const,
-				axisLabel: { formatter: "{value}%", fontSize: 10, color: '#85a0bd' },
-				splitLine: { lineStyle: { type: "dashed" as const, color: 'rgba(64,66,73,0.3)' } },
-			},
-			yAxis: {
-				type: "category" as const,
-				data: ["Portfolio NAV"],
-				inverse: true,
-				axisLabel: { fontSize: 11, fontWeight: 600, color: '#cbccd1' },
-				axisTick: { show: false },
-				axisLine: { show: false },
-			},
-			series: [
-				{
-					name: "Impact",
-					type: "bar" as const,
-					data: [
-						{
-							value,
-							itemStyle: {
-								color: value >= 0
-									? { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{offset: 0, color: '#09a552'}, {offset: 1, color: '#11ec79'}] }
-									: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{offset: 0, color: '#fc1a1a'}, {offset: 1, color: '#a30c0c'}] },
-								borderRadius: value >= 0 ? [0, 6, 6, 0] : [6, 0, 0, 6],
-								shadowBlur: 8,
-								shadowColor: value >= 0 ? 'rgba(17,236,121,0.2)' : 'rgba(252,26,26,0.2)'
-							},
-						},
-					],
-					barWidth: "40%",
-					label: {
-						show: true,
-						position: "right" as const,
-						fontSize: 10,
-						fontWeight: 600,
-						color: '#ffffff',
-						formatter: (p: { value: number }) => `${p.value > 0 ? "+" : ""}${p.value.toFixed(2)}%`,
-					},
-					markLine: {
-						silent: true,
-						symbol: "none" as const,
-						data: [{ xAxis: 0 }],
-						lineStyle: { color: "var(--ii-text-muted)", type: "solid" as const, width: 1 },
-						label: { show: false },
-					},
-				},
-			],
-		};
+	$effect(() => {
+		readChartTokens();
+		if (typeof document === "undefined") return;
+		const obs = new MutationObserver(() => readChartTokens());
+		obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+		return () => obs.disconnect();
 	});
 
 	// ── Block impacts chart ───────────────────────────────────────────────
+	// Note: a single-bar "Portfolio NAV Impact" chart used to live above
+	// this one. It was deleted as chart-junk — the same value is shown in
+	// the KPI strip below, so the chart added zero information.
 	let blockChartOption = $derived.by(() => {
 		const stress = workspace.localStress;
 		if (!stress || !stress.blockImpacts) return {};
@@ -116,24 +73,25 @@
 			tooltip: {
 				...globalChartOptions.tooltip,
 				trigger: "axis" as const,
-				axisPointer: { type: 'shadow' },
+				axisPointer: { type: "shadow" },
 				formatter(params: unknown) {
 					const list = Array.isArray(params) ? params : [params];
 					const p = list[0] as { name?: string; value?: number };
 					if (p.value == null) return "";
-					return `<strong>${p.name}</strong><br/>Impact: ${p.value > 0 ? "+" : ""}${p.value.toFixed(2)}%`;
+					const sign = p.value > 0 ? "+" : "";
+					return `<strong>${p.name}</strong><br/>Impact: ${sign}${formatPercent(p.value / 100, 2)}`;
 				},
 			},
 			xAxis: {
 				type: "value" as const,
-				axisLabel: { formatter: "{value}%", fontSize: 10, color: '#85a0bd' },
-				splitLine: { lineStyle: { type: "dashed" as const, color: 'rgba(64,66,73,0.3)' } },
+				axisLabel: { formatter: "{value}%", fontSize: 10, color: textMuted },
+				splitLine: { lineStyle: { type: "dashed" as const, color: borderColor } },
 			},
 			yAxis: {
 				type: "category" as const,
 				data: categories,
 				inverse: true,
-				axisLabel: { fontSize: 11, fontWeight: 500, color: '#cbccd1' },
+				axisLabel: { fontSize: 11, fontWeight: 500, color: textSecondary },
 				axisTick: { show: false },
 				axisLine: { show: false },
 			},
@@ -141,16 +99,11 @@
 				{
 					name: "Block Impact",
 					type: "bar" as const,
+					// Flat fills, no gradient, no shadow, no borderRadius —
+					// institutional bar charts don't decorate.
 					data: values.map((v) => ({
 						value: Math.round(v * 100) / 100,
-						itemStyle: {
-							color: v >= 0
-									? { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{offset: 0, color: '#09a552'}, {offset: 1, color: '#11ec79'}] }
-									: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{offset: 0, color: '#fc1a1a'}, {offset: 1, color: '#a30c0c'}] },
-							borderRadius: v >= 0 ? [0, 4, 4, 0] : [4, 0, 0, 4],
-							shadowBlur: 8,
-							shadowColor: v >= 0 ? 'rgba(17,236,121,0.2)' : 'rgba(252,26,26,0.2)'
-						},
+						itemStyle: { color: v >= 0 ? successColor : dangerColor },
 					})),
 					barWidth: "45%",
 					label: {
@@ -158,14 +111,17 @@
 						position: "right" as const,
 						fontSize: 10,
 						fontWeight: 600,
-						color: '#ffffff',
-						formatter: (p: { value: number }) => `${p.value > 0 ? "+" : ""}${p.value.toFixed(1)}%`,
+						color: textSecondary,
+						formatter: (p: { value: number }) => {
+							const sign = p.value > 0 ? "+" : "";
+							return `${sign}${formatPercent(p.value / 100, 1)}`;
+						},
 					},
 					markLine: {
 						silent: true,
 						symbol: "none" as const,
 						data: [{ xAxis: 0 }],
-						lineStyle: { color: "var(--ii-text-muted)", type: "solid" as const, width: 1 },
+						lineStyle: { color: textMuted, type: "solid" as const, width: 1 },
 						label: { show: false },
 					},
 				},
@@ -193,24 +149,23 @@
 {:else}
 	<div class="flex flex-col h-full">
 		<!-- Input section -->
-		<div class="px-6 py-5 border-b border-[#404249]/30">
-			<!-- Header -->
-			<div class="flex items-center gap-3 mb-5">
-				<span class="text-[16px] font-bold text-white tracking-tight">Parametric Stress Scenario</span>
+		<div class="stress-input-section">
+			<div class="stress-header">
+				<span class="stress-title">Parametric Stress Scenario</span>
 			</div>
 
-			<div class="grid grid-cols-3 gap-6 mb-5">
-				<div class="flex flex-col gap-2">
-					<label class="text-[11px] font-semibold text-[#85a0bd] uppercase tracking-wide" for="equity-shock">Equity Shock (%)</label>
-					<Input id="equity-shock" type="number" step={5} bind:value={equityShock} class="bg-[#141519] border-[#404249]" />
+			<div class="stress-input-grid">
+				<div class="stress-input-col">
+					<label class="stress-label" for="equity-shock">Equity Shock (%)</label>
+					<Input id="equity-shock" type="number" step={5} bind:value={equityShock} />
 				</div>
-				<div class="flex flex-col gap-2">
-					<label class="text-[11px] font-semibold text-[#85a0bd] uppercase tracking-wide" for="rates-shock">Rates Shock (bps)</label>
-					<Input id="rates-shock" type="number" step={25} bind:value={ratesShock} class="bg-[#141519] border-[#404249]" />
+				<div class="stress-input-col">
+					<label class="stress-label" for="rates-shock">Rates Shock (bps)</label>
+					<Input id="rates-shock" type="number" step={25} bind:value={ratesShock} />
 				</div>
-				<div class="flex flex-col gap-2">
-					<label class="text-[11px] font-semibold text-[#85a0bd] uppercase tracking-wide" for="credit-shock">Credit Spread (bps)</label>
-					<Input id="credit-shock" type="number" step={25} bind:value={creditShock} class="bg-[#141519] border-[#404249]" />
+				<div class="stress-input-col">
+					<label class="stress-label" for="credit-shock">Credit Spread (bps)</label>
+					<Input id="credit-shock" type="number" step={25} bind:value={creditShock} />
 				</div>
 			</div>
 
@@ -219,26 +174,16 @@
 					<Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
 					Running…
 				{:else}
-						Run Scenario
+					Run Scenario
 				{/if}
 			</Button>
 		</div>
 
 		<!-- Results section -->
 		{#if hasResult}
-			<div class="flex flex-col gap-5 p-5 flex-1 overflow-y-auto">
-				<div class="flex flex-col gap-1">
-					<span class="text-[11px] font-semibold text-[#85a0bd] uppercase tracking-[0.04em]">Portfolio NAV Impact</span>
-					<ChartContainer
-						option={chartOption}
-						height={80}
-						empty={!hasResult}
-						ariaLabel="Stress test portfolio NAV impact"
-					/>
-				</div>
-
-				<div class="flex flex-col gap-1">
-					<span class="text-[11px] font-semibold text-[#85a0bd] uppercase tracking-[0.04em]">Impact by Allocation Block</span>
+			<div class="stress-results">
+				<div class="stress-chart-block">
+					<span class="stress-label">Impact by Allocation Block</span>
 					<ChartContainer
 						option={blockChartOption}
 						height={Math.max(120, Object.keys(workspace.localStress!.blockImpacts).length * 28)}
@@ -248,33 +193,33 @@
 				</div>
 
 				<!-- KPI summary strip -->
-				<div class="flex gap-6 px-5 py-3 bg-white/[0.03] rounded-[12px]">
-					<div class="flex flex-col gap-0.5">
-						<span class="text-[11px] text-[#85a0bd] font-medium">NAV Impact</span>
-						<span class="text-[15px] font-bold tabular-nums {workspace.localStress!.portfolioDrop <= 0 ? 'text-[#fc1a1a]' : 'text-[#11ec79]'}">
+				<div class="stress-kpi-strip">
+					<div class="stress-kpi">
+						<span class="stress-kpi-label">NAV Impact</span>
+						<span class="stress-kpi-value tabular-nums" class:stress-kpi-value--bad={workspace.localStress!.portfolioDrop <= 0} class:stress-kpi-value--good={workspace.localStress!.portfolioDrop > 0}>
 							{workspace.localStress!.portfolioDrop > 0 ? "+" : ""}{formatPercent(workspace.localStress!.portfolioDrop / 100)}
 						</span>
 					</div>
 					{#if workspace.localStress!.cvarStressed != null}
-						<div class="flex flex-col gap-0.5">
-							<span class="text-[11px] text-[#85a0bd] font-medium">CVaR Stressed</span>
-							<span class="text-[15px] font-bold tabular-nums text-[#fc1a1a]">
+						<div class="stress-kpi">
+							<span class="stress-kpi-label">CVaR Stressed</span>
+							<span class="stress-kpi-value stress-kpi-value--bad tabular-nums">
 								{formatPercent(workspace.localStress!.cvarStressed)}
 							</span>
 						</div>
 					{/if}
 					{#if workspace.localStress!.worstBlock}
-						<div class="flex flex-col gap-0.5">
-							<span class="text-[11px] text-[#85a0bd] font-medium">Worst Block</span>
-							<span class="text-[15px] font-bold text-[#fc1a1a]">
+						<div class="stress-kpi">
+							<span class="stress-kpi-label">Worst Block</span>
+							<span class="stress-kpi-value stress-kpi-value--bad">
 								{blockLabel(workspace.localStress!.worstBlock)}
 							</span>
 						</div>
 					{/if}
 					{#if workspace.localStress!.bestBlock}
-						<div class="flex flex-col gap-0.5">
-							<span class="text-[11px] text-[#85a0bd] font-medium">Best Block</span>
-							<span class="text-[15px] font-bold text-[#11ec79]">
+						<div class="stress-kpi">
+							<span class="stress-kpi-label">Best Block</span>
+							<span class="stress-kpi-value stress-kpi-value--good">
 								{blockLabel(workspace.localStress!.bestBlock)}
 							</span>
 						</div>
@@ -282,9 +227,111 @@
 				</div>
 			</div>
 		{:else if !workspace.isStressing}
-			<div class="flex flex-col items-center justify-center gap-3 flex-1 py-12 text-center">
-				<p class="text-[13px] text-[#85a0bd]">Configure shocks above and click <strong class="text-[#cbccd1]">Run Scenario</strong> to see projected impacts.</p>
+			<div class="stress-empty">
+				<p>Configure shocks above and click <strong>Run Scenario</strong> to see projected impacts.</p>
 			</div>
 		{/if}
 	</div>
+
+<style>
+	.stress-input-section {
+		padding: 20px 24px;
+		border-bottom: 1px solid var(--ii-border-subtle);
+	}
+
+	.stress-header {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-bottom: 20px;
+	}
+
+	.stress-title {
+		font-size: 16px;
+		font-weight: 700;
+		color: var(--ii-text-primary);
+		letter-spacing: -0.02em;
+	}
+
+	.stress-input-grid {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 24px;
+		margin-bottom: 20px;
+	}
+
+	.stress-input-col {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.stress-label {
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--ii-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	.stress-results {
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+		padding: 20px;
+		flex: 1;
+		overflow-y: auto;
+	}
+
+	.stress-chart-block {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.stress-kpi-strip {
+		display: flex;
+		gap: 24px;
+		padding: 12px 20px;
+		background: color-mix(in srgb, var(--ii-text-primary) 3%, transparent);
+		border-radius: 12px;
+	}
+
+	.stress-kpi {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.stress-kpi-label {
+		font-size: 11px;
+		color: var(--ii-text-muted);
+		font-weight: 500;
+	}
+
+	.stress-kpi-value {
+		font-size: 15px;
+		font-weight: 700;
+	}
+
+	.stress-kpi-value--bad  { color: var(--ii-danger); }
+	.stress-kpi-value--good { color: var(--ii-success); }
+
+	.stress-empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+		flex: 1;
+		padding: 48px 0;
+		text-align: center;
+		color: var(--ii-text-muted);
+		font-size: 13px;
+	}
+
+	.stress-empty strong {
+		color: var(--ii-text-secondary);
+	}
+</style>
 {/if}
