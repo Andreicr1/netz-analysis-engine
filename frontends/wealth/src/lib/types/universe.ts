@@ -15,6 +15,15 @@ export interface UniverseAsset {
 	approval_status: string | null;
 	approval_decision: string;
 	approved_at: string | null;
+	/** Tier 1 density fields — see Flexible Columns Layout spec §3.1. */
+	aum_usd: number | null;
+	expense_ratio: number | null;
+	return_3y_ann: number | null;
+	sharpe_1y: number | null;
+	max_drawdown_1y: number | null;
+	blended_momentum_score: number | null;
+	liquidity_tier: string | null;
+	manager_score: number | null;
 	/**
 	 * Pearson correlation of the candidate's daily return series
 	 * against the equal-weight synthetic portfolio of the funds

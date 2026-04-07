@@ -160,10 +160,13 @@ async def list_universe(
     is supplied, enriches each row with `correlation_to_portfolio`
     computed on-the-fly from `nav_timeseries.return_1d`.
     """
-    from sqlalchemy import Column, MetaData, Table, Text, select
+    from sqlalchemy import Column, MetaData, Table, Text, func, select
+    from sqlalchemy.orm import aliased
     from sqlalchemy.sql import and_
 
     from app.domains.wealth.models.instrument_org import InstrumentOrg
+    from app.domains.wealth.models.nav import NavTimeseries
+    from app.domains.wealth.models.risk import FundRiskMetrics
     from app.domains.wealth.models.universe_approval import UniverseApproval
 
     # Dynamic reflection of mv_unified_assets
@@ -178,6 +181,30 @@ async def list_universe(
         Column("geography", Text),
     )
 
+    # Latest-row-per-instrument subqueries for fund_risk_metrics and
+    # nav_timeseries. These use DISTINCT ON (Postgres-specific) which
+    # is O(n log n) with the existing primary-key index on
+    # (instrument_id, calc_date|nav_date). The alternative — a window
+    # function with ROW_NUMBER — is marginally slower on the same
+    # indexes and uglier to read. DISTINCT ON wins.
+    latest_risk = (
+        select(FundRiskMetrics)
+        .distinct(FundRiskMetrics.instrument_id)
+        .order_by(FundRiskMetrics.instrument_id, FundRiskMetrics.calc_date.desc())
+        .subquery()
+    )
+    latest_risk_alias = aliased(FundRiskMetrics, latest_risk)
+
+    latest_nav = (
+        select(
+            NavTimeseries.instrument_id,
+            func.max(NavTimeseries.aum_usd).label("aum_usd"),
+        )
+        .where(NavTimeseries.aum_usd.is_not(None))
+        .group_by(NavTimeseries.instrument_id)
+        .subquery()
+    )
+
     stmt = (
         select(
             InstrumentOrg.instrument_id,
@@ -190,6 +217,14 @@ async def list_universe(
             InstrumentOrg.approval_status,
             UniverseApproval.decision.label("approval_decision"),
             UniverseApproval.decided_at.label("approved_at"),
+            # Tier 1 density from fund_risk_metrics
+            latest_risk_alias.return_3y_ann,
+            latest_risk_alias.sharpe_1y,
+            latest_risk_alias.max_drawdown_1y,
+            latest_risk_alias.blended_momentum_score,
+            latest_risk_alias.manager_score,
+            # AUM from nav_timeseries (latest non-null)
+            latest_nav.c.aum_usd,
         )
         .join(mv_assets, mv_assets.c.id == InstrumentOrg.instrument_id.cast(Text))
         .outerjoin(
@@ -198,6 +233,14 @@ async def list_universe(
                 UniverseApproval.instrument_id == InstrumentOrg.instrument_id,
                 UniverseApproval.is_current.is_(True),
             ),
+        )
+        .outerjoin(
+            latest_risk_alias,
+            latest_risk_alias.instrument_id == InstrumentOrg.instrument_id,
+        )
+        .outerjoin(
+            latest_nav,
+            latest_nav.c.instrument_id == InstrumentOrg.instrument_id,
         )
         .where(InstrumentOrg.approval_status == "approved")
     )
@@ -248,6 +291,22 @@ async def list_universe(
             approval_status=r.approval_status,
             approval_decision=r.approval_decision or "approved",
             approved_at=r.approved_at,
+            # Tier 1 density — None for any field the risk worker
+            # hasn't produced yet; frontend renders "—" in those cells.
+            aum_usd=r.aum_usd,
+            # expense_ratio + liquidity_tier are not yet in fund_risk_metrics
+            # — they live on instrument.attributes JSON (enriched by
+            # import_sec_security per CLAUDE.md). Populating them
+            # requires joining instruments_universe.attributes, which
+            # is deferred to a follow-up commit. For now they are None
+            # and the UI renders em-dash. Documented in spec §6.4.
+            expense_ratio=None,
+            liquidity_tier=None,
+            return_3y_ann=r.return_3y_ann,
+            sharpe_1y=r.sharpe_1y,
+            max_drawdown_1y=r.max_drawdown_1y,
+            blended_momentum_score=r.blended_momentum_score,
+            manager_score=r.manager_score,
             correlation_to_portfolio=correlations.get(r.instrument_id),
         )
         for r in rows

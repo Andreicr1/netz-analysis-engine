@@ -1,26 +1,41 @@
 <!--
-  Builder — Integrated portfolio construction workspace.
-  Left sidebar: Models | Universe | Policy pills + panel content.
-  Right workspace: Chart (top) + Strategic Blocks with DnD (bottom).
-  All components visible together so the manager can drag-and-drop from
-  the approved universe into allocation blocks while seeing the chart update.
+  Portfolio Builder — Flexible Columns Layout orchestrator.
+
+  Reference: docs/superpowers/specs/2026-04-08-portfolio-builder-flexible-columns.md
+
+  This file is a pure orchestrator. It:
+    - Reads the portfolio workspace store (single source of truth).
+    - Derives `layoutState` from observable facts
+      (`selectedAnalyticsFund` + `portfolioId`) — never stored.
+    - Mounts the `FlexibleColumnsLayout` primitive with 3 snippets:
+      * leftColumn — switches between Models / Universe / Policy panels
+        based on `workspace.activeBuilderTab`. The sub-pills header is
+        preserved from the previous design — all three panels benefit
+        from the wider column granted by the FCL.
+      * centerColumn — `BuilderColumn` (action bar + main chart +
+        allocation blocks with DnD drop targets).
+      * rightColumn — `AnalyticsColumn` (Estado C drill-down). Placeholder
+        v1; Phase C adds Fund / Portfolio / Stress / Compare tabs.
+    - Wires `onSelectFund` from the Universe table to
+      `workspace.setSelectedAnalyticsFund` (triggers Estado B → C).
+    - Calls `workspace.resetBuilderEntry()` on mount to enforce the
+      "reset ao voltar" rule from spec §1.3 — re-entering /portfolio
+      always starts in Estado B, never in Estado C.
 -->
 <script lang="ts">
-	import { getContext } from "svelte";
+	import { getContext, onMount } from "svelte";
 	import { Button } from "@investintell/ui/components/ui/button";
-	import Play from "lucide-svelte/icons/play";
 	import Plus from "lucide-svelte/icons/plus";
-	import BarChart2 from "lucide-svelte/icons/bar-chart-2";
-	import Loader2 from "lucide-svelte/icons/loader-2";
-	import { goto } from "$app/navigation";
 
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
-	import { portfolioDisplayName } from "$lib/constants/blocks";
-	import UniversePanel from "$lib/components/portfolio/UniversePanel.svelte";
-	import PolicyPanel from "$lib/components/portfolio/PolicyPanel.svelte";
+	import { workspace, type UniverseFund } from "$lib/state/portfolio-workspace.svelte";
+	import FlexibleColumnsLayout, {
+		type LayoutState,
+	} from "$lib/components/layout/FlexibleColumnsLayout.svelte";
+	import UniverseColumn from "$lib/components/portfolio/UniverseColumn.svelte";
+	import BuilderColumn from "$lib/components/portfolio/BuilderColumn.svelte";
+	import AnalyticsColumn from "$lib/components/portfolio/AnalyticsColumn.svelte";
 	import ModelListPanel from "$lib/components/portfolio/ModelListPanel.svelte";
-	import PortfolioOverview from "$lib/components/portfolio/PortfolioOverview.svelte";
-	import MainPortfolioChart from "$lib/components/portfolio/MainPortfolioChart.svelte";
+	import PolicyPanel from "$lib/components/portfolio/PolicyPanel.svelte";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 	import type { PageData } from "./$types";
 
@@ -30,309 +45,211 @@
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	workspace.setGetToken(getToken);
 
+	// Reset entry per spec §1.3 — 3rd column always starts closed.
+	onMount(() => {
+		workspace.resetBuilderEntry();
+	});
+
+	// Initial universe load — subsequent re-loads happen when the
+	// Builder composition changes (see below) so `current_holdings`
+	// stays fresh for correlation computation.
 	$effect(() => {
 		if (workspace.universe.length === 0 && !workspace.isLoadingUniverse) {
 			workspace.loadUniverse();
 		}
 	});
 
-	function handleConstruct() {
-		workspace.constructPortfolio();
-	}
+	// ── Layout state — DERIVED, never stored ────────────────────────
+	// The layout state is a pure function of observable facts in the
+	// store. Storing it creates classes of bug like "three-col but
+	// selectedAnalyticsFund is null". See spec §2.2.
+	const layoutState = $derived<LayoutState>(
+		workspace.selectedAnalyticsFund
+			? "three-col"
+			: workspace.portfolioId
+				? "two-col"
+				: "two-col", // landing (Estado A) deferred; empty builder still renders two-col
+	);
 
-	function handleStressNav() {
-		workspace.activeModelTab = "stress";
-		goto("/portfolio/model");
-	}
-
+	// ── Left column tab switching ───────────────────────────────────
+	// The sub-pills (Models | Universe | Policy) survive the FCL
+	// migration. All three panels now get the same wide column (45%
+	// of workspace in Estado B, 30% in Estado C) — Models and Policy
+	// simply benefit from the extra space.
 	const sidebarTabs = [
 		{ value: "models", label: "Models" },
 		{ value: "universe", label: "Universe" },
 		{ value: "policy", label: "Policy" },
 	] as const;
 
-	let chartTitle = $derived(
-		workspace.portfolio
-			? portfolioDisplayName(workspace.portfolio.display_name)
-			: "Select a portfolio"
-	);
+	function handleSelectFund(fund: UniverseFund) {
+		workspace.setSelectedAnalyticsFund(fund);
+	}
 </script>
 
 <svelte:head>
 	<title>Portfolio Builder — InvestIntell</title>
 </svelte:head>
 
-<div class="bld-root">
-	<div class="bld-grid">
+<div class="bld-shell">
+	<FlexibleColumnsLayout {layoutState}>
+		{#snippet leftColumn()}
+			<div class="bld-left">
+				<div class="bld-left-header">
+					<Button size="sm" variant="outline" class="h-8 text-[12px]">
+						<Plus class="mr-1 h-3.5 w-3.5" />
+						New Portfolio
+					</Button>
+				</div>
 
-		<!-- ── Left sidebar ── -->
-		<div class="bld-sidebar">
+				<div class="bld-sub-pills">
+					{#each sidebarTabs as tab (tab.value)}
+						{@const active = workspace.activeBuilderTab === tab.value}
+						<button
+							type="button"
+							class="bld-sub-pill"
+							class:bld-sub-pill--active={active}
+							onclick={() => (workspace.activeBuilderTab = tab.value)}
+						>
+							{tab.label}
+						</button>
+					{/each}
+				</div>
 
-			<!-- Sidebar header: New Portfolio button -->
-			<div class="bld-sidebar-header">
-				<Button size="sm" variant="outline" class="h-8 text-[12px]">
-					<Plus class="mr-1 h-3.5 w-3.5" />
-					New Portfolio
-				</Button>
-			</div>
-
-			<!-- Sidebar sub-pills -->
-			<div class="bld-sub-pills">
-				{#each sidebarTabs as tab (tab.value)}
-					{@const active = workspace.activeBuilderTab === tab.value}
-					<button
-						type="button"
-						class="bld-sub-pill"
-						class:bld-sub-pill--active={active}
-						onclick={() => workspace.activeBuilderTab = tab.value}
-					>
-						{tab.label}
-					</button>
-				{/each}
-			</div>
-
-			<!-- Sidebar content -->
-			<div class="bld-sidebar-content">
-				{#if workspace.activeBuilderTab === "models"}
-					<ModelListPanel {portfolios} />
-				{:else if workspace.activeBuilderTab === "universe"}
-					<UniversePanel />
-				{:else}
-					<PolicyPanel />
-				{/if}
-			</div>
-		</div>
-
-		<!-- ── Right workspace ── -->
-		<div class="bld-main">
-
-			<!-- Action bar -->
-			<div class="bld-actions">
-				<Button
-					size="sm"
-					variant="outline"
-					disabled={!workspace.portfolioId || workspace.isConstructing}
-					onclick={handleConstruct}
-					class="h-9 text-[13px]"
-				>
-					{#if workspace.isConstructing}
-						<Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
-						Building...
+				<div class="bld-left-content">
+					{#if workspace.activeBuilderTab === "models"}
+						<ModelListPanel {portfolios} />
+					{:else if workspace.activeBuilderTab === "universe"}
+						<UniverseColumn onSelectFund={handleSelectFund} />
 					{:else}
-						<Play class="mr-1.5 h-4 w-4" />
-						Construct
+						<PolicyPanel />
 					{/if}
-				</Button>
-				<Button
-					size="sm"
-					variant="outline"
-					disabled={!workspace.portfolioId}
-					onclick={handleStressNav}
-					class="h-9 text-[13px]"
-				>
-					<BarChart2 class="mr-1.5 h-4 w-4" />
-					Stress Test
-				</Button>
-			</div>
-
-			<!-- Top chart area -->
-			<div class="bld-chart-card">
-				<div class="bld-chart-header">
-					<span class="bld-chart-title">{chartTitle}</span>
-				</div>
-				<div class="bld-chart-body">
-					<MainPortfolioChart />
 				</div>
 			</div>
+		{/snippet}
 
-			<!-- Strategic blocks (fund selection with DnD) -->
-			<div class="bld-blocks">
-				<PortfolioOverview />
-			</div>
-		</div>
-	</div>
+		{#snippet centerColumn()}
+			<BuilderColumn />
+		{/snippet}
 
-	<!-- Error notification -->
+		{#snippet rightColumn()}
+			<AnalyticsColumn />
+		{/snippet}
+	</FlexibleColumnsLayout>
+
+	<!-- Error toast — preserved from previous design -->
 	{#if workspace.lastError}
 		<div class="bld-error-toast">
 			<span>
 				<strong>{workspace.lastError.action} failed:</strong>
 				{workspace.lastError.message}
 			</span>
-			<button class="bld-error-close" onclick={() => { workspace.lastError = null; }}>&times;</button>
+			<button
+				class="bld-error-close"
+				onclick={() => { workspace.lastError = null; }}
+				aria-label="Dismiss error"
+			>
+				&times;
+			</button>
 		</div>
 	{/if}
 </div>
 
 <style>
-	.bld-root {
+	.bld-shell {
 		height: 100%;
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-	}
-
-	.bld-grid {
-		display: grid;
-		flex: 1;
-		grid-template-columns: 380px 1fr;
-		gap: 34px;
-		overflow: hidden;
+		width: 100%;
 		min-height: 0;
+		overflow: hidden;
+		position: relative;
 	}
 
-	/* ── Sidebar ── */
-	.bld-sidebar {
+	/* ── Left column chrome ──────────────────────────────────────── */
+	.bld-left {
 		display: flex;
 		flex-direction: column;
-		overflow: hidden;
-		background: #141519;
-		border-radius: 20px;
-		border: 1px solid rgba(64, 66, 73, 0.3);
+		height: 100%;
+		min-height: 0;
+		background: var(--ii-surface, #141519);
 	}
 
-	.bld-sidebar-header {
+	.bld-left-header {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		padding: 16px 20px 8px;
+		padding: 14px 16px 8px;
 		flex-shrink: 0;
 	}
 
-	.bld-sidebar-content {
-		flex: 1;
-		overflow-y: auto;
-		min-height: 0;
-	}
-
-	/* ── Sidebar sub-pills ── */
 	.bld-sub-pills {
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		padding: 0 20px 12px;
+		padding: 0 16px 10px;
 		flex-shrink: 0;
+		border-bottom: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.3));
 	}
 
 	.bld-sub-pill {
 		display: inline-flex;
 		align-items: center;
-		justify-content: center;
-		gap: 6px;
-		padding: 7px 16px;
-		border: 1px solid #3a3b44;
-		border-radius: 36px;
+		padding: 5px 14px;
+		border: 1px solid transparent;
+		border-radius: 999px;
 		background: transparent;
-		color: #a1a1aa;
-		font-size: 12px;
-		font-weight: 600;
-		font-family: "Urbanist", sans-serif;
+		color: var(--ii-text-muted, #85a0bd);
+		font-family: var(--ii-font-sans);
+		font-size: 0.75rem;
+		font-weight: 500;
 		cursor: pointer;
-		white-space: nowrap;
-		transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
-		letter-spacing: 0.02em;
+		transition: all 120ms ease;
 	}
 
 	.bld-sub-pill:hover {
-		background: #22232a;
-		border-color: #52525b;
-		color: #fff;
+		color: var(--ii-text-primary, white);
+		background: rgba(255, 255, 255, 0.03);
 	}
 
 	.bld-sub-pill--active {
-		background: #0177fb;
-		border-color: transparent;
-		color: #fff;
+		background: var(--ii-brand-primary, #0177fb);
+		color: white;
+		font-weight: 600;
 	}
 
 	.bld-sub-pill--active:hover {
-		background: #0166d9;
+		background: var(--ii-brand-primary, #0177fb);
 	}
 
-	/* ── Main workspace ── */
-	.bld-main {
-		display: flex;
-		flex-direction: column;
-		gap: 24px;
-		overflow: hidden;
+	.bld-left-content {
+		flex: 1;
 		min-height: 0;
-	}
-
-	/* ── Action bar ── */
-	.bld-actions {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		flex-shrink: 0;
-	}
-
-	/* ── Chart card ── */
-	.bld-chart-card {
-		flex-shrink: 0;
-		height: 320px;
-		background: #141519;
-		border-radius: 20px;
-		border: 1px solid rgba(64, 66, 73, 0.3);
-		display: flex;
-		flex-direction: column;
 		overflow: hidden;
 	}
 
-	.bld-chart-header {
-		display: flex;
-		align-items: center;
-		padding: 12px 20px;
-		flex-shrink: 0;
-	}
-
-	.bld-chart-title {
-		font-size: 15px;
-		font-weight: 500;
-		color: #cbccd1;
-		font-family: "Urbanist", sans-serif;
-	}
-
-	.bld-chart-body {
-		flex: 1;
-		min-height: 0;
-		padding: 0 12px 12px;
-	}
-
-	/* ── Strategic blocks (fund selection + DnD) ── */
-	.bld-blocks {
-		flex: 1;
-		min-height: 0;
-		overflow-y: auto;
-	}
-
-	/* ── Error toast ── */
+	/* ── Error toast (preserved) ─────────────────────────────────── */
 	.bld-error-toast {
-		position: fixed;
-		bottom: 24px;
-		right: 24px;
-		z-index: 50;
+		position: absolute;
+		bottom: 20px;
+		right: 20px;
+		max-width: 480px;
+		padding: 12px 16px;
+		background: var(--ii-danger, #dc2626);
+		color: white;
+		border-radius: 10px;
+		box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.4);
 		display: flex;
-		max-width: 384px;
 		align-items: flex-start;
 		gap: 12px;
-		border-radius: 16px;
-		border: 1px solid rgba(239, 68, 68, 0.3);
-		background: rgba(69, 10, 10, 0.9);
-		padding: 12px 16px;
-		font-size: 14px;
-		color: #fecaca;
-		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-		backdrop-filter: blur(8px);
+		font-size: 0.8125rem;
+		z-index: 100;
 	}
 
 	.bld-error-close {
-		flex-shrink: 0;
-		color: #f87171;
-		background: none;
+		background: transparent;
 		border: none;
+		color: white;
 		cursor: pointer;
-		font-size: 18px;
+		font-size: 1.25rem;
+		line-height: 1;
+		padding: 0 4px;
 	}
-
-	.bld-error-close:hover { color: #fecaca; }
 </style>

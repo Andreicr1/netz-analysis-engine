@@ -100,6 +100,20 @@ export interface UniverseFund {
 	geography: string | null;
 	instrument_type: string;
 	manager_score: number | null;
+	/**
+	 * Tier 1 density fields (Flexible Columns Layout spec §3.1).
+	 * Populated from fund_risk_metrics + nav_timeseries + correlation
+	 * service. `null` means the metric is not yet computed for this
+	 * instrument — the UI renders em-dash, never crashes.
+	 */
+	aum_usd: number | null;
+	expense_ratio: number | null;
+	return_3y_ann: number | null;
+	sharpe_1y: number | null;
+	max_drawdown_1y: number | null;
+	blended_momentum_score: number | null;
+	liquidity_tier: string | null;
+	correlation_to_portfolio: number | null;
 	/** Pre-computed lowercase search key: "name|ticker|block_label" */
 	_searchKey: string;
 }
@@ -114,6 +128,14 @@ interface UniverseApiItem {
 	geography: string | null;
 	approval_status: string | null;
 	manager_score: number | null;
+	aum_usd: number | null;
+	expense_ratio: number | null;
+	return_3y_ann: number | null;
+	sharpe_1y: number | null;
+	max_drawdown_1y: number | null;
+	blended_momentum_score: number | null;
+	liquidity_tier: string | null;
+	correlation_to_portfolio: number | null;
 }
 
 export interface WorkspaceError {
@@ -485,14 +507,32 @@ export class PortfolioWorkspaceState {
 	/** True while universe is being fetched from API. */
 	isLoadingUniverse = $state(false);
 
-	/** Load approved universe funds from GET /universe. */
+	/** Load approved universe funds from GET /universe.
+	 *
+	 * Passes the current Builder `funds` as `current_holdings` query
+	 * param so the backend can enrich each row with
+	 * `correlation_to_portfolio` on-the-fly (spec §3.4). When the
+	 * portfolio is empty, the param is omitted and every row's
+	 * correlation comes back `null`.
+	 */
 	async loadUniverse() {
 		if (!this._getToken) return;
 		this.isLoadingUniverse = true;
 
 		try {
 			const api = this.api();
-			const result = await api.get<UniverseApiItem[]>("/universe");
+			// Send the list of currently allocated instrument IDs so
+			// the backend can correlate each candidate against this
+			// exact portfolio composition. The query param accepts
+			// comma-separated UUIDs; empty means "no portfolio context,
+			// return correlation_to_portfolio=null for everyone".
+			const holdingIds = this.funds
+				.map((f) => f.instrument_id)
+				.filter((id): id is string => !!id);
+			const qs = holdingIds.length > 0
+				? `?current_holdings=${holdingIds.join(",")}`
+				: "";
+			const result = await api.get<UniverseApiItem[]>(`/universe${qs}`);
 
 			this.universe = result.map((r) => {
 				const blockId = r.block_id ?? "unknown";
@@ -509,6 +549,14 @@ export class PortfolioWorkspaceState {
 					geography: r.geography ?? null,
 					instrument_type: r.asset_class ?? "fund",
 					manager_score: r.manager_score ?? null,
+					aum_usd: r.aum_usd ?? null,
+					expense_ratio: r.expense_ratio ?? null,
+					return_3y_ann: r.return_3y_ann ?? null,
+					sharpe_1y: r.sharpe_1y ?? null,
+					max_drawdown_1y: r.max_drawdown_1y ?? null,
+					blended_momentum_score: r.blended_momentum_score ?? null,
+					liquidity_tier: r.liquidity_tier ?? null,
+					correlation_to_portfolio: r.correlation_to_portfolio ?? null,
 					_searchKey: `${name}|${ticker}|${label.toLowerCase()}`,
 				};
 			});

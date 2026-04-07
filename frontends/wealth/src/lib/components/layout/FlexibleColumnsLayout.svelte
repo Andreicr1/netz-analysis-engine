@@ -1,7 +1,7 @@
 <!--
   FlexibleColumnsLayout — Institutional 3-column adaptive workspace primitive.
 
-  Reference: docs/superpowers/specs/2026-04-08-portfolio-builder-flexible-columns.md §2.1
+  Reference: docs/superpowers/specs/2026-04-08-portfolio-centerColumn-flexible-columns.md §2.1
 
   Three states, CSS Grid based, zero unmount:
     two-col:   Universe (2fr) | Builder (3fr) | Analytics (0fr, hidden)
@@ -61,12 +61,12 @@
 		 *   )
 		 */
 		layoutState: LayoutState;
-		universe: Snippet;
-		builder: Snippet;
-		analytics: Snippet;
+		leftColumn: Snippet;
+		centerColumn: Snippet;
+		rightColumn: Snippet;
 	}
 
-	let { layoutState, universe, builder, analytics }: Props = $props();
+	let { layoutState, leftColumn, centerColumn, rightColumn }: Props = $props();
 
 	// Grid template per state — expressed as a single CSS custom prop so
 	// the transition CSS only needs to watch one variable.
@@ -81,8 +81,8 @@
 		}
 	});
 
-	const universeHidden = $derived(layoutState === "landing");
-	const analyticsHidden = $derived(layoutState !== "three-col");
+	const leftColumnHidden = $derived(layoutState === "landing");
+	const rightColumnHidden = $derived(layoutState !== "three-col");
 </script>
 
 <div
@@ -90,32 +90,32 @@
 	style:grid-template-columns={gridTemplate}
 	data-layout-state={layoutState}
 >
+	<!-- A <section> with an accessible name (aria-label) already has
+	     implicit ARIA role="region". Explicit `role="region"` would
+	     be redundant and triggers svelte-check a11y_no_redundant_roles. -->
 	<section
-		class="fcl-col fcl-col-universe"
-		class:fcl-col--collapsed={universeHidden}
-		aria-hidden={universeHidden}
-		role="region"
+		class="fcl-col fcl-col-left"
+		class:fcl-col--collapsed={leftColumnHidden}
+		aria-hidden={leftColumnHidden}
 		aria-label="Approved Universe"
 	>
-		{@render universe()}
+		{@render leftColumn()}
 	</section>
 
 	<section
-		class="fcl-col fcl-col-builder"
-		role="region"
+		class="fcl-col fcl-col-center"
 		aria-label="Portfolio Builder"
 	>
-		{@render builder()}
+		{@render centerColumn()}
 	</section>
 
 	<section
-		class="fcl-col fcl-col-analytics"
-		class:fcl-col--collapsed={analyticsHidden}
-		aria-hidden={analyticsHidden}
-		role="region"
+		class="fcl-col fcl-col-right"
+		class:fcl-col--collapsed={rightColumnHidden}
+		aria-hidden={rightColumnHidden}
 		aria-label="Analytics"
 	>
-		{@render analytics()}
+		{@render rightColumn()}
 	</section>
 </div>
 
@@ -154,13 +154,13 @@
 		position: relative;
 	}
 
-	.fcl-col-universe,
-	.fcl-col-analytics {
+	.fcl-col-left,
+	.fcl-col-right {
 		/* These two can collapse; the Builder is always present. */
 		border-left: 1px solid var(--ii-border-subtle, transparent);
 	}
 
-	.fcl-col-universe {
+	.fcl-col-left {
 		border-left: none;
 		border-right: 1px solid var(--ii-border-subtle, transparent);
 	}
@@ -199,7 +199,7 @@
 			 * setting data-layout-state to two-col explicitly. */
 			grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 0fr;
 		}
-		.fcl-root[data-layout-state="three-col"] .fcl-col-analytics {
+		.fcl-root[data-layout-state="three-col"] .fcl-col-right {
 			position: absolute;
 			top: 0;
 			right: 0;
