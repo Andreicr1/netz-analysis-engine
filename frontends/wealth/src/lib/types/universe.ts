@@ -15,6 +15,22 @@ export interface UniverseAsset {
 	approval_status: string | null;
 	approval_decision: string;
 	approved_at: string | null;
+	/**
+	 * Pearson correlation of the candidate's daily return series
+	 * against the equal-weight synthetic portfolio of the funds
+	 * currently in the Builder workspace. Populated by `GET /universe`
+	 * when the loader passes `?current_holdings=<uuid1>,<uuid2>,...`.
+	 * `null` when the Builder is empty, when the candidate has
+	 * insufficient NAV history overlap (< 45 days), or when the
+	 * backend correlation service failed (best-effort enrichment).
+	 *
+	 * Frontend renders "—" for null, otherwise formatNumber(value, 2)
+	 * with a red→green color scale (negative = diversifying, positive
+	 * = concentrating).
+	 *
+	 * Spec: docs/superpowers/specs/2026-04-08-portfolio-builder-flexible-columns.md §3.4
+	 */
+	correlation_to_portfolio: number | null;
 }
 
 export function instrumentTypeLabel(type: InstrumentType | string | null | undefined): string {

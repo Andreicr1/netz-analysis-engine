@@ -42,6 +42,94 @@ def _set_rls_sync(session, org_id) -> None:
 _APPROVE_DECISIONS = {UniverseDecision.approved.value, UniverseDecision.watchlist.value}
 
 
+_CORRELATION_LOOKBACK_DAYS = 756  # ~3 years of trading days
+
+
+def _parse_current_holdings(raw: str | None) -> list[uuid.UUID]:
+    """Parse the ?current_holdings=uuid1,uuid2,... query param.
+
+    Returns an empty list on empty/None input, ignores malformed
+    UUIDs silently (drops them) so a single bad id never blocks the
+    whole loader. The Portfolio Builder routes its holdings through
+    client-side validation already; this is belt-and-suspenders.
+    """
+    if not raw:
+        return []
+    ids: list[uuid.UUID] = []
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            ids.append(uuid.UUID(token))
+        except ValueError:
+            logger.debug("universe_list_ignored_bad_holding_id", token=token)
+    return ids
+
+
+async def _load_correlations(
+    db: AsyncSession,
+    *,
+    candidate_ids: list[uuid.UUID],
+    current_holdings: list[uuid.UUID],
+) -> dict[uuid.UUID, float | None]:
+    """Load NAV return series and compute candidate→portfolio correlations.
+
+    Pulls ~3 years of `nav_timeseries.return_1d` for every candidate
+    and every current holding in a single batch query, groups by
+    instrument, and delegates the math to
+    `quant_engine.portfolio_correlation_service.compute_portfolio_correlations`.
+    """
+    from datetime import date, timedelta
+
+    from sqlalchemy import select as sa_select
+
+    from app.domains.wealth.models.nav import NavTimeseries
+    from quant_engine.portfolio_correlation_service import (
+        ReturnSeries,
+        compute_portfolio_correlations,
+    )
+
+    if not current_holdings:
+        return {cid: None for cid in candidate_ids}
+
+    all_ids = list(set(candidate_ids) | set(current_holdings))
+    cutoff = date.today() - timedelta(days=_CORRELATION_LOOKBACK_DAYS)
+
+    stmt = (
+        sa_select(
+            NavTimeseries.instrument_id,
+            NavTimeseries.nav_date,
+            NavTimeseries.return_1d,
+        )
+        .where(NavTimeseries.instrument_id.in_(all_ids))
+        .where(NavTimeseries.nav_date >= cutoff)
+        .where(NavTimeseries.return_1d.is_not(None))
+        .order_by(NavTimeseries.instrument_id, NavTimeseries.nav_date)
+    )
+    result = await db.execute(stmt)
+
+    series_by_id: dict[uuid.UUID, list[tuple[str, float]]] = {}
+    for row in result:
+        series_by_id.setdefault(row.instrument_id, []).append(
+            (row.nav_date.isoformat(), float(row.return_1d)),
+        )
+
+    def _to_series(iid: uuid.UUID) -> ReturnSeries:
+        points = series_by_id.get(iid, [])
+        dates = tuple(p[0] for p in points)
+        returns = tuple(p[1] for p in points)
+        return ReturnSeries(instrument_id=iid, dates=dates, returns=returns)
+
+    candidates = [_to_series(cid) for cid in candidate_ids]
+    holdings = [_to_series(hid) for hid in current_holdings if hid in series_by_id]
+
+    return compute_portfolio_correlations(
+        candidates=candidates,
+        holdings=holdings,
+    )
+
+
 @router.get(
     "",
     response_model=list[UniverseAssetRead],
@@ -51,6 +139,16 @@ async def list_universe(
     block_id: str | None = Query(None, description="Filter by allocation block"),
     geography: str | None = Query(None, description="Filter by geography"),
     asset_class: str | None = Query(None, description="Filter by asset class"),
+    current_holdings: str | None = Query(
+        None,
+        description=(
+            "Comma-separated UUIDs of instruments currently in the Builder workspace. "
+            "When provided, each response row is enriched with `correlation_to_portfolio` "
+            "— the Pearson correlation of the candidate's daily return series against "
+            "the equal-weight synthetic portfolio of these holdings. Used by the Flexible "
+            "Columns Layout Universe column (design spec 2026-04-08)."
+        ),
+    ),
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     org_id: str = Depends(get_org_id),
@@ -58,7 +156,9 @@ async def list_universe(
     """List all approved and active funds in the investment universe.
 
     Joins mv_unified_assets for enriched metadata and universe_approvals
-    for the current approval decision/timestamp.
+    for the current approval decision/timestamp. When `current_holdings`
+    is supplied, enriches each row with `correlation_to_portfolio`
+    computed on-the-fly from `nav_timeseries.return_1d`.
     """
     from sqlalchemy import Column, MetaData, Table, Text, select
     from sqlalchemy.sql import and_
@@ -112,6 +212,30 @@ async def list_universe(
     result = await db.execute(stmt)
     rows = result.all()
 
+    # Compute correlations on-the-fly when the caller supplied the
+    # Builder workspace holdings. The service swallows missing series
+    # and returns None for candidates without sufficient overlap, so
+    # we can always `.get()` with a None fallback.
+    holding_ids = _parse_current_holdings(current_holdings)
+    candidate_ids = [r.instrument_id for r in rows]
+    try:
+        correlations = await _load_correlations(
+            db,
+            candidate_ids=candidate_ids,
+            current_holdings=holding_ids,
+        )
+    except Exception as e:
+        # Correlation enrichment is best-effort — the universe table
+        # must still render even if nav_timeseries has a hiccup or
+        # the service raises. Log and move on with None values.
+        logger.warning(
+            "universe_correlation_enrichment_failed",
+            error=str(e),
+            holding_count=len(holding_ids),
+            candidate_count=len(candidate_ids),
+        )
+        correlations = {cid: None for cid in candidate_ids}
+
     return [
         UniverseAssetRead(
             instrument_id=r.instrument_id,
@@ -124,6 +248,7 @@ async def list_universe(
             approval_status=r.approval_status,
             approval_decision=r.approval_decision or "approved",
             approved_at=r.approved_at,
+            correlation_to_portfolio=correlations.get(r.instrument_id),
         )
         for r in rows
     ]

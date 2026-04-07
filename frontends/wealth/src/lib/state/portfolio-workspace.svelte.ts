@@ -184,6 +184,25 @@ export class PortfolioWorkspaceState {
 	/** Approved universe funds for DnD — loaded from API when portfolio is selected. */
 	universe = $state<UniverseFund[]>([]);
 
+	/**
+	 * The fund currently "under inspection" in the Analytics column
+	 * (Estado C of the Flexible Columns Layout — design spec
+	 * 2026-04-08). Populated when the PM clicks a row in the Universe
+	 * table; consumed by the 3rd column to drive the Fund drill-down
+	 * tab. `null` means Estado B is active (2 columns only).
+	 *
+	 * Reset rules:
+	 *   1. Cleared on `selectPortfolio()` (switching model starts fresh).
+	 *   2. Cleared on `resetBuilderEntry()` (re-entering /portfolio from
+	 *      another route — Andrei's explicit "reset ao voltar" rule).
+	 *   3. Cleared directly by the Analytics column close button via
+	 *      `clearSelectedAnalyticsFund()`.
+	 *
+	 * NOT armazenado como `layoutState`. The layout state is derived:
+	 *   selectedAnalyticsFund ? "three-col" : "two-col"
+	 */
+	selectedAnalyticsFund = $state.raw<UniverseFund | null>(null);
+
 	/** Token provider — set once from +page.svelte via setGetToken(). */
 	private _getToken: (() => Promise<string>) | null = null;
 
@@ -230,6 +249,34 @@ export class PortfolioWorkspaceState {
 		return createClientApiClient(this._getToken);
 	}
 
+	/**
+	 * Set the fund currently under inspection in the Analytics column
+	 * (triggers Estado C of the Flexible Columns Layout). Passing
+	 * `null` collapses the 3rd column back to Estado B.
+	 */
+	setSelectedAnalyticsFund(fund: UniverseFund | null) {
+		this.selectedAnalyticsFund = fund;
+	}
+
+	/** Convenience — collapse the Analytics column. */
+	clearSelectedAnalyticsFund() {
+		this.selectedAnalyticsFund = null;
+	}
+
+	/**
+	 * Reset layout-scoped state when the PM (re-)enters /portfolio
+	 * from another route. The 3rd column must always start closed
+	 * per the design spec §1.3 "Reset ao voltar" rule. Called from
+	 * `onMount` of `routes/(app)/portfolio/+page.svelte`.
+	 *
+	 * This is separate from `selectPortfolio()` because the PM may
+	 * re-enter with the same portfolio still selected — we don't
+	 * want to drop workspace state, only layout state.
+	 */
+	resetBuilderEntry() {
+		this.selectedAnalyticsFund = null;
+	}
+
 	selectPortfolio(p: ModelPortfolio) {
 		// Increment generation to invalidate any in-flight async loads
 		this._generation++;
@@ -247,6 +294,9 @@ export class PortfolioWorkspaceState {
 		this.adviceFetched = false;
 		this.lastError = null;
 		this.navSeries = [];
+		// Switching models is a hard reset of the analytics context —
+		// the 3rd column closes and the PM starts fresh in Estado B.
+		this.selectedAnalyticsFund = null;
 		// Fire-and-forget: load track-record, factor analysis, attribution, drift
 		this.loadTrackRecord();
 		this.loadDriftAlerts();
