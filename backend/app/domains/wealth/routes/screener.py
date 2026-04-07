@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import Float, Select, String, case, literal, select, union_all
 from sqlalchemy import func as sa_func
@@ -34,6 +34,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import route_cache
 from app.core.config.config_service import ConfigService
+from app.core.runtime.gates import get_idempotency_storage
+from app.core.runtime.idempotency import idempotent
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.instrument import Instrument
@@ -75,6 +77,7 @@ from app.domains.wealth.schemas.screening import (
     ScreeningRunRequest,
     ScreeningRunResponse,
 )
+from app.domains.wealth.workers.screener_import_worker import dispatch_screener_import
 from app.shared.enums import Role
 from app.shared.models import EsmaFund, EsmaManager, SecCusipTickerMap
 
@@ -881,388 +884,147 @@ async def get_screener_facets(
     )
 
 
-# ── ESMA Import ─────────────────────────────────────────────────────────
+# ── Unified Import — Job-or-Stream + Idempotent (Phase 4 §4.3) ──────────
 
-
-@router.post(
-    "/import-esma/{isin}",
-    status_code=status.HTTP_201_CREATED,
-    summary="Import an ESMA fund into instruments_universe",
-)
-async def import_esma_fund(
-    isin: str,
-    body: EsmaImportRequest,
-    db: AsyncSession = Depends(get_db_with_rls),
-    org_id: uuid.UUID = Depends(get_org_id),
-    actor: Actor = Depends(get_actor),
-) -> dict[str, object]:
-    _require_investment_role(actor)
-
-    from app.domains.wealth.services.esma_import_service import import_esma_fund_to_universe
-
-    instrument = await import_esma_fund_to_universe(
-        db, org_id, isin, block_id=body.block_id, strategy=body.strategy,
-    )
-    await db.commit()
-
-    return {
-        "instrument_id": str(instrument.instrument_id),
-        "name": instrument.name,
-        "isin": instrument.isin,
-        "status": "imported",
-    }
-
-
-# ── Unified Import ─────────────────────────────────────────────────────
 
 _ISIN_RE = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
 
 
+def _import_idempotency_key(
+    identifier: str,
+    body: EsmaImportRequest,
+    request: Request,
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    actor: Actor,
+) -> str:
+    """Derive a stable idempotency key for the screener import endpoint.
+
+    Order of precedence:
+      1. Client-supplied ``Idempotency-Key`` header (Stripe-style).
+         The server still namespaces by org_id so two tenants with
+         the same opaque key cannot collide.
+      2. Implicit fallback: SHA-256 of ``identifier|block_id``.
+         Two clicks within the TTL window with the same payload
+         dedupe automatically without any client cooperation.
+
+    The first parameter set is forwarded by the @idempotent decorator
+    untouched — args/kwargs match the wrapped function's signature.
+    """
+    client_key = request.headers.get("Idempotency-Key", "").strip()
+    if client_key:
+        return f"screener_import:{org_id}:{client_key}"
+    raw = f"{identifier.upper()}|{body.block_id or ''}"
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return f"screener_import:{org_id}:{digest}"
+
+
 @router.post(
     "/import/{identifier}",
-    status_code=status.HTTP_201_CREATED,
-    summary="Import a fund by ISIN (ESMA) or ticker (SEC) into instruments_universe",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary=(
+        "Enqueue a fund import (ISIN → ESMA, ticker → SEC) and stream "
+        "progress over /jobs/{job_id}/stream"
+    ),
+)
+@idempotent(
+    key=_import_idempotency_key,
+    ttl_s=300,
+    storage=get_idempotency_storage(),
 )
 async def import_fund(
     identifier: str,
     body: EsmaImportRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db_with_rls),
     org_id: uuid.UUID = Depends(get_org_id),
     actor: Actor = Depends(get_actor),
 ) -> dict[str, object]:
-    """Auto-detect identifier format and route to the correct importer."""
-    if _ISIN_RE.match(identifier.upper()):
-        return await import_esma_fund(
-            isin=identifier.upper(), body=body, db=db, org_id=org_id, actor=actor,
+    """Job-or-Stream import endpoint.
+
+    1. Validates the actor's role and the identifier shape (B3.4 —
+       ``_require_investment_role`` is the FIRST thing in the body).
+    2. Hands off to ``dispatch_screener_import`` which spawns a
+       background coroutine and returns immediately.
+    3. Returns ``202 Accepted`` with ``job_id``. The frontend opens
+       ``/api/v1/jobs/{job_id}/stream`` to consume progress events
+       and the terminal ``done`` / ``error`` payload.
+
+    Idempotency:
+      - The ``@idempotent`` decorator caches this entire response for
+        5 minutes keyed on the client-supplied ``Idempotency-Key``
+        header (or a stable fallback hash). A double-click within
+        that window receives the same ``job_id`` and reattaches to
+        the existing SSE stream.
+    """
+    _require_investment_role(actor)
+
+    normalized = (identifier or "").strip().upper()
+    if not normalized:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="identifier must be non-empty",
         )
-    return await import_sec_security(
-        ticker=identifier.upper(), body=body, db=db, org_id=org_id, actor=actor,
+    if _ISIN_RE.match(normalized) is None and not normalized.replace(".", "").isalnum():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"identifier {identifier!r} is not a valid ISIN or ticker",
+        )
+
+    handle = await dispatch_screener_import(
+        organization_id=org_id,
+        identifier=normalized,
+        block_id=body.block_id,
+        strategy=body.strategy,
     )
+    return {
+        "job_id": handle.job_id,
+        "identifier": handle.identifier,
+        "status": "queued",
+    }
 
 
-# ── SEC Import ──────────────────────────────────────────────────────────
+# Legacy alias kept for the existing frontend call sites
+# (FundClassesSheet, ConstructionAdvisor) and any external clients
+# that hard-coded the SEC-specific path. Both delegate to the same
+# unified endpoint above, so the @idempotent decorator and the
+# job-or-stream contract apply uniformly.
+@router.post(
+    "/import-esma/{isin}",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Alias for /import/{isin} — kept for backwards compatibility",
+)
+async def import_esma_fund(
+    isin: str,
+    body: EsmaImportRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db_with_rls),
+    org_id: uuid.UUID = Depends(get_org_id),
+    actor: Actor = Depends(get_actor),
+) -> dict[str, object]:
+    return await import_fund(
+        identifier=isin, body=body, request=request,
+        db=db, org_id=org_id, actor=actor,
+    )
 
 
 @router.post(
     "/import-sec/{ticker}",
-    status_code=status.HTTP_201_CREATED,
-    summary="Import a US security into instruments_universe",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Alias for /import/{ticker} — kept for backwards compatibility",
 )
 async def import_sec_security(
     ticker: str,
     body: EsmaImportRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db_with_rls),
     org_id: uuid.UUID = Depends(get_org_id),
     actor: Actor = Depends(get_actor),
 ) -> dict[str, object]:
-    _require_investment_role(actor)
-
-    # Check if instrument already exists globally by ticker
-    existing = (await db.execute(
-        select(Instrument).where(
-            Instrument.ticker == ticker.upper(),
-        ),
-    )).scalar_one_or_none()
-    if existing:
-        # Check if already linked to this org
-        existing_link = (await db.execute(
-            select(InstrumentOrg).where(
-                InstrumentOrg.instrument_id == existing.instrument_id,
-                InstrumentOrg.organization_id == org_id,
-            ),
-        )).scalar_one_or_none()
-        if existing_link:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Instrument with ticker {ticker} already exists in your universe",
-            )
-        # Link existing global instrument to this org
-        org_link = InstrumentOrg(
-            organization_id=org_id,
-            instrument_id=existing.instrument_id,
-            block_id=body.block_id,
-            approval_status="pending",
-        )
-        db.add(org_link)
-        await db.commit()
-        return {
-            "instrument_id": str(existing.instrument_id),
-            "name": existing.name,
-            "ticker": existing.ticker,
-            "status": "imported",
-        }
-
-    # Lookup from sec_cusip_ticker_map
-    sec_row = (await db.execute(
-        select(SecCusipTickerMap).where(
-            SecCusipTickerMap.ticker == ticker.upper(),
-            SecCusipTickerMap.is_tradeable.is_(True),
-        ).limit(1),
-    )).scalar_one_or_none()
-    if not sec_row:
-        # Fallback: mutual fund tickers are in sec_fund_classes, not cusip_ticker_map
-        from types import SimpleNamespace
-
-        from app.shared.models import SecFundClass as _FcFallback
-        from app.shared.models import SecRegisteredFund as _RfFallback
-
-        fc_fallback = (await db.execute(
-            select(_FcFallback).where(_FcFallback.ticker == ticker.upper()).limit(1),
-        )).scalar_one_or_none()
-        if not fc_fallback:
-            raise HTTPException(status_code=404, detail=f"Tradeable security with ticker {ticker} not found")
-        rf_fallback = (await db.execute(
-            select(_RfFallback).where(_RfFallback.cik == fc_fallback.cik),
-        )).scalar_one_or_none()
-        sec_row = SimpleNamespace(  # type: ignore[assignment]  # duck-types as SecCusipTickerMap
-            ticker=ticker.upper(),
-            issuer_name=rf_fallback.fund_name if rf_fallback else (fc_fallback.series_name or ticker),
-            security_type="Open-End Fund",
-            cusip=None, exchange=None, figi=None, composite_figi=None,
-            is_tradeable=True,
-        )
-
-    assert sec_row is not None  # guaranteed: either from DB or SimpleNamespace fallback
-
-    # Map security_type to instrument_type
-    _type_map = {
-        "Common Stock": "equity", "ETP": "fund", "Closed-End Fund": "fund",
-        "Open-End Fund": "fund", "ADR": "equity", "REIT": "equity", "MLP": "equity",
-    }
-    inst_type = _type_map.get(sec_row.security_type or "", "equity")
-    asset_class = "fund" if inst_type == "fund" else "equity"
-
-    # Resolve SEC registered fund linkage (CIK + universe) for N-PORT data
-    sec_cik: str | None = None
-    sec_universe: str | None = None
-    sec_crd: str | None = None
-    fund_manager_name = sec_row.issuer_name
-    enrichment_attrs: dict[str, object] = {}
-    if inst_type == "fund":
-        from app.shared.models import SecEtf, SecFundClass, SecRegisteredFund
-
-        reg_fund = (await db.execute(
-            select(SecRegisteredFund).where(
-                SecRegisteredFund.ticker == sec_row.ticker,
-            ).limit(1),
-        )).scalar_one_or_none()
-
-        # Fallback: search sec_fund_classes by ticker → find parent CIK
-        if not reg_fund:
-            fc_row = (await db.execute(
-                select(SecFundClass).where(
-                    SecFundClass.ticker == sec_row.ticker,
-                ).limit(1),
-            )).scalar_one_or_none()
-            if fc_row:
-                reg_fund = (await db.execute(
-                    select(SecRegisteredFund).where(
-                        SecRegisteredFund.cik == fc_row.cik,
-                    ),
-                )).scalar_one_or_none()
-
-        # Fallback: search sec_etfs by ticker
-        if not reg_fund:
-            etf_row = (await db.execute(
-                select(SecEtf).where(SecEtf.ticker == sec_row.ticker).limit(1),
-            )).scalar_one_or_none()
-            if etf_row:
-                enrichment_attrs["sec_universe"] = "etf"
-                enrichment_attrs["strategy_label"] = etf_row.strategy_label
-                enrichment_attrs["is_index"] = etf_row.is_index
-                if etf_row.net_operating_expenses is not None:
-                    enrichment_attrs["expense_ratio_pct"] = _normalize_to_fraction(
-                        etf_row.net_operating_expenses, "sec_etfs.net_operating_expenses",
-                    )
-                if etf_row.tracking_difference_net is not None:
-                    enrichment_attrs["tracking_difference_net"] = _normalize_to_fraction(
-                        etf_row.tracking_difference_net, "sec_etfs.tracking_difference_net",
-                    )
-                enrichment_attrs["index_tracked"] = etf_row.index_tracked
-
-        # Fallback: search sec_bdcs by ticker
-        if not reg_fund and not enrichment_attrs.get("sec_universe"):
-            from app.shared.models import SecBdc
-
-            bdc_row = (await db.execute(
-                select(SecBdc).where(SecBdc.ticker == sec_row.ticker).limit(1),
-            )).scalar_one_or_none()
-            if bdc_row:
-                enrichment_attrs["sec_universe"] = "bdc"
-                enrichment_attrs["strategy_label"] = bdc_row.strategy_label
-                if bdc_row.net_operating_expenses is not None:
-                    enrichment_attrs["expense_ratio_pct"] = _normalize_to_fraction(
-                        bdc_row.net_operating_expenses, "sec_bdcs.net_operating_expenses",
-                    )
-                enrichment_attrs["investment_focus"] = bdc_row.investment_focus
-                enrichment_attrs["is_externally_managed"] = bdc_row.is_externally_managed
-
-        # Note: sec_money_market_funds has no ticker column — MMFs are not
-        # importable via ticker. They appear in the catalog for browsing only.
-
-        if reg_fund:
-            sec_cik = reg_fund.cik
-            sec_universe = "registered_us"
-            sec_crd = reg_fund.crd_number
-            fund_manager_name = sec_row.issuer_name
-
-            # Enrich with N-CEN flags
-            enrichment_attrs["strategy_label"] = reg_fund.strategy_label
-            enrichment_attrs["is_index"] = reg_fund.is_index
-            enrichment_attrs["is_target_date"] = reg_fund.is_target_date
-            enrichment_attrs["is_fund_of_fund"] = reg_fund.is_fund_of_fund
-            if reg_fund.inception_date:
-                enrichment_attrs["fund_inception_date"] = str(reg_fund.inception_date)
-
-            # Enrich with XBRL per-share-class data (best class for this ticker)
-            class_rows = (await db.execute(
-                select(SecFundClass).where(SecFundClass.cik == sec_cik),
-            )).scalars().all()
-            if class_rows:
-                # Prefer the class matching the imported ticker
-                best = next(
-                    (c for c in class_rows if c.ticker == sec_row.ticker),
-                    max(class_rows, key=lambda c: float(c.net_assets or 0)),
-                )
-                if best.expense_ratio_pct is not None:
-                    enrichment_attrs["expense_ratio_pct"] = _normalize_to_fraction(
-                        best.expense_ratio_pct, "sec_fund_classes.expense_ratio_pct",
-                    )
-                if best.holdings_count is not None:
-                    enrichment_attrs["holdings_count"] = best.holdings_count
-                if best.portfolio_turnover_pct is not None:
-                    enrichment_attrs["portfolio_turnover_pct"] = _normalize_to_fraction(
-                        best.portfolio_turnover_pct, "sec_fund_classes.portfolio_turnover_pct",
-                    )
-
-            # Resolve manager name from sec_managers if available
-            if reg_fund.crd_number:
-                from app.shared.models import SecManager
-                mgr = (await db.execute(
-                    select(SecManager.firm_name).where(
-                        SecManager.crd_number == reg_fund.crd_number,
-                    ),
-                )).scalar_one_or_none()
-                if mgr:
-                    fund_manager_name = mgr
-
-    # ── Resolve L1 screening attributes from SEC data ────────────
-    resolved_universe = sec_universe or enrichment_attrs.get("sec_universe")
-    _UNIVERSE_TO_STRUCTURE = {
-        "registered_us": "Mutual Fund",
-        "etf": "ETF",
-        "bdc": "BDC",
-        "money_market": "Money Market",
-    }
-    resolved_structure = _UNIVERSE_TO_STRUCTURE.get(str(resolved_universe))
-
-    # AUM: pick first non-null from SEC tables already queried
-    resolved_aum: float | None = None
-    if inst_type == "fund":
-        if reg_fund and reg_fund.monthly_avg_net_assets is not None:
-            resolved_aum = float(reg_fund.monthly_avg_net_assets)
-        elif reg_fund and reg_fund.daily_avg_net_assets is not None:
-            resolved_aum = float(reg_fund.daily_avg_net_assets)
-        elif enrichment_attrs.get("sec_universe") == "etf":
-            # etf_row was set above when enrichment_attrs["sec_universe"] == "etf"
-            etf_aum = locals().get("etf_row")
-            if etf_aum and getattr(etf_aum, "monthly_avg_net_assets", None) is not None:
-                resolved_aum = float(etf_aum.monthly_avg_net_assets)
-            elif etf_aum and getattr(etf_aum, "daily_avg_net_assets", None) is not None:
-                resolved_aum = float(etf_aum.daily_avg_net_assets)
-        elif enrichment_attrs.get("sec_universe") == "bdc":
-            bdc_aum = locals().get("bdc_row")
-            if bdc_aum and getattr(bdc_aum, "monthly_avg_net_assets", None) is not None:
-                resolved_aum = float(bdc_aum.monthly_avg_net_assets)
-            elif bdc_aum and getattr(bdc_aum, "daily_avg_net_assets", None) is not None:
-                resolved_aum = float(bdc_aum.daily_avg_net_assets)
-        # Fallback: XBRL net_assets from best share class
-        if resolved_aum is None and enrichment_attrs.get("expense_ratio_pct") is not None:
-            from app.shared.models import SecFundClass as _Fc
-            _fc_aum = (await db.execute(
-                select(_Fc.net_assets).where(
-                    _Fc.ticker == sec_row.ticker,
-                ).limit(1),
-            )).scalar_one_or_none()
-            if _fc_aum is not None:
-                resolved_aum = float(_fc_aum)
-
-    # Track record: compute from inception_date
-    resolved_track_years: float | None = None
-    inception_str = enrichment_attrs.get("fund_inception_date")
-    if inception_str:
-        try:
-            inception_dt = dt.date.fromisoformat(str(inception_str))
-            resolved_track_years = round(
-                (dt.date.today() - inception_dt).days / 365.25, 1,
-            )
-        except (ValueError, TypeError):
-            pass
-    # Fallback: XBRL perf_inception_date
-    if resolved_track_years is None and inst_type == "fund":
-        from app.shared.models import SecFundClass as _Fc2
-        _fc_inception = (await db.execute(
-            select(_Fc2.perf_inception_date).where(
-                _Fc2.ticker == sec_row.ticker,
-            ).limit(1),
-        )).scalar_one_or_none()
-        if _fc_inception is not None:
-            resolved_track_years = round(
-                (dt.date.today() - _fc_inception).days / 365.25, 1,
-            )
-
-    instrument = Instrument(
-        instrument_type=inst_type,
-        name=sec_row.issuer_name,
-        isin=None,
-        ticker=sec_row.ticker,
-        asset_class=asset_class,
-        geography="north_america",
-        currency="USD",
-        attributes={
-            "cusip": sec_row.cusip,
-            "security_type": sec_row.security_type,
-            "exchange": sec_row.exchange,
-            "figi": sec_row.figi,
-            "composite_figi": sec_row.composite_figi,
-            "source": "sec",
-            "strategy": body.strategy,
-            # chk_fund_attrs requires these keys when instrument_type = 'fund'
-            "manager_name": fund_manager_name,
-            "aum_usd": resolved_aum,
-            "inception_date": inception_str,
-            # L1 screening attributes
-            "domicile": "US",
-            "structure": resolved_structure,
-            "track_record_years": resolved_track_years,
-            # SEC linkage for N-PORT fund-level data
-            "sec_cik": sec_cik,
-            "sec_crd": sec_crd,
-            "sec_universe": resolved_universe,
-            # Enrichment from N-CEN + XBRL
-            **enrichment_attrs,
-        },
+    return await import_fund(
+        identifier=ticker, body=body, request=request,
+        db=db, org_id=org_id, actor=actor,
     )
-    db.add(instrument)
-    await db.flush()
-
-    # Create org-scoped link
-    org_link = InstrumentOrg(
-        organization_id=org_id,
-        instrument_id=instrument.instrument_id,
-        block_id=body.block_id,
-        approval_status="pending",
-    )
-    db.add(org_link)
-    await db.commit()
-    await db.refresh(instrument)
-
-    return {
-        "instrument_id": str(instrument.instrument_id),
-        "name": instrument.name,
-        "ticker": instrument.ticker,
-        "status": "imported",
-    }
 
 
 # ── Unified Fund Catalog ──────────────────────────────────────────────

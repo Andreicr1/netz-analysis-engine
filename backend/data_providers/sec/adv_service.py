@@ -214,13 +214,28 @@ class AdvService:
         if not query or not query.strip():
             return []
 
+        # Wrap the IAPD search through the SEC EDGAR provider gate.
+        # The circuit opens after five consecutive failures and stays
+        # open for 30 s before probing — guards against IAPD edge
+        # outages spreading into the user-facing search path.
+        from app.core.runtime.gates import get_sec_edgar_gate
+        from app.core.runtime.provider_gate import ProviderGateError
+
+        gate = get_sec_edgar_gate()
         try:
-            results = await run_in_sec_thread(
-                self._search_managers_sync,
-                query.strip(),
-                limit,
+            return await gate.call(
+                f"iapd_search:{query.strip().lower()}:{limit}",
+                lambda: run_in_sec_thread(
+                    self._search_managers_sync, query.strip(), limit,
+                ),
             )
-            return results
+        except ProviderGateError as exc:
+            logger.warning(
+                "adv_search_gate_blocked",
+                query=query,
+                error=str(exc),
+            )
+            return []
         except Exception as exc:
             logger.error(
                 "adv_search_failed",
@@ -305,11 +320,26 @@ class AdvService:
         if csv_path:
             return await run_in_sec_thread(self._read_csv_file, csv_path)
 
-        # Download from SEC FOIA
+        # Download from SEC FOIA via the bulk SEC EDGAR gate. The
+        # bulk gate has a 5 minute wall (the FOIA ZIP is multi-MB and
+        # SEC's edge serves it slowly) and a more lenient circuit
+        # tuned for daily ingestion cadence. Distinct from the
+        # interactive gate so a slow bulk download cannot poison the
+        # circuit shared with brochure / IAPD search call sites.
+        from app.core.runtime.gates import get_sec_edgar_bulk_gate
+        from app.core.runtime.provider_gate import ProviderGateError
+
         logger.info("adv_bulk_download_start")
+        gate = get_sec_edgar_bulk_gate()
         try:
-            content = await run_in_sec_thread(self._download_foia_csv)
+            content = await gate.call(
+                "adv_foia_bulk_csv",
+                lambda: run_in_sec_thread(self._download_foia_csv),
+            )
             return content
+        except ProviderGateError as exc:
+            logger.warning("adv_foia_gate_blocked", error=str(exc))
+            return None
         except Exception as exc:
             logger.error("adv_foia_download_failed", error=str(exc))
             return None
@@ -752,7 +782,8 @@ class AdvService:
         """Fetch team from DB. If empty and force_refresh, extract from Part 2A PDF.
 
         Stale-but-serve: returns DB data immediately if available.
-        OCR extraction only triggered by force_refresh=True when DB is empty.
+        PyMuPDF text extraction only triggered by force_refresh=True
+        when DB is empty.
         """
         if not _validate_crd(crd_number):
             return []
@@ -803,7 +834,7 @@ class AdvService:
             return team_members
 
         except Exception as exc:
-            logger.error("adv_fetch_team_ocr_failed", crd=crd_number, error=str(exc))
+            logger.error("adv_fetch_team_extract_failed", crd=crd_number, error=str(exc))
             return []
 
     async def extract_brochure(
@@ -814,7 +845,11 @@ class AdvService:
     ) -> list[AdvBrochureSection]:
         """Extract and store brochure text sections for full-text search.
 
-        Returns classified sections. Triggers OCR if not in DB.
+        Reads cached sections from ``sec_manager_brochure_text`` first;
+        on miss (or ``force_refresh=True``) downloads the Part 2A PDF
+        and runs PyMuPDF text extraction. SEC mandates that all ADV
+        Part 2A brochures be text-searchable PDFs (since 2010), so
+        OCR is never required and never invoked from this path.
         """
         if not _validate_crd(crd_number):
             return []
@@ -842,7 +877,7 @@ class AdvService:
             except Exception as exc:
                 logger.error("adv_brochure_db_read_failed", crd=crd_number, error=str(exc))
 
-        # OCR extraction
+        # PyMuPDF text extraction (DB miss path)
         try:
             brochure_text = await self._download_and_extract_brochure(crd_number)
             if not brochure_text:
@@ -931,10 +966,27 @@ class AdvService:
         except Exception:
             pass  # fall through to legacy/download
 
-        # 2. Try legacy local path (seed script)
-        pdf_bytes = await run_in_sec_thread(
-            self._resolve_pdf_sync, crd_number,
-        )
+        # 2. Try legacy local path (seed script). The actual IAPD
+        # download is wrapped in the SEC EDGAR provider gate so a hung
+        # or rate-limited brochure server cannot starve unrelated
+        # workers — circuit opens after five consecutive failures and
+        # cools down for 30 s before probing again.
+        from app.core.runtime.gates import get_sec_edgar_gate
+        from app.core.runtime.provider_gate import ProviderGateError
+
+        gate = get_sec_edgar_gate()
+        try:
+            pdf_bytes = await gate.call(
+                f"adv_brochure:{crd_number}",
+                lambda: run_in_sec_thread(self._resolve_pdf_sync, crd_number),
+            )
+        except ProviderGateError as exc:
+            logger.warning(
+                "adv_brochure_gate_blocked",
+                crd=crd_number,
+                error=str(exc),
+            )
+            return ""
         if not pdf_bytes:
             return ""
 
