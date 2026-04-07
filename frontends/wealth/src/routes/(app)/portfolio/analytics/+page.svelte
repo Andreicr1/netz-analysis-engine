@@ -20,14 +20,20 @@
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	workspace.setGetToken(getToken);
 
-	// Seed workspace with SSR analytics data
+	// Seed workspace with SSR analytics data — only when no portfolio is selected
+	// or when the selected portfolio matches the SSR-prefetched "moderate" profile.
+	// Prevents stale "moderate" data from overwriting a different profile's analytics.
 	$effect(() => {
+		const selectedProfile = workspace.portfolio?.profile;
+		const ssrProfile = "moderate"; // SSR hardcodes this profile
+		const profileMatch = !selectedProfile || selectedProfile === ssrProfile;
+
 		const ssrAttribution = data.attribution as AttributionResult | null;
 		const ssrDrift = (data.driftAlerts ?? []) as StrategyDriftAlert[];
 		const ssrCorrelation = data.correlationRegime as CorrelationRegimeResult | null;
-		if (ssrAttribution && !workspace.attribution) workspace.attribution = ssrAttribution;
+		if (profileMatch && ssrAttribution && !workspace.attribution) workspace.attribution = ssrAttribution;
 		if (ssrDrift.length > 0 && workspace.driftAlerts.length === 0) workspace.driftAlerts = ssrDrift;
-		if (ssrCorrelation && !workspace.correlationRegime) workspace.correlationRegime = ssrCorrelation;
+		if (profileMatch && ssrCorrelation && !workspace.correlationRegime) workspace.correlationRegime = ssrCorrelation;
 	});
 
 	// ── Derived state ───────────────────────────────────────────────

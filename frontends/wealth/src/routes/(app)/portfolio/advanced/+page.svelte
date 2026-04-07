@@ -69,7 +69,14 @@
 			analytics = a;
 			peerGroup = p;
 		} catch (e) {
-			error = e instanceof Error ? e.message : "Failed to load analytics";
+			const msg = e instanceof Error ? e.message : "Failed to load analytics";
+			if (msg.includes("resolve entity") || msg.includes("not found") || msg.includes("404")) {
+				error = "This fund has not been imported yet — analytics require NAV data.";
+			} else if (msg.includes("Insufficient") || msg.includes("NAV data")) {
+				error = "Insufficient data to compute analytics for this fund.";
+			} else {
+				error = msg;
+			}
 			analytics = null;
 			peerGroup = null;
 		} finally {

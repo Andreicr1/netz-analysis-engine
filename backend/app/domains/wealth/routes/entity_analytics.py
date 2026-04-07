@@ -48,7 +48,7 @@ from app.domains.wealth.services.nav_reader import (
     fetch_nav_series,
     is_model_portfolio,
 )
-from app.shared.models import SecNportHolding
+from app.shared.models import SecFundClass, SecNportHolding
 from quant_engine.active_share_service import compute_active_share
 from quant_engine.cvar_service import compute_cvar_from_returns
 from quant_engine.drawdown_service import analyze_drawdowns
@@ -67,6 +67,82 @@ _WINDOW_DAYS = {"3m": 63, "6m": 126, "1y": 252, "3y": 756, "5y": 1260}
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+async def _resolve_entity_uuid(
+    db: AsyncSession, raw_id: str,
+) -> uuid.UUID:
+    """Resolve a catalog external_id or UUID string to an instruments_universe UUID.
+
+    Catalog external_id formats (from mv_unified_funds):
+    - registered_us: class_id (C000…), series_id (S000…), or CIK
+    - etf/bdc/mmf: series_id (S000…)
+    - ucits_eu: ISIN
+    - private_us: fund UUID
+    - Direct UUID: instruments_universe PK or model_portfolio PK
+    """
+    # 1. Direct UUID
+    try:
+        return uuid.UUID(raw_id)
+    except (ValueError, AttributeError):
+        pass
+
+    # 2. Class ID (C000…) → look up ticker via sec_fund_classes → instruments_universe
+    if raw_id.startswith("C"):
+        row = await db.execute(
+            select(SecFundClass.ticker).where(SecFundClass.class_id == raw_id).limit(1),
+        )
+        ticker = row.scalar_one_or_none()
+        if ticker:
+            inst = await db.execute(
+                select(Instrument.instrument_id).where(Instrument.ticker == ticker).limit(1),
+            )
+            found = inst.scalar_one_or_none()
+            if found:
+                return found
+
+    # 3. Series ID (S000…) → attributes->>'series_id'
+    if raw_id.startswith("S"):
+        row = await db.execute(
+            select(Instrument.instrument_id).where(
+                Instrument.attributes["series_id"].astext == raw_id,
+            ).limit(1),
+        )
+        found = row.scalar_one_or_none()
+        if found:
+            return found
+
+    # 4. CIK (numeric string) → attributes->>'sec_cik'
+    if raw_id.isdigit() or (raw_id.startswith("0") and raw_id.replace("0", "").isdigit()):
+        row = await db.execute(
+            select(Instrument.instrument_id).where(
+                Instrument.attributes["sec_cik"].astext == raw_id,
+            ).limit(1),
+        )
+        found = row.scalar_one_or_none()
+        if found:
+            return found
+
+    # 5. ISIN → isin column
+    row = await db.execute(
+        select(Instrument.instrument_id).where(Instrument.isin == raw_id).limit(1),
+    )
+    found = row.scalar_one_or_none()
+    if found:
+        return found
+
+    # 6. Ticker fallback
+    row = await db.execute(
+        select(Instrument.instrument_id).where(Instrument.ticker == raw_id).limit(1),
+    )
+    found = row.scalar_one_or_none()
+    if found:
+        return found
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Could not resolve entity identifier: {raw_id}",
+    )
 
 
 async def _resolve_entity_meta(
@@ -269,21 +345,24 @@ def _compute_distribution(returns: np.ndarray) -> ReturnDistribution:
     ),
 )
 async def get_entity_analytics(
-    entity_id: uuid.UUID,
+    entity_id: str,
     window: str = Query("1y", pattern="^(3m|6m|1y|3y|5y)$", description="Lookback window"),
     benchmark_id: uuid.UUID | None = Query(None, description="Explicit benchmark entity UUID"),
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> EntityAnalyticsResponse:
+    # ── Resolve catalog external_id to UUID ─────────────────────────
+    resolved_id = await _resolve_entity_uuid(db, entity_id)
+
     # ── Resolve entity metadata ──────────────────────────────────────
-    entity_type, entity_name, block_id = await _resolve_entity_meta(db, entity_id)
+    entity_type, entity_name, block_id = await _resolve_entity_meta(db, resolved_id)
 
     # ── Fetch NAV series via nav_reader ──────────────────────────────
     today = date.today()
     lookback_days = _WINDOW_DAYS.get(window, 252)
     start_date = today - timedelta(days=int(lookback_days * 1.5))  # buffer for trading days
 
-    nav_rows: list[NavRow] = await fetch_nav_series(db, entity_id, start_date, today)
+    nav_rows: list[NavRow] = await fetch_nav_series(db, resolved_id, start_date, today)
 
     if len(nav_rows) < 10:
         raise HTTPException(
@@ -439,7 +518,7 @@ async def get_entity_analytics(
             r_squared=return_stats_raw.r_squared,
         )
     except Exception:
-        logger.warning("return_statistics_computation_failed", entity_id=str(entity_id))
+        logger.warning("return_statistics_computation_failed", entity_id=str(resolved_id))
 
     # ── 7. Tail Risk (eVestment Section VII) ─────────────────────────
     tail_risk_result = None
@@ -461,10 +540,10 @@ async def get_entity_analytics(
             is_normal=tail_raw.is_normal,
         )
     except Exception:
-        logger.warning("tail_risk_computation_failed", entity_id=str(entity_id))
+        logger.warning("tail_risk_computation_failed", entity_id=str(resolved_id))
 
     return EntityAnalyticsResponse(
-        entity_id=entity_id,
+        entity_id=resolved_id,
         entity_type=entity_type,
         entity_name=entity_name,
         as_of_date=today,
