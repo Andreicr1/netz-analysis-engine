@@ -13,6 +13,16 @@ Primitives landed in this module MUST be:
 - Importable without side-effects
 """
 
+from app.core.runtime.broadcaster import (
+    BroadcasterClosedError,
+    BroadcasterConfig,
+    BroadcasterFullError,
+    BroadcasterMetrics,
+    ConnectionId,
+    FanoutResult,
+    RateLimitedBroadcaster,
+    make_connection_id,
+)
 from app.core.runtime.outbound_channel import (
     BoundedOutboundChannel,
     ChannelConfig,
@@ -22,7 +32,15 @@ from app.core.runtime.outbound_channel import (
 
 __all__ = [
     "BoundedOutboundChannel",
+    "BroadcasterClosedError",
+    "BroadcasterConfig",
+    "BroadcasterFullError",
+    "BroadcasterMetrics",
     "ChannelConfig",
     "ChannelMetrics",
+    "ConnectionId",
     "DropPolicy",
+    "FanoutResult",
+    "RateLimitedBroadcaster",
+    "make_connection_id",
 ]
