@@ -46,8 +46,6 @@
 		switch (report.report_type) {
 			case "fact_sheet":
 				return `/fact-sheets/${encodeURIComponent(report.job_id)}/download`;
-			case "long_form_dd":
-				return `/reporting/model-portfolios/${portfolioId}/long-form-report/download/${report.id}`;
 			case "monthly_report":
 				return `/reporting/model-portfolios/${portfolioId}/monthly-report/download/${report.id}`;
 			default:
@@ -77,7 +75,6 @@
 	function reportTypeBadgeClass(type: string): string {
 		switch (type) {
 			case "fact_sheet": return "rv-badge--factsheet";
-			case "long_form_dd": return "rv-badge--longform";
 			case "monthly_report": return "rv-badge--monthly";
 			default: return "";
 		}
@@ -103,7 +100,6 @@
 		<select class="rv-filter" bind:value={filterType}>
 			<option value="all">All Types</option>
 			<option value="fact_sheet">Fact Sheets</option>
-			<option value="long_form_dd">Long-Form DD</option>
 			<option value="monthly_report">Monthly Reports</option>
 		</select>
 		<Button size="sm" variant="outline" onclick={onRefresh} disabled={loading}>
@@ -240,11 +236,6 @@
 	.rv-badge--factsheet {
 		color: var(--ii-info);
 		background: color-mix(in srgb, var(--ii-info) 10%, transparent);
-	}
-
-	.rv-badge--longform {
-		color: var(--ii-success);
-		background: color-mix(in srgb, var(--ii-success) 10%, transparent);
 	}
 
 	.rv-badge--monthly {

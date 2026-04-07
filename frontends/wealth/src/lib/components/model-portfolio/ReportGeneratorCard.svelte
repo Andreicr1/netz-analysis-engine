@@ -29,7 +29,6 @@
 
 	const REPORT_DESCRIPTIONS: Record<ReportType, string> = {
 		fact_sheet: "Executive or institutional PDF summarizing portfolio composition, performance, and risk metrics.",
-		long_form_dd: "8-chapter AI-generated due diligence report with quant analysis, risk assessment, and recommendation.",
 		monthly_report: "Monthly performance review with attribution analysis, risk metrics, and outlook.",
 	};
 </script>

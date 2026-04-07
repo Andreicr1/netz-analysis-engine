@@ -21,10 +21,22 @@
 	// ── Props ──────────────────────────────────────────────────────────────
 	interface Props {
 		portfolioId: string;
+		/** When provided, component skips its own fetch and renders this data. */
+		externalAdvice?: ConstructionAdvice | null;
+		/** True when parent is loading advice externally. */
+		externalLoading?: boolean;
+		/** Error message from external fetch. */
+		externalError?: string | null;
 		onReconstruct?: () => void;
 	}
 
-	let { portfolioId, onReconstruct }: Props = $props();
+	let {
+		portfolioId,
+		externalAdvice = undefined,
+		externalLoading = false,
+		externalError = undefined,
+		onReconstruct,
+	}: Props = $props();
 
 	// ── State machine ─────────────────────────────────────────────────────
 	type AdvisorState =
@@ -33,7 +45,19 @@
 		| { status: "error"; message: string }
 		| { status: "loaded"; data: ConstructionAdvice };
 
-	let advisorState = $state<AdvisorState>({ status: "idle" });
+	/** Internal state — only used when externalAdvice is not provided. */
+	let internalState = $state<AdvisorState>({ status: "idle" });
+
+	/** Resolved state: prefer external props, fall back to internal. */
+	let advisorState = $derived.by((): AdvisorState => {
+		if (externalAdvice !== undefined) {
+			if (externalLoading) return { status: "loading" };
+			if (externalError) return { status: "error", message: externalError };
+			if (externalAdvice) return { status: "loaded", data: externalAdvice };
+			return { status: "idle" };
+		}
+		return internalState;
+	});
 	let addedFunds = $state<Set<string>>(new Set());
 	let expandedBlocks = $state<Set<string>>(new Set());
 	let addingFund = $state<string | null>(null);
@@ -102,9 +126,10 @@
 		}
 	});
 
-	// ── Fetch advice ──────────────────────────────────────────────────────
+	// ── Fetch advice (internal — skipped when externalAdvice is provided) ──
 	export async function fetchAdvice() {
-		advisorState = { status: "loading" };
+		if (externalAdvice !== undefined) return; // managed externally
+		internalState = { status: "loading" };
 		addedFunds = new Set();
 		try {
 			const api = createClientApiClient(getToken);
@@ -112,9 +137,9 @@
 				`/model-portfolios/${portfolioId}/construction-advice`,
 				{},
 			);
-			advisorState = { status: "loaded", data };
+			internalState = { status: "loaded", data };
 		} catch (e) {
-			advisorState = {
+			internalState = {
 				status: "error",
 				message: e instanceof Error ? e.message : "Failed to load construction advice",
 			};

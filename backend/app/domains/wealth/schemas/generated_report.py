@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 # ── Report types known to the system ────────────────────────────────
-ReportType = Literal["fact_sheet", "long_form_dd", "monthly_report"]
+ReportType = Literal["fact_sheet", "monthly_report"]
 
 
 class ReportHistoryItem(BaseModel):

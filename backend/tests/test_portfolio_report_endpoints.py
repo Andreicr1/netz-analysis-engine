@@ -48,12 +48,12 @@ def test_report_generate_request_defaults():
 def test_report_generate_request_all_fields():
     """ReportGenerateRequest accepts all fields."""
     req = ReportGenerateRequest(
-        report_type="long_form_dd",
+        report_type="monthly_report",
         as_of_date=date(2026, 4, 1),
         language="en",
         format="institutional",
     )
-    assert req.report_type == "long_form_dd"
+    assert req.report_type == "monthly_report"
     assert req.as_of_date == date(2026, 4, 1)
     assert req.language == "en"
     assert req.format == "institutional"

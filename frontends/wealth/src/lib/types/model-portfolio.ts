@@ -18,10 +18,22 @@ export interface ModelPortfolio {
 	created_by: string | null;
 }
 
+export interface OptimizationMeta {
+	expected_return: number | null;
+	portfolio_volatility: number | null;
+	sharpe_ratio: number | null;
+	solver: string | null;
+	status: string;
+	cvar_95: number | null;
+	cvar_limit: number | null;
+	cvar_within_limit: boolean;
+}
+
 export interface SelectionSchema {
 	profile: string;
 	total_weight: number;
 	funds: InstrumentWeight[];
+	optimization?: OptimizationMeta;
 }
 
 export interface InstrumentWeight {
@@ -206,7 +218,7 @@ export interface GeneratedReport {
 
 // ── Unified Report Endpoints ──────────────────────────────────────────
 
-export type ReportType = "fact_sheet" | "long_form_dd" | "monthly_report";
+export type ReportType = "fact_sheet" | "monthly_report";
 
 export interface ReportHistoryItem {
 	id: string;
@@ -254,9 +266,6 @@ export interface ReportProgressEvent {
 	stage: ReportStage;
 	message: string;
 	pct: number;
-	/** Present for long-form DD: per-chapter updates */
-	chapter?: string;
-	chapter_status?: string;
 }
 
 export interface ReportDoneEvent {
@@ -264,8 +273,6 @@ export interface ReportDoneEvent {
 	report_type: string;
 	storage_path?: string;
 	size_bytes?: number;
-	chapters_completed?: number;
-	total_chapters?: number;
 	error?: string | null;
 }
 
@@ -280,7 +287,6 @@ export type ReportSSEEvent =
 
 export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
 	fact_sheet: "Fact Sheet",
-	long_form_dd: "Long-Form DD Report",
 	monthly_report: "Monthly Report",
 };
 

@@ -629,10 +629,19 @@ async def get_construction_advice(
         logger.info("construction_advice_cache_hit", cache_key=cache_key)
         return ConstructionAdviceRead(**cached)
 
-    # 3. Load block metadata + strategic targets
-    block_metadata, strategic_targets = await asyncio.gather(
+    # ── Phase 1: parallel fetch of everything independent of candidates ──
+    (
+        block_metadata,
+        strategic_targets,
+        (portfolio_daily_returns, portfolio_ret_series, current_weights),
+        portfolio_holdings,
+        all_cvar_limits,
+    ) = await asyncio.gather(
         load_block_metadata(db),
         load_strategic_targets(db, profile),
+        fetch_portfolio_returns(db, fund_selection),
+        fetch_portfolio_holdings_cusips(db, fund_selection),
+        _resolve_all_cvar_limits(db),
     )
 
     if not strategic_targets:
@@ -658,32 +667,17 @@ async def get_construction_advice(
     # 6. Discover candidates from global catalog
     candidates = await discover_candidates(db, gap_block_ids, max_per_block=20)
 
-    # 7. Fetch NAV data in parallel
+    # ── Phase 2: candidate-dependent data only ───────────────────────────
     candidate_instrument_ids = [uuid.UUID(c.instrument_id) for c in candidates]
 
-    portfolio_returns_task = fetch_portfolio_returns(db, fund_selection)
-    candidate_returns_task = fetch_candidate_returns(db, candidate_instrument_ids)
-    portfolio_holdings_task = fetch_portfolio_holdings_cusips(db, fund_selection)
-    candidate_holdings_task = fetch_candidate_holdings(db, candidate_instrument_ids)
-
-    (
-        (portfolio_daily_returns, portfolio_ret_series, current_weights),
-        candidate_returns_map,
-        portfolio_holdings,
-        candidate_holdings_map,
-    ) = await asyncio.gather(
-        portfolio_returns_task,
-        candidate_returns_task,
-        portfolio_holdings_task,
-        candidate_holdings_task,
+    candidate_returns_map, candidate_holdings_map = await asyncio.gather(
+        fetch_candidate_returns(db, candidate_instrument_ids),
+        fetch_candidate_holdings(db, candidate_instrument_ids),
     )
 
-    # 8. Resolve CVaR limits for all profiles (for alternative suggestions)
-    cvar_limit = opt_meta.get("cvar_limit") or await _resolve_cvar_limit(db, profile)
-    alternative_cvar_limits: dict[str, float] = {}
-    for alt_profile in ("conservative", "moderate", "growth"):
-        alt_limit = await _resolve_cvar_limit(db, alt_profile)
-        alternative_cvar_limits[alt_profile] = alt_limit
+    # 8. CVaR limits (already resolved in Phase 1)
+    cvar_limit = opt_meta.get("cvar_limit") or all_cvar_limits.get(profile, -0.08)
+    alternative_cvar_limits = all_cvar_limits
 
     # 9. Run pure advisor engine in thread (CPU-bound numpy)
     if portfolio_daily_returns.size > 0 and len(candidate_returns_map) > 0:
@@ -1721,6 +1715,26 @@ async def _resolve_cvar_limit(
     return _DEFAULT_CVAR_LIMITS.get(profile, -0.08)
 
 
+async def _resolve_all_cvar_limits(db: AsyncSession) -> dict[str, float]:
+    """Resolve CVaR limits for all profiles in a single ConfigService call."""
+    try:
+        from app.core.config.config_service import ConfigService
+
+        config_svc = ConfigService(db)
+        result = await config_svc.get("liquid_funds", "portfolio_profiles")
+        profiles_cfg = result.value.get("profiles", {})
+
+        limits: dict[str, float] = {}
+        for profile_name in ("conservative", "moderate", "growth"):
+            cvar_cfg = profiles_cfg.get(profile_name, {}).get("cvar", {})
+            limit = cvar_cfg.get("limit")
+            limits[profile_name] = float(limit) if limit is not None else _DEFAULT_CVAR_LIMITS.get(profile_name, -0.08)
+        return limits
+    except Exception:
+        logger.debug("config_service_all_cvar_fallback")
+        return dict(_DEFAULT_CVAR_LIMITS)
+
+
 async def _resolve_max_single_fund(
     db: AsyncSession,
     profile: str,
@@ -2220,7 +2234,6 @@ async def generate_portfolio_report(
     # Generate job_id with report-type prefix
     prefix_map = {
         "fact_sheet": "fs",
-        "long_form_dd": "lfr",
         "monthly_report": "mcr",
     }
     prefix = prefix_map.get(req.report_type, "rpt")
@@ -2304,12 +2317,6 @@ async def _run_report_generation(
                 language=language,
                 format=format,
                 as_of=as_of,
-            )
-        elif report_type == "long_form_dd":
-            await _generate_long_form_job(
-                job_id=job_id,
-                portfolio_id=portfolio_id,
-                organization_id=organization_id,
             )
         elif report_type == "monthly_report":
             await _generate_monthly_report_job(
@@ -2439,129 +2446,6 @@ async def _generate_fact_sheet_job(
 
     finally:
         _get_content_semaphore().release()
-
-
-async def _generate_long_form_job(
-    *,
-    job_id: str,
-    portfolio_id: str,
-    organization_id: str,
-) -> None:
-    """Long-form DD report generation with per-chapter SSE progress."""
-    from app.core.db.engine import async_session_factory
-    from app.core.jobs.tracker import publish_event, publish_terminal_event
-    from app.core.tenancy.middleware import set_rls_context
-
-    try:
-        async with async_session_factory() as db:
-            await set_rls_context(db, uuid.UUID(organization_id))
-
-            await publish_event(job_id, "progress", {
-                "stage": "FETCHING_MARKET_DATA",
-                "message": "Loading portfolio context and market data",
-                "pct": 10,
-            })
-
-            from vertical_engines.wealth.long_form_report import LongFormReportEngine
-            engine = LongFormReportEngine()
-
-            await publish_event(job_id, "progress", {
-                "stage": "SYNTHESIZING_LLM",
-                "message": "Generating 8-chapter long-form report",
-                "pct": 25,
-            })
-
-            result = await engine.generate(
-                db,
-                portfolio_id=portfolio_id,
-                organization_id=organization_id,
-            )
-
-            # Publish per-chapter progress
-            total = len(result.chapters)
-            for i, ch in enumerate(result.chapters):
-                pct = 25 + int((i + 1) / total * 40)  # 25-65%
-                await publish_event(job_id, "progress", {
-                    "stage": "SYNTHESIZING_LLM",
-                    "message": f"Chapter {ch.order}: {ch.title} — {ch.status}",
-                    "pct": pct,
-                    "chapter": ch.tag,
-                    "chapter_status": ch.status,
-                })
-
-            # Generate PDF
-            await publish_event(job_id, "progress", {
-                "stage": "GENERATING_PDF",
-                "message": "Rendering PDF",
-                "pct": 70,
-            })
-
-            pdf_storage_key = ""
-            if result.status != "failed":
-                try:
-                    from vertical_engines.wealth.long_form_report.pdf_renderer import (
-                        LongFormPDFRenderer,
-                    )
-                    renderer = LongFormPDFRenderer()
-                    pdf_bytes = await renderer.render(result, db=db, organization_id=organization_id)
-
-                    if pdf_bytes:
-                        from ai_engine.pipeline.storage_routing import gold_long_form_report_path
-                        pdf_storage_key = gold_long_form_report_path(
-                            org_id=uuid.UUID(organization_id),
-                            portfolio_id=portfolio_id,
-                            job_id=job_id,
-                        )
-
-                        await publish_event(job_id, "progress", {
-                            "stage": "STORING_PDF",
-                            "message": "Uploading PDF to storage",
-                            "pct": 85,
-                        })
-
-                        from app.services.storage_client import create_storage_client
-                        storage = create_storage_client()
-                        await storage.write(pdf_storage_key, pdf_bytes)
-
-                        # Persist record
-                        try:
-                            async with async_session_factory() as record_db:
-                                await set_rls_context(record_db, uuid.UUID(organization_id))
-                                from app.domains.wealth.models.generated_report import (
-                                    WealthGeneratedReport,
-                                )
-                                record_db.add(WealthGeneratedReport(
-                                    organization_id=uuid.UUID(organization_id),
-                                    portfolio_id=uuid.UUID(portfolio_id),
-                                    report_type="long_form_dd",
-                                    job_id=job_id,
-                                    storage_path=pdf_storage_key,
-                                    display_filename=f"long-form-dd-{portfolio_id}.pdf",
-                                    size_bytes=len(pdf_bytes),
-                                    status="completed",
-                                ))
-                                await record_db.commit()
-                        except Exception:
-                            logger.warning("long_form_report_record_failed", exc_info=True)
-                except Exception:
-                    logger.warning("long_form_pdf_generation_failed", exc_info=True)
-
-            await publish_terminal_event(
-                job_id,
-                "done" if result.status != "failed" else "error",
-                {
-                    "status": result.status,
-                    "report_type": "long_form_dd",
-                    "chapters_completed": sum(1 for ch in result.chapters if ch.status == "completed"),
-                    "total_chapters": len(result.chapters),
-                    "storage_path": pdf_storage_key,
-                    "error": result.error,
-                },
-            )
-
-    except Exception as exc:
-        logger.exception("long_form_report_background_failed", job_id=job_id)
-        await publish_terminal_event(job_id, "error", {"error": str(exc)})
 
 
 async def _generate_monthly_report_job(

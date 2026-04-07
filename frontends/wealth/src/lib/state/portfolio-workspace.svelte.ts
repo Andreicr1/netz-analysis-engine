@@ -15,6 +15,7 @@ import type {
 	RebalancePreviewResponse,
 	TrackRecord,
 	OverlapResult,
+	ConstructionAdvice,
 } from "$lib/types/model-portfolio";
 import type {
 	AttributionResult,
@@ -139,8 +140,8 @@ export interface FactorAnalysisResponse {
 export class PortfolioWorkspaceState {
 	/** Builder sub-pills: Models | Universe | Policy */
 	activeBuilderTab = $state<"models" | "universe" | "policy">("models");
-	/** Model detail sub-pills: Holdings | Factor Analysis | Stress Testing | Overlap | Rebalance */
-	activeModelTab = $state<"overview" | "factor" | "stress" | "overlap" | "rebalance">("overview");
+	/** Model detail sub-pills: Holdings | Factor Analysis | Stress Testing | Overlap | Rebalance | Reporting */
+	activeModelTab = $state<"overview" | "factor" | "stress" | "overlap" | "rebalance" | "reporting">("overview");
 	/** Analytics sub-pills: Attribution | Factor | Drift | Risk Budget */
 	activeAnalyticsTab = $state<"attribution" | "factor" | "drift" | "risk-budget">("attribution");
 	portfolio = $state<ModelPortfolio | null>(null);
@@ -157,6 +158,11 @@ export class PortfolioWorkspaceState {
 	isRebalancing = $state(false);
 	isExecuting = $state(false);
 	rebalanceResult = $state.raw<RebalancePreviewResponse | null>(null);
+	isLoadingAdvice = $state(false);
+	advice = $state.raw<ConstructionAdvice | null>(null);
+	/** True after a fetchConstructionAdvice() attempt (success or failure) for the current portfolio. Reset on selectPortfolio(). */
+	adviceFetched = $state(false);
+	isActivating = $state(false);
 	lastError = $state.raw<WorkspaceError | null>(null);
 
 	/** Attribution analysis (Brinson-Fachler) for current portfolio profile. */
@@ -181,6 +187,13 @@ export class PortfolioWorkspaceState {
 	/** Token provider — set once from +page.svelte via setGetToken(). */
 	private _getToken: (() => Promise<string>) | null = null;
 
+	/**
+	 * Generation counter — incremented on every selectPortfolio() call.
+	 * Async methods capture the value at start and bail if it changed,
+	 * preventing stale responses from overwriting current portfolio data.
+	 */
+	private _generation = 0;
+
 	portfolioId = $derived(this.portfolio?.id ?? null);
 	funds = $derived(this.portfolio?.fund_selection_schema?.funds ?? []);
 
@@ -189,6 +202,12 @@ export class PortfolioWorkspaceState {
 
 	/** True when total weight is outside the acceptable [0.98, 1.02] range. */
 	weightWarning = $derived(this.funds.length > 0 && (this.totalWeight < 0.98 || this.totalWeight > 1.02));
+
+	/** Optimizer metadata from the last construction result (if available). */
+	optimizationMeta = $derived(this.portfolio?.fund_selection_schema?.optimization ?? null);
+
+	/** True when the last construction violated the CVaR risk limit. */
+	cvarViolated = $derived(this.optimizationMeta?.cvar_within_limit === false);
 
 	/** Group current funds by block_id for drop-zone rendering */
 	fundsByBlock = $derived.by(() => {
@@ -212,6 +231,9 @@ export class PortfolioWorkspaceState {
 	}
 
 	selectPortfolio(p: ModelPortfolio) {
+		// Increment generation to invalidate any in-flight async loads
+		this._generation++;
+
 		this.portfolio = p;
 		this.localStress = null;
 		this.localFactorAnalysis = null;
@@ -221,6 +243,8 @@ export class PortfolioWorkspaceState {
 		this.driftAlerts = [];
 		this.correlationRegime = null;
 		this.riskBudget = null;
+		this.advice = null;
+		this.adviceFetched = false;
 		this.lastError = null;
 		this.navSeries = [];
 		// Fire-and-forget: load track-record, factor analysis, attribution, drift
@@ -245,6 +269,7 @@ export class PortfolioWorkspaceState {
 	/** Fetch synthesized NAV series from GET /model-portfolios/{id}/track-record. */
 	async loadTrackRecord() {
 		if (!this._getToken || !this.portfolioId) return;
+		const gen = this._generation;
 		this.isLoadingTrackRecord = true;
 
 		try {
@@ -252,8 +277,10 @@ export class PortfolioWorkspaceState {
 			const result = await api.get<TrackRecord>(
 				`/model-portfolios/${this.portfolioId}/track-record`,
 			);
+			if (gen !== this._generation) return; // stale — portfolio changed
 			this.navSeries = result.nav_series ?? [];
 		} catch (err) {
+			if (gen !== this._generation) return;
 			this.lastError = {
 				action: "track-record",
 				message: err instanceof Error ? err.message : "Failed to load track record",
@@ -261,20 +288,23 @@ export class PortfolioWorkspaceState {
 			};
 			this.navSeries = [];
 		} finally {
-			this.isLoadingTrackRecord = false;
+			if (gen === this._generation) this.isLoadingTrackRecord = false;
 		}
 	}
 
 	async loadFactorAnalysis(profile: string) {
+		const gen = this._generation;
 		this.isLoadingFactorAnalysis = true;
 		try {
 			const api = this.api();
 			const result = await api.get<FactorAnalysisResponse>(
 				`/analytics/factor-analysis/${profile}`
 			);
+			if (gen !== this._generation) return;
 			this.localFactorAnalysis = result;
 			this.lastError = null;
 		} catch (err: any) {
+			if (gen !== this._generation) return;
 			console.error("loadFactorAnalysis error:", err);
 			this.lastError = {
 				action: "factor-analysis",
@@ -282,7 +312,7 @@ export class PortfolioWorkspaceState {
 				timestamp: Date.now()
 			};
 		} finally {
-			this.isLoadingFactorAnalysis = false;
+			if (gen === this._generation) this.isLoadingFactorAnalysis = false;
 		}
 	}
 
@@ -290,14 +320,17 @@ export class PortfolioWorkspaceState {
 
 	async loadOverlap() {
 		if (!this._getToken || !this.portfolioId) return;
+		const gen = this._generation;
 		this.isLoadingOverlap = true;
 		try {
 			const api = this.api();
 			const result = await api.get<OverlapResult>(
 				`/model-portfolios/${this.portfolioId}/overlap`
 			);
+			if (gen !== this._generation) return;
 			this.localOverlap = result;
 		} catch (err: any) {
+			if (gen !== this._generation) return;
 			console.error("loadOverlap error:", err);
 			this.lastError = {
 				action: "overlap",
@@ -306,7 +339,7 @@ export class PortfolioWorkspaceState {
 			};
 			this.localOverlap = null;
 		} finally {
-			this.isLoadingOverlap = false;
+			if (gen === this._generation) this.isLoadingOverlap = false;
 		}
 	}
 
@@ -314,16 +347,20 @@ export class PortfolioWorkspaceState {
 
 	async loadAttribution(profile: string) {
 		if (!this._getToken) return;
+		const gen = this._generation;
 		this.isLoadingAttribution = true;
 		try {
 			const api = this.api();
-			this.attribution = await api.get<AttributionResult>(
+			const result = await api.get<AttributionResult>(
 				`/analytics/attribution/${profile}`,
 			);
+			if (gen !== this._generation) return;
+			this.attribution = result;
 		} catch {
+			if (gen !== this._generation) return;
 			this.attribution = null;
 		} finally {
-			this.isLoadingAttribution = false;
+			if (gen === this._generation) this.isLoadingAttribution = false;
 		}
 	}
 
@@ -331,17 +368,21 @@ export class PortfolioWorkspaceState {
 
 	async loadDriftAlerts() {
 		if (!this._getToken) return;
+		const gen = this._generation;
 		this.isLoadingDrift = true;
 		try {
 			const api = this.api();
-			this.driftAlerts = await api.get<StrategyDriftAlert[]>(
+			const result = await api.get<StrategyDriftAlert[]>(
 				"/analytics/strategy-drift/alerts",
 				{ limit: "50" },
 			);
+			if (gen !== this._generation) return;
+			this.driftAlerts = result;
 		} catch {
+			if (gen !== this._generation) return;
 			this.driftAlerts = [];
 		} finally {
-			this.isLoadingDrift = false;
+			if (gen === this._generation) this.isLoadingDrift = false;
 		}
 	}
 
@@ -349,17 +390,21 @@ export class PortfolioWorkspaceState {
 
 	async loadCorrelationRegime(profile: string) {
 		if (!this._getToken) return;
+		const gen = this._generation;
 		this.isLoadingCorrelationRegime = true;
 		try {
 			const api = this.api();
-			this.correlationRegime = await api.get<CorrelationRegimeResult>(
+			const result = await api.get<CorrelationRegimeResult>(
 				`/analytics/correlation-regime/${profile}`,
 				{ window_days: "60" },
 			);
+			if (gen !== this._generation) return;
+			this.correlationRegime = result;
 		} catch {
+			if (gen !== this._generation) return;
 			this.correlationRegime = null;
 		} finally {
-			this.isLoadingCorrelationRegime = false;
+			if (gen === this._generation) this.isLoadingCorrelationRegime = false;
 		}
 	}
 
@@ -367,17 +412,21 @@ export class PortfolioWorkspaceState {
 
 	async loadRiskBudget() {
 		if (!this._getToken || !this.portfolio?.profile) return;
+		const gen = this._generation;
 		this.isLoadingRiskBudget = true;
 		try {
 			const api = this.api();
-			this.riskBudget = await api.post<RiskBudgetResult>(
+			const result = await api.post<RiskBudgetResult>(
 				`/analytics/risk-budget/${this.portfolio.profile}`,
 				{},
 			);
+			if (gen !== this._generation) return;
+			this.riskBudget = result;
 		} catch {
+			if (gen !== this._generation) return;
 			this.riskBudget = null;
 		} finally {
-			this.isLoadingRiskBudget = false;
+			if (gen === this._generation) this.isLoadingRiskBudget = false;
 		}
 	}
 
@@ -473,6 +522,64 @@ export class PortfolioWorkspaceState {
 		if (!this.portfolio) return;
 		// Policy updates are local UI state — the backend reads policy from StrategicAllocation table
 		this.portfolio = { ...this.portfolio };
+	}
+
+	// ── Construction Advisor (generation-guarded) ───────────────────────────
+
+	async fetchConstructionAdvice() {
+		if (!this._getToken || !this.portfolioId) return;
+		const gen = this._generation;
+		this.isLoadingAdvice = true;
+		this.advice = null;
+
+		try {
+			const api = this.api();
+			const result = await api.post<ConstructionAdvice>(
+				`/model-portfolios/${this.portfolioId}/construction-advice`,
+				{},
+			);
+			if (gen !== this._generation) return; // stale — portfolio changed
+			this.advice = result;
+		} catch (err) {
+			if (gen !== this._generation) return;
+			this.lastError = {
+				action: "construction-advice",
+				message: err instanceof Error ? err.message : "Failed to load construction advice",
+				timestamp: Date.now(),
+			};
+		} finally {
+			if (gen === this._generation) {
+				this.isLoadingAdvice = false;
+				this.adviceFetched = true;
+			}
+		}
+	}
+
+	// ── Portfolio Activation ────────────────────────────────────────────────
+
+	async activatePortfolio() {
+		if (!this._getToken || !this.portfolioId) return;
+		this.isActivating = true;
+		this.lastError = null;
+
+		try {
+			const api = this.api();
+			const result = await api.post<ModelPortfolio>(
+				`/model-portfolios/${this.portfolioId}/activate`,
+				{},
+			);
+			this.portfolio = result;
+			this.advice = null; // advisor no longer relevant after activation
+		} catch (err) {
+			this.lastError = {
+				action: "activate",
+				message: err instanceof Error ? err.message : "Portfolio activation failed",
+				timestamp: Date.now(),
+			};
+			throw err; // re-throw so ConsequenceDialog can handle
+		} finally {
+			this.isActivating = false;
+		}
 	}
 
 	// ── Construction & Live Rebalance ─────────────────────────────────────────
