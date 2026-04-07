@@ -4,8 +4,12 @@
 > Covers every stage from macro regime detection through fund-level optimization,
 > construction advisor, validation, and activation.
 
-**Last updated:** 2026-04-05 (v2: fee_efficiency formula clarified, momentum components documented)
+**Last updated:** 2026-04-06 (v2.1: Quantitative Fast-Track approval flow + automated eviction worker)
 **Supersedes:** Partial coverage in `portfolio-construction-reference-v2-post-quant-upgrade.md` (optimizer detail) and `institutional-portfolio-lifecycle-reference.md` (lifecycle overview).
+
+**Changelog:**
+- **2026-04-06** — Added §5.4 (Tiered Due Diligence: Quantitative Fast-Track), §5.5 (Automated Eviction), §12.5 (Fast-Track Eviction Worker). Documented `UniverseDecision.revoked` enum value, lock ID `900_009`, and the new `POST /screener/fast-track-approval` endpoint feeding `_load_universe_funds()`.
+- **2026-04-05** — fee_efficiency formula clarified, momentum components documented.
 
 ---
 
@@ -16,6 +20,8 @@
 3. [Stage 1 — Regime Detection](#3-stage-1--regime-detection)
 4. [Stage 2 — Strategic Allocation](#4-stage-2--strategic-allocation)
 5. [Stage 3 — Universe Loading](#5-stage-3--universe-loading)
+   - [5.4 Tiered Due Diligence — Quantitative Fast-Track](#54-tiered-due-diligence--quantitative-fast-track)
+   - [5.5 Automated Eviction (Fast-Track Governance)](#55-automated-eviction-fast-track-governance)
 6. [Stage 4 — Statistical Inputs](#6-stage-4--statistical-inputs)
 7. [Stage 5 — CLARABEL Optimizer Cascade](#7-stage-5--clarabel-optimizer-cascade)
 8. [Stage 6 — Portfolio Composition](#8-stage-6--portfolio-composition)
@@ -311,6 +317,71 @@ The `manager_score` (0-100) is a composite of 6 components:
 **Optional component:** `insider_sentiment` (opt-in via config weight > 0).
 
 Pre-computed by the `risk_calc` worker (daily at 03:00 UTC).
+
+### 5.4 Tiered Due Diligence — Quantitative Fast-Track
+
+Approved Universe entries can reach `UniverseApproval.decision = 'approved'` via two paths:
+
+| Path | Trigger | Eligible types | Audit | DD Report required |
+|---|---|---|---|---|
+| **Full DD** | `POST /universe/funds/{id}/approve` after a completed `dd_reports` chapter set | All instrument types (incl. private, BDC, hedge funds) | `universe.approve` | Yes (`analysis_report_id` set) |
+| **Fast-Track** | `POST /screener/fast-track-approval` (bulk, list of `instrument_ids`) | ETFs, Mutual Funds, Money Market, UCITS | `universe.fast_track_approval` | No (`analysis_report_id = NULL`) |
+
+**Fast-Track endpoint** ([backend/app/domains/wealth/routes/screener.py](backend/app/domains/wealth/routes/screener.py)):
+
+- **Eligibility check** reads `Instrument.attributes` JSONB:
+  - `attributes.sec_universe ∈ {registered_us, etf, money_market}` → eligible
+  - `attributes.source == 'esma'` → UCITS → eligible
+  - BDC, private (`source == 'sec_manager'`), closed-end → **rejected** with reason
+- **Persistence** (per eligible instrument):
+  1. Mark previous `UniverseApproval` row `is_current = False`
+  2. Insert `UniverseApproval(decision='approved', rationale='Auto-approved via Quantitative Fast-Track', is_current=True, analysis_report_id=NULL)`
+  3. `UPDATE InstrumentOrg SET approval_status='approved'`
+- **Audit:** single `universe.fast_track_approval` event per batch (lists all approved IDs)
+- **Auth:** `INVESTMENT_TEAM` or `ADMIN`. Self-approval prevention does **not** apply (system-grade quant check, not human discretion).
+- **Batch limit:** 100 instruments per request.
+
+**Why this matters for portfolio construction:** the fast-track rationale is the discriminator used by the eviction worker (§5.5) to distinguish quant-only approvals from human-vetted DD approvals. `_load_universe_funds()` itself is unaware of the path — it only consumes the canonical `(is_current=True, decision='approved')` predicate.
+
+### 5.5 Automated Eviction (Fast-Track Governance)
+
+Funds approved via Fast-Track bypass qualitative review, so they require **continuous quantitative governance**. A daily worker revokes any fast-tracked approval whose composite `manager_score` deteriorates below the eviction threshold.
+
+**Service:** `vertical_engines/wealth/asset_universe/eviction_service.py` — `process_fast_track_evictions(db, org_id) -> int`
+
+**Eviction state machine** (per instrument):
+
+```
+fast_track_approved
+        │
+        │  daily sweep: latest manager_score < EVICTION_SCORE_THRESHOLD (40.0)
+        ▼
+1. UniverseApproval (old).is_current  = False
+2. UniverseApproval (new).decision    = 'revoked'
+   .rationale  = 'Automated eviction: manager_score dropped below 40.0'
+   .is_current = True
+   .decided_by = 'system:fast_track_eviction'
+3. InstrumentOrg.approval_status      = 'revoked'
+4. AuditEvent  action='universe.automated_eviction'
+5. StrategyDriftAlert(severity='high', status='active',
+                     metric_details.trigger='fast_track_eviction')
+```
+
+**Key invariants:**
+
+| Invariant | Rationale |
+|---|---|
+| `EVICTION_SCORE_THRESHOLD = 40.0` (strict `<`) | Constant in `eviction_service.py`; conservative — boundary funds (40.0 exactly) survive. |
+| Identification by `rationale ILIKE '%Fast-Track%'` | Mirrors the literal string written by the fast-track endpoint. Full-DD approvals are immune to automated eviction. |
+| `fund_risk_metrics` joined globally (no `organization_id` filter) | Table is GLOBAL per CLAUDE.md; latest score per instrument selected via `DISTINCT ON (instrument_id) ORDER BY calc_date DESC`. |
+| Funds with **no** score row are skipped | Eviction must be evidence-based — newly fast-tracked funds get a grace period until `global_risk_metrics` populates a score. |
+| Per-instrument try/except inside the org sweep | A failure on one fund logs and continues; never aborts the org. |
+| Per-org isolation (one transaction per org) | A poisoned tenant cannot block the rest of the fleet. |
+| `UniverseDecision.revoked` enum value | Added 2026-04-06. Distinct from `rejected` (human pre-approval refusal). |
+
+**Downstream impact on construction:**
+
+`_load_universe_funds()` filters on `decision = 'approved'`, so a revoked fund is **immediately invisible** to the optimizer on the next `POST /model-portfolios/{id}/construct` call. Portfolio Managers are notified via the `StrategyDriftAlert` row (severity `high`) which surfaces in the monitoring UI. Existing active portfolios that hold the revoked fund continue to run, but the **next rebalance** will exclude it — that is by design: drift toward the new universe is the rebalancing trigger, not a forced sell.
 
 ---
 
@@ -1070,6 +1141,27 @@ Lock ID: `900_030`. Computes synthetic portfolio NAV:
 - Weights × NAV per fund → portfolio NAV
 - Persisted to `model_portfolio_nav` hypertable (1-month chunks)
 
+### 12.5 Fast-Track Eviction Worker (daily)
+
+**Lock ID:** `900_009` (global, non-blocking advisory).
+**Worker:** [backend/app/domains/wealth/workers/fast_track_eviction.py](backend/app/domains/wealth/workers/fast_track_eviction.py)
+**Service:** [backend/vertical_engines/wealth/asset_universe/eviction_service.py](backend/vertical_engines/wealth/asset_universe/eviction_service.py)
+**Dispatch:** `python -m app.workers.cli fast_track_eviction` (registered as `global` scope, `_LIGHT` 5-min timeout).
+
+Sweeps every active organization (discovered via `vertical_config_overrides ∪ tenant_assets`) and revokes fast-tracked Universe approvals whose latest `manager_score` is **strictly below 40.0**. See §5.5 for the full state machine.
+
+**Scheduling constraint:** Must run **after** `global_risk_metrics` (lock `900_071`) so the latest scores are persisted before the eviction sweep reads them. Recommended cron order:
+
+```
+03:00 UTC — global_risk_metrics  (lock 900_071)
+03:30 UTC — risk_calc            (lock 900_007, per-org DTW drift)
+04:00 UTC — fast_track_eviction  (lock 900_009)  ← reads scores written above
+```
+
+**Per-org isolation:** each org runs in its own `AsyncSession` with its own `set_rls_context()` and its own commit/rollback boundary. A failure on one org increments `orgs_failed` and is logged with `logger.exception(...)`, but the sweep continues.
+
+**Observability:** structured logs via `structlog` — `fast_track_eviction.start`, `.org_count`, `.scan`, `.revoked`, `.org_failed`, `.summary`. The summary payload includes `orgs_scanned`, `orgs_failed`, `total_revoked`, and a `per_org` map.
+
 ---
 
 ## 13. Data Model
@@ -1125,6 +1217,18 @@ All endpoints require Clerk JWT authentication. IC role (`investment_team`, `dir
 | GET | `/model-portfolios/{id}/track-record` | Get backtest + stress results | Any |
 | GET | `/model-portfolios/{id}/views` | List IC views | Any |
 | POST | `/model-portfolios/{id}/views` | Create IC view (BL) | IC |
+
+### 14.1 Universe-feeding endpoints
+
+These do not live under `/model-portfolios` but they directly mutate the set of funds returned by `_load_universe_funds()`.
+
+| Method | Path | Purpose | Auth |
+|--------|------|---------|------|
+| POST | `/universe/funds/{instrument_id}/approve` | Full-DD approval (requires DD report) | IC |
+| POST | `/universe/funds/{instrument_id}/reject` | Reject with rationale | IC |
+| POST | `/screener/fast-track-approval` | Bulk quant fast-track (ETF/MF/MMF/UCITS only) | IC |
+| GET | `/universe` | List currently approved funds | Any |
+| GET | `/universe/funds/{instrument_id}/audit-trail` | Full approve/revoke history | IC |
 
 ---
 
