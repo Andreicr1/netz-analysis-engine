@@ -1,4 +1,12 @@
-"""DD Report Pydantic schemas for API serialization."""
+"""DD Report Pydantic schemas for API serialization.
+
+`DDChapterRead.quant_data` is a free-form dict produced by the DD
+pipeline chapter engines. Raw metric keys (`cvar_95`, `max_drawdown`,
+`garch_volatility`, …) are translated into the Risk Methodology v3
+institutional labels by the Wealth sanitation layer before the
+chapter reaches the API boundary. See the charter in
+`app.domains.wealth.schemas.sanitized`.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +14,9 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.domains.wealth.schemas.sanitized import sanitize_dict_keys
 
 
 class DDChapterRead(BaseModel):
@@ -21,6 +31,20 @@ class DDChapterRead(BaseModel):
     critic_iterations: int
     critic_status: str
     generated_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def _sanitize_quant_data(self) -> DDChapterRead:
+        # `quant_data` flattens to the evidence grid in the DD report
+        # reading workbench — its dict keys are rendered verbatim. We
+        # translate the keys here so the frontend never needs to know
+        # the raw backend metric identifiers.
+        if isinstance(self.quant_data, dict):
+            object.__setattr__(
+                self,
+                "quant_data",
+                sanitize_dict_keys(self.quant_data),
+            )
+        return self
 
 
 class DDReportSummary(BaseModel):

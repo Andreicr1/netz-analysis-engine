@@ -1,3 +1,13 @@
+"""Risk metrics response schemas.
+
+CVaR / regime / GARCH fields are sanitised through the Wealth
+nomenclature layer (`app.domains.wealth.schemas.sanitized`) before
+reaching the API boundary. Field names (e.g. `cvar_95_1m`) remain
+stable because they are contract-bearing identifiers; only values
+(regime enums) and free-form dict keys (`score_components`) are
+translated. See the charter in `sanitized.py`.
+"""
+
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -5,8 +15,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from app.domains.wealth.schemas.sanitized import (
+    SanitizedRegimeFieldMixin,
+    SanitizedScoreComponentsMixin,
+)
 
-class FundRiskRead(BaseModel):
+
+class FundRiskRead(SanitizedScoreComponentsMixin):
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     instrument_id: uuid.UUID
@@ -47,7 +62,7 @@ class FundRiskRead(BaseModel):
     computed_at: datetime | None = None
 
 
-class FundScoreRead(BaseModel):
+class FundScoreRead(SanitizedScoreComponentsMixin):
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     fund_id: uuid.UUID
@@ -60,7 +75,7 @@ class FundScoreRead(BaseModel):
     return_1y: Decimal | None = None
 
 
-class CVaRStatus(BaseModel):
+class CVaRStatus(SanitizedRegimeFieldMixin):
     profile: str
     calc_date: date | None = None
     cvar_current: Decimal | None = None
@@ -116,7 +131,7 @@ class BatchRiskSummaryOut(BaseModel):
     profile_count: int
 
 
-class RegimeHistoryPoint(BaseModel):
+class RegimeHistoryPoint(SanitizedRegimeFieldMixin):
     snapshot_date: date
     profile: str
     regime: str | None = None

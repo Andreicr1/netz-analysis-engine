@@ -1,4 +1,11 @@
-"""Pydantic schemas for macroeconomic data."""
+"""Pydantic schemas for macroeconomic data.
+
+User-facing schemas here route through the Wealth sanitation layer
+(`app.domains.wealth.schemas.sanitized`) so regime enums and quant
+jargon are translated into the Risk Methodology v3 institutional
+phrasing before reaching any API consumer. See the charter docstring
+in `sanitized.py` for governance details.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +13,12 @@ from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.domains.wealth.schemas.sanitized import (
+    SanitizedRegimeHierarchyMixin,
+    sanitize_report_json,
+)
 
 
 class MacroDataRead(BaseModel):
@@ -96,17 +108,30 @@ class MacroSnapshotResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class RegimeHierarchyRead(BaseModel):
-    """Hierarchical regime: global + per-region."""
+class RegimeHierarchyRead(SanitizedRegimeHierarchyMixin):
+    """Hierarchical regime: global + per-region.
+
+    Both `global_regime` and `regional_regimes` values are translated
+    from the backend enum (RISK_ON / RISK_OFF / CRISIS) to the
+    institutional tri-state (Expansion / Cautious / Stress) by the
+    `SanitizedRegimeHierarchyMixin` post-validator.
+    """
 
     global_regime: str
-    regional_regimes: dict[str, str]  # region → regime
+    regional_regimes: dict[str, str]  # region → regime (sanitised)
     composition_reasons: dict[str, str] = {}
     as_of_date: date | None = None
 
 
 class MacroReviewRead(BaseModel):
-    """Macro committee review response."""
+    """Macro committee review response.
+
+    `report_json` is a free-form committee payload whose known
+    jargon branches (`regime.global`, `regime.regional.*`,
+    `score_components`, `metrics`) are rewritten in-place by the
+    `_sanitize_report_json` after-validator. Unknown branches are
+    preserved byte-for-byte.
+    """
 
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
@@ -122,6 +147,13 @@ class MacroReviewRead(BaseModel):
     decision_rationale: str | None = None
     created_at: datetime
     created_by: str | None = None
+
+    @model_validator(mode="after")
+    def _sanitize_report_json(self) -> MacroReviewRead:
+        sanitised = sanitize_report_json(self.report_json)
+        if sanitised is not None and sanitised is not self.report_json:
+            object.__setattr__(self, "report_json", sanitised)
+        return self
 
 
 class MacroReviewApprove(BaseModel):
