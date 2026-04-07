@@ -109,6 +109,12 @@ class ManagerRow(BaseModel):
     state: str | None = None
     country: str | None = None
     compliance_disclosures: int | None = None
+    private_fund_count: int | None = None
+    hedge_fund_count: int | None = None
+    pe_fund_count: int | None = None
+    vc_fund_count: int | None = None
+    mutual_fund_count: int | None = None
+    portfolio_value: int | None = None
     top_sectors: dict[str, float] = Field(default_factory=dict)
     hhi: float | None = None
     position_count: int | None = None
@@ -207,11 +213,20 @@ class ManagerCompareResult(BaseModel):
 
 
 class NportHoldingItem(BaseModel):
+    """N-PORT holding with normalized data.
+
+    ``pct_of_nav`` is a **pure decimal fraction** (0.0741 = 7.41%).
+    ``sector`` is the enriched GICS sector (via resolve_sector), falling
+    back to the human-readable issuer category label when unavailable.
+    ``issuer_category`` is the raw N-PORT issuerCat code (CORP, RF, etc.).
+    """
+
     cusip: str | None = None
     isin: str | None = None
     issuer_name: str
     asset_class: str | None = None
     sector: str | None = None
+    issuer_category: str | None = None
     market_value: float | None = None
     quantity: float | None = None
     currency: str | None = None

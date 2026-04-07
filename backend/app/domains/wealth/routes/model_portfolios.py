@@ -10,6 +10,7 @@ from StrategicAllocation and CVaR limit from profile config.
 from __future__ import annotations
 
 import asyncio
+import math
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -17,7 +18,7 @@ from typing import Any
 
 import numpy as np
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +27,7 @@ from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.model_portfolio import ModelPortfolio
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
+from app.domains.wealth.schemas.generated_report import ReportGenerateRequest
 from app.domains.wealth.schemas.model_portfolio import (
     ConstructionAdviceRead,
     CusipExposureRead,
@@ -33,9 +35,16 @@ from app.domains.wealth.schemas.model_portfolio import (
     ModelPortfolioRead,
     ModelPortfolioUpdate,
     OverlapResultRead,
+    RebalancePreviewRequest,
+    RebalancePreviewResponse,
     SectorExposureRead,
     StressTestRequest,
     StressTestResponse,
+)
+from app.domains.wealth.schemas.portfolio import (
+    BlockDriftRead,
+    DriftReportRead,
+    LiveDriftResponse,
 )
 from app.shared.enums import Role
 
@@ -191,7 +200,8 @@ async def construct_portfolio(
             detail=f"Model portfolio {portfolio_id} not found",
         )
 
-    fund_selection = await _run_construction_async(db, portfolio.profile, org_id, portfolio_id=portfolio_id)
+    raw_selection = await _run_construction_async(db, portfolio.profile, org_id, portfolio_id=portfolio_id)
+    fund_selection = _sanitize_for_jsonb(raw_selection)
 
     portfolio.fund_selection_schema = fund_selection
     portfolio.status = "backtesting"
@@ -619,10 +629,19 @@ async def get_construction_advice(
         logger.info("construction_advice_cache_hit", cache_key=cache_key)
         return ConstructionAdviceRead(**cached)
 
-    # 3. Load block metadata + strategic targets
-    block_metadata, strategic_targets = await asyncio.gather(
+    # ── Phase 1: parallel fetch of everything independent of candidates ──
+    (
+        block_metadata,
+        strategic_targets,
+        (portfolio_daily_returns, portfolio_ret_series, current_weights),
+        portfolio_holdings,
+        all_cvar_limits,
+    ) = await asyncio.gather(
         load_block_metadata(db),
         load_strategic_targets(db, profile),
+        fetch_portfolio_returns(db, fund_selection),
+        fetch_portfolio_holdings_cusips(db, fund_selection),
+        _resolve_all_cvar_limits(db),
     )
 
     if not strategic_targets:
@@ -648,32 +667,17 @@ async def get_construction_advice(
     # 6. Discover candidates from global catalog
     candidates = await discover_candidates(db, gap_block_ids, max_per_block=20)
 
-    # 7. Fetch NAV data in parallel
+    # ── Phase 2: candidate-dependent data only ───────────────────────────
     candidate_instrument_ids = [uuid.UUID(c.instrument_id) for c in candidates]
 
-    portfolio_returns_task = fetch_portfolio_returns(db, fund_selection)
-    candidate_returns_task = fetch_candidate_returns(db, candidate_instrument_ids)
-    portfolio_holdings_task = fetch_portfolio_holdings_cusips(db, fund_selection)
-    candidate_holdings_task = fetch_candidate_holdings(db, candidate_instrument_ids)
-
-    (
-        (portfolio_daily_returns, portfolio_ret_series, current_weights),
-        candidate_returns_map,
-        portfolio_holdings,
-        candidate_holdings_map,
-    ) = await asyncio.gather(
-        portfolio_returns_task,
-        candidate_returns_task,
-        portfolio_holdings_task,
-        candidate_holdings_task,
+    candidate_returns_map, candidate_holdings_map = await asyncio.gather(
+        fetch_candidate_returns(db, candidate_instrument_ids),
+        fetch_candidate_holdings(db, candidate_instrument_ids),
     )
 
-    # 8. Resolve CVaR limits for all profiles (for alternative suggestions)
-    cvar_limit = opt_meta.get("cvar_limit") or await _resolve_cvar_limit(db, profile)
-    alternative_cvar_limits: dict[str, float] = {}
-    for alt_profile in ("conservative", "moderate", "growth"):
-        alt_limit = await _resolve_cvar_limit(db, alt_profile)
-        alternative_cvar_limits[alt_profile] = alt_limit
+    # 8. CVaR limits (already resolved in Phase 1)
+    cvar_limit = opt_meta.get("cvar_limit") or all_cvar_limits.get(profile, -0.08)
+    alternative_cvar_limits = all_cvar_limits
 
     # 9. Run pure advisor engine in thread (CPU-bound numpy)
     if portfolio_daily_returns.size > 0 and len(candidate_returns_map) > 0:
@@ -739,6 +743,355 @@ async def get_construction_advice(
     )
 
     return ConstructionAdviceRead(**result_dict)
+
+
+# ── Rebalance Preview ────────────────────────────────────────────────────
+
+
+@router.post(
+    "/{portfolio_id}/rebalance/preview",
+    response_model=RebalancePreviewResponse,
+    summary="Preview rebalance trades (stateless)",
+    description=(
+        "Computes suggested BUY/SELL/HOLD trades by comparing the model "
+        "portfolio's target weights against externally-provided current "
+        "holdings. No DB writes — pure calculation. All values in USD."
+    ),
+)
+async def rebalance_preview(
+    portfolio_id: uuid.UUID,
+    body: RebalancePreviewRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> RebalancePreviewResponse:
+    """Stateless rebalance preview: target vs current → trades."""
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    fund_selection = portfolio.fund_selection_schema
+    if not fund_selection or not fund_selection.get("funds"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Portfolio has no fund selection. Run Construct first.",
+        )
+
+    from vertical_engines.wealth.rebalancing.preview_service import (
+        compute_rebalance_preview,
+    )
+
+    preview = compute_rebalance_preview(
+        portfolio_id=portfolio_id,
+        portfolio_name=portfolio.display_name,
+        profile=portfolio.profile,
+        fund_selection_schema=fund_selection,
+        current_holdings=[h.model_dump() for h in body.current_holdings],
+        cash_available=body.cash_available,
+        total_aum_override=body.total_aum,
+    )
+
+    # ── CVaR awareness: estimate projected CVaR from fund_risk_metrics ──
+    cvar_95_projected: float | None = None
+    cvar_limit_value: float | None = None
+    cvar_warning = False
+
+    try:
+        from app.domains.wealth.models.risk import FundRiskMetrics
+
+        target_funds = fund_selection.get("funds", [])
+        target_ids = [uuid.UUID(f["instrument_id"]) for f in target_funds]
+        target_weights = {str(f["instrument_id"]): float(f.get("weight", 0)) for f in target_funds}
+
+        if target_ids:
+            # Latest CVaR per fund from fund_risk_metrics (GLOBAL table, no RLS)
+            risk_stmt = (
+                select(
+                    FundRiskMetrics.instrument_id,
+                    FundRiskMetrics.cvar_95_12m,
+                )
+                .where(FundRiskMetrics.instrument_id.in_(target_ids))
+                .where(FundRiskMetrics.cvar_95_12m.is_not(None))
+                .distinct(FundRiskMetrics.instrument_id)
+                .order_by(FundRiskMetrics.instrument_id, FundRiskMetrics.as_of.desc())
+            )
+            risk_rows = await db.execute(risk_stmt)
+            cvar_map = {
+                str(row.instrument_id): float(row.cvar_95_12m)
+                for row in risk_rows.all()
+            }
+
+            # Weighted portfolio CVaR (linear approximation — conservative upper bound)
+            if cvar_map:
+                weighted_cvar = sum(
+                    target_weights.get(iid, 0) * cvar
+                    for iid, cvar in cvar_map.items()
+                )
+                cvar_95_projected = round(weighted_cvar, 6)
+
+            # Load cvar_limit from strategic allocation
+            today = date.today()
+            alloc_stmt = (
+                select(StrategicAllocation.cvar_limit)
+                .where(
+                    StrategicAllocation.profile == portfolio.profile,
+                    StrategicAllocation.effective_from <= today,
+                )
+                .where(
+                    (StrategicAllocation.effective_to.is_(None))
+                    | (StrategicAllocation.effective_to >= today),
+                )
+                .limit(1)
+            )
+            alloc_row = (await db.execute(alloc_stmt)).scalar_one_or_none()
+            if alloc_row is not None:
+                cvar_limit_value = float(alloc_row)
+
+            if cvar_95_projected is not None and cvar_limit_value is not None:
+                # Warning when projected CVaR >= 90% of limit (approaching breach)
+                cvar_warning = cvar_95_projected >= cvar_limit_value * 0.9
+    except Exception:
+        logger.warning("rebalance_cvar_estimation_failed", portfolio_id=str(portfolio_id), exc_info=True)
+
+    preview["cvar_95_projected"] = cvar_95_projected
+    preview["cvar_limit"] = cvar_limit_value
+    preview["cvar_warning"] = cvar_warning
+
+    return RebalancePreviewResponse(**preview)
+
+
+# ── Drift Endpoints ──────────────────────────────────────────────────────
+
+
+@router.get(
+    "/{portfolio_id}/drift",
+    response_model=DriftReportRead,
+    summary="Block-level allocation drift from latest snapshot",
+)
+async def get_drift_report(
+    portfolio_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> DriftReportRead:
+    """Compute block-level drift using the latest PortfolioSnapshot weights
+    versus strategic + tactical targets. Delegates to existing
+    ``compute_drift()`` in quant_queries — zero new math.
+    """
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    from app.domains.wealth.services.quant_queries import compute_drift
+
+    drift = await compute_drift(db, portfolio.profile)
+
+    return DriftReportRead(
+        profile=drift.profile,
+        as_of_date=drift.as_of_date,
+        blocks=[
+            BlockDriftRead(
+                block_id=b.block_id,
+                current_weight=b.current_weight,
+                target_weight=b.target_weight,
+                absolute_drift=b.absolute_drift,
+                relative_drift=b.relative_drift,
+                status=b.status,
+            )
+            for b in drift.blocks
+        ],
+        max_drift_pct=drift.max_drift_pct,
+        overall_status=drift.overall_status,
+        rebalance_recommended=drift.rebalance_recommended,
+        estimated_turnover=drift.estimated_turnover,
+    )
+
+
+@router.get(
+    "/{portfolio_id}/drift/live",
+    response_model=LiveDriftResponse,
+    summary="Live drift using latest nav_timeseries prices",
+    description=(
+        "Computes allocation drift by multiplying fund_selection_schema "
+        "target weights by the latest nav_timeseries prices to derive "
+        "current live weights, then passes to compute_block_drifts(). "
+        "Frontend should debounce calls (e.g. every 30s or on material "
+        "price change)."
+    ),
+)
+async def get_live_drift(
+    portfolio_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> LiveDriftResponse:
+    """Compute drift from live NAV prices in nav_timeseries.
+
+    1. Load fund_selection_schema (target weights per instrument + block).
+    2. Query latest nav_timeseries price per instrument in the portfolio.
+    3. Multiply target_weight * latest_nav to get live position values.
+    4. Aggregate to block-level current weights.
+    5. Load strategic + tactical block targets.
+    6. Pass to existing ``compute_block_drifts()`` — zero new math.
+    """
+    from app.domains.wealth.models.allocation import TacticalPosition
+    from app.domains.wealth.models.nav import NavTimeseries
+    from quant_engine.drift_service import compute_block_drifts, resolve_drift_thresholds
+
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    fund_selection = portfolio.fund_selection_schema
+    if not fund_selection or not fund_selection.get("funds"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Portfolio has no fund selection. Run Construct first.",
+        )
+
+    funds: list[dict] = fund_selection["funds"]
+    instrument_ids = [uuid.UUID(f["instrument_id"]) for f in funds]
+
+    # Query latest NAV price per instrument (DISTINCT ON + ORDER BY desc)
+    latest_nav_subq = (
+        select(
+            NavTimeseries.instrument_id,
+            NavTimeseries.nav,
+            NavTimeseries.nav_date,
+        )
+        .where(NavTimeseries.instrument_id.in_(instrument_ids))
+        .where(NavTimeseries.nav.is_not(None))
+        .distinct(NavTimeseries.instrument_id)
+        .order_by(NavTimeseries.instrument_id, NavTimeseries.nav_date.desc())
+        .subquery()
+    )
+    nav_result = await db.execute(select(latest_nav_subq))
+    nav_rows = nav_result.all()
+    price_map: dict[str, float] = {
+        str(row.instrument_id): float(row.nav)
+        for row in nav_rows
+        if row.nav is not None
+    }
+    # Track the most recent NAV date across all instruments for staleness indicator
+    latest_nav_date = max((row.nav_date for row in nav_rows if row.nav_date is not None), default=None)
+
+    # Compute live position values: target_weight * latest_nav
+    instrument_block: dict[str, str] = {}
+    position_values: dict[str, float] = {}
+    for fund in funds:
+        iid = fund["instrument_id"]
+        block_id = fund.get("block_id", "unknown")
+        target_weight = float(fund.get("weight", 0))
+        live_nav = price_map.get(iid)
+        if live_nav is not None and live_nav > 0:
+            position_values[iid] = target_weight * live_nav
+        else:
+            position_values[iid] = target_weight
+        instrument_block[iid] = block_id
+
+    # Aggregate to block-level current weights
+    total_value = sum(position_values.values()) or 1.0
+    block_values: dict[str, float] = {}
+    for iid, val in position_values.items():
+        bid = instrument_block.get(iid, "unknown")
+        block_values[bid] = block_values.get(bid, 0.0) + val
+    current_weights: dict[str, float] = {
+        bid: val / total_value for bid, val in block_values.items()
+    }
+
+    # Build target weights from strategic + tactical allocations
+    today = date.today()
+    alloc_stmt = (
+        select(StrategicAllocation)
+        .where(
+            StrategicAllocation.profile == portfolio.profile,
+            StrategicAllocation.effective_from <= today,
+        )
+        .where(
+            (StrategicAllocation.effective_to.is_(None))
+            | (StrategicAllocation.effective_to >= today),
+        )
+    )
+    alloc_result = await db.execute(alloc_stmt)
+    strategic = {a.block_id: float(a.target_weight) for a in alloc_result.scalars().all()}
+
+    tact_stmt = (
+        select(TacticalPosition)
+        .where(
+            TacticalPosition.profile == portfolio.profile,
+            TacticalPosition.valid_from <= today,
+        )
+        .where(
+            (TacticalPosition.valid_to.is_(None))
+            | (TacticalPosition.valid_to >= today),
+        )
+    )
+    tact_result = await db.execute(tact_stmt)
+    tactical = {t.block_id: float(t.overweight) for t in tact_result.scalars().all()}
+
+    target_weights: dict[str, float] = {}
+    for block_id in set(strategic.keys()) | set(tactical.keys()):
+        target_weights[block_id] = strategic.get(block_id, 0.0) + tactical.get(block_id, 0.0)
+
+    # Fallback: derive targets from fund_selection if no allocations
+    if not target_weights:
+        for fund in funds:
+            bid = fund.get("block_id", "unknown")
+            target_weights[bid] = target_weights.get(bid, 0.0) + float(fund.get("weight", 0))
+
+    # Delegate to existing pure function
+    maintenance, urgent = resolve_drift_thresholds()
+    drifts = compute_block_drifts(current_weights, target_weights, maintenance, urgent)
+
+    max_abs = max((abs(d.absolute_drift) for d in drifts), default=0.0)
+    if any(d.status == "urgent" for d in drifts):
+        overall = "urgent"
+    elif any(d.status == "maintenance" for d in drifts):
+        overall = "maintenance"
+    else:
+        overall = "ok"
+
+    meaningful = [abs(d.absolute_drift) for d in drifts if abs(d.absolute_drift) >= 0.005]
+    turnover = sum(meaningful) / 2
+    rebalance_recommended = overall != "ok" and turnover >= 0.01
+
+    return LiveDriftResponse(
+        portfolio_id=str(portfolio_id),
+        profile=portfolio.profile,
+        as_of=date.today(),
+        total_aum=total_value,
+        blocks=[
+            BlockDriftRead(
+                block_id=d.block_id,
+                current_weight=d.current_weight,
+                target_weight=d.target_weight,
+                absolute_drift=d.absolute_drift,
+                relative_drift=d.relative_drift,
+                status=d.status,
+            )
+            for d in drifts
+        ],
+        max_drift_pct=round(max_abs, 6),
+        overall_status=overall,
+        rebalance_recommended=rebalance_recommended,
+        estimated_turnover=round(turnover, 6),
+        latest_nav_date=latest_nav_date,
+    )
 
 
 # ── Activate ─────────────────────────────────────────────────────────────
@@ -859,6 +1212,17 @@ async def _set_cached_advice(cache_key: str, result: dict, ttl: int = 600) -> No
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _sanitize_for_jsonb(obj: Any) -> Any:
+    """Replace NaN/Inf floats with None so PostgreSQL JSONB accepts the payload."""
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_jsonb(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_jsonb(v) for v in obj]
+    return obj
 
 
 def _require_ic_role(actor: Actor) -> None:
@@ -1351,6 +1715,26 @@ async def _resolve_cvar_limit(
     return _DEFAULT_CVAR_LIMITS.get(profile, -0.08)
 
 
+async def _resolve_all_cvar_limits(db: AsyncSession) -> dict[str, float]:
+    """Resolve CVaR limits for all profiles in a single ConfigService call."""
+    try:
+        from app.core.config.config_service import ConfigService
+
+        config_svc = ConfigService(db)
+        result = await config_svc.get("liquid_funds", "portfolio_profiles")
+        profiles_cfg = result.value.get("profiles", {})
+
+        limits: dict[str, float] = {}
+        for profile_name in ("conservative", "moderate", "growth"):
+            cvar_cfg = profiles_cfg.get(profile_name, {}).get("cvar", {})
+            limit = cvar_cfg.get("limit")
+            limits[profile_name] = float(limit) if limit is not None else _DEFAULT_CVAR_LIMITS.get(profile_name, -0.08)
+        return limits
+    except Exception:
+        logger.debug("config_service_all_cvar_fallback")
+        return dict(_DEFAULT_CVAR_LIMITS)
+
+
 async def _resolve_max_single_fund(
     db: AsyncSession,
     profile: str,
@@ -1392,11 +1776,18 @@ async def _create_day0_snapshot(
     optimization = fund_selection.get("optimization", {})
     snapshot_date = date.today()
 
-    # Use actual CVaR from optimizer (not volatility)
+    # Use actual CVaR from optimizer (not volatility).
+    # Values may be None (sanitized from NaN upstream) — treat as missing.
     cvar_current_val = optimization.get("cvar_95")
     cvar_limit_val = optimization.get("cvar_limit")
 
-    # Compute utilization: |cvar_current / cvar_limit| × 100
+    # Guard against any residual NaN/Inf floats
+    if isinstance(cvar_current_val, float) and not math.isfinite(cvar_current_val):
+        cvar_current_val = None
+    if isinstance(cvar_limit_val, float) and not math.isfinite(cvar_limit_val):
+        cvar_limit_val = None
+
+    # Compute utilization: |cvar_current / cvar_limit| x 100
     cvar_utilized = None
     if cvar_current_val is not None and cvar_limit_val is not None and cvar_limit_val != 0:
         cvar_utilized = round(abs(cvar_current_val / cvar_limit_val) * 100, 2)
@@ -1424,8 +1815,8 @@ async def _create_day0_snapshot(
         organization_id=org_id,
         profile=portfolio.profile,
         snapshot_date=snapshot_date,
-        weights=block_weights,
-        fund_selection=fund_selection,
+        weights=_sanitize_for_jsonb(block_weights),
+        fund_selection=_sanitize_for_jsonb(fund_selection),
         cvar_current=Decimal(str(round(cvar_current_val, 6))) if cvar_current_val is not None else None,
         cvar_limit=Decimal(str(round(cvar_limit_val, 6))) if cvar_limit_val is not None else None,
         cvar_utilized_pct=Decimal(str(cvar_utilized)) if cvar_utilized is not None else None,
@@ -1521,3 +1912,645 @@ def _run_stress(
             for s in result.scenarios
         ],
     }
+
+
+# ── Holdings & Performance endpoints ────────────────────────
+
+
+@router.get(
+    "/{portfolio_id}/holdings",
+    response_model=list["PositionDetail"],
+    summary="Detailed holdings with latest prices",
+)
+async def get_holdings(
+    portfolio_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> list["PositionDetail"]:
+    """Return all positions in a model portfolio with latest prices and P&L.
+
+    Reads ``fund_selection_schema`` for weights, joins ``instruments_universe``
+    for metadata, and ``nav_timeseries`` for latest + previous prices.
+
+    Computed fields: position_value, intraday_pnl, intraday_pnl_pct.
+    """
+    from sqlalchemy import text as sa_text
+
+    from app.domains.wealth.schemas.portfolio import PositionDetail
+
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if not portfolio:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Portfolio not found")
+
+    fund_selection = portfolio.fund_selection_schema
+    if not fund_selection or not fund_selection.get("funds"):
+        return []
+
+    # Build instrument_id → (weight, block_id) map
+    fund_map: dict[str, dict] = {}
+    for f in fund_selection["funds"]:
+        iid = f.get("instrument_id")
+        w = f.get("weight")
+        if iid and w:
+            fund_map[str(iid)] = {"weight": float(w), "block_id": f.get("block_id")}
+
+    if not fund_map:
+        return []
+
+    instrument_ids = list(fund_map.keys())
+    placeholders = ", ".join(f"'{iid}'" for iid in instrument_ids)
+
+    # Single query: instruments + latest NAV + previous NAV
+    query = sa_text(f"""
+        WITH latest_nav AS (
+            SELECT DISTINCT ON (instrument_id)
+                instrument_id, nav_date, nav, currency
+            FROM nav_timeseries
+            WHERE instrument_id::text IN ({placeholders})
+            ORDER BY instrument_id, nav_date DESC
+        ),
+        prev_nav AS (
+            SELECT DISTINCT ON (nt.instrument_id)
+                nt.instrument_id, nt.nav AS prev_nav
+            FROM nav_timeseries nt
+            JOIN latest_nav ln ON ln.instrument_id = nt.instrument_id
+                AND nt.nav_date < ln.nav_date
+            ORDER BY nt.instrument_id, nt.nav_date DESC
+        )
+        SELECT
+            iu.instrument_id, iu.ticker, iu.name,
+            iu.asset_class, COALESCE(ln.currency, iu.currency, 'USD') AS currency,
+            ln.nav AS last_price, pn.prev_nav AS previous_close, ln.nav_date AS price_date
+        FROM instruments_universe iu
+        LEFT JOIN latest_nav ln ON ln.instrument_id = iu.instrument_id
+        LEFT JOIN prev_nav pn ON pn.instrument_id = iu.instrument_id
+        WHERE iu.instrument_id::text IN ({placeholders})
+    """)
+
+    rows = await db.execute(query)
+
+    portfolio_nav = float(portfolio.inception_nav or 1000)
+    positions: list[PositionDetail] = []
+
+    for row in rows.mappings():
+        iid = str(row["instrument_id"])
+        meta = fund_map.get(iid, {"weight": 0.0, "block_id": None})
+        weight = Decimal(str(meta["weight"]))
+        last_price = Decimal(str(row["last_price"])) if row["last_price"] else None
+        prev_close = Decimal(str(row["previous_close"])) if row["previous_close"] else None
+
+        # Compute intraday P&L
+        position_value = weight * Decimal(str(portfolio_nav)) if last_price else None
+        intraday_pnl: Decimal | None = None
+        intraday_pnl_pct: Decimal | None = None
+
+        if last_price and prev_close and prev_close != 0:
+            price_change_pct = (last_price - prev_close) / prev_close
+            intraday_pnl_pct = price_change_pct * 100
+            if position_value is not None:
+                intraday_pnl = position_value * price_change_pct
+
+        positions.append(PositionDetail(
+            instrument_id=row["instrument_id"],
+            ticker=row["ticker"],
+            name=row["name"] or "",
+            asset_class=row["asset_class"] or "",
+            currency=row["currency"] or "USD",
+            weight=weight,
+            block_id=meta.get("block_id"),
+            last_price=last_price,
+            previous_close=prev_close,
+            price_date=row["price_date"],
+            position_value=position_value,
+            intraday_pnl=intraday_pnl,
+            intraday_pnl_pct=intraday_pnl_pct,
+        ))
+
+    # Sort by position value descending
+    positions.sort(key=lambda p: p.position_value or Decimal("0"), reverse=True)
+    return positions
+
+
+@router.get(
+    "/{portfolio_id}/performance",
+    response_model="PortfolioPerformanceSeries",
+    summary="Historical NAV time series for charting",
+)
+async def get_performance(
+    portfolio_id: uuid.UUID,
+    timeframe: str = Query("1Y", pattern="^(1M|3M|6M|1Y|YTD|SI)$"),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> "PortfolioPerformanceSeries":
+    """Return the model portfolio's historical NAV series from ``model_portfolio_nav``.
+
+    Timeframes: 1M, 3M, 6M, 1Y, YTD, SI (since inception).
+    Benchmark NAV is fetched from ``benchmark_nav`` if the portfolio has one.
+    """
+    from datetime import timedelta
+
+    from app.domains.wealth.models.model_portfolio_nav import ModelPortfolioNav
+    from app.domains.wealth.schemas.portfolio import PerformancePoint, PortfolioPerformanceSeries
+
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if not portfolio:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Portfolio not found")
+
+    # Compute start date from timeframe
+    today = date.today()
+    start_date: date
+    if timeframe == "1M":
+        start_date = today - timedelta(days=30)
+    elif timeframe == "3M":
+        start_date = today - timedelta(days=90)
+    elif timeframe == "6M":
+        start_date = today - timedelta(days=180)
+    elif timeframe == "1Y":
+        start_date = today - timedelta(days=365)
+    elif timeframe == "YTD":
+        start_date = date(today.year, 1, 1)
+    else:  # SI
+        start_date = portfolio.inception_date or date(2020, 1, 1)
+
+    # Query model_portfolio_nav
+    nav_stmt = (
+        select(ModelPortfolioNav)
+        .where(
+            ModelPortfolioNav.portfolio_id == portfolio_id,
+            ModelPortfolioNav.nav_date >= start_date,
+        )
+        .order_by(ModelPortfolioNav.nav_date)
+    )
+    nav_result = await db.execute(nav_stmt)
+    nav_rows = nav_result.scalars().all()
+
+    # Build series with cumulative return
+    series: list[PerformancePoint] = []
+    first_nav: float | None = None
+
+    for row in nav_rows:
+        nav_val = float(row.nav) if row.nav else 0
+        if first_nav is None and nav_val > 0:
+            first_nav = nav_val
+        cum_return = ((nav_val / first_nav) - 1) * 100 if first_nav and first_nav > 0 else None
+
+        series.append(PerformancePoint(
+            nav_date=row.nav_date,
+            nav=row.nav,
+            daily_return=row.daily_return,
+            cumulative_return=Decimal(str(round(cum_return, 4))) if cum_return is not None else None,
+        ))
+
+    return PortfolioPerformanceSeries(
+        portfolio_id=portfolio_id,
+        profile=portfolio.profile or "",
+        inception_date=portfolio.inception_date,
+        inception_nav=portfolio.inception_nav or Decimal("1000"),
+        benchmark_name=portfolio.benchmark_composite,
+        series=series,
+        as_of=today,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# UNIFIED REPORT ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/{portfolio_id}/reports",
+    summary="List all generated reports for a portfolio",
+    description=(
+        "Returns historical reports (fact sheets, long-form DD, monthly) "
+        "from the WealthGeneratedReport registry."
+    ),
+)
+async def list_portfolio_reports(
+    portfolio_id: uuid.UUID,
+    report_type: str | None = Query(default=None, description="Filter by report type"),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    org_id: str = Depends(get_org_id),
+) -> dict[str, Any]:
+    """Unified report history for a portfolio.
+
+    Queries the WealthGeneratedReport table for all report types,
+    optionally filtered by report_type.
+    """
+    from app.domains.wealth.models.generated_report import WealthGeneratedReport
+    from app.domains.wealth.schemas.generated_report import (
+        ReportHistoryItem,
+        ReportHistoryResponse,
+    )
+
+    # Verify portfolio exists
+    result = await db.execute(
+        select(ModelPortfolio.id).where(ModelPortfolio.id == portfolio_id),
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    stmt = (
+        select(WealthGeneratedReport)
+        .where(
+            WealthGeneratedReport.portfolio_id == portfolio_id,
+            WealthGeneratedReport.status == "completed",
+        )
+        .order_by(WealthGeneratedReport.generated_at.desc())
+        .limit(limit)
+    )
+
+    if report_type:
+        stmt = stmt.where(WealthGeneratedReport.report_type == report_type)
+
+    rows = await db.execute(stmt)
+    reports = rows.scalars().all()
+
+    items = [ReportHistoryItem.model_validate(r) for r in reports]
+    return ReportHistoryResponse(
+        portfolio_id=portfolio_id,
+        reports=items,
+        total=len(items),
+    ).model_dump(mode="json")
+
+
+@router.post(
+    "/{portfolio_id}/reports/generate",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger background report generation",
+    description=(
+        "Dispatches a background job to generate a report. "
+        "Returns a job_id for SSE progress streaming."
+    ),
+)
+async def generate_portfolio_report(
+    portfolio_id: uuid.UUID,
+    body: ReportGenerateRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+    org_id: str = Depends(get_org_id),
+) -> dict[str, Any]:
+    """Unified report generation trigger.
+
+    Accepts report_type and dispatches to the appropriate engine.
+    Returns a job_id immediately; progress is streamed via SSE.
+    """
+    from app.core.jobs.tracker import register_job_owner
+
+    _require_ic_role(actor)
+
+    req = body
+
+    # Verify portfolio exists and has fund selection
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    if not portfolio.fund_selection_schema:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Portfolio has no fund selection. Run /construct first.",
+        )
+
+    as_of = req.as_of_date or date.today()
+
+    # Generate job_id with report-type prefix
+    prefix_map = {
+        "fact_sheet": "fs",
+        "monthly_report": "mcr",
+    }
+    prefix = prefix_map.get(req.report_type, "rpt")
+    job_id = f"{prefix}-{portfolio_id}-{uuid.uuid4().hex[:8]}"
+
+    # Register job for SSE streaming
+    await register_job_owner(job_id, str(org_id))
+
+    # Dispatch background task based on report type
+    import asyncio
+
+    asyncio.create_task(
+        _run_report_generation(
+            job_id=job_id,
+            portfolio_id=str(portfolio_id),
+            organization_id=str(org_id),
+            report_type=req.report_type,
+            language=req.language,
+            format=req.format,
+            as_of=as_of,
+        ),
+    )
+
+    return {
+        "job_id": job_id,
+        "portfolio_id": str(portfolio_id),
+        "report_type": req.report_type,
+        "status": "accepted",
+    }
+
+
+@router.get(
+    "/{portfolio_id}/reports/stream/{job_id}",
+    summary="SSE stream for report generation progress",
+)
+async def stream_report_progress(
+    portfolio_id: uuid.UUID,
+    job_id: str,
+    request: Request,
+    user: CurrentUser = Depends(get_current_user),
+    org_id: str = Depends(get_org_id),
+) -> Any:
+    """Subscribe to SSE events for a report generation job."""
+    from app.core.jobs.sse import create_job_stream
+    from app.core.jobs.tracker import verify_job_owner
+
+    if not await verify_job_owner(job_id, str(org_id)):
+        raise HTTPException(status_code=403, detail="Job not found or unauthorized")
+
+    return await create_job_stream(request, job_id)
+
+
+# ── Background report generation task ──────────────────────────────
+
+
+async def _run_report_generation(
+    *,
+    job_id: str,
+    portfolio_id: str,
+    organization_id: str,
+    report_type: str,
+    language: str,
+    format: str,
+    as_of: date,
+) -> None:
+    """Background task: dispatch to appropriate report engine and publish SSE events."""
+    from app.core.jobs.tracker import publish_event, publish_terminal_event
+
+    try:
+        await publish_event(job_id, "progress", {
+            "stage": "QUEUED",
+            "message": "Report generation queued",
+            "pct": 0,
+        })
+
+        if report_type == "fact_sheet":
+            await _generate_fact_sheet_job(
+                job_id=job_id,
+                portfolio_id=portfolio_id,
+                organization_id=organization_id,
+                language=language,
+                format=format,
+                as_of=as_of,
+            )
+        elif report_type == "monthly_report":
+            await _generate_monthly_report_job(
+                job_id=job_id,
+                portfolio_id=portfolio_id,
+                organization_id=organization_id,
+            )
+        else:
+            await publish_terminal_event(job_id, "error", {
+                "error": f"Unknown report type: {report_type}",
+            })
+
+    except Exception as exc:
+        logger.exception("report_generation_background_failed", job_id=job_id)
+        await publish_terminal_event(job_id, "error", {"error": str(exc)})
+
+
+async def _generate_fact_sheet_job(
+    *,
+    job_id: str,
+    portfolio_id: str,
+    organization_id: str,
+    language: str,
+    format: str,
+    as_of: date,
+) -> None:
+    """Fact sheet generation with SSE progress events."""
+    from app.core.jobs.tracker import publish_event, publish_terminal_event
+    from app.domains.wealth.routes.common import _get_content_semaphore, require_content_slot
+
+    await publish_event(job_id, "progress", {
+        "stage": "FETCHING_MARKET_DATA",
+        "message": "Loading portfolio and market data",
+        "pct": 10,
+    })
+
+    await require_content_slot()
+    try:
+        await publish_event(job_id, "progress", {
+            "stage": "GENERATING_PDF",
+            "message": f"Rendering {format} fact sheet ({language.upper()})",
+            "pct": 40,
+        })
+
+        def _generate() -> dict:
+            from app.core.db.session import sync_session_factory
+
+            with sync_session_factory() as sync_db, sync_db.begin():
+                sync_db.expire_on_commit = False
+                from sqlalchemy import text
+                sync_db.execute(
+                    text("SELECT set_config('app.current_organization_id', :oid, true)"),
+                    {"oid": str(organization_id)},
+                )
+                from ai_engine.pipeline.storage_routing import gold_fact_sheet_path
+                from vertical_engines.wealth.fact_sheet import FactSheetEngine
+
+                engine = FactSheetEngine()
+                pdf_buf = engine.generate(
+                    sync_db,
+                    portfolio_id=portfolio_id,
+                    organization_id=organization_id,
+                    format=format,
+                    language=language,
+                    as_of=as_of,
+                )
+
+                storage_path = gold_fact_sheet_path(
+                    org_id=uuid.UUID(organization_id),
+                    vertical="wealth",
+                    portfolio_id=portfolio_id,
+                    as_of_date=as_of.isoformat(),
+                    language=language,
+                    filename=f"{format}.pdf",
+                )
+
+                return {
+                    "storage_path": storage_path,
+                    "pdf_bytes": pdf_buf.read(),
+                    "format": format,
+                    "language": language,
+                }
+
+        gen_result = await asyncio.to_thread(_generate)
+
+        await publish_event(job_id, "progress", {
+            "stage": "STORING_PDF",
+            "message": "Uploading PDF to storage",
+            "pct": 80,
+        })
+
+        # Async storage write
+        from app.services.storage_client import get_storage_client
+        storage = get_storage_client()
+        pdf_bytes = gen_result["pdf_bytes"]
+        await storage.write(gen_result["storage_path"], pdf_bytes, content_type="application/pdf")
+
+        # Persist report record
+        from app.core.db.engine import async_session_factory
+        from app.core.tenancy.middleware import set_rls_context
+        from app.domains.wealth.models.generated_report import WealthGeneratedReport
+
+        try:
+            async with async_session_factory() as record_db:
+                await set_rls_context(record_db, uuid.UUID(organization_id))
+                report_record = WealthGeneratedReport(
+                    organization_id=uuid.UUID(organization_id),
+                    portfolio_id=uuid.UUID(portfolio_id),
+                    report_type="fact_sheet",
+                    job_id=job_id,
+                    storage_path=gen_result["storage_path"],
+                    display_filename=f"fact-sheet-{portfolio_id}-{format}.pdf",
+                    size_bytes=len(pdf_bytes),
+                    status="completed",
+                )
+                record_db.add(report_record)
+                await record_db.commit()
+        except Exception:
+            logger.warning("fact_sheet_report_record_failed", exc_info=True)
+
+        await publish_terminal_event(job_id, "done", {
+            "status": "completed",
+            "report_type": "fact_sheet",
+            "storage_path": gen_result["storage_path"],
+            "size_bytes": len(pdf_bytes),
+        })
+
+    finally:
+        _get_content_semaphore().release()
+
+
+async def _generate_monthly_report_job(
+    *,
+    job_id: str,
+    portfolio_id: str,
+    organization_id: str,
+) -> None:
+    """Monthly report generation with SSE progress."""
+    from app.core.db.engine import async_session_factory
+    from app.core.jobs.tracker import publish_event, publish_terminal_event
+    from app.core.tenancy.middleware import set_rls_context
+
+    try:
+        async with async_session_factory() as db:
+            await set_rls_context(db, uuid.UUID(organization_id))
+
+            await publish_event(job_id, "progress", {
+                "stage": "FETCHING_MARKET_DATA",
+                "message": "Loading portfolio and performance data",
+                "pct": 10,
+            })
+
+            from vertical_engines.wealth.monthly_report import MonthlyReportEngine
+            engine = MonthlyReportEngine()
+
+            await publish_event(job_id, "progress", {
+                "stage": "RUNNING_QUANT_ENGINE",
+                "message": "Computing performance attribution and risk metrics",
+                "pct": 25,
+            })
+
+            result = await engine.generate(
+                db,
+                portfolio_id=portfolio_id,
+                organization_id=organization_id,
+            )
+
+            await publish_event(job_id, "progress", {
+                "stage": "GENERATING_PDF",
+                "message": "Rendering monthly report PDF",
+                "pct": 60,
+            })
+
+            pdf_storage_key = ""
+            if result.status != "failed":
+                try:
+                    from vertical_engines.wealth.monthly_report.pdf_renderer import (
+                        MonthlyPDFRenderer,
+                    )
+                    renderer = MonthlyPDFRenderer()
+                    pdf_bytes = await renderer.render(result, db=db, organization_id=organization_id)
+
+                    if pdf_bytes:
+                        from ai_engine.pipeline.storage_routing import gold_monthly_report_path
+                        pdf_storage_key = gold_monthly_report_path(
+                            org_id=uuid.UUID(organization_id),
+                            portfolio_id=portfolio_id,
+                            job_id=job_id,
+                        )
+
+                        await publish_event(job_id, "progress", {
+                            "stage": "STORING_PDF",
+                            "message": "Uploading PDF to storage",
+                            "pct": 85,
+                        })
+
+                        from app.services.storage_client import create_storage_client
+                        storage = create_storage_client()
+                        await storage.write(pdf_storage_key, pdf_bytes)
+
+                        # Persist record
+                        try:
+                            async with async_session_factory() as record_db:
+                                await set_rls_context(record_db, uuid.UUID(organization_id))
+                                from app.domains.wealth.models.generated_report import (
+                                    WealthGeneratedReport,
+                                )
+                                record_db.add(WealthGeneratedReport(
+                                    organization_id=uuid.UUID(organization_id),
+                                    portfolio_id=uuid.UUID(portfolio_id),
+                                    report_type="monthly_report",
+                                    job_id=job_id,
+                                    storage_path=pdf_storage_key,
+                                    display_filename=f"monthly-report-{portfolio_id}.pdf",
+                                    size_bytes=len(pdf_bytes),
+                                    status="completed",
+                                ))
+                                await record_db.commit()
+                        except Exception:
+                            logger.warning("monthly_report_record_failed", exc_info=True)
+                except Exception:
+                    logger.warning("monthly_report_pdf_generation_failed", exc_info=True)
+
+            await publish_terminal_event(
+                job_id,
+                "done" if result.status != "failed" else "error",
+                {
+                    "status": result.status,
+                    "report_type": "monthly_report",
+                    "storage_path": pdf_storage_key,
+                    "error": getattr(result, "error", None),
+                },
+            )
+
+    except Exception as exc:
+        logger.exception("monthly_report_background_failed", job_id=job_id)
+        await publish_terminal_event(job_id, "error", {"error": str(exc)})

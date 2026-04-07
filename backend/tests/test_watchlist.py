@@ -439,35 +439,42 @@ class TestCheckEnrichmentChanges:
     _ID_B = uuid.UUID("00000000-0000-0000-0000-000000000002")
 
     def test_fee_increase_above_threshold(self):
-        """ER from 0.50 to 0.60 (+10bps) → alert with direction='enrichment_change'."""
+        """ER from 0.50% to 0.60% (+10bps) → alert with direction='enrichment_change'.
+
+        Values are pure decimal fractions: 0.0050 = 0.50%, 0.0060 = 0.60%.
+        Delta = 0.0010 > threshold 0.0005 (5bps).
+        """
         instruments = [
-            {"instrument_id": self._ID_A, "name": "Fund A", "attributes": {"expense_ratio_pct": 0.60}},
+            {"instrument_id": self._ID_A, "name": "Fund A", "attributes": {"expense_ratio_pct": 0.0060}},
         ]
-        previous = {self._ID_A: {"expense_ratio_pct": 0.50}}
+        previous = {self._ID_A: {"expense_ratio_pct": 0.0050}}
 
         alerts = WatchlistService.check_enrichment_changes(instruments, previous)
 
         assert len(alerts) == 1
         assert alerts[0].direction == "enrichment_change"
-        assert "0.5%" in alerts[0].message
-        assert "0.6%" in alerts[0].message
+        assert "0.50%" in alerts[0].message
+        assert "0.60%" in alerts[0].message
 
     def test_fee_increase_below_threshold(self):
-        """ER from 0.50 to 0.54 (+4bps) → no alert."""
+        """ER from 0.50% to 0.54% (+4bps) → no alert.
+
+        Delta = 0.0004 < threshold 0.0005.
+        """
         instruments = [
-            {"instrument_id": self._ID_A, "name": "Fund A", "attributes": {"expense_ratio_pct": 0.54}},
+            {"instrument_id": self._ID_A, "name": "Fund A", "attributes": {"expense_ratio_pct": 0.0054}},
         ]
-        previous = {self._ID_A: {"expense_ratio_pct": 0.50}}
+        previous = {self._ID_A: {"expense_ratio_pct": 0.0050}}
 
         alerts = WatchlistService.check_enrichment_changes(instruments, previous)
         assert len(alerts) == 0
 
     def test_fee_decrease_no_alert(self):
-        """ER decrease (0.80 → 0.50) → no alert (only increases flagged)."""
+        """ER decrease (0.80% → 0.50%) → no alert (only increases flagged)."""
         instruments = [
-            {"instrument_id": self._ID_A, "name": "Fund A", "attributes": {"expense_ratio_pct": 0.50}},
+            {"instrument_id": self._ID_A, "name": "Fund A", "attributes": {"expense_ratio_pct": 0.0050}},
         ]
-        previous = {self._ID_A: {"expense_ratio_pct": 0.80}}
+        previous = {self._ID_A: {"expense_ratio_pct": 0.0080}}
 
         alerts = WatchlistService.check_enrichment_changes(instruments, previous)
         assert len(alerts) == 0

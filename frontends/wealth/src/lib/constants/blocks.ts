@@ -35,3 +35,61 @@ export const BLOCK_GROUPS: Record<string, string[]> = {
 	ALTERNATIVES: ["alt_real_estate", "alt_commodities", "alt_gold"],
 	"CASH & EQUIVALENTS": ["cash"],
 };
+
+// ── UX Glossary — human-readable labels for front-office display ─────
+// Intercepts raw DB keys before rendering. Backend stays agnotic.
+
+/** Asset class group names → executive display labels */
+export const GROUP_DISPLAY: Record<string, string> = {
+	EQUITIES: "Equities",
+	"FIXED INCOME": "Fixed Income",
+	ALTERNATIVES: "Alternatives",
+	"CASH & EQUIVALENTS": "Cash & Equivalents",
+	OTHER: "Other Instruments",
+};
+
+/** Block IDs → UX-friendly region/sub-class labels (no abbreviations) */
+export const BLOCK_DISPLAY: Record<string, string> = {
+	na_equity_large: "North America — Large Cap",
+	na_equity_growth: "North America — Growth",
+	na_equity_value: "North America — Value",
+	na_equity_small: "North America — Small Cap",
+	dm_europe_equity: "Developed Markets — Europe",
+	dm_asia_equity: "Developed Markets — Asia Pacific",
+	em_equity: "Emerging Markets",
+	fi_us_aggregate: "US Aggregate Bond",
+	fi_us_treasury: "US Treasury",
+	fi_us_tips: "US Inflation-Protected (TIPS)",
+	fi_us_high_yield: "US High Yield",
+	fi_em_debt: "Emerging Markets Debt",
+	fi_treasury: "Treasuries",
+	fi_credit_ig: "Investment Grade Credit",
+	fi_credit_hy: "High Yield Credit",
+	alt_real_estate: "Real Estate",
+	alt_commodities: "Commodities",
+	alt_gold: "Gold & Precious Metals",
+	alt_reits: "REITs",
+	intl_equity_dm: "International — Developed Markets",
+	intl_equity_em: "International — Emerging Markets",
+	cash: "Cash & Money Market",
+};
+
+/** Resolve UX-friendly block display name, fallback to blockLabel */
+export function blockDisplay(blockId: string): string {
+	return BLOCK_DISPLAY[blockId] ?? blockLabel(blockId);
+}
+
+/** Resolve UX-friendly group display name */
+export function groupDisplay(groupName: string): string {
+	return GROUP_DISPLAY[groupName] ?? groupName;
+}
+
+/** Portfolio display name overrides — sanitize aggressive language */
+export const PORTFOLIO_DISPLAY: Record<string, string> = {
+	"Aggressive Growth": "Strategic Growth",
+};
+
+/** Resolve portfolio display name with UX override */
+export function portfolioDisplayName(raw: string): string {
+	return PORTFOLIO_DISPLAY[raw] ?? raw;
+}

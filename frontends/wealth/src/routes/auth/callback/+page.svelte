@@ -83,11 +83,19 @@
 
 			status = "No active session. Redirecting to sign-in...";
 			setTimeout(() => {
+				if (import.meta.env.DEV) {
+					window.location.href = "/";
+					return;
+				}
 				window.location.href = `https://accounts.investintell.com/sign-in?redirect_url=${encodeURIComponent(window.location.href)}`;
 			}, 1000);
 		} catch {
 			status = "Authentication failed. Redirecting...";
 			setTimeout(() => {
+				if (import.meta.env.DEV) {
+					window.location.href = "/";
+					return;
+				}
 				window.location.href = "https://accounts.investintell.com/sign-in?redirect_url=" + encodeURIComponent(window.location.href);
 			}, 2000);
 		}

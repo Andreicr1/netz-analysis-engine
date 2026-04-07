@@ -39,19 +39,25 @@ from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.screening_result import ScreeningResult, ScreeningRun
+from app.domains.wealth.models.universe_approval import UniverseApproval
 from app.domains.wealth.queries.catalog_sql import (
     CatalogFilters,
     build_catalog_facets_query,
     build_catalog_query,
+    build_manager_catalog_query,
     sec_money_market_funds,
 )
 from app.domains.wealth.schemas.catalog import (
     CatalogFacetItem,
     CatalogFacets,
     DisclosureMatrix,
+    FundClassesResponse,
     FundFactSheet,
     FundHolding,
+    ManagerCatalogItem,
+    ManagerCatalogPage,
     NavPoint,
+    ShareClassItem,
     TeamMember,
     UnifiedCatalogPage,
     UnifiedFundItem,
@@ -72,9 +78,50 @@ from app.domains.wealth.schemas.screening import (
 from app.shared.enums import Role
 from app.shared.models import EsmaFund, EsmaManager, SecCusipTickerMap
 
-logger = structlog.get_logger()
+logger = structlog.get_logger(__name__)
+
+
+def _normalize_to_fraction(value: float | Any | None, source: str) -> float | None:
+    """Ensure percentage value is stored as pure decimal fraction (0.015 = 1.5%).
+
+    Some SEC sources (N-CEN) may store human percent (e.g. 1.50) while others
+    store fractions. This guard normalizes values > 1.0 (impossible for fees
+    unless it's a convention mismatch).
+    """
+    if value is None:
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if f > 1.0:
+        # Likely human percent (1.50) — convert to fraction (0.015)
+        logger.warning(
+            "normalizing_to_fraction",
+            source=source,
+            original_value=f,
+            normalized_value=f / 100.0,
+        )
+        return f / 100.0
+    return f
+
 
 router = APIRouter(prefix="/screener", tags=["screener"])
+
+
+_SOCIAL_MEDIA_DOMAINS = {"twitter.com", "x.com", "linkedin.com", "facebook.com", "instagram.com", "youtube.com"}
+
+
+def _clean_website(url: str | None) -> str | None:
+    """Return institutional website URL, filtering out social media profiles."""
+    if not url:
+        return None
+    lower = url.lower().replace("https://", "").replace("http://", "").replace("www.", "")
+    for domain in _SOCIAL_MEDIA_DOMAINS:
+        if lower.startswith(domain):
+            return None
+    return url
 
 
 def _require_investment_role(actor: Actor) -> None:
@@ -1024,9 +1071,13 @@ async def import_sec_security(
                 enrichment_attrs["strategy_label"] = etf_row.strategy_label
                 enrichment_attrs["is_index"] = etf_row.is_index
                 if etf_row.net_operating_expenses is not None:
-                    enrichment_attrs["expense_ratio_pct"] = float(etf_row.net_operating_expenses)
+                    enrichment_attrs["expense_ratio_pct"] = _normalize_to_fraction(
+                        etf_row.net_operating_expenses, "sec_etfs.net_operating_expenses",
+                    )
                 if etf_row.tracking_difference_net is not None:
-                    enrichment_attrs["tracking_difference_net"] = float(etf_row.tracking_difference_net)
+                    enrichment_attrs["tracking_difference_net"] = _normalize_to_fraction(
+                        etf_row.tracking_difference_net, "sec_etfs.tracking_difference_net",
+                    )
                 enrichment_attrs["index_tracked"] = etf_row.index_tracked
 
         # Fallback: search sec_bdcs by ticker
@@ -1040,7 +1091,9 @@ async def import_sec_security(
                 enrichment_attrs["sec_universe"] = "bdc"
                 enrichment_attrs["strategy_label"] = bdc_row.strategy_label
                 if bdc_row.net_operating_expenses is not None:
-                    enrichment_attrs["expense_ratio_pct"] = float(bdc_row.net_operating_expenses)
+                    enrichment_attrs["expense_ratio_pct"] = _normalize_to_fraction(
+                        bdc_row.net_operating_expenses, "sec_bdcs.net_operating_expenses",
+                    )
                 enrichment_attrs["investment_focus"] = bdc_row.investment_focus
                 enrichment_attrs["is_externally_managed"] = bdc_row.is_externally_managed
 
@@ -1072,11 +1125,15 @@ async def import_sec_security(
                     max(class_rows, key=lambda c: float(c.net_assets or 0)),
                 )
                 if best.expense_ratio_pct is not None:
-                    enrichment_attrs["expense_ratio_pct"] = float(best.expense_ratio_pct)
+                    enrichment_attrs["expense_ratio_pct"] = _normalize_to_fraction(
+                        best.expense_ratio_pct, "sec_fund_classes.expense_ratio_pct",
+                    )
                 if best.holdings_count is not None:
                     enrichment_attrs["holdings_count"] = best.holdings_count
                 if best.portfolio_turnover_pct is not None:
-                    enrichment_attrs["portfolio_turnover_pct"] = float(best.portfolio_turnover_pct)
+                    enrichment_attrs["portfolio_turnover_pct"] = _normalize_to_fraction(
+                        best.portfolio_turnover_pct, "sec_fund_classes.portfolio_turnover_pct",
+                    )
 
             # Resolve manager name from sec_managers if available
             if reg_fund.crd_number:
@@ -1461,9 +1518,11 @@ async def get_catalog(
     investment_geography: str | None = Query(None, description="Comma-separated: US,Europe,Emerging Markets,Asia Pacific,Global,Latin America"),
     aum_min: float | None = Query(None, ge=0, description="Minimum AUM in USD"),
     has_nav: bool | None = Query(None, description="Only funds with NAV history (ticker)"),
+    in_universe: bool | None = Query(None, description="Only funds present in instruments_universe (real NAV data)"),
     has_aum: bool | None = Query(None, description="Only funds with AUM > 0"),
     domicile: str | None = Query(None),
     manager: str | None = Query(None, description="Manager name text search"),
+    manager_id: str | None = Query(None, description="Exact manager CRD number"),
     sort: str = Query("name_asc", description="name_asc | name_desc | aum_desc | aum_asc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -1481,9 +1540,11 @@ async def get_catalog(
         investment_geography=investment_geography,
         aum_min=aum_min,
         has_nav=has_nav,
+        in_universe=in_universe,
         has_aum=has_aum,
         domicile=domicile,
         manager=manager,
+        manager_id=manager_id,
         sort=sort,
         page=page,
         page_size=page_size,
@@ -1546,6 +1607,7 @@ async def get_catalog(
                 expense_ratio_pct=float(r.expense_ratio_pct) if getattr(r, "expense_ratio_pct", None) is not None else None,
                 avg_annual_return_1y=float(r.avg_annual_return_1y) if getattr(r, "avg_annual_return_1y", None) is not None else None,
                 avg_annual_return_10y=float(r.avg_annual_return_10y) if getattr(r, "avg_annual_return_10y", None) is not None else None,
+                class_count=int(r.class_count) if getattr(r, "class_count", None) is not None else 1,
                 is_index=bool(r.is_index) if getattr(r, "is_index", None) is not None else None,
                 is_target_date=bool(r.is_target_date) if getattr(r, "is_target_date", None) is not None else None,
                 is_fund_of_fund=bool(r.is_fund_of_fund) if getattr(r, "is_fund_of_fund", None) is not None else None,
@@ -1612,6 +1674,99 @@ async def get_catalog(
             item.disclosure.nav_status = "unavailable"
 
     return UnifiedCatalogPage(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_next=(offset + page_size) < total,
+    )
+
+
+@router.get(
+    "/catalog/managers",
+    response_model=ManagerCatalogPage,
+    summary="Manager-grouped catalog — Level 1 screener (registered advisers with funds)",
+)
+@route_cache(ttl=120, key_prefix="screener:catalog:managers", global_key=True)
+async def get_catalog_managers(
+    q: str | None = Query(None, description="Text search (manager name, fund name, ticker)"),
+    region: str | None = Query(None),
+    fund_universe: str | None = Query(None),
+    fund_type: str | None = Query(None),
+    strategy_label: str | None = Query(None),
+    aum_min: float | None = Query(None, ge=0),
+    has_aum: bool | None = Query(None),
+    sort: str = Query("aum_desc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> ManagerCatalogPage:
+    """Group funds by manager_id, return aggregated AUM + fund types.
+
+    Enriched with location/website from sec_managers table.
+    """
+    filters = CatalogFilters(
+        q=q,
+        region=region,
+        fund_universe=fund_universe,
+        fund_type=fund_type,
+        strategy_label=strategy_label,
+        aum_min=aum_min,
+        has_nav=None,
+        has_aum=has_aum,
+        sort=sort,
+        page=page,
+        page_size=page_size,
+    )
+
+    stmt = build_manager_catalog_query(filters)
+    rows = (await db.execute(stmt)).all()
+
+    total = rows[0]._total if rows else 0
+    offset = (page - 1) * page_size
+
+    # Collect CRDs to batch-lookup sec_managers for location/website
+    crds = [r.manager_id for r in rows if r.manager_id]
+    manager_meta: dict[str, Any] = {}
+    if crds:
+        from sqlalchemy import text as sa_text
+
+        meta_result = await db.execute(
+            sa_text(
+                "SELECT crd_number, state, country, website "
+                "FROM sec_managers WHERE crd_number = ANY(:crds)"
+            ),
+            {"crds": crds},
+        )
+        for mr in meta_result.all():
+            manager_meta[mr.crd_number] = mr
+
+    items: list[ManagerCatalogItem] = []
+    for r in rows:
+        aum_val: float | None = None
+        if r.total_aum is not None:
+            try:
+                aum_val = float(r.total_aum)
+            except (ValueError, TypeError):
+                pass
+
+        fund_types = list(r.fund_types) if r.fund_types else []
+
+        meta = manager_meta.get(r.manager_id)
+        items.append(
+            ManagerCatalogItem(
+                manager_id=r.manager_id,
+                manager_name=r.manager_name or "Unknown",
+                total_aum=aum_val,
+                fund_count=int(r.fund_count),
+                fund_types=fund_types,
+                state=meta.state if meta else None,
+                country=meta.country if meta else None,
+                website=meta.website if meta else None,
+            ),
+        )
+
+    return ManagerCatalogPage(
         items=items,
         total=total,
         page=page,
@@ -1851,6 +2006,7 @@ async def get_fund_fact_sheet(
         gather_nport_sector_history,
         gather_prospectus_returns,
         gather_prospectus_stats,
+        gather_sec_adv_brochure,
         gather_sec_adv_data,
         gather_sec_nport_data,
     )
@@ -1917,7 +2073,7 @@ async def get_fund_fact_sheet(
 
             # Holdings (N-PORT) — filter by series_id to avoid mixing umbrella CIK holdings
             nport_data = gather_sec_nport_data(
-                sync_db, fund_cik=fund_cik, series_id=correct_series_id, holdings_limit=50,
+                sync_db, fund_cik=fund_cik, series_id=correct_series_id, holdings_limit=10,
             )
             sector_history = gather_nport_sector_history(
                 sync_db, fund_cik=fund_cik, series_id=correct_series_id,
@@ -1927,9 +2083,40 @@ async def get_fund_fact_sheet(
             prop_stats = gather_prospectus_stats(sync_db, fund_cik=fund_cik, series_id=correct_series_id)
             prop_returns = gather_prospectus_returns(sync_db, fund_cik=fund_cik, series_id=correct_series_id)
             
+            # Brochure narratives (ADV Part 2A — item_4 = firm description, item_8 = strategy)
+            brochure = gather_sec_adv_brochure(
+                sync_db, crd_number=effective_crd,
+                sections=["item_4", "item_8"],
+            )
+
             # Enrichment (Classes)
-            enrichment = gather_fund_enrichment(sync_db, fund_cik=fund_cik, sec_universe=detail.universe)
-            
+            enrichment = gather_fund_enrichment(sync_db, fund_cik=fund_cik, sec_universe=detail.universe, series_id=correct_series_id)
+
+            # Per-fund-type extended data (Phase 5)
+            from app.domains.wealth.queries.fund_extended_data import hydrate_extended_data
+
+            extended = hydrate_extended_data(
+                sync_db,
+                external_id=detail.external_id,
+                universe=detail.universe,
+                fund_type=detail.fund_type,
+                series_id=correct_series_id,
+            )
+
+            # Inception date fallback: fund.inception_date → earliest share class perf_inception_date
+            inception_fallback: dt.date | None = None
+            if not detail.inception_date and fund_cik:
+                from sqlalchemy import func as sa_func
+
+                from app.shared.models import SecFundClass
+                earliest = (
+                    sync_db.query(sa_func.min(SecFundClass.perf_inception_date))
+                    .filter(SecFundClass.cik == fund_cik, SecFundClass.perf_inception_date.isnot(None))
+                    .scalar()
+                )
+                if earliest:
+                    inception_fallback = earliest
+
             return {
                 "adv": adv_data,
                 "nport": nport_data,
@@ -1937,6 +2124,9 @@ async def get_fund_fact_sheet(
                 "stats": prop_stats,
                 "returns": prop_returns,
                 "enrichment": enrichment,
+                "extended_data": extended,
+                "brochure": brochure,
+                "inception_fallback": inception_fallback,
             }
 
     evidence = await asyncio.to_thread(_gather_evidence)
@@ -1967,9 +2157,12 @@ async def get_fund_fact_sheet(
             )
             nav_history = [NavPoint(nav_date=r.nav_date, nav=float(r.nav)) for r in nav_res.all()]
             
-        # Risk Metrics / Scoring
+        # Risk Metrics / Scoring — global table (no RLS), reads NULL or any org_id
         metrics_res = await db.execute(
-            select(FundRiskMetrics).where(FundRiskMetrics.instrument_id == inst_id).limit(1)
+            select(FundRiskMetrics)
+            .where(FundRiskMetrics.instrument_id == inst_id)
+            .order_by(FundRiskMetrics.calc_date.desc())
+            .limit(1)
         )
         m = metrics_res.scalar_one_or_none()
         if m:
@@ -1990,6 +2183,18 @@ async def get_fund_fact_sheet(
     adv = evidence["adv"]
     nport = evidence["nport"]
     enrichment = evidence["enrichment"]
+    brochure = evidence.get("brochure", {})
+
+    # Apply inception_date fallback on the detail object if missing
+    inception_fallback = evidence.get("inception_fallback")
+    if not detail.inception_date and inception_fallback:
+        detail.inception_date = inception_fallback
+
+    # Strategy fallback: if strategy_label is null, use style_label from N-PORT analysis
+    if not detail.strategy_label:
+        style_label = nport.get("fund_style", {}).get("style_label")
+        if style_label:
+            detail.strategy_label = style_label
 
     team = [
         TeamMember(
@@ -2009,14 +2214,16 @@ async def get_fund_fact_sheet(
             name=h["name"],
             cusip=h["cusip"],
             sector=h["sector"],
+            issuer_category=h.get("issuer_category"),
             pct_of_nav=h["pct_of_nav"],
             market_value=float(h["market_value"]) if h.get("market_value") else None,
         )
-        for h in nport.get("top_holdings", [])[:50]
+        for h in nport.get("top_holdings", [])[:10]
     ]
 
     return FundFactSheet(
         fund=detail,
+        extended_data=evidence["extended_data"],
         team=team,
         top_holdings=holdings,
         annual_returns=evidence["returns"],
@@ -2025,4 +2232,310 @@ async def get_fund_fact_sheet(
         prospectus_stats=evidence["stats"],
         share_classes=enrichment.get("share_classes", []),
         scoring_metrics=scoring_metrics,
+        strategy_narrative=brochure.get("item_8"),
+        firm_description=brochure.get("item_4"),
+        firm_website=_clean_website(adv.get("adv_website")),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Fund fact sheet — PDF export (Playwright)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.post(
+    "/catalog/{external_id}/fact-sheet/pdf",
+    summary="Generate fund fact-sheet PDF via Playwright",
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+async def generate_fund_fact_sheet_pdf(
+    external_id: str,
+    manager: str | None = Query(default=None, description="Manager CRD for back link"),
+    manager_name: str | None = Query(default=None, description="Manager name for back link"),
+    user: CurrentUser = Depends(get_current_user),
+) -> Any:
+    """Render the fund fact-sheet page to PDF via headless Chromium.
+
+    Navigates to the SvelteKit fund page and captures it as a pixel-perfect PDF.
+    """
+    from fastapi.responses import Response
+
+    from vertical_engines.wealth.pdf.html_renderer import url_to_pdf
+
+    # Build the frontend URL for this fund's fact sheet
+    frontend_base = "http://localhost:5175"
+    params = f"?manager={manager}&manager_name={manager_name}" if manager else ""
+    page_url = f"{frontend_base}/screener/fund/{external_id}{params}"
+
+    try:
+        pdf_bytes = await url_to_pdf(
+            page_url,
+            format="A4",
+            print_background=True,
+            margin_mm=6,
+        )
+    except Exception as exc:
+        logger.error("fund_fact_sheet_pdf_failed", external_id=external_id, error=str(exc), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"PDF generation failed: {exc}",
+        ) from exc
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="fact-sheet-{external_id}.pdf"',
+        },
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Fund share classes (Level 3 drill-down)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/funds/{external_id}/classes",
+    response_model=FundClassesResponse,
+    summary="Share classes for a specific registered fund",
+)
+@route_cache(ttl=300, key_prefix="screener:fund_classes", global_key=True)
+async def get_fund_classes(
+    external_id: str,
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> FundClassesResponse:
+    """Return share classes for a registered fund identified by CIK.
+
+    Queries sec_fund_classes by CIK (external_id for registered_us funds).
+    XBRL fractions (expense_ratio_pct, avg_annual_return_pct, portfolio_turnover_pct)
+    are stored as decimals — multiply by 100 for percentage display.
+    """
+    _require_investment_role(actor)
+
+    from app.shared.models import SecFundClass, SecRegisteredFund
+
+    # Get fund name from registered funds table
+    fund_row = (
+        await db.execute(
+            select(SecRegisteredFund.fund_name).where(SecRegisteredFund.cik == external_id)
+        )
+    ).scalar_one_or_none()
+
+    # Query share classes
+    rows = (
+        await db.execute(
+            select(SecFundClass)
+            .where(SecFundClass.cik == external_id)
+            .order_by(SecFundClass.class_name.asc())
+        )
+    ).scalars().all()
+
+    classes = [
+        ShareClassItem(
+            class_id=r.class_id,
+            class_name=r.class_name,
+            ticker=r.ticker,
+            expense_ratio_pct=float(r.expense_ratio_pct) if r.expense_ratio_pct is not None else None,
+            net_assets=float(r.net_assets) if r.net_assets is not None else None,
+            avg_annual_return_pct=float(r.avg_annual_return_pct) if r.avg_annual_return_pct is not None else None,
+            holdings_count=r.holdings_count,
+            portfolio_turnover_pct=float(r.portfolio_turnover_pct) if r.portfolio_turnover_pct is not None else None,
+            perf_inception_date=r.perf_inception_date,
+        )
+        for r in rows
+    ]
+
+    return FundClassesResponse(
+        external_id=external_id,
+        fund_name=fund_row,
+        classes=classes,
+        total_classes=len(classes),
+    )
+
+
+# ── Fast-Track Approval ─────────────────────────────────────────────
+
+
+class FastTrackRequest(BaseModel):
+    instrument_ids: list[uuid.UUID]
+
+
+class FastTrackResult(BaseModel):
+    approved: list[str]
+    rejected: list[dict[str, str]]
+    total_approved: int
+    total_rejected: int
+
+
+# Fund types eligible for quantitative fast-track (liquid + regulated).
+# Private, BDC, and closed-end require full DD.
+_FAST_TRACK_ELIGIBLE_UNIVERSES = {"registered_us", "etf", "money_market"}
+_FAST_TRACK_ELIGIBLE_SOURCES = {"esma"}  # UCITS funds
+
+
+@router.post(
+    "/fast-track-approval",
+    response_model=FastTrackResult,
+    summary="Bulk fast-track approval for liquid/regulated instruments",
+)
+async def fast_track_approval(
+    body: FastTrackRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    org_id: str = Depends(get_org_id),
+) -> FastTrackResult:
+    """Approve liquid/regulated instruments directly to the universe.
+
+    Eligible: ETFs, Mutual Funds, Money Market, UCITS.
+    Rejected: Private funds, BDCs, Closed-End (require full DD).
+    Creates or updates UniverseApproval with is_current=True, decision=approved.
+    """
+    _require_investment_role(actor)
+
+    if not body.instrument_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="instrument_ids must not be empty",
+        )
+    if len(body.instrument_ids) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Maximum 100 instruments per request",
+        )
+
+    # Fetch instruments and their org links
+    instruments_result = await db.execute(
+        select(
+            Instrument.instrument_id,
+            Instrument.name,
+            Instrument.attributes,
+        ).where(Instrument.instrument_id.in_(body.instrument_ids)),
+    )
+    instruments_map = {
+        row.instrument_id: row for row in instruments_result.all()
+    }
+
+    # Verify all instruments have org links (imported to this org)
+    org_links_result = await db.execute(
+        select(InstrumentOrg.instrument_id).where(
+            InstrumentOrg.instrument_id.in_(body.instrument_ids),
+        ),
+    )
+    linked_ids = {row.instrument_id for row in org_links_result.all()}
+
+    approved: list[str] = []
+    rejected: list[dict[str, str]] = []
+
+    for iid in body.instrument_ids:
+        inst = instruments_map.get(iid)
+        if not inst:
+            rejected.append({
+                "instrument_id": str(iid),
+                "reason": "Instrument not found",
+            })
+            continue
+
+        if iid not in linked_ids:
+            rejected.append({
+                "instrument_id": str(iid),
+                "reason": "Instrument not imported to your organization",
+            })
+            continue
+
+        # Determine eligibility from attributes
+        attrs = inst.attributes or {}
+        sec_universe = attrs.get("sec_universe")
+        source = attrs.get("source")
+
+        eligible = (
+            sec_universe in _FAST_TRACK_ELIGIBLE_UNIVERSES
+            or source in _FAST_TRACK_ELIGIBLE_SOURCES
+        )
+
+        if not eligible:
+            structure = attrs.get("structure") or sec_universe or source or "unknown"
+            rejected.append({
+                "instrument_id": str(iid),
+                "name": inst.name,
+                "reason": f"Requires full Due Diligence ({structure})",
+            })
+            continue
+
+        # Upsert UniverseApproval: mark previous as not current
+        existing = (await db.execute(
+            select(UniverseApproval).where(
+                UniverseApproval.instrument_id == iid,
+                UniverseApproval.organization_id == org_id,
+                UniverseApproval.is_current.is_(True),
+            ),
+        )).scalar_one_or_none()
+
+        if existing and existing.decision == "approved":
+            # Already approved — skip silently
+            approved.append(str(iid))
+            continue
+
+        if existing:
+            existing.is_current = False
+
+        approval = UniverseApproval(
+            instrument_id=iid,
+            organization_id=org_id,
+            analysis_report_id=None,
+            decision="approved",
+            rationale="Auto-approved via Quantitative Fast-Track",
+            created_by=actor.actor_id,
+            decided_by=actor.actor_id,
+            decided_at=datetime.now(UTC),
+            is_current=True,
+        )
+        db.add(approval)
+
+        # Also update InstrumentOrg approval_status
+        from sqlalchemy import update as sa_update
+        await db.execute(
+            sa_update(InstrumentOrg)
+            .where(
+                InstrumentOrg.instrument_id == iid,
+                InstrumentOrg.organization_id == org_id,
+            )
+            .values(approval_status="approved"),
+        )
+
+        approved.append(str(iid))
+
+    await db.commit()
+
+    if approved:
+        from app.core.db.audit import write_audit_event
+        await write_audit_event(
+            db,
+            actor_id=actor.actor_id,
+            action="universe.fast_track_approval",
+            entity_type="UniverseApproval",
+            entity_id=",".join(approved[:10]),
+            before={"count": len(approved)},
+            after={
+                "decision": "approved",
+                "rationale": "Auto-approved via Quantitative Fast-Track",
+                "instrument_ids": approved,
+            },
+        )
+        await db.commit()
+
+    logger.info(
+        "fast_track_approval",
+        approved_count=len(approved),
+        rejected_count=len(rejected),
+        actor=actor.actor_id,
+        org_id=org_id,
+    )
+
+    return FastTrackResult(
+        approved=approved,
+        rejected=rejected,
+        total_approved=len(approved),
+        total_rejected=len(rejected),
     )

@@ -34,6 +34,7 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
     )
     from app.domains.wealth.workers.drift_check import run_drift_check
     from app.domains.wealth.workers.esma_ingestion import run_esma_ingestion
+    from app.domains.wealth.workers.fast_track_eviction import run_fast_track_eviction
     from app.domains.wealth.workers.imf_ingestion import run_imf_ingestion
     from app.domains.wealth.workers.ingestion import run_ingestion
     from app.domains.wealth.workers.instrument_ingestion import run_instrument_ingestion
@@ -75,6 +76,7 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         "wealth_embedding": (run_wealth_embedding, "global", _BULK),
         "drift_check": (run_drift_check, "global", _LIGHT),
         "regime_fit": (run_regime_fit, "global", _LIGHT),
+        "fast_track_eviction": (run_fast_track_eviction, "global", _LIGHT),
         # ── Org-scoped workers (dispatched per active org) ────
         "ingestion": (run_ingestion, "org", _HEAVY),
         "instrument_ingestion": (run_instrument_ingestion, "global", _HEAVY),

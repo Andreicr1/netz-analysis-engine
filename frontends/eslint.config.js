@@ -1,7 +1,7 @@
 /**
  * Shared ESLint flat config for all Netz frontends.
  * Enforces formatter discipline: all number/date/currency formatting
- * must go through @netz/ui formatters.
+ * must go through @investintell/ui formatters.
  *
  * Install in each frontend: pnpm add -D eslint typescript-eslint
  * Then run: eslint src/
@@ -13,39 +13,39 @@ export const netzFormatterRules = [
 		files: ["**/*.{js,ts}"],
 		rules: {
 			/**
-			 * Ban raw number/date formatting APIs that bypass @netz/ui formatters.
-			 * Use formatNumber, formatCurrency, formatDate, formatDateTime, etc. from @netz/ui.
+			 * Ban raw number/date formatting APIs that bypass @investintell/ui formatters.
+			 * Use formatNumber, formatCurrency, formatDate, formatDateTime, etc. from @investintell/ui.
 			 */
 			"no-restricted-syntax": [
 				"error",
 				{
 					selector: "CallExpression[callee.property.name='toFixed']",
 					message:
-						"Use formatNumber() from @netz/ui instead of .toFixed(). " +
-						"@netz/ui formatters use Intl.NumberFormat with caching and EM-dash fallback.",
+						"Use formatNumber() from @investintell/ui instead of .toFixed(). " +
+						"@investintell/ui formatters use Intl.NumberFormat with caching and EM-dash fallback.",
 				},
 				{
 					selector: "CallExpression[callee.property.name='toLocaleString']",
 					message:
-						"Use formatNumber(), formatCurrency(), formatDate(), or formatDateTime() from @netz/ui " +
-						"instead of .toLocaleString(). @netz/ui formatters use Intl caching and consistent locale defaults.",
+						"Use formatNumber(), formatCurrency(), formatDate(), or formatDateTime() from @investintell/ui " +
+						"instead of .toLocaleString(). @investintell/ui formatters use Intl caching and consistent locale defaults.",
 				},
 				{
 					selector: "NewExpression[callee.object.name='Intl'][callee.property.name='NumberFormat']",
 					message:
 						"Do not instantiate Intl.NumberFormat directly. " +
-						"Use formatNumber(), formatCurrency(), formatPercent(), formatAUM(), etc. from @netz/ui.",
+						"Use formatNumber(), formatCurrency(), formatPercent(), formatAUM(), etc. from @investintell/ui.",
 				},
 				{
 					selector: "NewExpression[callee.object.name='Intl'][callee.property.name='DateTimeFormat']",
 					message:
 						"Do not instantiate Intl.DateTimeFormat directly. " +
-						"Use formatDate(), formatDateTime(), formatShortDate(), or formatDateRange() from @netz/ui.",
+						"Use formatDate(), formatDateTime(), formatShortDate(), or formatDateRange() from @investintell/ui.",
 				},
 			],
 
 			/**
-			 * Force formatter imports to come from @netz/ui, not from relative paths
+			 * Force formatter imports to come from @investintell/ui, not from relative paths
 			 * or reimplemented in domain packages.
 			 */
 			"no-restricted-imports": [
@@ -55,8 +55,8 @@ export const netzFormatterRules = [
 						{
 							regex: "\\.\\.?/.*format",
 							message:
-								"Import formatters from '@netz/ui', not from relative paths. " +
-								"Centralising formatters in @netz/ui ensures consistent locale and Intl caching.",
+								"Import formatters from '@investintell/ui', not from relative paths. " +
+								"Centralising formatters in @investintell/ui ensures consistent locale and Intl caching.",
 						},
 					],
 				},

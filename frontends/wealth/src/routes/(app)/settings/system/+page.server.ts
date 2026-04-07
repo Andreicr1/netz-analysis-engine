@@ -40,19 +40,20 @@ function toErrorMessage(error: unknown): string {
 }
 
 export const load: PageServerLoad = async ({ locals }) => {
-	const api = createServerApiClient(locals.token);
+	const token = locals.token as string;
+	const api = createServerApiClient(token);
 
 	const [servicesResult, workersResult, pipelinesResult] = await Promise.allSettled([
-		api.get("/admin/health/services"),
-		api.get("/admin/health/workers"),
-		api.get("/admin/health/pipelines"),
+		api.get<ServiceHealthRow[]>("/admin/health/services"),
+		api.get<WorkerStatusRow[]>("/admin/health/workers"),
+		api.get<PipelineStats>("/admin/health/pipelines"),
 	]);
 
-	const services = servicesResult.status === "fulfilled" ? (servicesResult.value as ServiceHealthRow[]) : [];
-	const workers = workersResult.status === "fulfilled" ? (workersResult.value as WorkerStatusRow[]) : [];
+	const services = servicesResult.status === "fulfilled" ? servicesResult.value : [];
+	const workers = workersResult.status === "fulfilled" ? workersResult.value : [];
 	const pipelines =
 		pipelinesResult.status === "fulfilled"
-			? (pipelinesResult.value as PipelineStats)
+			? pipelinesResult.value
 			: { docs_processed: 0, queue_depth: 0, error_rate: 0, checked_at: null };
 
 	const sectionErrors: SectionErrors = {
@@ -62,6 +63,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	};
 
 	return {
+		token,
 		services,
 		workers,
 		pipelines,

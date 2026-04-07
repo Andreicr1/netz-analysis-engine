@@ -1,5 +1,5 @@
 <script lang="ts">
-	import SimpleDialog from "./SimpleDialog.svelte";
+	import * as AlertDialog from "$lib/components/ui/alert-dialog";
 	import { Button } from "$lib/components/ui/button";
 
 	interface Props {
@@ -42,11 +42,13 @@
 	}
 </script>
 
-<SimpleDialog bind:open>
-	<div class="space-y-4">
-		<h2 class="text-lg font-semibold text-(--ii-text-primary)">{title}</h2>
-		<p class="text-sm text-(--ii-text-secondary)">{message}</p>
-		<div class="flex justify-end gap-3">
+<AlertDialog.Root bind:open>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{title}</AlertDialog.Title>
+			<AlertDialog.Description>{message}</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
 			<Button variant="outline" onclick={handleCancel} disabled={loading}>
 				{cancelLabel}
 			</Button>
@@ -59,6 +61,6 @@
 				{/if}
 				{confirmLabel}
 			</Button>
-		</div>
-	</div>
-</SimpleDialog>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

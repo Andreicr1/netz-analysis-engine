@@ -1,11 +1,16 @@
 # Local development stack — mirrors Milestone 2 production:
-# - PostgreSQL 16 + TimescaleDB + pgvector (timescale/timescaledb:latest-pg16)
+# - PostgreSQL 16 + TimescaleDB + pgvector (timescale/timescaledb-ha:pg16)
 # - Redis 7
 # No Azure services needed for local development.
 # Production: Timescale Cloud + Upstash Redis
+#
+# IMPORTANT: Use timescaledb-ha (not timescaledb) — the -ha variant bundles
+# pgvector. The non-ha image lacks it and init_db.sql fails silently.
+# After changing image for the first time:
+#   docker-compose down -v && docker-compose up -d && make migrate
 services:
   db:
-    image: timescale/timescaledb:latest-pg16
+    image: timescale/timescaledb-ha:pg16
     environment:
       POSTGRES_USER: netz
       POSTGRES_PASSWORD: password

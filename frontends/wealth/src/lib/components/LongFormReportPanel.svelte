@@ -5,6 +5,7 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { StatusBadge, Button, formatPercent } from "@investintell/ui";
+	import { Spinner } from "@investintell/ui/components/ui/spinner";
 	import { createClientApiClient } from "$lib/api/client";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -315,7 +316,7 @@
 						</span>
 						<span class="lfr-chapter-status">
 							{#if ch.status === "generating"}
-								<span class="lfr-spinner"></span> Generating&hellip;
+								<Spinner class="size-3" /> Generating&hellip;
 							{:else if ch.status === "completed" && ch.confidence !== null}
 								{formatPercent(ch.confidence)}
 							{:else if ch.status === "partial"}
@@ -465,22 +466,6 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	/* ── Spinner ─────────────────────────────────────────────────────── */
-	.lfr-spinner {
-		display: inline-block;
-		width: 12px;
-		height: 12px;
-		border: 2px solid var(--ii-border-subtle);
-		border-top-color: var(--ii-brand-primary);
-		border-radius: 50%;
-		animation: lfr-spin 0.8s linear infinite;
-	}
-
-	@keyframes lfr-spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
 
 	/* ── Footer ──────────────────────────────────────────────────────── */
 	.lfr-footer {

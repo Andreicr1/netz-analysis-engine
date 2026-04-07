@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { Drawer as DrawerPrimitive } from "vaul-svelte";
+	import type { Snippet } from "svelte";
 
-	let { ...restProps }: DrawerPrimitive.PortalProps = $props();
+	let { ...restProps }: { children?: Snippet } = $props();
 </script>
 
 <DrawerPrimitive.Portal {...restProps} />

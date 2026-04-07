@@ -12,6 +12,7 @@ venv/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.import_linter_cache/
 htmlcov/
 .coverage
 
@@ -19,18 +20,30 @@ htmlcov/
 node_modules/
 .svelte-kit/
 .output/
-dist/
+
+# Build artifacts
+**/build/
+**/dist/
+**/*.js.map
+**/*.css.map
+
+# Lock files (tracked by pnpm — not source code)
+pnpm-lock.yaml
 
 # Environment
 .env
+.env.dev
 .env.local
 .env.*.local
 .env.production
 .env.cloudflare
 frontends/**/.env
+backend/.env
+backend/.env.dev
 
 # IDE
 .vscode/
+.vscode_bkp/
 .idea/
 *.swp
 *.swo
@@ -72,3 +85,19 @@ tmp_*.json
 tmp_*.txt
 backend/tmp_*.json
 backend/tmp_*.txt
+
+# Large files that crash AI extensions
+*.dump
+*.sql
+*.parquet
+restore_log.txt
+
+# Deprecated infra (kept for reference but not indexed)
+infra/_deprecated/
+
+# Scratch / personal notes at repo root
+*.workspace.svelte.ts
+design dashboard figma.txt
+Inventário Completo*
+
+CLAUDE.md

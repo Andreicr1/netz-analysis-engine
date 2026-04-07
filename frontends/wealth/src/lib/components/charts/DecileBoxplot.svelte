@@ -27,45 +27,58 @@
         const fundData = metrics.map((m, i) => [i, m.value]);
 
         return {
-            title: { text: `Relative Performance: ${strategy}`, left: 'center', textStyle: { fontSize: 14, color: '#64748b' } },
-            tooltip: { trigger: 'item' },
-            grid: { left: '10%', right: '10%', bottom: '15%' },
+            title: { text: `Percentile Rank: ${strategy}`, left: 'center', top: 8, textStyle: { fontSize: 13, color: '#71717a' } },
+            tooltip: {
+                trigger: 'item',
+                backgroundColor: '#1e1e22',
+                borderColor: '#2a2a2e',
+                textStyle: { color: '#e4e4e7', fontSize: 12 },
+            },
+            grid: { left: 16, right: 16, bottom: 16, top: 48, containLabel: true },
             xAxis: {
                 type: 'category',
                 data: categories,
                 boundaryGap: true,
-                axisLabel: { color: '#64748b' }
+                axisLabel: { color: '#a1a1aa', fontSize: 12 },
+                axisLine: { lineStyle: { color: '#3f3f46' } },
+                axisTick: { show: false },
             },
             yAxis: {
                 type: 'value',
                 min: 0,
                 max: 100,
-                axisLabel: { formatter: '{value}th', color: '#64748b' },
-                splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } }
+                axisLabel: { formatter: '{value}th', color: '#71717a', fontSize: 11 },
+                splitLine: { lineStyle: { type: 'dashed', color: '#2a2a2e' } },
+                axisLine: { show: false },
+                axisTick: { show: false },
             },
             series: [
                 {
                     name: 'Peer Universe',
                     type: 'boxplot',
                     data: boxData,
-                    itemStyle: { color: '#f8fafc', borderColor: '#cbd5e1' },
-                    emphasis: { disabled: true }
+                    itemStyle: { color: 'rgba(255,255,255,0.03)', borderColor: '#3f3f46' },
+                    emphasis: { disabled: true },
                 },
                 {
                     name: 'This Fund',
                     type: 'scatter',
                     data: fundData,
-                    symbolSize: 12,
-                    itemStyle: { color: '#3b82f6', shadowBlur: 10, shadowColor: 'rgba(59, 130, 246, 0.5)' },
+                    symbolSize: 14,
+                    itemStyle: { color: '#0177fb', shadowBlur: 12, shadowColor: 'rgba(1, 119, 251, 0.5)' },
                     label: {
                         show: true,
                         position: 'top',
-                        formatter: (p: any) => `${p.value[1].toFixed(0)}%`,
-                        fontSize: 11,
-                        fontWeight: 'bold'
-                    }
-                }
-            ]
+                        formatter: (p: any) => {
+                            const v = Number(p.value?.[1]);
+                            return Number.isFinite(v) ? `${v.toFixed(0)}th` : "";
+                        },
+                        fontSize: 12,
+                        fontWeight: 'bold',
+                        color: '#fafafa',
+                    },
+                },
+            ],
         };
     });
 </script>

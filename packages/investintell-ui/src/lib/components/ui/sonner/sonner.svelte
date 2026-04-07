@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Toaster as Sonner, type ToasterProps as SonnerProps } from "svelte-sonner";
 	import { mode } from "mode-watcher";
-	import { SpinnerGap as Loader2Icon, CheckCircle as CircleCheckIcon, XCircle as OctagonXIcon, Info as InfoIcon, Warning as TriangleAlertIcon } from 'phosphor-svelte';
+	import { Loader2 as Loader2Icon, CircleCheck as CircleCheckIcon, CircleX as OctagonXIcon, Info as InfoIcon, TriangleAlert as TriangleAlertIcon } from 'lucide-svelte';
 
 	let { ...restProps }: SonnerProps = $props();
 </script>

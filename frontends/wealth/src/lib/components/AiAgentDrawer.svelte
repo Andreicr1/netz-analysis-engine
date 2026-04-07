@@ -5,7 +5,9 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { X, Robot, PaperPlaneRight, SpinnerGap, FileText } from "phosphor-svelte";
+	import { X, Bot, SendHorizonal, FileText } from "lucide-svelte";
+	import { Spinner } from "@investintell/ui/components/ui/spinner";
+	import * as Sheet from "@investintell/ui/components/ui/sheet";
 
 	interface Props {
 		open: boolean;
@@ -232,25 +234,25 @@
 	}
 </script>
 
-{#if open}
-	<!-- Backdrop -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="agent-backdrop" onkeydown={() => {}} onclick={onclose}></div>
-
-	<aside class="agent-drawer">
+<Sheet.Root {open} onOpenChange={(v) => { if (!v) onclose(); }}>
+	<Sheet.Content side="right" class="w-[420px] max-w-full sm:max-w-[420px] flex flex-col p-0 gap-0" showCloseButton={false}>
 		<!-- Header -->
 		<header class="agent-header">
 			<div class="agent-header-title">
-				<Robot size={18} weight="light" />
+				<Bot size={18} />
 				<span>AI Assistant</span>
 			</div>
 			<div class="agent-header-actions">
 				<button class="agent-icon-btn" type="button" title="New chat" onclick={resetChat}>
-					<FileText size={15} weight="light" />
+					<FileText size={15} />
 				</button>
-				<button class="agent-icon-btn" type="button" title="Close" onclick={onclose}>
-					<X size={18} weight="light" />
-				</button>
+				<Sheet.Close>
+					{#snippet child({ props })}
+						<button class="agent-icon-btn" type="button" title="Close" {...props}>
+							<X size={18} />
+						</button>
+					{/snippet}
+				</Sheet.Close>
 			</div>
 		</header>
 
@@ -258,7 +260,7 @@
 		<div class="agent-messages" bind:this={chatContainer}>
 			{#if messages.length === 0}
 				<div class="agent-empty">
-					<Robot size={32} weight="thin" class="agent-empty-icon" />
+					<Bot size={32} class="agent-empty-icon" />
 					<p class="agent-empty-title">Wealth AI Assistant</p>
 					<p class="agent-empty-desc">
 						Ask about funds, managers, DD reports, portfolios, or macro analysis.
@@ -274,7 +276,7 @@
 							<div class="agent-tools">
 								{#each msg.toolCalls.filter(tc => tc.status === "running") as tc (tc.tool)}
 									<div class="agent-tool running">
-										<SpinnerGap size={12} weight="bold" class="agent-tool-spin" />
+										<Spinner class="size-3" />
 										<span>{tc.detail}</span>
 									</div>
 								{/each}
@@ -286,7 +288,7 @@
 							<div class="agent-msg-text">{msg.content}</div>
 						{:else if msg.isStreaming}
 							<div class="agent-msg-text agent-msg-text--loading">
-								<SpinnerGap size={14} weight="bold" class="agent-tool-spin" />
+								<Spinner class="size-3.5" />
 								<span>Thinking…</span>
 							</div>
 						{/if}
@@ -299,7 +301,7 @@
 									<span class="agent-citations-label">Sources</span>
 									{#each documentedCites as cite (cite.chunk_id)}
 										<div class="agent-citation" title={cite.excerpt}>
-											<FileText size={11} weight="light" />
+											<FileText size={11} />
 											<span>{citationLabel(cite.chunk_id)}</span>
 										</div>
 									{/each}
@@ -336,42 +338,14 @@
 					disabled={isLoading || !inputText.trim()}
 					title="Send"
 				>
-					<PaperPlaneRight size={16} weight="light" />
+					<SendHorizonal size={16} />
 				</button>
 			</div>
 		</div>
-	</aside>
-{/if}
+	</Sheet.Content>
+</Sheet.Root>
 
 <style>
-	.agent-backdrop {
-		position: fixed;
-		inset: 0;
-		background: rgba(0, 0, 0, 0.2);
-		z-index: 900;
-	}
-
-	.agent-drawer {
-		position: fixed;
-		top: 0;
-		right: 0;
-		width: 420px;
-		max-width: 100vw;
-		height: 100vh;
-		display: flex;
-		flex-direction: column;
-		background: var(--ii-surface-elevated, #fff);
-		border-left: 1px solid var(--ii-border-subtle);
-		box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
-		z-index: 950;
-		animation: slideIn 200ms cubic-bezier(0, 0, 0.2, 1);
-	}
-
-	@keyframes slideIn {
-		from { transform: translateX(100%); }
-		to { transform: translateX(0); }
-	}
-
 	/* Header */
 	.agent-header {
 		display: flex;
@@ -501,18 +475,6 @@
 
 	.agent-tool.running { color: var(--ii-brand-highlight, #3b82f6); }
 
-	.agent-tool :global(.agent-tool-spin) {
-		animation: spin 1s linear infinite;
-	}
-
-	:global(.agent-tool-spin) {
-		animation: spin 1s linear infinite;
-	}
-
-	@keyframes spin {
-		from { transform: rotate(0deg); }
-		to { transform: rotate(360deg); }
-	}
 
 	/* Citations */
 	.agent-citations {

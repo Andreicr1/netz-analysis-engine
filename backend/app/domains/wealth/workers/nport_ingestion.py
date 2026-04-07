@@ -90,11 +90,15 @@ async def run_nport_ingestion(months: int = 12) -> dict[str, Any]:
                         error=str(exc),
                     )
 
+            # Best-effort GICS sector enrichment for equity holdings
+            enriched = await _enrich_nport_sectors(db)
+
             summary = {
                 "status": "completed",
                 "managers": len(ciks),
                 "holdings": total_holdings,
                 "errors": errors,
+                "sectors_enriched": enriched,
             }
             logger.info("nport_ingestion_complete", **summary)
             return summary
@@ -124,6 +128,69 @@ async def _get_ciks_from_registered_funds(db: AsyncSession) -> list[str]:
         # Table may not exist yet (pre-migration)
         logger.debug("sec_registered_funds_query_failed", error=str(exc))
         return []
+
+
+_EQUITY_ASSET_CATS = {"EC", "EP"}
+_ENRICHMENT_BATCH = 500
+
+
+async def _enrich_nport_sectors(db: AsyncSession) -> int:
+    """Best-effort GICS sector enrichment for equity holdings without sector.
+
+    Uses the same 3-tier resolve_sector() cascade as 13F (SIC → OpenFIGI →
+    keyword heuristic).  Only processes equity holdings (EC/EP) whose
+    ``sector`` is still a raw issuerCat code (CORP, RF, etc.) rather than
+    an enriched GICS sector.  Capped at ``_ENRICHMENT_BATCH`` CUSIPs per run
+    to respect external API rate limits.
+    """
+    try:
+        from data_providers.sec.shared import resolve_sector, run_in_sec_thread
+
+        # Find distinct equity CUSIPs with only raw issuerCat codes
+        result = await db.execute(
+            text("""
+                SELECT DISTINCT cusip, issuer_name
+                FROM sec_nport_holdings
+                WHERE asset_class IN ('EC', 'EP')
+                  AND (sector IS NULL
+                       OR sector IN ('CORP', 'UST', 'USGA', 'USGSE', 'NUSS',
+                                     'MUN', 'RF', 'PF', 'OTHER', 'EC', 'OT'))
+                LIMIT :lim
+            """),
+            {"lim": _ENRICHMENT_BATCH},
+        )
+        to_resolve = [(r[0], r[1] or "") for r in result.all()]
+
+        if not to_resolve:
+            return 0
+
+        enriched = 0
+        for cusip, issuer_name in to_resolve:
+            sector = await run_in_sec_thread(resolve_sector, cusip, issuer_name)
+            if not sector:
+                continue
+
+            await db.execute(
+                text("""
+                    UPDATE sec_nport_holdings
+                    SET sector = :sector
+                    WHERE cusip = :cusip
+                      AND asset_class IN ('EC', 'EP')
+                      AND (sector IS NULL
+                           OR sector IN ('CORP', 'UST', 'USGA', 'USGSE', 'NUSS',
+                                         'MUN', 'RF', 'PF', 'OTHER', 'EC', 'OT'))
+                """),
+                {"cusip": cusip, "sector": sector},
+            )
+            enriched += 1
+
+        await db.commit()
+        logger.info("nport_sector_enrichment_complete", enriched=enriched, attempted=len(to_resolve))
+        return enriched
+
+    except Exception as exc:
+        logger.warning("nport_sector_enrichment_failed", error=str(exc))
+        return 0
 
 
 async def _update_last_nport_date(db: AsyncSession, cik: str, report_date: str) -> None:

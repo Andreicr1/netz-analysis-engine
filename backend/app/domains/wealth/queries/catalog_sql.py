@@ -24,7 +24,9 @@ from sqlalchemy import (
     Table,
     Text,
     and_,
+    exists,
     func,
+    literal,
     literal_column,
     or_,
     select,
@@ -72,6 +74,21 @@ mv_unified_funds = Table(
     Column("is_fund_of_fund", Boolean),
 )
 
+sec_managers = Table(
+    "sec_managers",
+    _meta,
+    Column("crd_number", Text, primary_key=True),
+    Column("aum_total", Numeric),
+)
+
+instruments_universe = Table(
+    "instruments_universe",
+    _meta,
+    Column("instrument_id", Text, primary_key=True),
+    Column("ticker", Text),
+    Column("isin", Text),
+)
+
 sec_money_market_funds = Table(
     "sec_money_market_funds",
     _meta,
@@ -115,14 +132,18 @@ class CatalogFilters:
     has_aum: bool | None = None            # True = only funds with AUM > 0
     domicile: str | None = None
     manager: str | None = None            # text search on manager name
+    manager_id: str | None = None         # exact match on manager_id (CRD number)
     sort: str = "name_asc"               # name_asc | name_desc | aum_desc | aum_asc
     page: int = 1
     page_size: int = 50
 
+    in_universe: bool | None = None        # True = only funds present in instruments_universe (have real NAV data)
+
     # Prospectus-based filters (applied to registered_us + etf branches)
+    # User provides human percent (0.50 = 0.50%), DB stores fraction (0.005)
     max_expense_ratio: float | None = None      # e.g. 0.50 → ER ≤ 0.50%
-    min_return_1y: float | None = None          # e.g. 5.0 → avg_annual_return_1y ≥ 5%
-    min_return_10y: float | None = None         # e.g. 8.0 → avg_annual_return_10y ≥ 8%
+    min_return_1y: float | None = None          # e.g. 5.0 → return ≥ 5%
+    min_return_10y: float | None = None         # e.g. 8.0 → return ≥ 8%
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -259,7 +280,20 @@ def _build_base_stmt(f: CatalogFilters) -> Select[Any]:
     # 8. NAV (Ticker availability)
     if f.has_nav is True:
         conditions.append(mv_unified_funds.c.ticker.isnot(None))
-        
+
+    # 8b. In instruments_universe (real NAV data ingested)
+    if f.in_universe is True:
+        conditions.append(
+            exists(
+                select(instruments_universe.c.instrument_id).where(
+                    or_(
+                        instruments_universe.c.ticker == mv_unified_funds.c.ticker,
+                        instruments_universe.c.isin == mv_unified_funds.c.isin,
+                    ),
+                )
+            )
+        )
+
     # 9. Domicile
     if f.domicile:
         conditions.append(mv_unified_funds.c.domicile == f.domicile)
@@ -268,14 +302,21 @@ def _build_base_stmt(f: CatalogFilters) -> Select[Any]:
     if f.manager:
         escaped = _escape_ilike(f.manager)
         conditions.append(mv_unified_funds.c.manager_name.ilike(f"%{escaped}%"))
+
+    # 10b. Manager ID (exact CRD match)
+    if f.manager_id:
+        conditions.append(mv_unified_funds.c.manager_id == f.manager_id)
         
     # 11. Prospectus filters
     if f.max_expense_ratio is not None:
-        conditions.append(mv_unified_funds.c.expense_ratio_pct <= f.max_expense_ratio)
+        # User enters 0.50 (meaning 0.50%), DB stores 0.005
+        conditions.append(mv_unified_funds.c.expense_ratio_pct <= f.max_expense_ratio / 100.0)
     if f.min_return_1y is not None:
-        conditions.append(mv_unified_funds.c.avg_annual_return_1y >= f.min_return_1y)
+        # User enters 5.0 (meaning 5%), DB stores 0.05
+        conditions.append(mv_unified_funds.c.avg_annual_return_1y >= f.min_return_1y / 100.0)
     if f.min_return_10y is not None:
-        conditions.append(mv_unified_funds.c.avg_annual_return_10y >= f.min_return_10y)
+        # User enters 8.0 (meaning 8%), DB stores 0.08
+        conditions.append(mv_unified_funds.c.avg_annual_return_10y >= f.min_return_10y / 100.0)
 
     if conditions:
         stmt = stmt.where(and_(*conditions))
@@ -284,16 +325,40 @@ def _build_base_stmt(f: CatalogFilters) -> Select[Any]:
 
 
 def build_catalog_query(filters: CatalogFilters) -> Select[Any] | None:
-    """Build paginated query from mv_unified_funds."""
+    """Build paginated query from mv_unified_funds.
+
+    Series dedup: for registered_us funds with a ``series_id``, only the
+    share class with the lowest ``expense_ratio_pct`` is returned.  A
+    ``class_count`` window column tells the frontend how many share classes
+    exist for that series.
+    """
     base = _build_base_stmt(filters)
-    
-    # Map 'aum' column to 'aum_usd' for the frontend expectations if needed, 
-    # but the catalog response mapper handles it. 
-    # Actually, we should rename it in the select to match previous 'aum' name.
-    stmt = base.add_columns(func.count().over().label("_total"))
-    
-    # Alias aum_usd as aum for backward compatibility in the Select result
-    stmt = stmt.column(mv_unified_funds.c.aum_usd.label("aum"))
+
+    # ── Series dedup via ROW_NUMBER ──
+    # Partition key: series_id when present, else external_id (1:1 for
+    # private/ucits/mmf funds that have no series concept).
+    partition_key = func.coalesce(
+        mv_unified_funds.c.series_id, mv_unified_funds.c.external_id,
+    )
+
+    ranked = base.add_columns(
+        func.row_number().over(
+            partition_by=partition_key,
+            order_by=[
+                mv_unified_funds.c.expense_ratio_pct.asc().nullslast(),
+                mv_unified_funds.c.aum_usd.desc().nullslast(),
+            ],
+        ).label("_rn"),
+        func.count(literal(1)).over(
+            partition_by=partition_key,
+        ).label("class_count"),
+        mv_unified_funds.c.aum_usd.label("aum"),
+    ).subquery("ranked")
+
+    deduped = select(ranked).where(ranked.c._rn == 1)
+
+    # Pagination + total
+    stmt = deduped.add_columns(func.count().over().label("_total"))
 
     sort_expr: ColumnElement[Any] = literal_column(_SORT_MAP.get(filters.sort, "name ASC"))
     offset = (filters.page - 1) * filters.page_size
@@ -304,6 +369,64 @@ def build_catalog_query(filters: CatalogFilters) -> Select[Any] | None:
         .offset(offset)
         .limit(filters.page_size)
     )
+
+
+_MANAGER_SORT_MAP = {
+    "name_asc": "manager_name ASC NULLS LAST",
+    "name_desc": "manager_name DESC NULLS FIRST",
+    "aum_desc": "total_aum DESC NULLS LAST",
+    "aum_asc": "total_aum ASC NULLS LAST",
+    "funds_desc": "fund_count DESC",
+    "funds_asc": "fund_count ASC",
+}
+
+
+def build_manager_catalog_query(filters: CatalogFilters) -> Select[Any]:
+    """Group funds by manager_id, join sec_managers for official AUM.
+
+    Uses sec_managers.aum_total (Form ADV Q5F2C) instead of summing
+    fund-level AUM which double-counts share classes and fund-of-funds.
+    fund_count uses DISTINCT series_id to count actual funds, not classes.
+    Only returns managers that have a non-null manager_id (registered advisers).
+    """
+    base = _build_base_stmt(filters)
+
+    # Force filter: only rows with a manager
+    base = base.where(mv_unified_funds.c.manager_id.isnot(None))
+
+    sub = base.subquery("filtered")
+
+    grouped = select(
+        sub.c.manager_id,
+        func.max(sub.c.manager_name).label("manager_name"),
+        func.count(func.distinct(func.coalesce(
+            sub.c.series_id, sub.c.external_id,
+        ))).label("fund_count"),
+        func.array_agg(func.distinct(sub.c.fund_type)).label("fund_types"),
+    ).group_by(sub.c.manager_id).having(
+        # Only managers with at least one fund with ticker (tradeable via YFinance)
+        func.count(sub.c.ticker) > 0,
+    ).subquery("grouped")
+
+    # JOIN sec_managers for official AUM (Form ADV)
+    joined = select(
+        grouped,
+        sec_managers.c.aum_total.label("total_aum"),
+    ).outerjoin(
+        sec_managers, grouped.c.manager_id == sec_managers.c.crd_number,
+    ).subquery("joined")
+
+    # Pagination + windowed total
+    stmt = select(joined).add_columns(
+        func.count().over().label("_total"),
+    )
+
+    sort_expr: ColumnElement[Any] = literal_column(
+        _MANAGER_SORT_MAP.get(filters.sort, "manager_name ASC NULLS LAST"),
+    )
+    offset = (filters.page - 1) * filters.page_size
+
+    return stmt.order_by(sort_expr).offset(offset).limit(filters.page_size)
 
 
 def build_catalog_facets_query(filters: CatalogFilters) -> Select[Any] | None:
@@ -321,6 +444,7 @@ def build_catalog_facets_query(filters: CatalogFilters) -> Select[Any] | None:
         has_aum=filters.has_aum,
         domicile=filters.domicile,
         manager=filters.manager,
+        manager_id=filters.manager_id,
         page=1,
         page_size=1_000_000,
     )

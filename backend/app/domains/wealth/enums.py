@@ -22,3 +22,4 @@ class UniverseDecision(str, Enum):
     approved = "approved"
     watchlist = "watchlist"
     rejected = "rejected"
+    revoked = "revoked"  # automated eviction (e.g. fast-track score deterioration)

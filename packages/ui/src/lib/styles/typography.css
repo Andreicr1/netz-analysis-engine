@@ -1,6 +1,6 @@
 /* ============================================================
  * Netz Design Tokens - Typography
- * Thunder Client exact measurements (getComputedStyle).
+ * Synced with Figma "investintell" Variables.
  * ============================================================ */
 
 @import "@fontsource/ibm-plex-sans/400.css";
@@ -11,9 +11,9 @@
 @import "@fontsource/ibm-plex-mono/500.css";
 
 :root {
-	/* Font families */
-	--netz-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-	--netz-font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Monaco, monospace;
+	/* Font families — Figma: Urbanist (Font 1), Geist Mono (Font 4) */
+	--netz-font-sans: "Urbanist Variable", "Urbanist", ui-sans-serif, system-ui, sans-serif;
+	--netz-font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
 
 	/* Font feature settings — TC style */
 	--netz-font-features: "rlig" 1, "calt" 1, "ss01" 1;
@@ -25,16 +25,16 @@
 	--netz-text-md: 15px;       /* nav items sidebar */
 	--netz-text-lg: 20px;       /* subtítulos menores */
 
-	/* Heading sizes — TC exact (px from getComputedStyle) */
-	--netz-text-h1: 30.4px;
-	--netz-text-h2: 27.2px;
+	/* Heading sizes — Figma font size tokens */
+	--netz-text-h1: 32px;
+	--netz-text-h2: 27px;
 	--netz-text-h3: 24px;
 	--netz-text-h4: 1.125rem;
 	--netz-text-h5: 1rem;
 	--netz-text-h6: 0.9375rem;
 
-	/* Display (hero / marketing — larger than H1) */
-	--netz-text-display: clamp(2.5rem, 2.1rem + 1.8vw, 3.25rem);
+	/* Display (hero / marketing — larger than H1, Figma: 48px) */
+	--netz-text-display: clamp(2.5rem, 2.1rem + 1.8vw, 3rem);
 
 	/* Body sizes */
 	--netz-text-body-lg: 1rem;
@@ -105,8 +105,8 @@
 /* ── Component tokens — theme-specific ── */
 
 [data-theme="light"], :root {
-	--netz-link-color: #006be6;
-	--netz-link-hover-color: #0055c8;
+	--netz-link-color: #0177fb;
+	--netz-link-hover-color: #0166d9;
 	--netz-code-bg: rgba(147, 141, 189, 0.23);
 	--netz-code-border: rgba(0, 0, 0, 0.04);
 	--netz-kbd-bg: #fafafa;
@@ -114,8 +114,8 @@
 }
 
 [data-theme="dark"] {
-	--netz-link-color: #60b0ff;
-	--netz-link-hover-color: #90c8ff;
+	--netz-link-color: #3b9bff;
+	--netz-link-hover-color: #0177fb;
 	--netz-code-bg: rgba(147, 141, 189, 0.15);
 	--netz-code-border: rgba(255, 255, 255, 0.06);
 	--netz-kbd-bg: #1e1e1e;

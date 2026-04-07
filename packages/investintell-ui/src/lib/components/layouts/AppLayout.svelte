@@ -12,7 +12,6 @@
 	import Toast from "../analytical/Toast.svelte";
 	import TopNav from "./TopNav.svelte";
 	import ContextSidebar from "./ContextSidebar.svelte";
-	import ThemeToggle from "../analytical/ThemeToggle.svelte";
 	import { injectBranding, startSessionExpiryMonitor, setConflictHandler, setAuthRedirectHandler } from "../../utils/index.js";
 	import type { NavItem, BrandingConfig, ContextNav } from "../../utils/types.js";
 	import { goto, invalidateAll } from "$app/navigation";
@@ -91,29 +90,37 @@
 </script>
 
 <ErrorBoundary>
-	<div class="ii-app-layout">
-		<TopNav
-			items={navItems}
-			{appName}
-			activeHref={$page.url.pathname}
-			{logo}
-		>
-			{#snippet trailing()}
-				{#if trailingSnippet}
-					{@render trailingSnippet()}
-				{/if}
-				<ThemeToggle />
-			{/snippet}
-		</TopNav>
+	<div class="flex h-screen w-screen bg-black overflow-hidden font-sans text-white">
 
-		<div class="ii-app-layout__body">
-			{#if contextNav}
-				<ContextSidebar {contextNav} />
-			{/if}
+		<!-- Sidebar -->
+		{#if contextNav}
+			<ContextSidebar {contextNav} />
+		{/if}
 
-			<main class="ii-app-layout__main">
-				{@render children()}
-			</main>
+		<!-- Right column: TopNav + Content -->
+		<div class="flex flex-1 flex-col h-full overflow-hidden bg-black">
+
+			<TopNav
+				items={navItems}
+				{appName}
+				activeHref={$page.url.pathname}
+				{logo}
+			>
+				{#snippet trailing()}
+					{#if trailingSnippet}
+						{@render trailingSnippet()}
+					{/if}
+				{/snippet}
+			</TopNav>
+
+			<!-- Content panel with black breathing room -->
+			<div class="flex-1 flex overflow-hidden bg-black p-4 pb-6 pr-6">
+				<main class="flex-1 bg-[#1a1b20] rounded-tl-[32px] rounded-br-[32px] overflow-y-auto p-8 shadow-2xl relative border border-white/5">
+					<div class="mx-auto h-full max-w-screen-2xl">
+						{@render children()}
+					</div>
+				</main>
+			</div>
 		</div>
 	</div>
 </ErrorBoundary>
@@ -147,27 +154,3 @@
 	<Toast message={conflictMessage} type="warning" duration={4000} onDismiss={() => conflictMessage = null} />
 {/if}
 
-<style>
-	.ii-app-layout {
-		display: flex;
-		flex-direction: column;
-		height: 100vh;
-		width: 100vw;
-		overflow: hidden;
-	}
-
-	.ii-app-layout__body {
-		display: flex;
-		flex: 1;
-		min-height: 0;
-		overflow: hidden;
-	}
-
-	.ii-app-layout__main {
-		flex: 1;
-		overflow-y: auto;
-		overflow-x: hidden;
-		background: var(--ii-page-background, var(--ii-surface, #f9fafb));
-		min-width: 0;
-	}
-</style>

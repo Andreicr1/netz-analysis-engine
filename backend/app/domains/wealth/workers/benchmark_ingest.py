@@ -62,7 +62,13 @@ def _batch_download(tickers: list[str], start: str, end: str):
     )
 
 
-async def run_benchmark_ingest(lookback_days: int = 3650) -> dict[str, int | list[str]]:
+# Default lookback: ~15 years from today, capturing the full window since
+# 2007-01-01 (GFC, Taper Tantrum, COVID, 2022 rate shock). Stress-testing
+# engines require this depth — proxies were the previous workaround.
+DEFAULT_LOOKBACK_DAYS = 5475  # ~15y
+
+
+async def run_benchmark_ingest(lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> dict[str, int | list[str]]:
     """Fetch benchmark NAV for all active allocation blocks.
 
     Returns dict with blocks_updated, rows_upserted, stale_blocks, skipped_tickers.
@@ -120,6 +126,11 @@ async def _do_ingest(db, lookback_days: int) -> dict[str, int | list[str]]:
     # 3. Batch download with retry
     end_date = date.today()
     start_date = end_date - timedelta(days=lookback_days)
+    # Floor at 2007-01-01 — guarantees GFC 2008 + Taper Tantrum 2013 in the
+    # window even if lookback_days is mis-configured short.
+    _GFC_FLOOR = date(2007, 1, 1)
+    if start_date > _GFC_FLOOR:
+        start_date = _GFC_FLOOR
     hist = None
 
     loop = asyncio.get_event_loop()

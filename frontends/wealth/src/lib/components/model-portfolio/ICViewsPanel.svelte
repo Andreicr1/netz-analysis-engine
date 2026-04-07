@@ -4,8 +4,9 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { formatPercent, formatDate } from "@investintell/ui";
+	import { formatPercent, formatDate, DatePicker } from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
+	import { Label } from "@investintell/ui/components/ui/label";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PortfolioView } from "$lib/types/model-portfolio";
 	import type { UniverseAsset } from "$lib/types/universe";
@@ -398,23 +399,19 @@
 
 					<!-- Effective from -->
 					<div class="form-field">
-						<label class="form-label" for="view-from">Valid From</label>
-						<input
-							id="view-from"
-							type="date"
-							class="form-input"
+						<Label for="view-from">Valid From</Label>
+						<DatePicker
 							bind:value={formEffectiveFrom}
+							placeholder="Select start date"
 						/>
 					</div>
 
 					<!-- Effective to -->
 					<div class="form-field">
-						<label class="form-label" for="view-to">Valid To (optional)</label>
-						<input
-							id="view-to"
-							type="date"
-							class="form-input"
+						<Label for="view-to">Valid To (optional)</Label>
+						<DatePicker
 							bind:value={formEffectiveTo}
+							placeholder="Select end date"
 						/>
 					</div>
 

@@ -1,5 +1,7 @@
-/* Import @investintell/ui design tokens + base reset */
+/* Import @investintell/ui design tokens + base reset (--ii-* tokens) */
 @import "@investintell/ui/styles";
+/* Shared InvestIntell theme — provides --netz-* tokens for @netz/ui admin components */
+@import "../../../packages/ui/src/lib/styles/investintell-theme.css";
 @import "tailwindcss";
 
 /* ── Content sources (replaces tailwind.config content[]) ── */
@@ -12,6 +14,6 @@
 	--color-ii-accent: var(--ii-brand-accent);
 	--color-ii-surface: var(--ii-surface);
 	--color-ii-muted: var(--ii-text-muted);
-	--font-sans: var(--ii-font-sans), "IBM Plex Sans", system-ui, sans-serif;
-	--font-mono: var(--ii-font-mono), "IBM Plex Mono", monospace;
+	--font-sans: var(--ii-font-sans), "Inter", system-ui, sans-serif;
+	--font-mono: var(--ii-font-mono), "Geist Mono", "Menlo", monospace;
 }

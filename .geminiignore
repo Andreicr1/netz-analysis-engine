@@ -1,0 +1,92 @@
+# Gemini CLI Ignore Patterns
+# Mirrors and extends .gitignore to keep the agent focused on code and architecture.
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.import_linter_cache/
+htmlcov/
+.coverage
+
+# Node
+node_modules/
+.svelte-kit/
+.output/
+
+# Build artifacts
+**/build/
+**/dist/
+**/*.js.map
+**/*.css.map
+
+# Lock files (Do not index these as code)
+pnpm-lock.yaml
+package-lock.json
+
+# Environment
+.env
+.env.dev
+.env.local
+.env.*.local
+.env.production
+.env.cloudflare
+frontends/**/.env
+backend/.env
+backend/.env.dev
+
+# IDE and OS
+.vscode/
+.vscode_bkp/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Docker and Data
+pgdata/
+.data/
+backend/.data/
+Deals/
+scripts/
+!backend/scripts/
+backend/scripts/db_inventory_output.txt
+
+# Project Artifacts
+.claude/
+CLAUDE.md
+**/.turbo/
+**/.codex-*.txt
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# Large files and Binary (Strict Ignore)
+*.dump
+*.sql
+*.parquet
+*.exe
+cloudflared.exe
+restore_log.txt
+
+# Deprecated/Temporary
+infra/_deprecated/
+tmp_*.py
+tmp_*.json
+tmp_*.txt
+backend/tmp_*.json
+backend/tmp_*.txt
+
+# Specific to Gemini (Uncomment if you want to hide GEMINI.md from the agent's file list, though not recommended)
+# GEMINI.md

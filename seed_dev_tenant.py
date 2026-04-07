@@ -37,6 +37,9 @@ from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.instrument_org import InstrumentOrg
 
+# Lookup: block_id → ISIN (for building fund_selection_schema)
+_BLOCK_TO_ISIN: dict[str, str] = {}  # populated after INSTRUMENTS is defined
+
 DEV_ORG_ID = uuid.UUID("e28fc30c-9d6d-4b21-8e91-cad8696b44fa")
 ORG_ID: uuid.UUID = DEV_ORG_ID  # overridden by --clerk-org
 # Deterministic namespace for uuid5 — stable IDs across re-runs
@@ -67,6 +70,38 @@ INSTRUMENTS = [
     ("alt_gold",         "fund", "SPDR Gold Shares",                  "US78463V1070", "GLD", "global",        "alternatives", "USD"),
     ("cash",             "fund", "iShares Short Treasury Bond ETF",   "US4642886265", "SHV", "north_america", "cash",         "USD"),
 ]
+
+# Build block→ISIN lookup from INSTRUMENTS
+for _blk, _itype, _name, _isin, _ticker, *_ in INSTRUMENTS:
+    _BLOCK_TO_ISIN[_blk] = _isin
+
+
+def _build_fund_selection(profile: str, weights: dict[str, float]) -> dict:
+    """Build fund_selection_schema JSONB matching backend SelectionSchema format."""
+    funds = []
+    for block_id, weight in weights.items():
+        isin = _BLOCK_TO_ISIN[block_id]
+        inst_id = _det_id(isin)
+        # Find instrument name from INSTRUMENTS list
+        name = next(n for b, _, n, i, *_ in INSTRUMENTS if b == block_id)
+        funds.append({
+            "instrument_id": str(inst_id),
+            "fund_name": name,
+            "block_id": block_id,
+            "instrument_type": "etf",
+            "weight": weight,
+            "score": 0,
+        })
+    return {
+        "profile": profile,
+        "total_weight": round(sum(weights.values()), 4),
+        "optimization": {
+            "status": "seed_strategic_weights",
+            "solver": "seed",
+        },
+        "funds": funds,
+    }
+
 
 PROFILES = {
     "conservative": {

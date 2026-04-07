@@ -74,7 +74,7 @@
                                     {h.holder_type.toUpperCase()}
                                 </span>
                             </td>
-                            <td class="r rl-weight">{h.weight_pct ? formatPercent(h.weight_pct / 100) : "—"}</td>
+                            <td class="r rl-weight">{h.weight_pct ? formatPercent(h.weight_pct) : "—"}</td>
                             <td class="r rl-value">{h.market_value ? formatCompact(h.market_value) : "—"}</td>
                             <td class="r rl-date">{h.report_date ? formatDate(h.report_date) : "—"}</td>
                         </tr>

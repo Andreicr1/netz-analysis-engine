@@ -1,307 +1,90 @@
-/* 
-  Fact Sheet CSS — Professional Financial Styling 
-  Optimized for screen and high-quality PDF print.
+/*
+  Fact Sheet CSS — Minimal overrides for print and chart containers.
+  All layout styling uses Tailwind utilities in the Svelte template.
+  Tokens via @investintell/ui (--ii-* CSS custom properties).
 */
 
-.fs-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 40px;
-    background: #fff;
-    color: #1d293d;
-    font-family: var(--ii-font-sans, "Inter", sans-serif);
-}
-
-/* ── Header ── */
-.fs-header {
-    border-bottom: 2px solid #e2e8f0;
-    padding-bottom: 24px;
-    margin-bottom: 32px;
-}
-
-.fs-header-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 24px;
-}
-
-.fs-universe-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    background: #f1f5f9;
-    color: #64748b;
-    font-size: 10px;
-    font-weight: 700;
-    border-radius: 4px;
-    letter-spacing: 0.5px;
-    margin-bottom: 8px;
-}
-
-.fs-fund-name {
-    margin: 0;
-    font-size: 28px;
-    font-weight: 800;
-    line-height: 1.2;
-    color: #0f172a;
-}
-
-.fs-ticker {
-    display: inline-block;
-    font-family: var(--ii-font-mono, monospace);
-    font-size: 16px;
-    font-weight: 700;
-    color: #3b82f6;
-    background: #eff6ff;
-    padding: 2px 8px;
-    border-radius: 4px;
-    margin-top: 8px;
-}
-
-.fs-manager-box {
-    text-align: right;
-}
-
-.fs-mgr-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.fs-mgr-name {
-    font-size: 18px;
-    font-weight: 700;
-    color: #334155;
-    margin-top: 4px;
-}
-
-.fs-mgr-id {
-    font-size: 12px;
-    color: #94a3b8;
-}
-
-/* ── Quick Stats ── */
-.fs-quick-stats {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 16px;
-    background: #f8fafc;
-    padding: 20px;
-    border-radius: 12px;
-}
-
-.fs-stat {
-    display: flex;
-    flex-direction: column;
-}
-
-.fs-stat-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: #64748b;
-    text-transform: uppercase;
-    margin-bottom: 4px;
-}
-
-.fs-stat-val {
-    font-size: 16px;
-    font-weight: 700;
-    color: #0f172a;
-}
-
-/* ── Layout Grid ── */
-.fs-grid {
-    display: grid;
-    grid-template-columns: 2fr 0.85fr;
-    gap: 40px;
-}
-
-.fs-col-right {
-    position: sticky;
-    top: 80px;
-    align-self: start;
-    max-height: calc(100vh - 100px);
-    overflow-y: auto;
-}
-
-.fs-section {
-    margin-bottom: 40px;
-}
-
-.fs-section-title {
-    font-size: 16px;
-    font-weight: 700;
-    color: #334155;
-    border-left: 4px solid #3b82f6;
-    padding-left: 12px;
-    margin-bottom: 20px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* ── Tables ── */
-.fs-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.fs-table th {
-    text-align: left;
-    font-size: 11px;
-    font-weight: 600;
-    color: #94a3b8;
-    text-transform: uppercase;
-    padding: 8px 12px;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.fs-table td {
-    padding: 12px;
-    font-size: 13px;
-    border-bottom: 1px solid #f1f5f9;
-}
-
-.fs-table th.r, .fs-table td.r {
-    text-align: right;
-}
-
-.fs-table--compact td {
-    padding: 8px 12px;
-}
-
-.fs-mini-ticker {
-    font-size: 11px;
-    background: #f1f5f9;
-    padding: 2px 4px;
-    border-radius: 3px;
-}
-
-/* ── Performance ── */
-.fs-chart-wrap {
-    height: 320px;
-    background: #fff;
-    border: 1px solid #f1f5f9;
-    border-radius: 8px;
-    padding: 16px;
-}
-
-.fs-returns-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-    gap: 12px;
-}
-
-.fs-ret-card {
-    display: flex;
-    flex-direction: column;
+/* ── Back button — matches L2 ManagerDetailPanel ── */
+.fs-back {
+    display: inline-flex;
     align-items: center;
-    background: #f8fafc;
-    padding: 10px;
-    border-radius: 8px;
-}
-
-.fs-ret-year {
-    font-size: 11px;
-    font-weight: 600;
-    color: #64748b;
-}
-
-.fs-ret-val {
-    font-size: 14px;
-    font-weight: 700;
-    color: #10b981;
-}
-
-.fs-ret-val.neg {
-    color: #ef4444;
-}
-
-/* ── Team ── */
-.fs-team-card {
-    padding: 16px;
-    background: #f8fafc;
-    border-radius: 12px;
+    gap: 6px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #71717a;
+    font-size: 0.8125rem;
+    font-family: "Urbanist", sans-serif;
+    cursor: pointer;
+    transition: color 120ms ease;
     margin-bottom: 16px;
 }
 
-.fs-team-name {
-    font-size: 15px;
-    font-weight: 700;
-    color: #0f172a;
+.fs-back:hover {
+    color: #0177fb;
 }
 
-.fs-team-role {
-    font-size: 12px;
-    color: #3b82f6;
-    font-weight: 600;
-    margin-bottom: 8px;
+/* ── Scrollable body — custom scrollbar ── */
+.fs-body::-webkit-scrollbar { width: 6px; }
+.fs-body::-webkit-scrollbar-track { background: transparent; }
+.fs-body::-webkit-scrollbar-thumb { background: #2a2b33; border-radius: 3px; }
+.fs-body::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
+/* ── Chart containers need fixed height for ECharts ── */
+.fs-chart-wrap {
+    height: 320px;
+    border: 1px solid var(--ii-border-subtle);
+    border-radius: var(--ii-radius-md);
+    padding: 16px;
+    background: var(--ii-bg);
 }
 
-.fs-team-bio {
-    font-size: 12px;
-    line-height: 1.5;
-    color: #475569;
-    margin: 8px 0;
-}
-
-.fs-team-meta {
-    font-size: 11px;
-    font-style: italic;
-    color: #94a3b8;
-}
-
-/* ── Holdings ── */
-.fs-holding-btn {
-    background: none;
-    border: none;
-    padding: 0;
-    margin: 0;
-    text-align: left;
-    cursor: pointer;
-    color: inherit;
-    font-family: inherit;
-}
-
-.fs-holding-btn:hover .fs-holding-name {
-    color: #3b82f6;
-    text-decoration: underline;
-}
-
-.fs-holding-name {
-    font-weight: 600;
-    font-size: 13px;
-    transition: color 120ms ease;
-}
-
-.fs-holding-meta {
-    font-size: 11px;
-    color: #94a3b8;
-}
-
-.fs-holding-weight {
-    font-weight: 700;
+/* ── Tabular numbers for financial data ── */
+.fs-tabular {
     font-variant-numeric: tabular-nums;
-}
-
-.fs-no-data {
-    padding: 40px;
-    text-align: center;
-    color: #94a3b8;
-    background: #f8fafc;
-    border-radius: 8px;
-    font-size: 13px;
-    font-style: italic;
 }
 
 /* ── Print Styles ── */
 @media print {
-    body { background: #fff; }
-    .fs-container { width: 100%; padding: 0; }
-    .fs-grid { display: block; }
-    .fs-col-left, .fs-col-right { width: 100%; }
-    .fs-section { break-inside: avoid; }
-    .fs-header { border-bottom-width: 3px; }
-    .fs-print-hide { display: none !important; }
+    /* Switch to light tokens for paper */
+    .fs-container {
+        color-scheme: light;
+        background: white !important;
+        padding: 0 !important;
+    }
+
+    /* Apply light theme values for print */
+    .fs-container,
+    .fs-container * {
+        --ii-bg: #ffffff;
+        --ii-surface: #ffffff;
+        --ii-surface-alt: #f1f5f9;
+        --ii-text-primary: #0f172a;
+        --ii-text-secondary: #475569;
+        --ii-text-muted: #64748b;
+        --ii-brand-primary: #0177fb;
+        --ii-border-subtle: #e2e8f0;
+        --ii-border: #e2e8f0;
+        --ii-success: #1b9858;
+        --ii-danger: #ef4343;
+        color: var(--ii-text-primary);
+    }
+
+    .fs-no-print {
+        display: none !important;
+    }
+
+    .fs-section {
+        break-inside: avoid;
+    }
+
+    .fs-chart-wrap {
+        height: 260px;
+        border-color: var(--ii-border-subtle);
+    }
+
+    /* Collapse grid pairs to single column on print */
+    .fs-grid-pair {
+        grid-template-columns: 1fr !important;
+    }
 }

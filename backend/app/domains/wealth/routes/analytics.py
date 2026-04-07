@@ -19,7 +19,7 @@ from app.core.jobs.tracker import (
     register_job_owner,
 )
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
-from app.core.tenancy.middleware import get_db_with_rls
+from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.backtest import BacktestRun
 from app.domains.wealth.models.block import AllocationBlock
@@ -135,6 +135,7 @@ async def create_backtest(
     body: BacktestRequest,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
+    org_id: str = Depends(get_org_id),
 ) -> BacktestRunRead:
     _validate_profile(body.profile)
 
@@ -185,6 +186,7 @@ async def create_backtest(
             status = "failed"
 
     run = BacktestRun(
+        organization_id=org_id,
         profile=body.profile,
         params=body.params.model_dump(),
         status=status,
@@ -623,9 +625,18 @@ async def _resolve_profile_weights(
             detail=f"No strategic allocation found for profile '{profile}'",
         )
 
-    allocations = [r[0] for r in rows]
+    # Deduplicate by block_id — keep the latest effective_from per block
+    # (overlapping date ranges cause duplicates, e.g. today boundary)
+    seen: dict[str, tuple[StrategicAllocation, str]] = {}
+    for alloc, display_name in rows:
+        prev = seen.get(alloc.block_id)
+        if prev is None or alloc.effective_from > prev[0].effective_from:
+            seen[alloc.block_id] = (alloc, display_name)
+
+    deduped = list(seen.values())
+    allocations = [r[0] for r in deduped]
     block_ids = [a.block_id for a in allocations]
-    block_names = [r[1] for r in rows]
+    block_names = [r[1] for r in deduped]
     weights = np.array([float(a.target_weight) for a in allocations])
 
     # Normalize weights to sum to 1
@@ -730,6 +741,15 @@ async def get_factor_analysis(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Insufficient NAV data to compute factor analysis",
         )
+
+    # Align weights to returns matrix columns (fetch_returns_matrix may
+    # return fewer columns than block_ids if some blocks lack NAV data)
+    n_cols = returns_matrix.shape[1]
+    if len(weights) != n_cols:
+        weights = weights[:n_cols] if len(weights) > n_cols else np.pad(weights, (0, n_cols - len(weights)))
+        w_sum = weights.sum()
+        if w_sum > 0:
+            weights = weights / w_sum
 
     # Run PCA decomposition
     factor_result = decompose_factors(
@@ -885,16 +905,20 @@ async def run_monte_carlo_endpoint(
     ),
 )
 async def get_peer_group(
-    entity_id: uuid.UUID,
+    entity_id: str,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> PeerGroupResponse:
     from app.domains.wealth.models.risk import FundRiskMetrics
+    from app.domains.wealth.routes.entity_analytics import _resolve_entity_uuid
+
+    # Resolve catalog external_id to UUID
+    resolved_id = await _resolve_entity_uuid(db, entity_id)
 
     # Resolve entity name and strategy_label
     inst_row = await db.execute(
         select(Instrument.name, Instrument.attributes)
-        .where(Instrument.instrument_id == entity_id),
+        .where(Instrument.instrument_id == resolved_id),
     )
     inst = inst_row.one_or_none()
     if inst is None:
@@ -913,7 +937,7 @@ async def get_peer_group(
     # Fetch fund's latest risk metrics
     fund_row = await db.execute(
         select(FundRiskMetrics)
-        .where(FundRiskMetrics.instrument_id == entity_id)
+        .where(FundRiskMetrics.instrument_id == resolved_id)
         .order_by(FundRiskMetrics.calc_date.desc())
         .limit(1),
     )
@@ -933,7 +957,7 @@ async def get_peer_group(
         .where(
             Instrument.attributes["strategy_label"].as_string() == strategy_label,
             FundRiskMetrics.calc_date == fund_date,
-            FundRiskMetrics.instrument_id != entity_id,
+            FundRiskMetrics.instrument_id != resolved_id,
         )
     )
     peer_result = await db.execute(peer_stmt)
@@ -945,7 +969,7 @@ async def get_peer_group(
             select(FundRiskMetrics)
             .where(
                 FundRiskMetrics.calc_date == fund_date,
-                FundRiskMetrics.instrument_id != entity_id,
+                FundRiskMetrics.instrument_id != resolved_id,
                 FundRiskMetrics.sharpe_1y.isnot(None),
             )
             .limit(500)
@@ -978,7 +1002,7 @@ async def get_peer_group(
     )
 
     return PeerGroupResponse(
-        entity_id=entity_id,
+        entity_id=resolved_id,
         entity_name=entity_name,
         strategy_label=result.strategy_label,
         peer_count=result.peer_count,

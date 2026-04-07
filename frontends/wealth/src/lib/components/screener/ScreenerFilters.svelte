@@ -3,10 +3,11 @@
   with tab-specific inline filters. Stacked layout, no sidebar.
 -->
 <script lang="ts">
-  import "./screener.css";
+
   import { goto } from "$app/navigation";
   import type { ScreenerTab, ScreenerFacets } from "$lib/types/screening";
   import { EMPTY_FACETS } from "$lib/types/screening";
+  import { createDebouncedState } from "$lib/utils/reactivity";
 
   interface Props {
     activeTab: ScreenerTab;
@@ -14,32 +15,33 @@
     initParams: Record<string, string>;
   }
 
-  let { activeTab = "fund", facets = EMPTY_FACETS, initParams = {} }: Props = $props();
+  let { activeTab = "fund", facets = EMPTY_FACETS, initParams: _ip = {} }: Props = $props();
+  const ip = { ..._ip }; // one-time snapshot — filters are locally mutable
 
   // ── Shared state ──
-  let searchQ = $state(initParams.q ?? "");
-  let searchFundType = $state<string | null>(initParams.fund_type ?? null);
-  let searchAssetClass = $state<string | null>(initParams.asset_class ?? null);
-  let searchGeography = $state<string | null>(initParams.geography ?? null);
-  let searchManager = $state(initParams.manager ?? "");
-  let searchStrategy = $state<string | null>(initParams.strategy ?? null);
-  let aumMin = $state(initParams.aum_min ?? "");
+  let searchQ = $state(ip.q ?? "");
+  let searchFundType = $state<string | null>(ip.fund_type ?? null);
+  let searchAssetClass = $state<string | null>(ip.asset_class ?? null);
+  let searchGeography = $state<string | null>(ip.geography ?? null);
+  let searchManager = $state(ip.manager ?? "");
+  let searchStrategy = $state<string | null>(ip.strategy ?? null);
+  let aumMin = $state(ip.aum_min ?? "");
 
   // ── Equity filters ──
-  let eqSector = $state(initParams.sector ?? "");
-  let eqExchange = $state(initParams.exchange ?? "");
-  let eqMarketCapMin = $state(initParams.market_cap_min ?? "");
-  let eqPeMax = $state(initParams.pe_max ?? "");
-  let eqDivYieldMin = $state(initParams.div_yield_min ?? "");
+  let eqSector = $state(ip.sector ?? "");
+  let eqExchange = $state(ip.exchange ?? "");
+  let eqMarketCapMin = $state(ip.market_cap_min ?? "");
+  let eqPeMax = $state(ip.pe_max ?? "");
+  let eqDivYieldMin = $state(ip.div_yield_min ?? "");
 
   // ── ETF filters ──
-  let etfFundFamily = $state(initParams.fund_family ?? "");
-  let etfExpenseRatioMax = $state(initParams.expense_ratio_max ?? "");
+  let etfFundFamily = $state(ip.fund_family ?? "");
+  let etfExpenseRatioMax = $state(ip.expense_ratio_max ?? "");
 
   // ── Fixed Income filters ──
-  let bondAssetClass = $state(initParams.bond_asset_class ?? "");
-  let bondMaturityRange = $state(initParams.maturity_range ?? "");
-  let bondYtmMin = $state(initParams.ytm_min ?? "");
+  let bondAssetClass = $state(ip.bond_asset_class ?? "");
+  let bondMaturityRange = $state(ip.maturity_range ?? "");
+  let bondYtmMin = $state(ip.ytm_min ?? "");
 
   const TAB_CONFIG: { key: ScreenerTab; label: string }[] = [
     { key: "fund", label: "Funds" },
@@ -48,13 +50,22 @@
     { key: "etf", label: "ETF" },
   ];
 
-  // ── Debounce ──
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  // ── Debounce (300ms) — single signal triggers applyFilters ──
+  const debounceTrigger = createDebouncedState(0, 300);
+  let _lastApplied = 0;
 
   function debouncedApply() {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => applyFilters(), 300);
+    debounceTrigger.current = Date.now();
   }
+
+  // React to debounced trigger changing
+  $effect(() => {
+    const v = debounceTrigger.debounced;
+    if (v !== _lastApplied && v !== 0) {
+      _lastApplied = v;
+      applyFilters();
+    }
+  });
 
   function selectTab(tab: ScreenerTab) {
     // Reset tab-specific filters when switching
@@ -158,6 +169,7 @@
         type="text"
         placeholder="Search by name, ISIN, ticker, manager…"
         bind:value={searchQ}
+        oninput={debouncedApply}
         onkeydown={handleSearchKeydown}
       />
     </div>

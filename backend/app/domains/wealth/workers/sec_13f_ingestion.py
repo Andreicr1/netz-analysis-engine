@@ -135,6 +135,38 @@ async def run_sec_13f_ingestion(
                         error=str(exc),
                     )
 
+            # Post-ingestion: refresh sec_13f_manager_sector_latest MV
+            mv_refreshed = False
+            try:
+                logger.info("sec_13f_refreshing_sector_mv")
+                await db.execute(
+                    text(
+                        "REFRESH MATERIALIZED VIEW CONCURRENTLY "
+                        "sec_13f_manager_sector_latest"
+                    ),
+                )
+                await db.commit()
+                mv_refreshed = True
+                logger.info("sec_13f_sector_mv_refreshed")
+            except Exception:
+                await db.rollback()
+                # Fallback: non-concurrent refresh (slower but always works)
+                try:
+                    await db.execute(
+                        text(
+                            "REFRESH MATERIALIZED VIEW "
+                            "sec_13f_manager_sector_latest"
+                        ),
+                    )
+                    await db.commit()
+                    mv_refreshed = True
+                except Exception as mv_exc:
+                    await db.rollback()
+                    logger.warning(
+                        "sec_13f_sector_mv_refresh_failed",
+                        error=str(mv_exc),
+                    )
+
             summary = {
                 "status": "completed",
                 "managers": len(ciks),
@@ -142,6 +174,7 @@ async def run_sec_13f_ingestion(
                 "diffs": total_diffs,
                 "sectors_enriched": total_enriched,
                 "errors": errors,
+                "mv_sector_latest_refreshed": mv_refreshed,
             }
             logger.info("sec_13f_ingestion_complete", **summary)
             return summary

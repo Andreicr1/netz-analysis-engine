@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
-	import { CaretRight as ChevronRightIcon } from 'phosphor-svelte';
+	import { ChevronRight as ChevronRightIcon } from 'lucide-svelte';
 	import { cn } from "$lib/utils.js";
 
 	let {

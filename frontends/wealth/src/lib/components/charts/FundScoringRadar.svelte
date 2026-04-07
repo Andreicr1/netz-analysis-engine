@@ -11,29 +11,40 @@
         if (!scoringMetrics || !scoringMetrics.score_components) return null;
 
         const components = scoringMetrics.score_components;
-        const indicators = Object.keys(components).map(key => ({
-            name: key.replace(/_/g, ' ').toUpperCase(),
-            max: 100
-        }));
-        
-        const values = Object.values(components).map(v => Number(v));
+        const entries = Object.entries(components);
+
+        // Indicator labels — clean name only, no score in parens
+        const indicators = entries.map(([key]) => {
+            const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            return { name: label, max: 100 };
+        });
+
+        const values = entries.map(([, v]) => Number(v));
+        const score = scoringMetrics.manager_score;
+        const overall = score != null ? Number(score).toFixed(1) : '—';
 
         return {
             title: {
-                text: `Overall: ${scoringMetrics.manager_score?.toFixed(1) || '—'}`,
-                left: 'center',
-                top: 'center',
-                textStyle: { fontSize: 24, fontWeight: '800', color: '#1d293d' }
+                text: `Overall: ${overall}`,
+                left: 16,
+                top: 8,
+                textStyle: { fontSize: 18, fontWeight: '700', color: '#e4e4e7' }
             },
-            tooltip: { trigger: 'item' },
+            tooltip: {
+                trigger: 'item',
+                backgroundColor: '#1e1e22',
+                borderColor: '#2a2a2e',
+                textStyle: { color: '#e4e4e7', fontSize: 12 },
+            },
             radar: {
                 indicator: indicators,
-                radius: '65%',
+                center: ['50%', '55%'],
+                radius: '62%',
                 splitNumber: 4,
-                axisName: { color: '#64748b' },
-                splitLine: { lineStyle: { color: ['rgba(203, 213, 225, 0.4)'] } },
-                splitArea: { areaStyle: { color: ['rgba(241, 245, 249, 0.2)', 'rgba(248, 250, 252, 0.4)'] } },
-                axisLine: { lineStyle: { color: 'rgba(203, 213, 225, 0.4)' } }
+                axisName: { color: '#94a3b8', fontSize: 12 },
+                splitLine: { lineStyle: { color: ['rgba(148, 163, 184, 0.15)'] } },
+                splitArea: { areaStyle: { color: ['rgba(30, 30, 34, 0.6)', 'rgba(42, 42, 46, 0.4)'] } },
+                axisLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.2)' } }
             },
             series: [
                 {
@@ -43,9 +54,9 @@
                         {
                             value: values,
                             name: 'Score Components',
-                            areaStyle: { color: 'rgba(59, 130, 246, 0.3)' },
-                            lineStyle: { color: '#3b82f6', width: 2 },
-                            itemStyle: { color: '#3b82f6' },
+                            areaStyle: { color: 'rgba(1, 119, 251, 0.25)' },
+                            lineStyle: { color: '#0177fb', width: 2 },
+                            itemStyle: { color: '#0177fb' },
                             symbol: 'circle',
                             symbolSize: 6
                         }

@@ -1,5 +1,8 @@
 /** Model Portfolio domain types — maps 1:1 to backend schemas. */
 
+/** Universal cash instrument ID — matches backend CASH_INSTRUMENT_ID. */
+export const CASH_INSTRUMENT_ID = "00000000-0000-0000-0000-000000000000";
+
 export interface ModelPortfolio {
 	id: string;
 	profile: string;
@@ -15,10 +18,22 @@ export interface ModelPortfolio {
 	created_by: string | null;
 }
 
+export interface OptimizationMeta {
+	expected_return: number | null;
+	portfolio_volatility: number | null;
+	sharpe_ratio: number | null;
+	solver: string | null;
+	status: string;
+	cvar_95: number | null;
+	cvar_limit: number | null;
+	cvar_within_limit: boolean;
+}
+
 export interface SelectionSchema {
 	profile: string;
 	total_weight: number;
 	funds: InstrumentWeight[];
+	optimization?: OptimizationMeta;
 }
 
 export interface InstrumentWeight {
@@ -144,6 +159,12 @@ export interface PortfolioView {
 	created_at: string;
 }
 
+/** Parametric stress test request for POST /model-portfolios/{id}/stress-test */
+export interface ParametricStressRequest {
+	scenario_name: "gfc_2008" | "covid_2020" | "taper_2013" | "rate_shock_200bps" | "custom";
+	shocks?: Record<string, number>;
+}
+
 /** Parametric stress test result from POST /stress-test */
 export interface ParametricStressResult {
 	portfolio_id: string;
@@ -193,6 +214,140 @@ export interface GeneratedReport {
 	display_filename: string;
 	generated_at: string;
 	size_bytes: number | null;
+}
+
+// ── Unified Report Endpoints ──────────────────────────────────────────
+
+export type ReportType = "fact_sheet" | "monthly_report";
+
+export interface ReportHistoryItem {
+	id: string;
+	portfolio_id: string;
+	report_type: ReportType;
+	job_id: string;
+	display_filename: string;
+	generated_at: string;
+	size_bytes: number | null;
+	status: string;
+}
+
+export interface ReportHistoryResponse {
+	portfolio_id: string;
+	reports: ReportHistoryItem[];
+	total: number;
+}
+
+export interface ReportGenerateRequest {
+	report_type: ReportType;
+	as_of_date?: string;
+	language?: "pt" | "en";
+	format?: "executive" | "institutional";
+}
+
+export interface ReportGenerateResponse {
+	job_id: string;
+	portfolio_id: string;
+	report_type: string;
+	status: string;
+}
+
+// ── SSE Progress Events ───────────────────────────────────────────────
+
+export type ReportStage =
+	| "QUEUED"
+	| "FETCHING_MARKET_DATA"
+	| "RUNNING_QUANT_ENGINE"
+	| "SYNTHESIZING_LLM"
+	| "GENERATING_PDF"
+	| "STORING_PDF"
+	| "COMPLETED";
+
+export interface ReportProgressEvent {
+	stage: ReportStage;
+	message: string;
+	pct: number;
+}
+
+export interface ReportDoneEvent {
+	status: string;
+	report_type: string;
+	storage_path?: string;
+	size_bytes?: number;
+	error?: string | null;
+}
+
+export interface ReportErrorEvent {
+	error: string;
+}
+
+export type ReportSSEEvent =
+	| { event: "progress"; data: ReportProgressEvent }
+	| { event: "done"; data: ReportDoneEvent }
+	| { event: "error"; data: ReportErrorEvent };
+
+export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
+	fact_sheet: "Fact Sheet",
+	monthly_report: "Monthly Report",
+};
+
+export const REPORT_STAGE_LABELS: Record<ReportStage, string> = {
+	QUEUED: "Queued",
+	FETCHING_MARKET_DATA: "Fetching Market Data",
+	RUNNING_QUANT_ENGINE: "Running Quant Engine",
+	SYNTHESIZING_LLM: "Synthesizing with AI",
+	GENERATING_PDF: "Generating PDF",
+	STORING_PDF: "Storing PDF",
+	COMPLETED: "Completed",
+};
+
+// ── Rebalance Preview ─────────────────────────────────────────────────
+
+export interface HoldingInput {
+	instrument_id: string;
+	quantity: number;
+	current_price: number;
+}
+
+export interface RebalancePreviewRequest {
+	total_aum?: number;
+	cash_available: number;
+	current_holdings: HoldingInput[];
+}
+
+export interface SuggestedTrade {
+	instrument_id: string;
+	fund_name: string;
+	block_id: string;
+	action: "BUY" | "SELL" | "HOLD";
+	current_weight: number;
+	target_weight: number;
+	delta_weight: number;
+	current_value: number;
+	target_value: number;
+	trade_value: number;
+	estimated_quantity: number;
+}
+
+export interface WeightDelta {
+	block_id: string;
+	current_weight: number;
+	target_weight: number;
+	delta_pp: number;
+}
+
+export interface RebalancePreviewResponse {
+	portfolio_id: string;
+	portfolio_name: string;
+	profile: string;
+	total_aum: number;
+	cash_available: number;
+	total_trades: number;
+	estimated_turnover_pct: number;
+	trades: SuggestedTrade[];
+	weight_comparison: WeightDelta[];
+	cvar_95_projected: number | null;
+	cvar_limit: number | null;
+	cvar_warning: boolean;
 }
 
 export function profileColor(profile: string): string {

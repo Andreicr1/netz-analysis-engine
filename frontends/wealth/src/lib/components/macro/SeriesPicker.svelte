@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
 	import { slide } from "svelte/transition";
+	import { createDebouncedState } from "$lib/utils/reactivity";
 
 	export interface IndicatorEntry {
 		id: string;
@@ -30,7 +31,7 @@
 		onToggleFavorite,
 	}: Props = $props();
 
-	let searchQuery = $state("");
+	const searchState = createDebouncedState("", 250);
 	let regionFilter = $state("All");
 	let frequencyFilter = $state("All");
 	let expandedGroups = $state<Set<string>>(new Set());
@@ -177,8 +178,8 @@
 		if (frequencyFilter !== "All") {
 			items = items.filter((e) => e.frequency === frequencyFilter);
 		}
-		if (searchQuery.trim()) {
-			const q = searchQuery.trim().toLowerCase();
+		if (searchState.debounced.trim()) {
+			const q = searchState.debounced.trim().toLowerCase();
 			items = items.filter(
 				(e) =>
 					e.name.toLowerCase().includes(q) ||
@@ -222,7 +223,8 @@
 		class="picker-search"
 		type="search"
 		placeholder="Search indicators…"
-		bind:value={searchQuery}
+		value={searchState.current}
+		oninput={(e) => { searchState.current = e.currentTarget.value; }}
 	/>
 
 	<div class="chip-row">
@@ -256,12 +258,12 @@
 	<div class="picker-list">
 		{#each [...groupedFiltered] as [group, items] (group)}
 			<button class="group-header" onclick={() => toggleGroup(group)}>
-				<span class="group-chevron" class:group-chevron--open={expandedGroups.has(group) || searchQuery.trim() !== ""}>&#9656;</span>
+				<span class="group-chevron" class:group-chevron--open={expandedGroups.has(group) || searchState.debounced.trim() !== ""}>&#9656;</span>
 				<span class="group-name">{group}</span>
 				<span class="group-count">{items.length}</span>
 			</button>
 
-			{#if expandedGroups.has(group) || searchQuery.trim() !== ""}
+			{#if expandedGroups.has(group) || searchState.debounced.trim() !== ""}
 				<div transition:slide={{ duration: 150 }}>
 					{#each items as entry (entry.id)}
 						{@const isSelected = selected.has(entry.id)}

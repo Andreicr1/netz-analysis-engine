@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Command as CommandPrimitive } from "bits-ui";
 	import { cn } from "$lib/utils.js";
-	import { Check as CheckIcon } from 'phosphor-svelte';
+	import { Check as CheckIcon } from 'lucide-svelte';
 
 	let {
 		ref = $bindable(null),

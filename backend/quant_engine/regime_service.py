@@ -74,7 +74,7 @@ REGIME_DEFINITIONS: dict[str, RegimeDefinition] = {
 }
 
 # Staleness thresholds (business days)
-STALENESS_DAILY = 3
+STALENESS_DAILY = 5  # Accommodates weekends + US holidays (FRED publishes Mon-Fri only)
 STALENESS_MONTHLY = 45
 
 # Plausibility bounds for input validation
@@ -145,12 +145,50 @@ def classify_regime_multi_signal(
     sahm_rule: float | None = None,
     thresholds: RegimeThresholds | None = None,
     config: dict[str, Any] | None = None,
+    *,
+    hy_oas: float | None = None,
+    baa_spread: float | None = None,
+    fed_funds_delta_6m: float | None = None,
+    dxy_zscore: float | None = None,
+    energy_shock: float | None = None,
+    cfnai: float | None = None,
 ) -> tuple[str, dict[str, str]]:
-    """Classify regime using priority hierarchy.
+    """Classify regime using multi-factor stress scoring.
 
-    Args:
-        thresholds: Pre-resolved thresholds (takes precedence).
-        config: Raw calibration config dict from ConfigService (resolved if thresholds is None).
+    Combines financial market signals with real-economy indicators to avoid
+    monetary bias. Supply shocks (oil, commodities) and production contractions
+    are leading indicators that precede VIX/credit spread reactions by weeks.
+
+    Regime classification from composite stress score:
+        score < 25  → RISK_ON   (benign conditions)
+        score < 50  → RISK_OFF  (elevated caution, defensive tilt)
+        score ≥ 50  → CRISIS    (multiple stress signals, capital preservation)
+
+    CPI override: inflation above threshold triggers INFLATION regime
+    regardless of stress score.
+
+    === FAST SIGNALS (55%) — react within days ===
+        VIX (20%):              Implied vol. LT avg ~19, ramp 18→35.
+        HY OAS (15%):           US HY credit spread. Normal ~3.0, stress >5.0.
+        Energy Shock (10%):     Composite of WTI Z-score (1Y) and WTI RoC (3m),
+                                fused via max(z_score, roc_score). Single signal
+                                avoids multicollinearity — both spike together
+                                during supply shocks but capture different tails.
+        DXY Z-score (10%):      Dollar strength surprise → global liquidity crunch.
+
+    === SLOW SIGNALS (45%) — structural, weeks-to-months lag ===
+        CFNAI (15%):            Chicago Fed National Activity Index. Composite
+                                of 85 indicators (production, employment,
+                                consumption, sales). 0 = trend growth, below
+                                -0.70 = high probability of recession. Replaces
+                                INDPRO (heavy retroactive revisions) and ISM PMI
+                                (not available on FRED).
+        Yield curve (10%):      10Y-2Y. Inverted = recession signal.
+        BAA spread (5%):        Corporate credit risk → real economy stress.
+        FF Rate-of-Change (5%): 6-month Fed Funds delta. Rapid hikes = stress.
+        Sahm Rule (5%):         Labor market recession onset at 0.50.
+        Reserved (5%):          Placeholder for future signals (e.g. Baltic Dry,
+                                soft commodities, shipping rates).
 
     """
     if thresholds is None:
@@ -164,38 +202,113 @@ def classify_regime_multi_signal(
 
     reasons: dict[str, str] = {}
 
-    if vix is not None and vix >= thresholds["vix_extreme"]:
-        reasons["vix"] = f"VIX={vix:.1f} >= {thresholds['vix_extreme']} (CRISIS)"
-        reasons["decision"] = "CRISIS: extreme VIX overrides all other signals"
-        return "CRISIS", reasons
-
+    # ── Inflation override (structural regime, not stress-driven) ──
     if cpi_yoy is not None and cpi_yoy >= thresholds["cpi_yoy_high"]:
         reasons["cpi"] = f"CPI_YoY={cpi_yoy:.1f}% >= {thresholds['cpi_yoy_high']}% (INFLATION)"
-        reasons["decision"] = "INFLATION: CPI above threshold"
+        reasons["decision"] = "INFLATION: CPI above threshold overrides stress score"
         return "INFLATION", reasons
 
-    if vix is not None and vix >= thresholds["vix_risk_off"]:
-        reasons["vix"] = f"VIX={vix:.1f} >= {thresholds['vix_risk_off']} (RISK_OFF)"
-        reasons["decision"] = "RISK_OFF: elevated volatility"
+    # ── Multi-factor stress scoring ──
+    # Each signal produces a sub-score 0-100 via _ramp().
+    # Weighted sum → composite stress score (0-100).
+    # Two layers: financial (55%) + real economy (45%).
+    signals: list[tuple[str, float, float, str]] = []  # (label, sub_score, weight, reason)
+
+    # ═══ FINANCIAL SIGNALS (55%) ═══
+
+    # VIX (20%): implied vol. LT avg ~19, ramp 18→35
+    if vix is not None:
+        s = _ramp(vix, calm=18.0, panic=35.0)
+        signals.append(("vix", s, 0.20, f"VIX={vix:.1f} (stress={s:.0f}/100)"))
+
+    # US HY OAS (15%): credit stress. Normal ~3.0%, stress >5.0%
+    if hy_oas is not None:
+        s = _ramp(hy_oas, calm=2.5, panic=6.0)
+        signals.append(("hy_oas", s, 0.15, f"US_HY_OAS={hy_oas:.2f}% (stress={s:.0f}/100)"))
+
+    # DXY Z-score (10%): sharp dollar rally = global liquidity crunch
+    if dxy_zscore is not None:
+        s = _ramp(dxy_zscore, calm=0.0, panic=2.0)
+        signals.append(("dxy", s, 0.10, f"DXY_z={dxy_zscore:+.2f}σ (stress={s:.0f}/100)"))
+
+    # ═══ SLOW SIGNALS (45%) — structural, weeks-to-months lag ═══
+
+    # Energy Shock Composite (10%): fuses WTI Z-score (1Y) and WTI RoC (3m)
+    # into a single signal via max(). Avoids multicollinearity — during a supply
+    # shock both spike together (correlation ~1.0), so separate weights would
+    # double-count the same event. max() captures whichever tail is louder.
+    if energy_shock is not None:
+        s = _ramp(energy_shock, calm=0.0, panic=100.0)
+        signals.append(("energy_shock", s, 0.10, f"Energy_shock={energy_shock:.0f}/100 (stress={s:.0f}/100)"))
+
+    # CFNAI (15%): Chicago Fed National Activity Index.
+    # Composite of 85 indicators. 0 = trend growth, negative = below trend.
+    # Below -0.70 = high probability of recession (NBER-calibrated).
+    # Monthly, minimal revisions. Much more robust than INDPRO alone.
+    if cfnai is not None:
+        # Inverted: positive = calm (above-trend growth), negative = stress
+        s = _ramp(-cfnai, calm=0.20, panic=0.70)
+        signals.append(("cfnai", s, 0.15, f"CFNAI={cfnai:+.2f} (stress={s:.0f}/100)"))
+
+    # Yield curve (10%): +1.0=calm, -0.5=full stress (inverted)
+    if yield_curve_spread is not None:
+        yc_s = _ramp(-yield_curve_spread, calm=-1.0, panic=0.5)
+        # Move to slow block (recession signal takes months to materialize)
+        signals.append(("yield_curve", yc_s, 0.10, f"10Y-2Y={yield_curve_spread:+.2f}% (stress={yc_s:.0f}/100)"))
+
+    # BAA-10Y spread (5%): corporate credit → real economy stress
+    if baa_spread is not None:
+        s = _ramp(baa_spread, calm=1.2, panic=2.5)
+        signals.append(("baa_spread", s, 0.05, f"BAA-10Y={baa_spread:.2f}% (stress={s:.0f}/100)"))
+
+    # Fed Funds rate-of-change (5%): surprise tightening
+    if fed_funds_delta_6m is not None:
+        s = _ramp(fed_funds_delta_6m, calm=-0.50, panic=1.50)
+        signals.append(("ff_roc", s, 0.05, f"FF_Δ6m={fed_funds_delta_6m:+.2f}% (stress={s:.0f}/100)"))
+
+    # Sahm Rule (5%): labor market recession onset at 0.50
+    if sahm_rule is not None:
+        s = _ramp(sahm_rule, calm=0.0, panic=0.50)
+        signals.append(("sahm", s, 0.05, f"Sahm={sahm_rule:.2f} (stress={s:.0f}/100)"))
+
+    # Need at least 2 signals for confident classification
+    if len(signals) < 2:
+        reasons["decision"] = "RISK_OFF: insufficient signals for confident classification"
         return "RISK_OFF", reasons
 
-    # Informational signals — IC awareness only
-    if yield_curve_spread is not None and yield_curve_spread < thresholds["yield_curve_inversion"]:
-        reasons["yield_curve"] = (
-            f"10Y-2Y={yield_curve_spread:.2f}% inverted "
-            f"(threshold: {thresholds['yield_curve_inversion']}%) — IC awareness"
-        )
+    # Compute weighted composite — normalize for missing signals
+    raw_score = sum(s * w for _, s, w, _ in signals)
+    weight_sum = sum(w for _, _, w, _ in signals)
+    stress_score = raw_score / weight_sum if weight_sum > 0 else 50.0
 
-    if sahm_rule is not None and sahm_rule >= thresholds["sahm_rule_recession"]:
-        reasons["sahm_rule"] = (
-            f"Sahm={sahm_rule:.2f} >= {thresholds['sahm_rule_recession']} "
-            f"(recession onset signal — IC awareness)"
-        )
+    for label, _, _, reason_str in signals:
+        reasons[label] = reason_str
 
-    if vix is not None:
-        reasons["vix"] = f"VIX={vix:.1f} < {thresholds['vix_risk_off']} (RISK_ON)"
-    reasons["decision"] = "RISK_ON: no stress signals triggered"
-    return "RISK_ON", reasons
+    stress_score = round(min(100.0, max(0.0, stress_score)), 1)
+    reasons["composite_stress"] = f"{stress_score}/100 ({len(signals)} signals)"
+
+    # ── Classify from composite score ──
+    if stress_score >= 75:
+        regime = "CRISIS"
+        reasons["decision"] = f"CRISIS: composite stress {stress_score}/100 — extreme multi-signal stress"
+    elif stress_score >= 50:
+        regime = "CRISIS"
+        reasons["decision"] = f"CRISIS: composite stress {stress_score}/100 — multiple elevated signals"
+    elif stress_score >= 25:
+        regime = "RISK_OFF"
+        reasons["decision"] = f"RISK_OFF: composite stress {stress_score}/100 — caution warranted"
+    else:
+        regime = "RISK_ON"
+        reasons["decision"] = f"RISK_ON: composite stress {stress_score}/100 — benign conditions"
+
+    return regime, reasons
+
+
+def _ramp(value: float, calm: float, panic: float) -> float:
+    """Linear ramp from 0 (at calm) to 100 (at panic). Clamped to [0, 100]."""
+    if panic == calm:
+        return 50.0
+    return max(0.0, min(100.0, (value - calm) / (panic - calm) * 100))
 
 
 def classify_regime_from_volatility(
@@ -519,6 +632,8 @@ async def get_latest_macro_values(
         "CPI_YOY": STALENESS_MONTHLY,
         "DFF": STALENESS_DAILY,
         "SAHMREALTIME": STALENESS_MONTHLY,
+        "CFNAI": 75,                             # Chicago Fed National Activity Index (published ~1mo lag)
+        "BAA10Y": STALENESS_DAILY,              # BAA corporate spread
         # Regional credit spread signals (Phase 2 — hierarchical regime)
         "BAMLH0A0HYM2": STALENESS_DAILY,       # US HY OAS
         "BAMLHE00EHYIOAS": STALENESS_DAILY,     # Euro HY OAS
@@ -562,6 +677,121 @@ async def get_latest_macro_values(
     return result
 
 
+async def _compute_ff_delta_6m(db: AsyncSession) -> float | None:
+    """Compute 6-month change in Fed Funds Rate from macro_data.
+
+    Returns positive delta for tightening (stress), negative for easing (calm).
+    None if insufficient data.
+    """
+    try:
+        result = await db.execute(
+            select(MacroData.value, MacroData.obs_date)
+            .where(MacroData.series_id == "DFF")
+            .order_by(MacroData.obs_date.desc())
+            .limit(1),
+        )
+        latest = result.first()
+        if not latest:
+            return None
+
+        from datetime import timedelta
+
+        target_date = latest.obs_date - timedelta(days=180)
+        result_6m = await db.execute(
+            select(MacroData.value)
+            .where(
+                MacroData.series_id == "DFF",
+                MacroData.obs_date <= target_date,
+            )
+            .order_by(MacroData.obs_date.desc())
+            .limit(1),
+        )
+        past_val = result_6m.scalar_one_or_none()
+        if past_val is None:
+            return None
+
+        return round(float(latest.value) - float(past_val), 4)
+    except Exception:
+        logger.exception("ff_delta_6m_failed")
+        return None
+
+
+async def _compute_series_zscore(
+    db: AsyncSession, series_id: str, lookback_days: int = 252,
+) -> float | None:
+    """Compute Z-score of any macro series vs its rolling mean.
+
+    Positive z = above-average (stress for supply shocks like oil).
+    """
+    try:
+        result = await db.execute(
+            select(MacroData.value)
+            .where(MacroData.series_id == series_id)
+            .order_by(MacroData.obs_date.desc())
+            .limit(lookback_days),
+        )
+        values = [float(r[0]) for r in result.all()]
+        if len(values) < 60:
+            return None
+
+        latest = values[0]
+        mean = float(np.mean(values))
+        std = float(np.std(values))
+        if std < 0.001:
+            return 0.0
+
+        return round((latest - mean) / std, 2)
+    except Exception:
+        logger.exception("series_zscore_failed", series_id=series_id)
+        return None
+
+
+async def _compute_series_roc(
+    db: AsyncSession, series_id: str, months: int = 3,
+) -> float | None:
+    """Compute rate-of-change (%) for any macro series over N months.
+
+    Returns percentage change: (latest - past) / past * 100.
+    Positive = increase (stress for commodities, calm for INDPRO).
+    """
+    try:
+        result = await db.execute(
+            select(MacroData.value, MacroData.obs_date)
+            .where(MacroData.series_id == series_id)
+            .order_by(MacroData.obs_date.desc())
+            .limit(1),
+        )
+        latest = result.first()
+        if not latest:
+            return None
+
+        from datetime import timedelta
+
+        target_date = latest.obs_date - timedelta(days=months * 30)
+        result_past = await db.execute(
+            select(MacroData.value)
+            .where(
+                MacroData.series_id == series_id,
+                MacroData.obs_date <= target_date,
+            )
+            .order_by(MacroData.obs_date.desc())
+            .limit(1),
+        )
+        past_val = result_past.scalar_one_or_none()
+        if past_val is None or float(past_val) == 0:
+            return None
+
+        return round((float(latest.value) - float(past_val)) / float(past_val) * 100, 2)
+    except Exception:
+        logger.exception("series_roc_failed", series_id=series_id)
+        return None
+
+
+async def _compute_dxy_zscore(db: AsyncSession) -> float | None:
+    """Compute Z-score of Trade-Weighted Dollar Index vs 1Y rolling mean."""
+    return await _compute_series_zscore(db, "DTWEXBGS", lookback_days=252)
+
+
 async def get_current_regime(
     db: AsyncSession,
     config: dict[str, Any] | None = None,
@@ -584,10 +814,34 @@ async def get_current_regime(
     yield_val = macro.get("YIELD_CURVE_10Y2Y", (None, None))[0]
     cpi_val = macro.get("CPI_YOY", (None, None))[0]
     sahm_val = macro.get("SAHMREALTIME", (None, None))[0]
+    hy_oas_val = macro.get("BAMLH0A0HYM2", (None, None))[0]
+    baa_val = macro.get("BAA10Y", (None, None))[0]
 
-    if vix_val is not None:
+    # Derived signals — rate-of-change and Z-scores
+    ff_delta = await _compute_ff_delta_6m(db)
+    dxy_z = await _compute_dxy_zscore(db)
+
+    # Energy Shock Composite: fuse WTI Z-score + WTI RoC via max()
+    # Avoids multicollinearity — both spike together during supply shocks
+    crude_z = await _compute_series_zscore(db, "DCOILWTICO", lookback_days=252)
+    crude_roc = await _compute_series_roc(db, "DCOILWTICO", months=3)
+    energy_shock: float | None = None
+    if crude_z is not None or crude_roc is not None:
+        z_score = _ramp(crude_z, calm=0.5, panic=3.0) if crude_z is not None else 0.0
+        roc_score = _ramp(crude_roc, calm=0.0, panic=50.0) if crude_roc is not None else 0.0
+        energy_shock = max(z_score, roc_score)
+
+    # CFNAI — Chicago Fed National Activity Index (composite of 85 indicators)
+    cfnai_val = macro.get("CFNAI", (None, None))[0]
+
+    # Need at least VIX or HY OAS or energy data to classify
+    if vix_val is not None or hy_oas_val is not None or energy_shock is not None:
         regime, reasons = classify_regime_multi_signal(
-            vix_val, yield_val, cpi_val, sahm_rule=sahm_val, config=config,
+            vix_val, yield_val, cpi_val,
+            sahm_rule=sahm_val, config=config,
+            hy_oas=hy_oas_val, baa_spread=baa_val,
+            fed_funds_delta_6m=ff_delta, dxy_zscore=dxy_z,
+            energy_shock=energy_shock, cfnai=cfnai_val,
         )
 
         as_of = None

@@ -24,7 +24,7 @@
 		vertical,
 		configType,
 		token,
-		apiBaseUrl,
+		apiBaseUrl: _apiBaseUrl,
 		orgId,
 		tenantName,
 	}: {
@@ -35,6 +35,7 @@
 		orgId?: string;
 		tenantName?: string;
 	} = $props();
+	const apiBaseUrl = _apiBaseUrl; // one-time snapshot
 
 	const scopeLabel = $derived(
 		orgId && tenantName

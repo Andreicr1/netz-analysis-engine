@@ -1,23 +1,19 @@
 /* ============================================================
  * InvestIntell Design Tokens - Typography
- * IBM Plex Sans (interface) + IBM Plex Mono (data/financial)
+ * Urbanist (interface) + Geist Mono (data/financial)
+ * Inspired by One X Investment Dashboard + shadcn/ui alignment
  * ============================================================ */
 
-@import "@fontsource/ibm-plex-sans/300.css";
-@import "@fontsource/ibm-plex-sans/400.css";
-@import "@fontsource/ibm-plex-sans/500.css";
-@import "@fontsource/ibm-plex-sans/600.css";
-@import "@fontsource/ibm-plex-sans/700.css";
-@import "@fontsource/ibm-plex-mono/400.css";
-@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource-variable/urbanist";
+@import "@fontsource-variable/geist-mono";
 
 :root {
 	/* Font families */
-	--ii-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-	--ii-font-mono: "IBM Plex Mono", "Fira Code", ui-monospace, monospace;
+	--ii-font-sans: "Urbanist Variable", "Urbanist", ui-sans-serif, system-ui, sans-serif;
+	--ii-font-mono: "Geist Mono Variable", "Geist Mono", "Menlo", ui-monospace, monospace;
 
-	/* Font feature settings — IBM Plex has strong OpenType support */
-	--ii-font-features: "rlig" 1, "calt" 1, "tnum" 1;   /* tnum: tabular nums for financial data */
+	/* Font feature settings — Urbanist supports contextual alternates + tabular nums */
+	--ii-font-features: "calt" 1, "tnum" 1;   /* tnum: tabular nums for financial data */
 
 	/* ── Scale ── */
 	--ii-text-xs:   11px;
@@ -26,13 +22,13 @@
 	--ii-text-md:   15px;
 	--ii-text-lg:   20px;
 
-	/* Heading sizes */
-	--ii-text-h1: 30px;
-	--ii-text-h2: 26px;
-	--ii-text-h3: 22px;
-	--ii-text-h4: 1.125rem;
-	--ii-text-h5: 1rem;
-	--ii-text-h6: 0.9375rem;
+	/* Heading sizes — shadcn/ui Figma spec */
+	--ii-text-h1: 48px;
+	--ii-text-h2: 30px;
+	--ii-text-h3: 24px;
+	--ii-text-h4: 20px;
+	--ii-text-h5: 18px;
+	--ii-text-h6: 16px;
 
 	/* Display */
 	--ii-text-display: clamp(2.5rem, 2.1rem + 1.8vw, 3.25rem);
@@ -45,50 +41,51 @@
 	--ii-text-caption: 0.75rem;
 	--ii-text-mono:    0.875rem;
 
-	/* ── Line heights — tighter than Geist defaults ── */
+	/* ── Line heights — Inter metrics per shadcn Figma ── */
 	--ii-leading-tight:   1.11;
 	--ii-leading-snug:    1.33;
 	--ii-leading-normal:  1.5;
 	--ii-leading-relaxed: 1.75;
 
-	--ii-leading-display: 1.08;
-	--ii-leading-h1:      1.11;
-	--ii-leading-h2:      1.20;
-	--ii-leading-h3:      1.33;
-	--ii-leading-h4:      1.3;
-	--ii-leading-h5:      1.35;
-	--ii-leading-h6:      1.4;
+	--ii-leading-display: 1.0;
+	--ii-leading-h1:      1.0;    /* 48px / 48px */
+	--ii-leading-h2:      1.2;    /* 30px / 36px */
+	--ii-leading-h3:      1.33;   /* 24px / 32px */
+	--ii-leading-h4:      1.4;    /* 20px / 28px */
+	--ii-leading-h5:      1.4;
+	--ii-leading-h6:      1.5;
 	--ii-leading-body-lg: 1.6;
-	--ii-leading-body:    1.55;   /* tighter than before: IBM Plex is denser */
-	--ii-leading-small:   1.5;
+	--ii-leading-body:    1.55;
+	--ii-leading-small:   1.0;    /* 14px / 14px per shadcn "small" */
 	--ii-leading-label:   1.3;
 	--ii-leading-caption: 1.45;
-	--ii-leading-mono:    1.5;    /* tighter: Plex Mono reads well at 1.5 */
+	--ii-leading-mono:    1.43;   /* 14px / 20px per shadcn "inline code" */
 
-	/* ── Letter spacing ── */
+	/* ── Letter spacing — Urbanist is geometric, tighter headings ── */
 	--ii-tracking-tight:  -0.025em;
 	--ii-tracking-normal: normal;
 	--ii-tracking-wide:   0.07em;
 
-	--ii-tracking-display: -0.03em;
-	--ii-tracking-h1:      -0.02em;
-	--ii-tracking-h2:      -0.02em;
-	--ii-tracking-h3:      -0.015em;
-	--ii-tracking-h4:      -0.01em;
-	--ii-tracking-h5:      -0.008em;
-	--ii-tracking-h6:      -0.004em;
-	--ii-tracking-body:    0em;      /* IBM Plex Sans needs no negative track at body */
+	--ii-tracking-display: -0.025em;
+	--ii-tracking-h1:      -0.025em;
+	--ii-tracking-h2:      -0.025em;
+	--ii-tracking-h3:      -0.025em;
+	--ii-tracking-h4:      -0.025em;
+	--ii-tracking-h5:      -0.02em;
+	--ii-tracking-h6:      -0.015em;
+	--ii-tracking-body:    0em;
 	--ii-tracking-small:   0em;
 	--ii-tracking-label:   0.08em;
 	--ii-tracking-caption: 0.01em;
-	--ii-tracking-mono:    -0.01em;  /* Plex Mono is slightly wider than Geist Mono */
+	--ii-tracking-mono:    0em;
 
 	/* ── Font weights ── */
-	--ii-weight-light:    300;
-	--ii-weight-normal:   400;
-	--ii-weight-medium:   500;
-	--ii-weight-semibold: 600;
-	--ii-weight-bold:     700;
+	--ii-weight-light:     300;
+	--ii-weight-normal:    400;
+	--ii-weight-medium:    500;
+	--ii-weight-semibold:  600;
+	--ii-weight-bold:      700;
+	--ii-weight-extrabold: 800;
 
 	/* ── Heading margins ── */
 	--ii-heading-h1-mt: 16px;
@@ -105,20 +102,20 @@
 /* ── Component tokens — theme-specific ── */
 
 :root {
-	--ii-link-color:       #c9a84c;   /* gold */
-	--ii-link-hover-color: #b8953f;   /* gold hover */
-	--ii-code-bg:     rgba(201, 168, 76, 0.10);
+	--ii-link-color:       #d9d9d9;   /* One X text-secondary */
+	--ii-link-hover-color: #ffffff;   /* pure white */
+	--ii-code-bg:     rgba(248, 250, 252, 0.08);
 	--ii-code-border: rgba(255, 255, 255, 0.06);
-	--ii-kbd-bg:      #27272a;   /* zinc-800 */
-	--ii-kbd-border:  #3f3f46;   /* zinc-700 */
+	--ii-kbd-bg:      #1e293b;   /* slate-800 */
+	--ii-kbd-border:  #334155;   /* slate-700 */
 }
 
 .light,
 [data-theme="light"] {
-	--ii-link-color:       #9a7a2e;
-	--ii-link-hover-color: #806520;
-	--ii-code-bg:     rgba(154, 122, 46, 0.10);
+	--ii-link-color:       #0f172a;   /* slate-900 */
+	--ii-link-hover-color: #334155;   /* slate-700 */
+	--ii-code-bg:     rgba(15, 23, 42, 0.06);
 	--ii-code-border: rgba(0, 0, 0, 0.06);
-	--ii-kbd-bg:      #f4f4f5;   /* zinc-100 */
-	--ii-kbd-border:  #d4d4d8;   /* zinc-300 */
+	--ii-kbd-bg:      #f1f5f9;   /* slate-100 */
+	--ii-kbd-border:  #cbd5e1;   /* slate-300 */
 }

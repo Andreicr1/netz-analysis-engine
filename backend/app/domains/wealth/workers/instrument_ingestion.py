@@ -39,7 +39,11 @@ _io_executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=2, thread_name_prefix="instrument-io",
 )
 
-# Map lookback_days to yfinance period strings
+# Map lookback_days to yfinance period strings.
+# 15y+ uses "max" — yfinance has no "15y" literal, and "max" returns every
+# bar Yahoo holds (typically since 1970 for equities, since inception for ETFs).
+# This is critical for stress-testing engines that need real GFC 2008 and
+# Taper Tantrum 2013 data instead of proxies.
 _LOOKBACK_TO_PERIOD = {
     30: "1mo",
     90: "3mo",
@@ -50,17 +54,21 @@ _LOOKBACK_TO_PERIOD = {
     3650: "10y",
 }
 
+# Default lookback: ~15 years, covers GFC 2008 + Taper Tantrum 2013.
+DEFAULT_LOOKBACK_DAYS = 5475  # ~15y
+
 
 def _resolve_period(lookback_days: int) -> str:
     """Map lookback_days to the closest yfinance period string."""
     for threshold, period in sorted(_LOOKBACK_TO_PERIOD.items()):
         if lookback_days <= threshold:
             return period
-    return "10y"
+    # 15y+ → "max" (full history available from the provider)
+    return "max"
 
 
 async def run_instrument_ingestion(
-    lookback_days: int = 3650,
+    lookback_days: int = DEFAULT_LOOKBACK_DAYS,
 ) -> dict[str, int | list[str]]:
     """Fetch NAV history for all active instruments in the global catalog.
 

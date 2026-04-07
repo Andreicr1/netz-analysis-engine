@@ -8,10 +8,21 @@ from __future__ import annotations
 
 import os
 from logging.config import fileConfig
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()  # Load .env so DATABASE_URL_SYNC is available
+# Load .env.dev first (local Docker), fall back to .env (prod/CI).
+# override=False means process env vars (set by Railway, CI, or dev.ps1)
+# always win — .env files only fill gaps.
+# Precedence: process env > .env.dev > .env > alembic.ini fallback
+_here = Path(__file__).resolve().parent
+_backend = _here.parents[3]  # backend/
+_root = _backend.parent       # repo root
+load_dotenv(_backend / ".env.dev", override=False)
+load_dotenv(_root / ".env.dev", override=False)
+load_dotenv(_backend / ".env", override=False)
+load_dotenv(_root / ".env", override=False)
 
 from alembic import context
 from sqlalchemy import create_engine, pool, text

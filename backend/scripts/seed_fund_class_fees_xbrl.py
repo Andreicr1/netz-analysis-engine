@@ -13,6 +13,7 @@ Usage:
     python -m scripts.seed_fund_class_fees_xbrl
     python -m scripts.seed_fund_class_fees_xbrl --dsn "postgresql://..."
     python -m scripts.seed_fund_class_fees_xbrl --max-ciks 50  # test with subset
+    python -m scripts.seed_fund_class_fees_xbrl --idx-file xbrl.idx  # skip submissions lookup
 """
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ import structlog
 
 logger = structlog.get_logger()
 
-SEC_RATE_LIMIT = 10  # requests per second
+SEC_RATE_LIMIT = 8  # concurrent requests (SEC allows 10 req/s)
 USER_AGENT = "Netz/1.0 (andrei@investintell.com)"
 UPSERT_BATCH = 500
 
@@ -71,19 +72,25 @@ class ClassFacts:
 
 async def _fetch(session, url: str, sem: asyncio.Semaphore) -> bytes | None:
     async with sem:
-        try:
-            async with session.get(url, headers={"User-Agent": USER_AGENT}, timeout=30) as resp:
-                if resp.status == 200:
-                    return await resp.read()
-                if resp.status == 404:
+        for attempt in range(3):
+            try:
+                async with session.get(url, headers={"User-Agent": USER_AGENT}, timeout=30) as resp:
+                    if resp.status == 200:
+                        return await resp.read()
+                    if resp.status == 404:
+                        return None
+                    if resp.status == 429:
+                        wait = 2.0 * (attempt + 1)
+                        await asyncio.sleep(wait)
+                        continue
+                    logger.warning("http_error", url=url, status=resp.status)
                     return None
-                logger.warning("http_error", url=url, status=resp.status)
+            except Exception as e:
+                logger.warning("http_exception", url=url, error=str(e)[:80])
                 return None
-        except Exception as e:
-            logger.warning("http_exception", url=url, error=str(e)[:80])
-            return None
-        finally:
-            await asyncio.sleep(1.0 / SEC_RATE_LIMIT)  # rate limit
+            finally:
+                await asyncio.sleep(0.15)  # 150ms between requests ≈ 6-7 req/s
+        return None
 
 
 # ── Step 1: Find latest N-CSR filing ─────────────────────────────────
@@ -139,11 +146,18 @@ async def _find_xbrl_in_index(
     # Find _htm.xml or _ncsr_htm.xml
     matches = re.findall(r'href="([^"]*_htm\.xml)"', html, re.I)
     if matches:
-        return index_url + matches[0]
+        href = matches[0]
+        # Handle absolute paths (e.g. /Archives/edgar/...)
+        if href.startswith("/"):
+            return f"https://www.sec.gov{href}"
+        return index_url + href
     # Try any .xml that looks like XBRL instance
     matches = re.findall(r'href="([^"]*ncsr[^"]*\.xml)"', html, re.I)
     if matches:
-        return index_url + matches[0]
+        href = matches[0]
+        if href.startswith("/"):
+            return f"https://www.sec.gov{href}"
+        return index_url + href
     return None
 
 
@@ -278,48 +292,172 @@ WHERE class_id = $1
 """
 
 
+# ── IDX file parser ──────────────────────────────────────────────────
+
+@dataclass
+class IdxEntry:
+    cik: str
+    form_type: str
+    date_filed: str
+    accession: str  # e.g. 0001104659-26-024604
+    filename: str   # e.g. edgar/data/CIK/ACCESSION.txt
+
+
+def _parse_idx_file(idx_path: str) -> list[IdxEntry]:
+    """Parse EDGAR xbrl.idx file, return N-CSR/N-CSRS entries."""
+    entries: list[IdxEntry] = []
+    with open(idx_path, "r", encoding="utf-8", errors="replace") as f:
+        in_data = False
+        for line in f:
+            line = line.rstrip("\n")
+            if not in_data:
+                if line.startswith("---"):
+                    in_data = True
+                continue
+            parts = line.split("|")
+            if len(parts) < 5:
+                continue
+            cik_raw, _name, form_type, date_filed, filename = (
+                parts[0], parts[1], parts[2], parts[3], parts[4],
+            )
+            if form_type not in ("N-CSR", "N-CSRS", "N-CSR/A", "N-CSRS/A"):
+                continue
+            # Extract accession from filename: edgar/data/CIK/ACCESSION.txt
+            fname_parts = filename.strip().split("/")
+            if len(fname_parts) < 4:
+                continue
+            acc_raw = fname_parts[3].replace(".txt", "")
+            # Convert 0001104659-26-024604 format (already has dashes)
+            entries.append(IdxEntry(
+                cik=cik_raw.strip().lstrip("0") or "0",
+                form_type=form_type,
+                date_filed=date_filed.strip(),
+                accession=acc_raw,
+                filename=filename.strip(),
+            ))
+    # Deduplicate: keep latest filing per CIK
+    latest: dict[str, IdxEntry] = {}
+    for e in entries:
+        if e.cik not in latest or e.date_filed > latest[e.cik].date_filed:
+            latest[e.cik] = e
+    return list(latest.values())
+
+
+async def _process_cik_from_idx(
+    session, entry: IdxEntry, sem: asyncio.Semaphore,
+) -> list[tuple]:
+    """Fetch XBRL for a CIK using pre-resolved accession from idx file."""
+    acc_nodash = entry.accession.replace("-", "")
+    cik = entry.cik
+
+    # Try the primary document pattern: look in filing index for _htm.xml
+    index_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc_nodash}/"
+    xbrl_url = await _find_xbrl_in_index(session, index_url, sem)
+
+    if not xbrl_url:
+        return []
+
+    xml_bytes = await _fetch(session, xbrl_url, sem)
+    if not xml_bytes:
+        return []
+
+    class_facts = _parse_xbrl(xml_bytes, entry.accession)
+    if not class_facts:
+        return []
+
+    rows = []
+    for cf in class_facts.values():
+        holdings = None
+        if cf.holdings_count is not None:
+            try:
+                holdings = int(float(cf.holdings_count))
+            except (ValueError, TypeError):
+                pass
+
+        rows.append((
+            cf.class_id,
+            cf.expense_ratio_pct,
+            cf.advisory_fees_paid,
+            cf.expenses_paid,
+            cf.avg_annual_return_pct,
+            cf.net_assets,
+            str(holdings) if holdings is not None else None,
+            cf.portfolio_turnover_pct,
+            cf.fund_name,
+            cf.perf_inception_date,
+            cf.__dict__.get("_accession"),
+            cf.__dict__.get("_period_end"),
+        ))
+
+    return rows
+
+
 # ── Main pipeline ────────────────────────────────────────────────────
 
-async def _run(dsn: str, max_ciks: int | None = None) -> None:
+async def _run(dsn: str, max_ciks: int | None = None, idx_file: str | None = None) -> None:
     import aiohttp
     import asyncpg
-
-    # Get unique CIKs from DB
-    conn = await asyncpg.connect(dsn, ssl="require")
-    db_ciks = await conn.fetch("SELECT DISTINCT cik FROM sec_fund_classes")
-    cik_list = sorted({r["cik"] for r in db_ciks})
-    await conn.close()
-
-    if max_ciks:
-        cik_list = cik_list[:max_ciks]
-
-    # Zero-pad CIKs to 10 digits
-    padded = [c.zfill(10) for c in cik_list]
-    logger.info("starting", ciks=len(padded))
 
     sem = asyncio.Semaphore(SEC_RATE_LIMIT)
     all_rows: list[tuple] = []
     processed = 0
     errors = 0
 
-    async with aiohttp.ClientSession() as session:
-        # Process in chunks to avoid memory pressure
-        chunk_size = 100
-        for i in range(0, len(padded), chunk_size):
-            chunk = padded[i:i + chunk_size]
-            tasks = [_process_cik(session, cik, sem) for cik in chunk]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+    if idx_file:
+        # ── Fast path: use pre-parsed idx file (skip submissions lookup) ──
+        entries = _parse_idx_file(idx_file)
+        if max_ciks:
+            entries = entries[:max_ciks]
+        logger.info("starting_from_idx", idx_file=idx_file, entries=len(entries))
 
-            for r in results:
-                if isinstance(r, Exception):
-                    errors += 1
-                elif r:
-                    all_rows.extend(r)
-                processed += 1
+        async with aiohttp.ClientSession() as session:
+            chunk_size = 20  # conservative — each CIK = 2 requests
+            for i in range(0, len(entries), chunk_size):
+                chunk = entries[i:i + chunk_size]
+                tasks = [_process_cik_from_idx(session, e, sem) for e in chunk]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            logger.info("progress",
-                        processed=processed, total=len(padded),
-                        rows_so_far=len(all_rows), errors=errors)
+                for r in results:
+                    if isinstance(r, Exception):
+                        errors += 1
+                        logger.warning("cik_error", error=str(r)[:120])
+                    elif r:
+                        all_rows.extend(r)
+                    processed += 1
+
+                logger.info("progress",
+                            processed=processed, total=len(entries),
+                            rows_so_far=len(all_rows), errors=errors)
+    else:
+        # ── Original path: discover N-CSR from submissions API ──
+        conn = await asyncpg.connect(dsn, ssl="require")
+        db_ciks = await conn.fetch("SELECT DISTINCT cik FROM sec_fund_classes")
+        cik_list = sorted({r["cik"] for r in db_ciks})
+        await conn.close()
+
+        if max_ciks:
+            cik_list = cik_list[:max_ciks]
+
+        padded = [c.zfill(10) for c in cik_list]
+        logger.info("starting", ciks=len(padded))
+
+        async with aiohttp.ClientSession() as session:
+            chunk_size = 100
+            for i in range(0, len(padded), chunk_size):
+                chunk = padded[i:i + chunk_size]
+                tasks = [_process_cik(session, cik, sem) for cik in chunk]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                for r in results:
+                    if isinstance(r, Exception):
+                        errors += 1
+                    elif r:
+                        all_rows.extend(r)
+                    processed += 1
+
+                logger.info("progress",
+                            processed=processed, total=len(padded),
+                            rows_so_far=len(all_rows), errors=errors)
 
     logger.info("fetch_complete", total_rows=len(all_rows), errors=errors)
 
@@ -368,13 +506,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Enrich sec_fund_classes from N-CSR XBRL")
     parser.add_argument("--dsn", type=str, help="Direct PostgreSQL DSN")
     parser.add_argument("--max-ciks", type=int, help="Limit CIKs to process (for testing)")
+    parser.add_argument("--idx-file", type=str, help="EDGAR xbrl.idx file (skip submissions API)")
     args = parser.parse_args()
 
     dsn = _resolve_dsn(args.dsn)
     if not dsn:
         raise ValueError("No DSN provided and DATABASE_URL not set")
 
-    asyncio.run(_run(dsn, max_ciks=args.max_ciks))
+    asyncio.run(_run(dsn, max_ciks=args.max_ciks, idx_file=args.idx_file))
 
 
 if __name__ == "__main__":

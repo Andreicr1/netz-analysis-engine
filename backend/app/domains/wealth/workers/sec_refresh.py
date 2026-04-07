@@ -45,7 +45,7 @@ async def run_sec_refresh() -> dict:
             return {"status": "skipped", "reason": "lock_held"}
 
         try:
-            # ── Step 1: Refresh continuous aggregates ────────────────
+            # ── Step 1a: Refresh continuous aggregates ───────────────
             logger.info("Refreshing sec_13f_holdings_agg continuous aggregate")
             await db.execute(
                 text("CALL refresh_continuous_aggregate('sec_13f_holdings_agg', NULL, NULL)"),
@@ -56,6 +56,44 @@ async def run_sec_refresh() -> dict:
             )
             await db.commit()
             logger.info("Continuous aggregates refreshed")
+
+            # ── Step 1b: Refresh plain materialized view ─────────────
+            # sec_13f_manager_sector_latest is a plain MV (not a continuous
+            # aggregate) — requires explicit REFRESH after each ingestion.
+            try:
+                logger.info("Refreshing sec_13f_manager_sector_latest materialized view")
+                await db.execute(
+                    text(
+                        "REFRESH MATERIALIZED VIEW CONCURRENTLY "
+                        "sec_13f_manager_sector_latest"
+                    ),
+                )
+                await db.commit()
+                logger.info("sec_13f_manager_sector_latest refreshed")
+            except Exception:
+                await db.rollback()
+                logger.warning(
+                    "sec_13f_manager_sector_latest refresh failed — "
+                    "retrying without CONCURRENTLY",
+                    exc_info=True,
+                )
+                try:
+                    await db.execute(
+                        text(
+                            "REFRESH MATERIALIZED VIEW "
+                            "sec_13f_manager_sector_latest"
+                        ),
+                    )
+                    await db.commit()
+                    logger.info(
+                        "sec_13f_manager_sector_latest refreshed (non-concurrent)"
+                    )
+                except Exception:
+                    await db.rollback()
+                    logger.error(
+                        "sec_13f_manager_sector_latest refresh failed permanently",
+                        exc_info=True,
+                    )
 
             # ── Step 2: Compute per-manager aggregates in bulk ───────
 

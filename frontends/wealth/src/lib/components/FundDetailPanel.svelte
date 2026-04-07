@@ -5,6 +5,8 @@
 -->
 <script lang="ts">
 	import { ContextPanel, EmptyState, SectionCard, MetricCard, formatAUM, formatNumber, formatPercent, formatDate } from "@investintell/ui";
+	import { Progress } from "@investintell/ui/components/ui/progress";
+	import * as Tabs from "@investintell/ui/components/ui/tabs";
 	import { getContext } from "svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -187,171 +189,161 @@
 		</div>
 
 		<!-- Tabs -->
-		<div class="mb-4 flex gap-1 border-b border-(--ii-border)">
-			{#each tabs as tab (tab.value)}
-				<button
-					class="relative px-3 py-2 text-sm font-medium transition-colors"
-					class:text-(--ii-brand-primary)={activeTab === tab.value}
-					class:text-(--ii-text-muted)={activeTab !== tab.value}
-					onclick={() => (activeTab = tab.value)}
-				>
-					{tab.label}
-					{#if activeTab === tab.value}
-						<span class="absolute bottom-0 left-0 right-0 h-0.5 bg-(--ii-brand-primary)"></span>
-					{/if}
-				</button>
-			{/each}
-		</div>
+		<Tabs.Root bind:value={activeTab}>
+			<Tabs.List>
+				{#each tabs as tab (tab.value)}
+					<Tabs.Trigger value={tab.value}>{tab.label}</Tabs.Trigger>
+				{/each}
+			</Tabs.List>
 
-		<!-- Tab: Resumo -->
-		{#if activeTab === "resumo"}
-			<div class="space-y-4">
-				<!-- Key metrics -->
-				<div class="grid grid-cols-2 gap-3">
-					<MetricCard label="AUM" value={formatAum(fund.aum)} />
-					<MetricCard
-						label="Score Geral"
-						value={formatNumber(fund.score, 1, "pt-BR")}
-					/>
-					{#if fund.annual_return !== undefined}
+			<!-- Tab: Resumo -->
+			<Tabs.Content value="resumo">
+				<div class="space-y-4">
+					<!-- Key metrics -->
+					<div class="grid grid-cols-2 gap-3">
+						<MetricCard label="AUM" value={formatAum(fund.aum)} />
 						<MetricCard
-							label="Retorno Anual"
-							value={formatPct(fund.annual_return ?? null)}
+							label="Score Geral"
+							value={formatNumber(fund.score, 1, "pt-BR")}
 						/>
-					{/if}
-					{#if fund.sharpe_ratio !== undefined}
-						<MetricCard
-							label="Sharpe"
-							value={formatNumber(fund.sharpe_ratio, 2, "pt-BR")}
-						/>
-					{/if}
-					{#if fund.max_drawdown !== undefined}
-						<MetricCard
-							label="Max Drawdown"
-							value={formatPct(fund.max_drawdown ?? null)}
-						/>
-					{/if}
-					{#if fund.cvar_95 !== undefined}
-						<MetricCard
-							label="CVaR 95%"
-							value={formatPct(fund.cvar_95 ?? null)}
-						/>
-					{/if}
-				</div>
-
-				<!-- Fund metadata -->
-				<SectionCard title="Informações">
-					{#snippet children()}
-						<dl class="space-y-2 text-sm">
-							{#if fund.isin}
-								<div class="flex justify-between">
-									<dt class="text-(--ii-text-muted)">ISIN</dt>
-									<dd class="font-mono text-(--ii-text-primary)">{fund.isin}</dd>
-								</div>
-							{/if}
-							{#if fund.cnpj}
-								<div class="flex justify-between">
-									<dt class="text-(--ii-text-muted)">CNPJ</dt>
-									<dd class="font-mono text-(--ii-text-primary)">{fund.cnpj}</dd>
-								</div>
-							{/if}
-							<div class="flex justify-between">
-								<dt class="text-(--ii-text-muted)">Estratégia</dt>
-								<dd class="text-(--ii-text-primary)">{fund.strategy ?? "—"}</dd>
-							</div>
-							<div class="flex justify-between">
-								<dt class="text-(--ii-text-muted)">Gestor</dt>
-								<dd class="text-(--ii-text-primary)">{fund.manager ?? "—"}</dd>
-							</div>
-							<div class="flex justify-between">
-								<dt class="text-(--ii-text-muted)">Atualizado</dt>
-								<dd class="text-(--ii-text-primary)">{formatDate(fund.updated_at, "short", "pt-BR")}</dd>
-							</div>
-							{#if fund.inception_date}
-								<div class="flex justify-between">
-									<dt class="text-(--ii-text-muted)">Início</dt>
-									<dd class="text-(--ii-text-primary)">{formatDate(fund.inception_date, "short", "pt-BR")}</dd>
-								</div>
-							{/if}
-						</dl>
-					{/snippet}
-				</SectionCard>
-			</div>
-
-		<!-- Tab: DD Report -->
-		{:else if activeTab === "dd-report"}
-			<div class="space-y-4">
-				{#if fund.dd_report_status === "complete"}
-					<div class="rounded-lg border border-(--ii-border) bg-(--ii-surface-elevated) p-4">
-						<div class="mb-3 flex items-center justify-between">
-							<span class="text-sm font-medium text-(--ii-text-primary)">DD Report Completo</span>
-							<span
-								class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
-								style="background-color: color-mix(in srgb, var(--ii-success) 15%, transparent); color: var(--ii-success);"
-							>
-								Completo
-							</span>
-						</div>
-						<a
-							href="/dd-reports/{fund.id}"
-							class="inline-flex items-center gap-1.5 rounded-md bg-(--ii-brand-primary) px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
-						>
-							Ver Relatório
-							<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-								<path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-						</a>
-					</div>
-
-				{:else if fund.dd_report_status === "generating" || ddSseStatus === "streaming"}
-					<div class="rounded-lg border border-(--ii-border) bg-(--ii-surface-elevated) p-4">
-						<div class="mb-3 flex items-center justify-between">
-							<span class="text-sm font-medium text-(--ii-text-primary)">Gerando relatório…</span>
-							{#if ddProgress !== null}
-								<span class="text-xs text-(--ii-text-muted)">{ddProgress}%</span>
-							{/if}
-						</div>
-						<!-- Progress bar -->
-						<div class="h-1.5 w-full overflow-hidden rounded-full bg-(--ii-surface-inset)">
-							<div
-								class="h-full rounded-full bg-(--ii-brand-primary) transition-all duration-300"
-								style="width: {ddProgress ?? 0}%;"
-							></div>
-						</div>
-						{#if ddProgressMessage}
-							<p class="mt-2 text-xs text-(--ii-text-muted)">{ddProgressMessage}</p>
+						{#if fund.annual_return !== undefined}
+							<MetricCard
+								label="Retorno Anual"
+								value={formatPct(fund.annual_return ?? null)}
+							/>
+						{/if}
+						{#if fund.sharpe_ratio !== undefined}
+							<MetricCard
+								label="Sharpe"
+								value={formatNumber(fund.sharpe_ratio, 2, "pt-BR")}
+							/>
+						{/if}
+						{#if fund.max_drawdown !== undefined}
+							<MetricCard
+								label="Max Drawdown"
+								value={formatPct(fund.max_drawdown ?? null)}
+							/>
+						{/if}
+						{#if fund.cvar_95 !== undefined}
+							<MetricCard
+								label="CVaR 95%"
+								value={formatPct(fund.cvar_95 ?? null)}
+							/>
 						{/if}
 					</div>
 
-				{:else if ddSseStatus === "error"}
-					<EmptyState
-						title="Erro na geração"
-						message="Ocorreu um erro ao gerar o DD Report. Tente novamente."
-					/>
-				{:else}
-					<EmptyState
-						title="DD Report Pendente"
-						message="Nenhum relatório de due diligence foi gerado para este fundo."
-						actionLabel="Gerar Relatório"
-						onAction={() => {}}
-					/>
-				{/if}
-			</div>
+					<!-- Fund metadata -->
+					<SectionCard title="Informações">
+						{#snippet children()}
+							<dl class="space-y-2 text-sm">
+								{#if fund.isin}
+									<div class="flex justify-between">
+										<dt class="text-(--ii-text-muted)">ISIN</dt>
+										<dd class="font-mono text-(--ii-text-primary)">{fund.isin}</dd>
+									</div>
+								{/if}
+								{#if fund.cnpj}
+									<div class="flex justify-between">
+										<dt class="text-(--ii-text-muted)">CNPJ</dt>
+										<dd class="font-mono text-(--ii-text-primary)">{fund.cnpj}</dd>
+									</div>
+								{/if}
+								<div class="flex justify-between">
+									<dt class="text-(--ii-text-muted)">Estratégia</dt>
+									<dd class="text-(--ii-text-primary)">{fund.strategy ?? "—"}</dd>
+								</div>
+								<div class="flex justify-between">
+									<dt class="text-(--ii-text-muted)">Gestor</dt>
+									<dd class="text-(--ii-text-primary)">{fund.manager ?? "—"}</dd>
+								</div>
+								<div class="flex justify-between">
+									<dt class="text-(--ii-text-muted)">Atualizado</dt>
+									<dd class="text-(--ii-text-primary)">{formatDate(fund.updated_at, "short", "pt-BR")}</dd>
+								</div>
+								{#if fund.inception_date}
+									<div class="flex justify-between">
+										<dt class="text-(--ii-text-muted)">Início</dt>
+										<dd class="text-(--ii-text-primary)">{formatDate(fund.inception_date, "short", "pt-BR")}</dd>
+									</div>
+								{/if}
+							</dl>
+						{/snippet}
+					</SectionCard>
+				</div>
+			</Tabs.Content>
 
-		<!-- Tab: Docs -->
-		{:else if activeTab === "docs"}
-			<EmptyState
-				title="Documentos"
-				message="Os documentos deste fundo aparecerão aqui após o upload."
-			/>
+			<!-- Tab: DD Report -->
+			<Tabs.Content value="dd-report">
+				<div class="space-y-4">
+					{#if fund.dd_report_status === "complete"}
+						<div class="rounded-lg border border-(--ii-border) bg-(--ii-surface-elevated) p-4">
+							<div class="mb-3 flex items-center justify-between">
+								<span class="text-sm font-medium text-(--ii-text-primary)">DD Report Completo</span>
+								<span
+									class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+									style="background-color: color-mix(in srgb, var(--ii-success) 15%, transparent); color: var(--ii-success);"
+								>
+									Completo
+								</span>
+							</div>
+							<a
+								href="/screener/dd-reports/{fund.id}"
+								class="inline-flex items-center gap-1.5 rounded-md bg-(--ii-brand-primary) px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
+							>
+								Ver Relatório
+								<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+									<path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+								</svg>
+							</a>
+						</div>
 
-		<!-- Tab: Screening -->
-		{:else if activeTab === "screening"}
-			<EmptyState
-				title="Screening"
-				message="Os resultados de screening para este fundo aparecerão aqui após a execução do screener."
-			/>
-		{/if}
+					{:else if fund.dd_report_status === "generating" || ddSseStatus === "streaming"}
+						<div class="rounded-lg border border-(--ii-border) bg-(--ii-surface-elevated) p-4">
+							<div class="mb-3 flex items-center justify-between">
+								<span class="text-sm font-medium text-(--ii-text-primary)">Gerando relatório…</span>
+								{#if ddProgress !== null}
+									<span class="text-xs text-(--ii-text-muted)">{ddProgress}%</span>
+								{/if}
+							</div>
+							<!-- Progress bar -->
+							<Progress value={ddProgress ?? 0} max={100} class="h-1.5" />
+							{#if ddProgressMessage}
+								<p class="mt-2 text-xs text-(--ii-text-muted)">{ddProgressMessage}</p>
+							{/if}
+						</div>
+
+					{:else if ddSseStatus === "error"}
+						<EmptyState
+							title="Erro na geração"
+							message="Ocorreu um erro ao gerar o DD Report. Tente novamente."
+						/>
+					{:else}
+						<EmptyState
+							title="DD Report Pendente"
+							message="Nenhum relatório de due diligence foi gerado para este fundo."
+							actionLabel="Gerar Relatório"
+							onAction={() => {}}
+						/>
+					{/if}
+				</div>
+			</Tabs.Content>
+
+			<!-- Tab: Docs -->
+			<Tabs.Content value="docs">
+				<EmptyState
+					title="Documentos"
+					message="Os documentos deste fundo aparecerão aqui após o upload."
+				/>
+			</Tabs.Content>
+
+			<!-- Tab: Screening -->
+			<Tabs.Content value="screening">
+				<EmptyState
+					title="Screening"
+					message="Os resultados de screening para este fundo aparecerão aqui após a execução do screener."
+				/>
+			</Tabs.Content>
+		</Tabs.Root>
 	{:else}
 		<EmptyState title="Nenhum fundo selecionado" message="Selecione um fundo na tabela para ver os detalhes." />
 	{/if}

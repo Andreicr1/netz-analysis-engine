@@ -50,15 +50,15 @@ class TestDefaultWeights:
 
 class TestFeeEfficiency:
     def test_fee_efficiency_with_low_er(self):
-        """expense_ratio_pct=0.035 → fee_efficiency near 98.25."""
+        """expense_ratio_pct=0.00035 (0.035%) → fee_efficiency near 98.25."""
         metrics = _make_metrics()
-        _, components = compute_fund_score(metrics, expense_ratio_pct=0.035)
+        _, components = compute_fund_score(metrics, expense_ratio_pct=0.00035)
         assert abs(components["fee_efficiency"] - 98.25) < 0.01
 
     def test_fee_efficiency_with_high_er(self):
-        """expense_ratio_pct=1.52 → fee_efficiency near 24.0."""
+        """expense_ratio_pct=0.0152 (1.52%) → fee_efficiency near 24.0."""
         metrics = _make_metrics()
-        _, components = compute_fund_score(metrics, expense_ratio_pct=1.52)
+        _, components = compute_fund_score(metrics, expense_ratio_pct=0.0152)
         assert abs(components["fee_efficiency"] - 24.0) < 0.01
 
     def test_fee_efficiency_none_defaults_neutral(self):
@@ -68,9 +68,9 @@ class TestFeeEfficiency:
         assert components["fee_efficiency"] == 50.0
 
     def test_fee_efficiency_2pct_is_zero(self):
-        """expense_ratio_pct=2.0 → fee_efficiency == 0.0."""
+        """expense_ratio_pct=0.02 (2.0%) → fee_efficiency == 0.0."""
         metrics = _make_metrics()
-        _, components = compute_fund_score(metrics, expense_ratio_pct=2.0)
+        _, components = compute_fund_score(metrics, expense_ratio_pct=0.02)
         assert components["fee_efficiency"] == 0.0
 
     def test_fee_efficiency_zero_er_is_100(self):
@@ -80,9 +80,9 @@ class TestFeeEfficiency:
         assert components["fee_efficiency"] == 100.0
 
     def test_fee_efficiency_above_2pct_clamped_to_zero(self):
-        """expense_ratio_pct=3.0 → fee_efficiency == 0.0 (clamped by max(0, ...))."""
+        """expense_ratio_pct=0.03 (3.0%) → fee_efficiency == 0.0 (clamped by max(0, ...))."""
         metrics = _make_metrics()
-        _, components = compute_fund_score(metrics, expense_ratio_pct=3.0)
+        _, components = compute_fund_score(metrics, expense_ratio_pct=0.03)
         assert components["fee_efficiency"] == 0.0
 
 

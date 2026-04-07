@@ -62,6 +62,10 @@ sec_managers = Table(
     Column("website", Text),
     Column("compliance_disclosures", Integer),
     Column("last_adv_filed_at", Date),
+    Column("private_fund_count", Integer),
+    Column("hedge_fund_count", Integer),
+    Column("pe_fund_count", Integer),
+    Column("vc_fund_count", Integer),
     extend_existing=True,
 )
 
@@ -93,6 +97,14 @@ instruments_universe = Table(
     Column("name", Text),
     Column("attributes", JSONB),
     Column("is_active", Text),
+    extend_existing=True,
+)
+
+registered_funds = Table(
+    "sec_registered_funds",
+    _meta,
+    Column("cik", Text, primary_key=True),
+    Column("crd_number", Text),
     extend_existing=True,
 )
 
@@ -231,6 +243,18 @@ def build_screener_queries(
         conditions.append(sec_managers.c.country.in_(filters.countries))
     if filters.registration_status:
         conditions.append(sec_managers.c.registration_status == filters.registration_status)
+    else:
+        # Default: Registered RIAs with fund vehicles (5,669 of 976k)
+        # private_fund_count > 0 covers 5,634 (ADV Schedule D)
+        # EXISTS sec_registered_funds adds 35 mutual-fund-only shops
+        # (Capital Research $3.7T, Blackrock Fund Advisors $3.5T, etc.)
+        has_registered = select(literal_column("1")).select_from(registered_funds).where(
+            registered_funds.c.crd_number == sec_managers.c.crd_number,
+        ).exists()
+        conditions.append(sec_managers.c.registration_status == "Registered")
+        conditions.append(
+            (sec_managers.c.private_fund_count > 0) | has_registered,
+        )
     if filters.compliance_clean is True:
         conditions.append(
             (sec_managers.c.compliance_disclosures == 0)
@@ -314,6 +338,16 @@ def build_screener_queries(
         .subquery("universe_status")
     )
 
+    # ── Registered fund count (mutual funds) ─────────────────────
+    mf_count_sub = (
+        select(func.count())
+        .select_from(registered_funds)
+        .where(registered_funds.c.crd_number == sec_managers.c.crd_number)
+        .correlate(sec_managers)
+        .scalar_subquery()
+        .label("mutual_fund_count")
+    )
+
     # ── Main query ──────────────────────────────────────────────
     base = (
         select(
@@ -324,6 +358,11 @@ def build_screener_queries(
             sec_managers.c.state,
             sec_managers.c.country,
             sec_managers.c.compliance_disclosures,
+            sec_managers.c.private_fund_count,
+            sec_managers.c.hedge_fund_count,
+            sec_managers.c.pe_fund_count,
+            sec_managers.c.vc_fund_count,
+            mf_count_sub,
             latest_q_sub.c.total_value.label("portfolio_value"),
             latest_q_sub.c.total_positions.label("position_count"),
             drift_sub.c.total_churn.label("drift_churn"),

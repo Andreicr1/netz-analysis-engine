@@ -2,6 +2,7 @@
   AllocationView — Figma redesign: profile tabs, KPI row, view sub-tabs,
   hierarchical table (group → block → instruments).
   Governed save flow: simulate → preview CVaR → ConsequenceDialog with rationale.
+  Data loaded via SSR (+page.server.ts); profile switch uses goto (re-runs SSR load).
 -->
 <script lang="ts">
 	import {
@@ -13,7 +14,9 @@
 		ActionButton,
 	} from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
+	import { goto } from "$app/navigation";
 	import { createClientApiClient } from "$lib/api/client";
+	import { invalidateCache } from "$lib/api/cache";
 	import { getContext } from "svelte";
 	import { BLOCK_INSTRUMENTS } from "./allocation/BLOCK_INSTRUMENTS";
 	import type { BlockMeta } from "./allocation/types";
@@ -32,7 +35,7 @@
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
-	// ── Profile state ──
+	// ── Profile state (driven by SSR props) ──
 	type Profile = "conservative" | "moderate" | "growth";
 	type ViewTab = "target" | "adjustments" | "effective";
 
@@ -48,11 +51,26 @@
 		{ id: "effective", label: "Final Portfolio" },
 	];
 
-	let activeProfile = $state<Profile>("moderate");
-	let activeView = $state<ViewTab>("effective");
-	let loading = $state(true);
+	// ── SSR props ──
+	interface Props {
+		blocks?: BlockMeta[];
+		strategic?: StrategicRow[];
+		tactical?: TacticalRow[];
+		effective?: EffectiveRow[];
+		profile?: string;
+	}
+	let {
+		blocks: ssrBlocks = [],
+		strategic: ssrStrategic = [],
+		tactical: ssrTactical = [],
+		effective: ssrEffective = [],
+		profile: ssrProfile = "moderate",
+	}: Props = $props();
 
-	// ── Backend data ──
+	let activeProfile = $derived(ssrProfile as Profile);
+	let activeView = $state<ViewTab>("effective");
+
+	// ── Backend data (initialized from SSR, updated after mutations) ──
 	type StrategicRow = {
 		block: string;
 		weight: number;
@@ -71,33 +89,35 @@
 		effective_weight: number;
 	};
 
-	let blocks = $state<BlockMeta[]>([]);
-	let strategic = $state<StrategicRow[]>([]);
-	let tactical = $state<TacticalRow[]>([]);
-	let effective = $state<EffectiveRow[]>([]);
+	let blocks = $state<BlockMeta[]>(ssrBlocks as BlockMeta[]);
+	let strategic = $state<StrategicRow[]>(ssrStrategic as StrategicRow[]);
+	let tactical = $state<TacticalRow[]>(ssrTactical as TacticalRow[]);
+	let effective = $state<EffectiveRow[]>(ssrEffective as EffectiveRow[]);
 
-	async function fetchProfile(profile: Profile) {
-		loading = true;
-		try {
-			const api = createClientApiClient(getToken);
-			const [b, s, t, e] = await Promise.all([
-				api.get<BlockMeta[]>("/blended-benchmarks/blocks"),
-				api.get<StrategicRow[]>(`/allocation/${profile}/strategic`),
-				api.get<TacticalRow[]>(`/allocation/${profile}/tactical`),
-				api.get<EffectiveRow[]>(`/allocation/${profile}/effective`),
-			]);
-			blocks = b;
-			strategic = s;
-			tactical = t;
-			effective = e;
-		} finally {
-			loading = false;
-		}
+	// Keep local state in sync when SSR props change (profile switch via goto)
+	$effect(() => {
+		blocks = ssrBlocks as BlockMeta[];
+		strategic = ssrStrategic as StrategicRow[];
+		tactical = ssrTactical as TacticalRow[];
+		effective = ssrEffective as EffectiveRow[];
+	});
+
+	/** Profile switch — navigates via URL, SSR load fetches new data. */
+	function switchProfile(profile: Profile) {
+		editing = false;
+		editingTactical = false;
+		goto(`/portfolio/builder?profile=${profile}`, { replaceState: true });
 	}
 
-	$effect(() => {
-		fetchProfile(activeProfile);
-	});
+	/** Re-fetch current profile after mutation (save strategic/tactical). */
+	async function reloadCurrentProfile() {
+		invalidateCache("/allocation");
+		invalidateCache("/blended-benchmarks");
+		await goto(`/portfolio/builder?profile=${activeProfile}`, {
+			replaceState: true,
+			invalidateAll: true,
+		});
+	}
 
 	// ── KPI computation ──
 	let assetCategoryCount = $derived(strategic.filter((r) => r.weight > 0).length);
@@ -304,7 +324,7 @@
 			});
 			editing = false;
 			simulationResult = null;
-			await fetchProfile(activeProfile);
+			await reloadCurrentProfile();
 		} catch (e) {
 			editError = e instanceof Error ? e.message : "Save failed";
 		} finally {
@@ -346,7 +366,7 @@
 				...(rationale ? { rationale } : {}),
 			});
 			editingTactical = false;
-			await fetchProfile(activeProfile);
+			await reloadCurrentProfile();
 		} catch (e) {
 			editError = e instanceof Error ? e.message : "Failed to save tactical allocation";
 		} finally {
@@ -363,16 +383,12 @@
 			<button
 				class="alloc-profile-tab"
 				class:alloc-profile-tab--active={activeProfile === p.id}
-				onclick={() => {
-					activeProfile = p.id;
-					editing = false;
-					editingTactical = false;
-				}}
+				onclick={() => switchProfile(p.id)}
 			>{p.label}</button>
 		{/each}
 	</div>
 
-	{#if loading}
+	{#if blocks.length === 0}
 		<div class="alloc-loading">Loading…</div>
 	{:else}
 		<!-- KPI ROW -->
@@ -939,11 +955,6 @@
 		font-size: 16px;
 		font-weight: 500;
 		color: #90a1b9;
-	}
-
-	.alloc-row-instrument .alloc-td--final {
-		font-weight: 600;
-		color: #314158;
 	}
 
 	.alloc-positive {

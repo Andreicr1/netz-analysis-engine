@@ -5,6 +5,7 @@
 <script lang="ts">
 	import { cn } from "../../utils/cn.js";
 	import type { Snippet } from "svelte";
+	import * as Breadcrumb from "$lib/components/ui/breadcrumb";
 
 	let {
 		title,
@@ -23,22 +24,22 @@
 
 <div class={cn("ii-page-header", className)}>
 	{#if breadcrumbs.length > 0}
-		<nav class="ii-page-header__breadcrumbs" aria-label="Breadcrumb">
-			<ol>
+		<Breadcrumb.Root class="mb-1.5">
+			<Breadcrumb.List>
 				{#each breadcrumbs as crumb, i (i)}
-					<li>
-						{#if crumb.href}
-							<a href={crumb.href} class="ii-page-header__crumb-link">{crumb.label}</a>
+					<Breadcrumb.Item>
+						{#if crumb.href && i < breadcrumbs.length - 1}
+							<Breadcrumb.Link href={crumb.href}>{crumb.label}</Breadcrumb.Link>
 						{:else}
-							<span class="ii-page-header__crumb-text">{crumb.label}</span>
+							<Breadcrumb.Page>{crumb.label}</Breadcrumb.Page>
 						{/if}
-						{#if i < breadcrumbs.length - 1}
-							<span class="ii-page-header__crumb-sep" aria-hidden="true">&gt;</span>
-						{/if}
-					</li>
+					</Breadcrumb.Item>
+					{#if i < breadcrumbs.length - 1}
+						<Breadcrumb.Separator />
+					{/if}
 				{/each}
-			</ol>
-		</nav>
+			</Breadcrumb.List>
+		</Breadcrumb.Root>
 	{/if}
 
 	<div class="ii-page-header__row">
@@ -59,45 +60,6 @@
 <style>
 	.ii-page-header {
 		padding: 0;
-	}
-
-	.ii-page-header__breadcrumbs ol {
-		display: flex;
-		align-items: center;
-		gap: 0;
-		list-style: none;
-		margin: 0 0 6px;
-		padding: 0;
-		font-size: var(--ii-text-sm, 14px);
-		font-weight: var(--ii-weight-normal, 400);
-		line-height: 20px;
-		color: var(--ii-text-muted);
-	}
-
-	.ii-page-header__breadcrumbs li {
-		display: flex;
-		align-items: center;
-	}
-
-	.ii-page-header__crumb-link {
-		color: var(--ii-text-muted);
-		text-decoration: none;
-		transition: color 120ms ease;
-	}
-
-	.ii-page-header__crumb-link:hover {
-		color: var(--ii-text-primary);
-		text-decoration: underline;
-	}
-
-	.ii-page-header__crumb-text {
-		color: var(--ii-text-secondary);
-	}
-
-	.ii-page-header__crumb-sep {
-		margin: 0 6px;
-		color: var(--ii-text-muted);
-		font-size: 11px;
 	}
 
 	.ii-page-header__row {

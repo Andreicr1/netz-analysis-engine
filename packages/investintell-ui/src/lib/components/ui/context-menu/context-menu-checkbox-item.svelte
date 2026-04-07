@@ -2,7 +2,7 @@
 	import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
 	import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
 	import type { Snippet } from "svelte";
-	import { Check as CheckIcon } from 'phosphor-svelte';
+	import { Check as CheckIcon } from 'lucide-svelte';
 
 	let {
 		ref = $bindable(null),

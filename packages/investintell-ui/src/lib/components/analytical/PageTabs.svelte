@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { cn } from "../../utils/cn.js";
 	import type { Snippet } from "svelte";
+	import * as Tabs from "$lib/components/ui/tabs";
 
 	interface TabDef {
 		value?: string;
@@ -41,7 +42,7 @@
 	/** The effective active tab — controlled (active prop) or uncontrolled (internal) */
 	let currentTab = $derived(active ?? internalTab);
 
-	function select(value: string) {
+	function handleValueChange(value: string) {
 		if (onChange) {
 			onChange(value);
 		} else {
@@ -57,35 +58,17 @@
 </script>
 
 <div class={cn("w-full", className)}>
-	<!-- Tab triggers -->
-	<div
-		class="flex items-center gap-6 overflow-x-auto border-b border-(--ii-border-subtle)"
-		role="tablist"
-	>
-		{#each tabs as tab (resolveTabValue(tab))}
-			{@const tabValue = resolveTabValue(tab)}
-			<button
-				role="tab"
-				aria-selected={currentTab === tabValue}
-				class={cn(
-					"relative flex shrink-0 items-center gap-2 px-1 pb-3 pt-1 text-sm font-medium tracking-[-0.01em] transition-[color,box-shadow] duration-(--ii-duration-fast) focus-visible:outline-none focus-visible:shadow-(--ii-shadow-focus)",
-					currentTab === tabValue
-						? "text-(--ii-text-primary)"
-						: "text-(--ii-text-muted) hover:text-(--ii-text-secondary)",
-				)}
-				onclick={() => select(tabValue)}
-			>
-				{tab.label}
-				{#if currentTab === tabValue}
-					<span
-						class="absolute bottom-0 left-0 right-0 h-px bg-(--ii-border-accent)"
-					></span>
-				{/if}
-			</button>
-		{/each}
-	</div>
+	<Tabs.Root value={currentTab} onValueChange={handleValueChange}>
+		<Tabs.List variant="line" class="w-full justify-start gap-6">
+			{#each tabs as tab (resolveTabValue(tab))}
+				<Tabs.Trigger value={resolveTabValue(tab)}>
+					{tab.label}
+				</Tabs.Trigger>
+			{/each}
+		</Tabs.List>
+	</Tabs.Root>
 
-	<!-- Tab content -->
+	<!-- Tab content via render prop — preserves external API -->
 	<div class="mt-4" role="tabpanel">
 		{@render children?.(currentTab)}
 	</div>

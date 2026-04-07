@@ -13,6 +13,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.domains.wealth.schemas.instrument import FundExtendedData
+
 
 class DisclosureMatrix(BaseModel):
     """Data availability flags driven by fund universe and source."""
@@ -81,6 +83,9 @@ class UnifiedFundItem(BaseModel):
     weighted_avg_maturity: int | None = None
     weighted_avg_life: int | None = None
 
+    # Series dedup — how many share classes exist for this series
+    class_count: int = 1
+
     # Screening overlay (if imported to tenant universe)
     instrument_id: str | None = None
     screening_status: Literal["PASS", "FAIL", "WATCHLIST"] | None = None
@@ -116,13 +121,43 @@ class UnifiedCatalogPage(BaseModel):
     facets: CatalogFacets | None = None
 
 
+class ManagerCatalogItem(BaseModel):
+    """Single row in the manager-grouped catalog (Level 1)."""
+
+    manager_id: str
+    manager_name: str
+    total_aum: float | None = None
+    fund_count: int = 0
+    fund_types: list[str] = Field(default_factory=list)
+    # Enriched from sec_managers (joined server-side)
+    state: str | None = None
+    country: str | None = None
+    website: str | None = None
+
+
+class ManagerCatalogPage(BaseModel):
+    items: list[ManagerCatalogItem]
+    total: int
+    page: int
+    page_size: int
+    has_next: bool
+
+
 # ── Fact Sheet Support ──
 
 
 class FundHolding(BaseModel):
+    """Fund holding from N-PORT.
+
+    ``pct_of_nav`` is a pure decimal fraction (0.0741 = 7.41%).
+    ``sector`` is the enriched GICS sector or issuer category label.
+    ``issuer_category`` is the raw N-PORT issuerCat code.
+    """
+
     name: str
     cusip: str | None = None
     sector: str | None = None
+    issuer_category: str | None = None
     pct_of_nav: float
     market_value: float | None = None
 
@@ -144,6 +179,7 @@ class NavPoint(BaseModel):
 
 class FundFactSheet(BaseModel):
     fund: UnifiedFundItem
+    extended_data: FundExtendedData | None = None
     team: list[TeamMember] = Field(default_factory=list)
     top_holdings: list[FundHolding] = Field(default_factory=list)
     annual_returns: list[dict[str, Any]] = Field(default_factory=list)
@@ -152,3 +188,31 @@ class FundFactSheet(BaseModel):
     prospectus_stats: dict[str, Any] | None = None
     share_classes: list[dict[str, Any]] = Field(default_factory=list)
     scoring_metrics: dict[str, Any] | None = None
+
+    # Brochure narratives (ADV Part 2A)
+    strategy_narrative: str | None = None
+    firm_description: str | None = None
+    firm_website: str | None = None
+
+
+class ShareClassItem(BaseModel):
+    """Single share class within a registered fund."""
+
+    class_id: str
+    class_name: str | None = None
+    ticker: str | None = None
+    expense_ratio_pct: float | None = None
+    net_assets: float | None = None
+    avg_annual_return_pct: float | None = None
+    holdings_count: int | None = None
+    portfolio_turnover_pct: float | None = None
+    perf_inception_date: date | None = None
+
+
+class FundClassesResponse(BaseModel):
+    """Share classes for a specific fund."""
+
+    external_id: str
+    fund_name: str | None = None
+    classes: list[ShareClassItem] = Field(default_factory=list)
+    total_classes: int = 0

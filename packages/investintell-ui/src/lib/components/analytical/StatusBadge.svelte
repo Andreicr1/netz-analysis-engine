@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { cn } from "../../utils/cn.js";
 	import { DEV } from "esm-env";
+	import { Badge } from "$lib/components/ui/badge";
 
 	export type StatusSeverity = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -44,7 +45,7 @@
 	]);
 	const warningTokens = new Set(["pending", "risk_off", "warning", "warn"]);
 	const dangerTokens = new Set(["critical", "declined", "danger", "error", "failed", "rejected"]);
-	const infoTokens = new Set(["active", "generated", "in_progress", "info", "processing", "risk_on", "running"]);
+	const infoTokens = new Set(["active", "backtesting", "generated", "in_progress", "info", "processing", "risk_on", "running"]);
 
 	/** Tokens that are intentionally neutral — suppress dev warning for these. */
 	const NEUTRAL_STATUSES = new Set([
@@ -130,9 +131,10 @@
 	});
 </script>
 
-<span
+<Badge
+	variant="outline"
 	class={cn(
-		"inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium",
+		"gap-1.5 rounded-full border-transparent",
 		isDevUnknown && "dev-unknown",
 		className,
 	)}
@@ -142,4 +144,4 @@
 >
 	<span class="h-1.5 w-1.5 rounded-full" style={`background-color: ${badgeColor};`}></span>
 	{config.label}
-</span>
+</Badge>

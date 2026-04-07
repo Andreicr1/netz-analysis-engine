@@ -290,4 +290,11 @@ async def run_portfolio_nav_synthesizer(org_id: uuid.UUID) -> dict[str, Any]:
 
 
 if __name__ == "__main__":
-    asyncio.run(run_portfolio_nav_synthesizer())
+    import sys
+
+    if len(sys.argv) < 2:
+        print("Usage: python -m backend.app.domains.wealth.workers.portfolio_nav_synthesizer <org_id>")
+        sys.exit(1)
+
+    _org_id = uuid.UUID(sys.argv[1])
+    asyncio.run(run_portfolio_nav_synthesizer(_org_id))

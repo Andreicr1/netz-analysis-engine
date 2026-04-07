@@ -131,9 +131,9 @@ class TestGatherFundEnrichment:
 
         assert len(result["share_classes"]) == 2
         assert result["share_classes"][0]["class_id"] == "C000001"
-        assert result["share_classes"][0]["expense_ratio_pct"] == 0.14
+        assert result["share_classes"][0]["expense_ratio_pct"] == 0.0014
         assert result["share_classes"][1]["class_id"] == "C000002"
-        assert result["share_classes"][1]["expense_ratio_pct"] == 0.04
+        assert result["share_classes"][1]["expense_ratio_pct"] == 0.0004
 
     def test_etf_vehicle_specific(self):
         from vertical_engines.wealth.dd_report.sec_injection import gather_fund_enrichment

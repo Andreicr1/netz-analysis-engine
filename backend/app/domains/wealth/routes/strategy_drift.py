@@ -102,7 +102,7 @@ async def trigger_drift_scan(
     # Advisory lock — per-org serialization via two-argument lock(class, org_hash).
     # Allows concurrent scans across different organizations.
     # xact-scoped: auto-releases on commit/rollback.
-    org_lock_id = int.from_bytes(org_id.bytes[:4], "big")
+    org_lock_id = int.from_bytes(org_id.bytes[:4], "big", signed=True)
     lock_result = await db.execute(
         text("SELECT pg_try_advisory_xact_lock(:cls, :id)"),
         {"cls": DRIFT_SCAN_LOCK_ID, "id": org_lock_id},
@@ -122,9 +122,16 @@ async def _do_drift_scan(
     severity_filter: str | None,
     limit: int,
 ) -> StrategyDriftScanRead:
-    # 1. Load all active instruments
-    inst_stmt = select(Instrument.instrument_id, Instrument.name).where(
-        Instrument.is_active == True,  # noqa: E712
+    # 1. Load active instruments in this org's approved universe
+    from app.domains.wealth.models.instrument_org import InstrumentOrg
+
+    inst_stmt = (
+        select(Instrument.instrument_id, Instrument.name)
+        .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
+        .where(
+            Instrument.is_active == True,  # noqa: E712
+            InstrumentOrg.approval_status == "approved",
+        )
     )
     inst_result = await db.execute(inst_stmt)
     instruments = inst_result.all()
@@ -183,25 +190,11 @@ async def _do_drift_scan(
             .values(is_current=False),
         )
 
-    # Insert new alerts for all scanned instruments — batch upsert
+    # Insert new alerts for all scanned instruments.
+    # Previous alerts already marked is_current=False above, so plain INSERT is safe.
     if scan_result.all_results:
         alert_dicts = [_drift_result_to_alert_dict(r, org_id) for r in scan_result.all_results]
-        # Batch upsert: single INSERT ... ON CONFLICT for all rows
-        stmt = pg_insert(StrategyDriftAlert).values(alert_dicts)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["organization_id", "instrument_id"],
-            set_={
-                "status": stmt.excluded.status,
-                "severity": stmt.excluded.severity,
-                "anomalous_count": stmt.excluded.anomalous_count,
-                "total_metrics": stmt.excluded.total_metrics,
-                "metric_details": stmt.excluded.metric_details,
-                "detected_at": stmt.excluded.detected_at,
-                "updated_at": stmt.excluded.updated_at,
-            },
-            where=StrategyDriftAlert.is_current == True,  # noqa: E712
-        )
-        await db.execute(stmt)
+        await db.execute(pg_insert(StrategyDriftAlert).values(alert_dicts))
         await db.commit()
 
     # 5. Build response (filter by severity if requested)

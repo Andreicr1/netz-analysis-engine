@@ -5,6 +5,8 @@
 <script lang="ts">
 	import { DataTable, EmptyState, ContextPanel, ActionButton, ConfirmDialog, FormField, Toast } from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
+	import { Checkbox } from "@investintell/ui/components/ui/checkbox";
+	import { Label } from "@investintell/ui/components/ui/label";
 	import { Skeleton } from "@investintell/ui/components/ui/skeleton";
 	import { Dialog, Input, Select, Textarea } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
@@ -332,8 +334,8 @@
 						<Input type="text" bind:value={editForm.block_id} placeholder="Allocation block" />
 					</FormField>
 					<div class="flex items-center gap-2">
-						<input type="checkbox" id="edit-is-active" bind:checked={editForm.is_active} class="h-4 w-4 rounded border-(--ii-border) accent-(--ii-brand)" />
-						<label for="edit-is-active" class="text-sm text-(--ii-text-primary)">Active</label>
+						<Checkbox id="edit-is-active" checked={editForm.is_active} onCheckedChange={(v) => { editForm.is_active = !!v; }} />
+						<Label for="edit-is-active" class="text-sm text-(--ii-text-primary)">Active</Label>
 					</div>
 					{#if editError}<p class="text-sm text-(--ii-status-error)">{editError}</p>{/if}
 					<div class="flex justify-end gap-2 pt-2">

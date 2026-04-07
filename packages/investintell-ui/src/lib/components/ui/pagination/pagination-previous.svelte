@@ -2,7 +2,7 @@
 	import type { ComponentProps } from "svelte";
 	import { cn } from "$lib/utils.js";
 	import { PaginationLink } from "./index.js";
-	import { CaretLeft as ChevronLeftIcon } from 'phosphor-svelte';
+	import { ChevronLeft as ChevronLeftIcon } from 'lucide-svelte';
 
 	type PaginationPreviousProps = ComponentProps<typeof PaginationLink>;
 

@@ -1,9 +1,40 @@
 /* ============================================================
- * InvestIntell Design Tokens - Shadows (Elevation)
- * Restrained depth tuned for layered enterprise surfaces.
+ * InvestIntell Design Tokens - Shadows & Glass Effects
+ * Elevation layers + glassmorphism inspired by One X Dashboard.
  * ============================================================ */
 
 :root {
+	--ii-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.20),
+		0 0 0 1px var(--ii-border-subtle);
+	--ii-shadow-2: 0 1px 2px rgba(0, 0, 0, 0.16),
+		0 8px 20px -14px rgba(0, 0, 0, 0.40),
+		0 0 0 1px var(--ii-border-subtle);
+	--ii-shadow-3: 0 4px 12px -8px rgba(0, 0, 0, 0.24),
+		0 18px 40px -24px rgba(0, 0, 0, 0.48),
+		0 0 0 1px var(--ii-border);
+	--ii-shadow-4: 0 10px 24px -12px rgba(0, 0, 0, 0.28),
+		0 28px 60px -32px rgba(0, 0, 0, 0.52),
+		0 0 0 1px var(--ii-border);
+	--ii-shadow-5: 0 14px 36px -16px rgba(0, 0, 0, 0.32),
+		0 36px 80px -36px rgba(0, 0, 0, 0.56),
+		0 0 0 1px var(--ii-border-strong);
+	--ii-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+	--ii-shadow-focus: 0 0 0 1px var(--ii-border-focus), 0 0 0 4px var(--ii-focus-ring);
+	--ii-shadow-card: var(--ii-shadow-2);
+	--ii-shadow-floating: var(--ii-shadow-4);
+
+	/* ── Glass effect (One X inspired) ── */
+	--ii-shadow-glass: 0 0 0 1px var(--ii-glass-border),
+		0 8px 32px -8px rgba(0, 0, 0, 0.40);
+
+	/* ── Glow effects ── */
+	--ii-glow-accent: 0 0 12px color-mix(in srgb, var(--ii-brand-primary) 40%, transparent);
+	--ii-glow-success: 0 0 12px color-mix(in srgb, var(--ii-success) 30%, transparent);
+	--ii-glow-danger: 0 0 12px color-mix(in srgb, var(--ii-danger) 30%, transparent);
+}
+
+.light,
+[data-theme="light"] {
 	--ii-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.04),
 		0 0 0 1px color-mix(in srgb, var(--ii-border-subtle) 88%, white 12%);
 	--ii-shadow-2: 0 1px 2px rgba(15, 23, 42, 0.03),
@@ -22,31 +53,13 @@
 	--ii-shadow-focus: 0 0 0 1px var(--ii-border-focus), 0 0 0 4px var(--ii-focus-ring);
 	--ii-shadow-card: var(--ii-shadow-2);
 	--ii-shadow-floating: var(--ii-shadow-4);
-}
 
-.dark,
-[data-theme="dark"] {
-	--ii-shadow-1: inset 0 1px 0 rgba(255, 255, 255, 0.05),
-		0 0 0 1px var(--ii-border-subtle),
-		0 1px 2px rgba(0, 0, 0, 0.28);
-	--ii-shadow-2: inset 0 1px 0 rgba(255, 255, 255, 0.05),
-		0 0 0 1px var(--ii-border-subtle),
-		0 10px 24px -18px rgba(0, 0, 0, 0.48),
-		0 3px 8px rgba(0, 0, 0, 0.24);
-	--ii-shadow-3: inset 0 1px 0 rgba(255, 255, 255, 0.06),
-		0 0 0 1px var(--ii-border),
-		0 18px 40px -24px rgba(0, 0, 0, 0.54),
-		0 8px 18px rgba(0, 0, 0, 0.26);
-	--ii-shadow-4: inset 0 1px 0 rgba(255, 255, 255, 0.06),
-		0 0 0 1px var(--ii-border),
-		0 24px 56px -28px rgba(0, 0, 0, 0.6),
-		0 12px 28px rgba(0, 0, 0, 0.28);
-	--ii-shadow-5: inset 0 1px 0 rgba(255, 255, 255, 0.07),
-		0 0 0 1px var(--ii-border-strong),
-		0 32px 72px -32px rgba(0, 0, 0, 0.68),
-		0 18px 40px rgba(0, 0, 0, 0.32);
-	--ii-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-	--ii-shadow-focus: 0 0 0 1px var(--ii-border-focus), 0 0 0 4px var(--ii-focus-ring);
-	--ii-shadow-card: var(--ii-shadow-2);
-	--ii-shadow-floating: var(--ii-shadow-4);
+	/* ── Glass — lighter for white bg ── */
+	--ii-shadow-glass: 0 0 0 1px var(--ii-glass-border),
+		0 8px 32px -8px rgba(15, 23, 42, 0.12);
+
+	/* ── Glow — subtler on light ── */
+	--ii-glow-accent: 0 0 8px color-mix(in srgb, var(--ii-brand-primary) 20%, transparent);
+	--ii-glow-success: 0 0 8px color-mix(in srgb, var(--ii-success) 15%, transparent);
+	--ii-glow-danger: 0 0 8px color-mix(in srgb, var(--ii-danger) 15%, transparent);
 }

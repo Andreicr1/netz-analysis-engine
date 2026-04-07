@@ -32,8 +32,9 @@
 
 	let containerEl: HTMLDivElement | undefined = $state();
 	let chart: ReturnType<typeof echarts.init> | undefined = $state();
-	let lastAppliedOption: Record<string, unknown> | null = $state(null);
-	let lastAppliedOverride: Record<string, unknown> | undefined = $state();
+	// Plain vars (not $state) — avoid proxy equality mismatch in $effect
+	let lastAppliedOption: Record<string, unknown> | null = null;
+	let lastAppliedOverride: Record<string, unknown> | undefined;
 
 	onMount(() => {
 		if (!containerEl) return;
@@ -52,8 +53,6 @@
 			ro.disconnect();
 			chart?.dispose();
 			chart = undefined;
-			lastAppliedOption = null;
-			lastAppliedOverride = undefined;
 		};
 	});
 

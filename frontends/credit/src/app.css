@@ -1,5 +1,5 @@
-/* Import @netz/ui design tokens + base reset */
-@import "@netz/ui/styles";
+/* Import shared InvestIntell theme — canonical --netz-* tokens + resets */
+@import "@netz/ui/investintell-theme";
 @import "tailwindcss";
 
 /* ── Content sources (replaces tailwind.config content[]) ── */

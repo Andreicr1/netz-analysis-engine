@@ -139,14 +139,13 @@ async def get_attribution(
     fund_selection = live_portfolio.fund_selection_schema if live_portfolio else None
     instruments_by_block: dict[str, list[str]] = {}
     if fund_selection:
-        for block_id, funds in fund_selection.items():
-            if isinstance(funds, list):
-                instruments_by_block[block_id] = [
-                    f["instrument_id"] if isinstance(f, dict) else str(f)
-                    for f in funds
-                ]
-            elif isinstance(funds, dict) and "instrument_id" in funds:
-                instruments_by_block[block_id] = [funds["instrument_id"]]
+        # fund_selection_schema format: {"funds": [{"instrument_id": ..., "block_id": ...}, ...]}
+        funds_list = fund_selection.get("funds", [])
+        if isinstance(funds_list, list):
+            for f in funds_list:
+                if isinstance(f, dict) and f.get("instrument_id") and f.get("block_id"):
+                    bid = f["block_id"]
+                    instruments_by_block.setdefault(bid, []).append(f["instrument_id"])
 
     all_instrument_ids: list[str] = []
     for ids in instruments_by_block.values():

@@ -181,13 +181,21 @@ class FeeDragService:
         instrument_type: str,
         attributes: dict[str, Any],
     ) -> FeeBreakdown:
-        """Extract fee components from JSONB attributes by instrument type."""
+        """Extract fee components from JSONB attributes by instrument type.
+
+        Converts decimal fraction percentages (e.g. 0.015) to percentage
+        points (1.5) as expected by the FeeDragService logic.
+        """
         # Prefer XBRL expense_ratio_pct (authoritative) over manual management_fee_pct
-        mgmt = max(0.0, _safe_float(
+        # Both are stored as pure decimal fractions (0.015 = 1.5%)
+        raw_mgmt = (
             attributes.get("expense_ratio_pct")
             or attributes.get("management_fee_pct")
-            or 0.0,
-        ))
+            or 0.0
+        )
+        mgmt = max(0.0, _safe_float(raw_mgmt) * 100.0)
+
+        # performance_fee_pct is already stored as percentage points in attributes
         perf = max(0.0, _safe_float(attributes.get("performance_fee_pct", 0.0)))
         other = 0.0
 

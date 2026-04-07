@@ -7,6 +7,7 @@ Dual mount pattern: root + /api prefix (for Cloudflare gateway proxy).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -99,8 +100,10 @@ from app.domains.wealth.routes.funds import router as wealth_funds_router
 from app.domains.wealth.routes.instruments import router as wealth_instruments_router
 from app.domains.wealth.routes.long_form_reports import router as wealth_long_form_reports_router
 from app.domains.wealth.routes.macro import router as wealth_macro_router
+from app.domains.wealth.routes.market_data import router as wealth_market_data_router
 from app.domains.wealth.routes.manager_screener import router as wealth_manager_screener_router
 from app.domains.wealth.routes.model_portfolios import router as wealth_model_portfolios_router
+from app.domains.wealth.routes.monitoring import router as wealth_monitoring_router
 from app.domains.wealth.routes.monthly_report import router as wealth_monthly_report_router
 from app.domains.wealth.routes.portfolio_views import router as wealth_portfolio_views_router
 from app.domains.wealth.routes.portfolios import router as wealth_portfolios_router
@@ -204,6 +207,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     await _verify_config_completeness()
 
+    # Start WebSocket connection manager + Redis price subscriber
+    from app.core.ws.manager import ConnectionManager, redis_subscriber
+    from app.core.ws.tiingo_bridge import TiingoStreamBridge
+
+    ws_manager = ConnectionManager()
+    app.state.ws_manager = ws_manager
+    redis_sub_task = asyncio.create_task(redis_subscriber(ws_manager))
+
+    # Tiingo WS → Redis bridge (live IEX prices for equities/ETFs).
+    # Institutional plan: pre-subscribe the entire approved universe at boot
+    # so the firehose is hot before the first frontend client connects.
+    tiingo_bridge = TiingoStreamBridge()
+    app.state.tiingo_bridge = tiingo_bridge
+    try:
+        added = await tiingo_bridge.subscribe_approved_universe()
+        logger.info("tiingo_bridge_bootstrap added=%d", added)
+    except Exception:
+        logger.exception("tiingo_bridge_bootstrap_failed")
+
     # Start PgNotifier for config cache invalidation
     from app.core.config.config_service import ConfigService
     from app.core.config.pg_notify import PgNotifier
@@ -228,11 +250,42 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     yield
     # Cleanup
+    await tiingo_bridge.shutdown()
+    await ws_manager.shutdown()
+    redis_sub_task.cancel()
+    try:
+        await redis_sub_task
+    except asyncio.CancelledError:
+        pass
     if pg_notifier:
         await pg_notifier.stop()
     await engine.dispose()
     await close_redis_pool()
     logger.info("Netz Analysis Engine shutdown complete")
+
+
+async def _server_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """ServerErrorMiddleware handler — ensures CORS headers on 500 responses.
+
+    Without this, Starlette's default handler returns text/plain without CORS
+    headers, causing browsers to mask the real 500 as "blocked by CORS".
+    """
+    import structlog
+    import traceback as tb_mod
+    slog = structlog.get_logger()
+    slog.error("unhandled_exception", path=str(request.url.path), error=str(exc), exc_type=type(exc).__name__)
+
+    origin = request.headers.get("origin", "")
+    headers: dict[str, str] = {}
+    if origin and origin in settings.cors_origins:
+        headers["access-control-allow-origin"] = origin
+        headers["access-control-allow-credentials"] = "true"
+
+    detail = "Internal server error"
+    if settings.is_development:
+        detail = f"{type(exc).__name__}: {exc}\n{''.join(tb_mod.format_tb(exc.__traceback__))}"
+
+    return JSONResponse(status_code=500, content={"detail": detail}, headers=headers)
 
 
 app = FastAPI(
@@ -247,7 +300,7 @@ from app.core.middleware.rate_limit import RateLimitMiddleware  # noqa: E402
 
 app.add_middleware(RateLimitMiddleware)
 
-# CORS registered last (outermost) — handles preflight OPTIONS before rate limiter sees it
+# CORS registered next — handles preflight OPTIONS before rate limiter sees it
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -256,6 +309,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ServerErrorMiddleware registered LAST (outermost) with custom CORS-safe handler.
+# Starlette auto-adds ServerErrorMiddleware, but with the default text/plain handler
+# that lacks CORS headers. Adding it explicitly with our handler takes precedence.
+from starlette.middleware.errors import ServerErrorMiddleware  # noqa: E402
+
+app.add_middleware(ServerErrorMiddleware, handler=_server_error_handler)
 
 
 
@@ -277,10 +337,25 @@ async def global_exception_handler(request: Request, exc: Exception):
         error=str(exc),
         exc_type=type(exc).__name__,
     )
+    # Manually inject CORS headers — ServerErrorMiddleware can catch exceptions
+    # before CORSMiddleware enriches the response, causing browsers to mask
+    # the real 500 as "blocked by CORS".
+    origin = request.headers.get("origin", "")
+    headers: dict[str, str] = {}
+    if origin and origin in settings.cors_origins:
+        headers["access-control-allow-origin"] = origin
+        headers["access-control-allow-credentials"] = "true"
+    detail = "Internal server error"
+    if settings.is_development:
+        import traceback
+        detail = f"{type(exc).__name__}: {exc}\n{''.join(traceback.format_tb(exc.__traceback__))}"
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error"},
+        content={"detail": detail},
+        headers=headers,
     )
+
+
 
 
 # ── Health endpoints ─────────────────────────────────────────
@@ -402,6 +477,8 @@ api_v1.include_router(wealth_agent_router)
 api_v1.include_router(wealth_search_router)
 api_v1.include_router(wealth_sec_analysis_router)
 api_v1.include_router(wealth_sec_funds_router)
+api_v1.include_router(wealth_market_data_router)
+api_v1.include_router(wealth_monitoring_router)
 
 # ── Mount credit domain routes ───────────────────────────────
 

@@ -78,6 +78,7 @@
 		return map;
 	});
 
+
 	function toggleFund(fundId: string) {
 		if (!selectedBlockId) return;
 		const next = new Map(selectedByBlock);
@@ -117,6 +118,50 @@
 	});
 
 	let hasChanges = $derived(addedFunds.length > 0 || removedFunds.length > 0);
+
+	// ── Manual weight editing ─────────────────────────────────────────────
+	let weightOverrides = $state<Map<string, number>>(new Map());
+	let weightEditMode = $state(false);
+
+	function effectiveWeight(fundId: string): number {
+		return weightOverrides.get(fundId) ?? weightMap.get(fundId) ?? 0;
+	}
+
+	function setWeight(fundId: string, value: number) {
+		const clamped = Math.max(0, Math.min(1, value));
+		const next = new Map(weightOverrides);
+		next.set(fundId, Math.round(clamped * 10000) / 10000);
+		weightOverrides = next;
+	}
+
+	let totalEffectiveWeight = $derived.by(() => {
+		let sum = 0;
+		for (const id of allSelectedIds) {
+			sum += effectiveWeight(id);
+		}
+		return sum;
+	});
+
+	let weightBudgetWarning = $derived(allSelectedIds.size > 0 && (totalEffectiveWeight < 0.98 || totalEffectiveWeight > 1.02));
+
+	function normalizeWeights() {
+		const total = totalEffectiveWeight;
+		if (total <= 0 || allSelectedIds.size === 0) return;
+		const next = new Map<string, number>();
+		for (const id of allSelectedIds) {
+			const w = effectiveWeight(id);
+			next.set(id, Math.round((w / total) * 10000) / 10000);
+		}
+		const adjusted = [...next.entries()];
+		const rSum = adjusted.reduce((s, [, v]) => s + v, 0);
+		if (adjusted.length > 0 && Math.abs(rSum - 1.0) > 0.00001) {
+			const top = adjusted.sort((a, b) => b[1] - a[1])[0];
+			if (top) {
+				top[1] = Math.round((top[1] + 1.0 - rSum) * 10000) / 10000;
+			}
+		}
+		weightOverrides = new Map(adjusted);
+	}
 
 	// Fund name lookup
 	let nameMap = $derived.by(() => {
@@ -182,7 +227,17 @@
 			{:else}
 				<div class="fse-funds-header">
 					<span class="fse-funds-title">{blockLabel(selectedBlockId)}</span>
-					<span class="fse-funds-count">{selectedIdsForBlock.size} / {fundsForBlock.length} selected</span>
+					<div class="fse-funds-header-right">
+						<span class="fse-funds-count">{selectedIdsForBlock.size} / {fundsForBlock.length} selected</span>
+						<button
+							class="fse-weight-toggle"
+							class:fse-weight-toggle--active={weightEditMode}
+							type="button"
+							onclick={() => (weightEditMode = !weightEditMode)}
+						>
+							{weightEditMode ? "Hide Weights" : "Edit Weights"}
+						</button>
+					</div>
 				</div>
 				<div class="fse-fund-items">
 					{#each fundsForBlock as fund (fund.instrument_id)}
@@ -203,7 +258,22 @@
 									<span class="fse-fund-ticker">{fund.ticker}</span>
 								{/if}
 							</div>
-							{#if currentWeight != null}
+							{#if weightEditMode && isSelected}
+								<input
+									type="number"
+									class="fse-weight-input"
+									min="0"
+									max="100"
+									step="0.1"
+									value={Math.round(effectiveWeight(fund.instrument_id) * 10000) / 100}
+									oninput={(e) => {
+										const v = parseFloat((e.target as HTMLInputElement).value);
+										if (!Number.isNaN(v)) setWeight(fund.instrument_id, v / 100);
+									}}
+									onclick={(e) => e.stopPropagation()}
+								/>
+								<span class="fse-weight-pct">%</span>
+							{:else if currentWeight != null}
 								<span class="fse-fund-weight">{formatPercent(currentWeight)}</span>
 							{/if}
 						</button>
@@ -212,6 +282,23 @@
 			{/if}
 		</div>
 	</div>
+
+	<!-- Weight budget bar (visible in weight edit mode) -->
+	{#if weightEditMode && allSelectedIds.size > 0}
+		<div class="fse-weight-budget">
+			<span class="fse-weight-budget-label {weightBudgetWarning ? 'fse-weight-budget-label--warn' : ''}">
+				Total: {formatPercent(totalEffectiveWeight * 100)}
+			</span>
+			<button
+				class="fse-normalize-btn"
+				type="button"
+				onclick={normalizeWeights}
+				disabled={totalEffectiveWeight <= 0}
+			>
+				Normalize to 100%
+			</button>
+		</div>
+	{/if}
 
 	<!-- Footer with change summary + actions -->
 	{#if hasChanges}
@@ -441,6 +528,95 @@
 		color: var(--ii-text-secondary);
 		font-variant-numeric: tabular-nums;
 		flex-shrink: 0;
+	}
+
+	/* ── Weight editing controls ───────────────────────────────────────────── */
+	.fse-funds-header-right {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.fse-weight-toggle {
+		padding: 2px 8px;
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-sm, 6px);
+		background: transparent;
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		cursor: pointer;
+		transition: all 120ms ease;
+	}
+	.fse-weight-toggle:hover {
+		border-color: var(--ii-brand-primary);
+		color: var(--ii-text-primary);
+	}
+	.fse-weight-toggle--active {
+		border-color: var(--ii-brand-primary);
+		background: color-mix(in srgb, var(--ii-brand-primary) 10%, transparent);
+		color: var(--ii-brand-primary);
+	}
+
+	.fse-weight-input {
+		width: 60px;
+		padding: 2px 4px;
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: 4px;
+		background: var(--ii-surface-alt);
+		color: var(--ii-text-primary);
+		font-size: var(--ii-text-label, 0.75rem);
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+		flex-shrink: 0;
+	}
+	.fse-weight-input:focus {
+		outline: none;
+		border-color: var(--ii-brand-primary);
+	}
+
+	.fse-weight-pct {
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
+		flex-shrink: 0;
+		margin-left: -2px;
+	}
+
+	.fse-weight-budget {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 6px 16px;
+		border-top: 1px solid var(--ii-border-subtle);
+		background: var(--ii-surface-alt);
+	}
+
+	.fse-weight-budget-label {
+		font-size: var(--ii-text-small, 0.8125rem);
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		color: var(--ii-success, #11ec79);
+	}
+	.fse-weight-budget-label--warn {
+		color: var(--ii-warning, #f59e0b);
+	}
+
+	.fse-normalize-btn {
+		padding: 4px 12px;
+		border: 1px solid var(--ii-brand-primary);
+		border-radius: var(--ii-radius-sm, 6px);
+		background: transparent;
+		color: var(--ii-brand-primary);
+		font-size: var(--ii-text-label, 0.75rem);
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 120ms ease;
+	}
+	.fse-normalize-btn:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--ii-brand-primary) 10%, transparent);
+	}
+	.fse-normalize-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
 	}
 
 	/* ── Footer ────────────────────────────────────────────────────────────── */

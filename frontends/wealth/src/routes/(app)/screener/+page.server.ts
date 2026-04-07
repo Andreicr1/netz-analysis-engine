@@ -1,62 +1,38 @@
-/** Unified Screener SSR — Fund Catalog with server-side pagination.
+/** Screener Level 1 — Manager Catalog SSR load.
  *
- * GET /screener/catalog + /screener/catalog/facets (3-universe funds)
- *
- * ARCHITECTURAL RULE: instruments_universe (RLS) is the DESTINATION, not the source.
- * Screener is DISCOVERY → DD Report → Approval → Import to Universe.
+ * Fetches from GET /screener/catalog/managers (grouped by manager_id).
+ * Default sort: AUM descending for institutional relevance.
+ * Falls back to empty page on error to avoid blocking navigation.
  */
 import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
-import type { UnifiedCatalogPage, CatalogFacets } from "$lib/types/catalog";
-import { EMPTY_CATALOG_PAGE, EMPTY_FACETS } from "$lib/types/catalog";
-import type { ScreeningRun, ScreeningResult } from "$lib/types/screening";
+import type { ManagerCatalogPage } from "$lib/types/catalog";
+import { EMPTY_MANAGER_CATALOG_PAGE } from "$lib/types/catalog";
 
-export const load: PageServerLoad = async ({ parent, url }) => {
+export const load: PageServerLoad = async ({ url, parent }) => {
 	const { token } = await parent();
 	const api = createServerApiClient(token);
 
-	const page = url.searchParams.get("page") ?? "1";
-	const pageSize = url.searchParams.get("page_size") ?? "50";
+	const q = url.searchParams.get("q") ?? "";
+	const page = parseInt(url.searchParams.get("page") ?? "1", 10);
+	const pageSize = 50;
 
-	const catalogParams: Record<string, string> = { page, page_size: pageSize };
-	const q = url.searchParams.get("q");
-	if (q) catalogParams.q = q;
-	const category = url.searchParams.get("category") ?? "mutual_fund";
-	catalogParams.fund_universe = category;
-	const fundTypes = url.searchParams.get("fund_type");
-	if (fundTypes) catalogParams.fund_type = fundTypes;
-	const strategyLabel = url.searchParams.get("strategy_label");
-	if (strategyLabel) catalogParams.strategy_label = strategyLabel;
-	const investmentGeography = url.searchParams.get("investment_geography");
-	if (investmentGeography) catalogParams.investment_geography = investmentGeography;
-	const domiciles = url.searchParams.getAll("domicile");
-	if (domiciles.length) catalogParams.domicile = domiciles.join(",");
-	const aumMin = url.searchParams.get("aum_min");
-	if (aumMin) catalogParams.aum_min = aumMin;
-	const sort = url.searchParams.get("sort");
-	if (sort) catalogParams.sort = sort;
-	// Default has_aum=true: show only funds with AUM > 0 unless toggled off
-	catalogParams.has_aum = url.searchParams.get("has_aum") ?? "true";
-	const maxER = url.searchParams.get("max_expense_ratio");
-	if (maxER) catalogParams.max_expense_ratio = maxER;
-	const minReturn1y = url.searchParams.get("min_return_1y");
-	if (minReturn1y) catalogParams.min_return_1y = minReturn1y;
-	const minReturn10y = url.searchParams.get("min_return_10y");
-	if (minReturn10y) catalogParams.min_return_10y = minReturn10y;
+	const aum_min = url.searchParams.get("aum_min");
 
-	const [catalog, facets, screeningRuns, screeningResults] = await Promise.all([
-		api.get<UnifiedCatalogPage>("/screener/catalog", catalogParams).catch(() => EMPTY_CATALOG_PAGE),
-		api.get<CatalogFacets>("/screener/catalog/facets", catalogParams).catch(() => EMPTY_FACETS),
-		api.get<ScreeningRun[]>("/screener/runs", { limit: "10" }).catch(() => [] as ScreeningRun[]),
-		api.get<ScreeningResult[]>("/screener/results", { is_current: "true", limit: "100" }).catch(() => [] as ScreeningResult[]),
-	]);
+	const sort = url.searchParams.get("sort") ?? "aum_desc";
 
-	return {
-		tab: url.searchParams.get("tab") ?? "catalog",
-		catalog,
-		catalogFacets: facets,
-		screeningRuns,
-		screeningResults,
-		currentParams: Object.fromEntries(url.searchParams.entries()),
-	};
+	try {
+		const params: Record<string, string> = {
+			page: String(page),
+			page_size: String(pageSize),
+			sort: sort,
+		};
+		if (q) params.q = q;
+		if (aum_min) params.aum_min = aum_min;
+
+		const catalog = await api.get<ManagerCatalogPage>("/screener/catalog/managers", params);
+		return { catalog, q, aum_min, page, sort };
+	} catch {
+		return { catalog: EMPTY_MANAGER_CATALOG_PAGE, q, aum_min, page, sort };
+	}
 };

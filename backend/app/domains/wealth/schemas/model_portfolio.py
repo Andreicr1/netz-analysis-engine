@@ -7,7 +7,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+import structlog
+from pydantic import BaseModel, ConfigDict, model_validator
+
+logger = structlog.get_logger()
 
 
 class ModelPortfolioRead(BaseModel):
@@ -27,6 +30,31 @@ class ModelPortfolioRead(BaseModel):
     stress_result: dict | None = None
     created_at: datetime
     created_by: str | None = None
+    weight_warning: bool = False
+
+    @model_validator(mode="after")
+    def _check_fund_weights(self) -> ModelPortfolioRead:
+        """Flag when fund_selection_schema weights are outside [0.98, 1.02].
+
+        Does NOT reject the payload (drafts are legitimate), but sets
+        ``weight_warning=True`` so the frontend can surface a badge.
+        """
+        schema = self.fund_selection_schema
+        if not schema or not isinstance(schema, dict):
+            return self
+        funds = schema.get("funds")
+        if not funds:
+            return self
+        total = sum(float(f.get("weight", 0)) for f in funds)
+        if total < 0.98 or total > 1.02:
+            self.weight_warning = True
+            logger.warning(
+                "fund_weight_sum_anomaly",
+                portfolio_id=str(self.id),
+                total_weight=round(total, 6),
+                status=self.status,
+            )
+        return self
 
 
 class ModelPortfolioCreate(BaseModel):
@@ -154,6 +182,70 @@ class AlternativeProfileRead(BaseModel):
     profile: str
     cvar_limit: float
     current_cvar_would_pass: bool
+
+
+# ── Rebalance Preview ──────────────────────────────────────────────────────
+
+
+class HoldingInput(BaseModel):
+    """A single current holding in the client's account (external input)."""
+
+    instrument_id: uuid.UUID
+    quantity: float
+    current_price: float
+
+
+class RebalancePreviewRequest(BaseModel):
+    """Request body for POST /{portfolio_id}/rebalance/preview."""
+
+    total_aum: float | None = None  # If omitted, computed from holdings + cash
+    cash_available: float = 0.0
+    current_holdings: list[HoldingInput]
+
+
+class SuggestedTrade(BaseModel):
+    """A single trade suggestion: BUY, SELL, or HOLD."""
+
+    instrument_id: str
+    fund_name: str
+    block_id: str
+    action: Literal["BUY", "SELL", "HOLD"]
+    current_weight: float
+    target_weight: float
+    delta_weight: float  # target - current (percentage points)
+    current_value: float
+    target_value: float
+    trade_value: float  # positive = buy, negative = sell
+    estimated_quantity: float
+
+
+class WeightDelta(BaseModel):
+    """Block-level weight comparison: current vs target."""
+
+    block_id: str
+    current_weight: float
+    target_weight: float
+    delta_pp: float  # delta in percentage points
+
+
+class RebalancePreviewResponse(BaseModel):
+    """Response body for POST /{portfolio_id}/rebalance/preview."""
+
+    portfolio_id: str
+    portfolio_name: str
+    profile: str
+    total_aum: float
+    cash_available: float
+    total_trades: int
+    estimated_turnover_pct: float
+    trades: list[SuggestedTrade]
+    weight_comparison: list[WeightDelta]
+    cvar_95_projected: float | None = None
+    cvar_limit: float | None = None
+    cvar_warning: bool = False
+
+
+# ── Construction Advisor ──────────────────────────────────────────────────
 
 
 class ConstructionAdviceRead(BaseModel):

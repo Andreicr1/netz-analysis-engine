@@ -352,6 +352,7 @@ class SecCusipTickerMap(Base):
     issuer_cik: Mapped[str | None] = mapped_column(Text)
     resolved_via: Mapped[str] = mapped_column(Text, nullable=False)
     is_tradeable: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    gics_sector: Mapped[str | None] = mapped_column(Text)
     last_verified_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
@@ -615,6 +616,9 @@ class SecEtf(Base):
     lei: Mapped[str | None] = mapped_column(String)
     ticker: Mapped[str | None] = mapped_column(String)
     isin: Mapped[str | None] = mapped_column(String)
+    crd_number: Mapped[str | None] = mapped_column(
+        String, ForeignKey("sec_managers.crd_number", ondelete="SET NULL"),
+    )
 
     strategy_label: Mapped[str | None] = mapped_column(String)
     asset_class: Mapped[str | None] = mapped_column(String)
@@ -671,6 +675,10 @@ class SecBdc(Base):
     ticker: Mapped[str | None] = mapped_column(String)
     isin: Mapped[str | None] = mapped_column(String)
 
+    crd_number: Mapped[str | None] = mapped_column(
+        String, ForeignKey("sec_managers.crd_number", ondelete="SET NULL"),
+    )
+
     strategy_label: Mapped[str | None] = mapped_column(String, server_default="Private Credit")
     investment_focus: Mapped[str | None] = mapped_column(String)
 
@@ -716,6 +724,10 @@ class SecMoneyMarketFund(Base):
     fund_name: Mapped[str] = mapped_column(String, nullable=False)
     lei_series: Mapped[str | None] = mapped_column(String)
     lei_registrant: Mapped[str | None] = mapped_column(String)
+
+    crd_number: Mapped[str | None] = mapped_column(
+        String, ForeignKey("sec_managers.crd_number", ondelete="SET NULL"),
+    )
 
     mmf_category: Mapped[str] = mapped_column(String, nullable=False)
     strategy_label: Mapped[str | None] = mapped_column(String)

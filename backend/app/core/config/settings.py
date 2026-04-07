@@ -74,6 +74,7 @@ class Settings(BaseSettings):
 
     # ── External APIs ────────────────────────────────────────
     fred_api_key: str = ""
+    tiingo_api_key: str = ""
 
     # ── Data Commons (free key from https://apikeys.datacommons.org/) ──
     dc_api_key: str = ""

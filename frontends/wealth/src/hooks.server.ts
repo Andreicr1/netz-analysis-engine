@@ -23,13 +23,18 @@ function deriveJwksUrl(pk: string): string {
 const PK = pubEnv.PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
 const CLERK_JWKS_URL = env.CLERK_JWKS_URL || deriveJwksUrl(PK);
 const DEV_TOKEN = env.DEV_TOKEN ?? "dev-token";
+const IS_DEV = import.meta.env.DEV;
+
+const SIGN_IN_URL = IS_DEV
+	? "/auth/callback"
+	: "https://accounts.investintell.com/sign-in?redirect_url=https://wealth.investintell.com/auth/callback";
 
 const authHook = createClerkHook({
-	jwksUrl: CLERK_JWKS_URL,
-	devBypass: import.meta.env.DEV,
+	jwksUrl: IS_DEV ? undefined : CLERK_JWKS_URL,
+	devBypass: IS_DEV,
 	devToken: DEV_TOKEN,
 	publicPrefixes: ["/health", "/.well-known/", "/auth/"],
-	signInUrl: "https://accounts.investintell.com/sign-in?redirect_url=https://wealth.investintell.com/auth/callback",
+	signInUrl: SIGN_IN_URL,
 });
 
 /**

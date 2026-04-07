@@ -21,6 +21,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-cusip-resolution",
+    "name": "trigger_run_cusip_resolution"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-esma-ingestion",
     "name": "trigger_run_esma_ingestion"
   },

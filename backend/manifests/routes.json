@@ -881,6 +881,21 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/market-data/dashboard-snapshot",
+    "name": "dashboard_snapshot"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/market-data/portfolio/{portfolio_id}/holdings",
+    "name": "portfolio_holdings"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/market-data/screener/catalog",
+    "name": "screener_catalog"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/model-portfolios",
     "name": "list_model_portfolios"
   },
@@ -891,8 +906,28 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/drift",
+    "name": "get_drift_report"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/drift/live",
+    "name": "get_live_drift"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/holdings",
+    "name": "get_holdings"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/model-portfolios/{portfolio_id}/overlap",
     "name": "get_portfolio_overlap"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/performance",
+    "name": "get_performance"
   },
   {
     "method": "GET",
@@ -903,6 +938,11 @@
     "method": "GET",
     "path": "/api/v1/model-portfolios/{portfolio_id}/views",
     "name": "list_views"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/monitoring/alerts",
+    "name": "get_monitoring_alerts"
   },
   {
     "method": "GET",
@@ -1046,6 +1086,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/screener/catalog/managers",
+    "name": "get_catalog_managers"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/screener/catalog/{external_id}/detail",
     "name": "get_catalog_fund_detail"
   },
@@ -1058,6 +1103,11 @@
     "method": "GET",
     "path": "/api/v1/screener/facets",
     "name": "get_screener_facets"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/screener/funds/{external_id}/classes",
+    "name": "get_fund_classes"
   },
   {
     "method": "GET",
@@ -1801,6 +1851,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/rebalance/preview",
+    "name": "rebalance_preview"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/model-portfolios/{portfolio_id}/stress",
     "name": "trigger_stress"
   },
@@ -1948,6 +2003,11 @@
     "method": "POST",
     "path": "/api/v1/workers/run-brochure-extract",
     "name": "trigger_run_brochure_extract"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-cusip-resolution",
+    "name": "trigger_run_cusip_resolution"
   },
   {
     "method": "POST",

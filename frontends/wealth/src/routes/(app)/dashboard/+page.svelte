@@ -1,273 +1,449 @@
 <!--
-  Dashboard — Wealth OS entry point.
-  SSR provides initial snapshot; riskStore (SSE) streams live CVaR/regime updates.
-  Owns riskStore lifecycle — start() on mount, destroy() on unmount.
+  Dashboard — InvestIntell Wealth OS.
+  12-column grid layout matching Figma. No risk jargon.
+  Holdings + prices from real API (SSR) + WebSocket (live updates).
 -->
 <script lang="ts">
 	import { getContext, onMount } from "svelte";
-	import { PageHeader, StatusBadge, formatPercent, formatNumber } from "@investintell/ui";
-	import type { RiskStore, CVaRStatus } from "$lib/stores/risk-store.svelte";
-	import { regimeMultiplierLabel } from "$lib/constants/regime";
-	import RegimeTimeline from "$lib/components/charts/RegimeTimeline.svelte";
-	import MacroIndicatorStrip from "$lib/components/MacroIndicatorStrip.svelte";
+	import { formatNumber, formatPercent, formatCurrency } from "@investintell/ui";
+	import type { RiskStore, RegimeData, DriftAlert, BehaviorAlert } from "$lib/stores/risk-store.svelte";
+	import type { MarketDataStore, DashboardSnapshot } from "$lib/stores/market-data.svelte";
+	import type { PortfolioAnalyticsStore } from "$lib/stores/portfolio-analytics.svelte";
+	import { ArrowUpRight, ChevronDown, TrendingUp, TrendingDown } from "lucide-svelte";
+	import AdvancedMarketChart from "$lib/components/charts/AdvancedMarketChart.svelte";
+	import LiveNewsFeed from "$lib/components/dashboard/LiveNewsFeed.svelte";
 
 	let { data } = $props();
 
 	const riskStore = getContext<RiskStore>("netz:riskStore");
+	const marketStore = getContext<MarketDataStore>("netz:marketDataStore");
+	const analytics = getContext<PortfolioAnalyticsStore>("netz:portfolioAnalytics");
 
+	// Seed risk store with SSR data — layout handles start/destroy lifecycle.
 	onMount(() => {
-		// Delay riskStore start to avoid hydration interference
-		const timer = setTimeout(() => {
-			try { riskStore.start(); } catch (e) { console.warn("Risk store failed to start:", e); }
-		}, 2000);
-		return () => { clearTimeout(timer); riskStore.destroy(); };
+		if (data.riskSummary || data.regime) {
+			riskStore.seedFromSSR({
+				riskSummary: data.riskSummary as Record<string, unknown> | null,
+				regime: data.regime as RegimeData | null,
+				driftAlerts: data.alerts as { dtw_alerts: DriftAlert[]; behavior_change_alerts: BehaviorAlert[] } | null,
+			});
+		}
+
+		// Seed market data store with SSR dashboard snapshot
+		if (data.dashboardSnapshot) {
+			marketStore.seedFromSSR(data.dashboardSnapshot as DashboardSnapshot);
+		}
 	});
 
-	// ── Regime — live from store, SSR fallback ──────────────────────────
-	let regime = $derived(
-		riskStore.regime?.regime
-		?? (data.regime as { regime?: string } | null)?.regime
-		?? null
-	);
-
-	function regimeBadgeStatus(r: string | null): "neutral" | "warning" | "danger" | "success" {
-		switch (r) {
-			case "RISK_OFF":    return "warning";
-			case "CRISIS":      return "danger";
-			case "RISK_ON":     return "success";
-			case "INFLATION":   return "warning";
-			default:            return "neutral";
-		}
-	}
-
-	// ── Profile display config ───────────────────────────────────────────
 	const PROFILES = ["conservative", "moderate", "growth"] as const;
 	type Profile = typeof PROFILES[number];
 
-	const profileLabel: Record<Profile, string> = {
-		conservative: "Conservador",
-		moderate:     "Moderado",
-		growth:       "Growth",
-	};
-	const profileSubLabel: Record<Profile, string> = {
-		conservative: "Conservative",
-		moderate:     "Moderate",
-		growth:       "Aggressive",
-	};
-
-	// ── CVaR per profile — live from store, SSR fallback ────────────────
-	function getCvar(profile: Profile): CVaRStatus | null {
-		const live = riskStore.cvarByProfile[profile];
-		if (live?.cvar_current != null) return live;
-		// SSR fallback from riskSummary — backend returns profiles as dict, not array
-		const summaryProfiles = (data.riskSummary as { profiles?: Record<string, CVaRStatus | null> } | null)?.profiles;
-		return summaryProfiles?.[profile] ?? null;
-	}
-
-	function utilizationColor(pct: number | null): string {
-		if (pct == null) return "var(--ii-text-muted)";
-		if (pct >= 100)  return "var(--ii-danger)";
-		if (pct >= 80)   return "var(--ii-warning)";
-		return "var(--ii-success)";
-	}
-
-	function utilizationBarColor(pct: number | null): string {
-		if (pct == null) return "var(--ii-border)";
-		if (pct >= 100)  return "var(--ii-danger)";
-		if (pct >= 80)   return "var(--ii-warning)";
-		return "var(--ii-success)";
-	}
-
-	// ── NAV from snapshot SSR data ───────────────────────────────────────
 	function getSnapshot(profile: Profile) {
 		return (data.snapshotsByProfile as Record<string, unknown>)?.[profile] as {
-			nav?: number;
-			ytd_return?: number;
-			snapshot_date?: string;
+			nav?: number; ytd_return?: number;
 		} | null;
 	}
 
-	// ── Alerts ───────────────────────────────────────────────────────────
-	let dtwAlerts   = $derived((riskStore.driftAlerts?.dtw_alerts?.length ?? 0) > 0
-		? riskStore.driftAlerts.dtw_alerts
-		: ((data.alerts as { dtw_alerts?: unknown[] } | null)?.dtw_alerts ?? []));
-	let behaviorAlerts = $derived((riskStore.driftAlerts?.behavior_change_alerts?.length ?? 0) > 0
-		? riskStore.driftAlerts.behavior_change_alerts
-		: ((data.alerts as { behavior_change_alerts?: unknown[] } | null)?.behavior_change_alerts ?? []));
-
-	// ── Timestamp ────────────────────────────────────────────────────────
-	let updatedAt = $derived(
-		riskStore.computedAt
-			? new Date(riskStore.computedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-			: null
+	// Derived from portfolio analytics (live prices fused with positions)
+	let totalAum = $derived(
+		analytics.totalNav > 0
+			? analytics.totalNav
+			: marketStore.totalAum > 0
+				? marketStore.totalAum
+				: PROFILES.reduce((sum, p) => sum + (getSnapshot(p)?.nav ?? 0), 0)
 	);
-	let today = new Date().toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
+
+	let totalReturnPct = $derived(
+		analytics.positions.length > 0
+			? analytics.totalPnlPct
+			: marketStore.totalReturnPct ??
+				(() => {
+					const returns = PROFILES.map(p => getSnapshot(p)?.ytd_return).filter((r): r is number => r != null);
+					return returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : null;
+				})()
+	);
+
+	let totalPnl = $derived(analytics.totalPnl);
+
+	let selectedRange = $state("6M");
+	const timeRanges = ["1D", "1W", "1M", "6M", "1Y"];
+
+	let selectedProfile = $state("All");
+	const profileFilters = ["Conservative", "Balanced", "Growth", "All"];
+
+	let overviewFilter = $state("All");
+	let watchlistFilter = $state("Most Viewed");
+
+	// ── Active ticker — drives the central chart + news feed ──────────
+	// Defaults to SPY until the user clicks a holding/watchlist row, or
+	// auto-promotes to the first holding once the SSR snapshot lands.
+	let activeTicker = $state<string>("SPY");
+
+	function selectTicker(ticker: string | null | undefined) {
+		const t = (ticker ?? "").trim().toUpperCase();
+		if (!t) return;
+		activeTicker = t;
+		// Ensure the WS bridge is streaming this symbol — idempotent.
+		marketStore.subscribe([t]);
+	}
+
+	// Once holdings arrive from SSR/snapshot, prefer the largest position
+	// so the user doesn't open the dashboard staring at an unrelated SPY.
+	$effect(() => {
+		if (activeTicker !== "SPY") return;
+		const first = marketStore.holdings[0];
+		if (first?.ticker) {
+			activeTicker = first.ticker.toUpperCase();
+			marketStore.subscribe([activeTicker]);
+		}
+	});
+
+	// Gradient borders — rotate across holdings for visual interest
+	const GRADIENTS = [
+		(pos: boolean) => `linear-gradient(to top, ${pos ? "rgba(17,236,121,0.5)" : "rgba(252,26,26,0.5)"}, ${pos ? "rgba(17,236,121,0.15)" : "rgba(252,26,26,0.15)"} 50%, transparent)`,
+		(pos: boolean) => `linear-gradient(to bottom, ${pos ? "rgba(17,236,121,0.5)" : "rgba(252,26,26,0.5)"}, ${pos ? "rgba(17,236,121,0.15)" : "rgba(252,26,26,0.15)"} 50%, transparent)`,
+		(pos: boolean) => `linear-gradient(to bottom right, ${pos ? "rgba(17,236,121,0.5)" : "rgba(252,26,26,0.5)"}, ${pos ? "rgba(17,236,121,0.15)" : "rgba(252,26,26,0.15)"} 50%, transparent)`,
+		(pos: boolean) => `linear-gradient(to bottom left, ${pos ? "rgba(17,236,121,0.5)" : "rgba(252,26,26,0.5)"}, ${pos ? "rgba(17,236,121,0.15)" : "rgba(252,26,26,0.15)"} 50%, transparent)`,
+		(pos: boolean) => `linear-gradient(to top right, ${pos ? "rgba(17,236,121,0.5)" : "rgba(252,26,26,0.5)"}, ${pos ? "rgba(17,236,121,0.12)" : "rgba(252,26,26,0.12)"} 50%, transparent)`,
+	];
+
+	// Top 5 holdings for the card row
+	let topHoldings = $derived(marketStore.holdings.slice(0, 5));
+
+	// Normalized row type for the overview table
+	interface OverviewRow {
+		name: string;
+		ticker: string;
+		price: number;
+		changePct: number;
+		aum: number | null;
+		currency: string;
+		pnl: number | null;
+	}
+
+	// Use analytics positions (live P&L) when available, fallback to raw holdings
+	let overviewRows = $derived.by((): OverviewRow[] => {
+		let rows: OverviewRow[];
+
+		if (analytics.positions.length > 0) {
+			rows = analytics.positions.map((p) => ({
+				name: p.name,
+				ticker: p.ticker,
+				price: p.livePrice,
+				changePct: p.intradayPnlPct,
+				aum: p.positionValue,
+				currency: p.currency,
+				pnl: p.intradayPnl,
+			}));
+		} else {
+			rows = marketStore.holdings.map((h) => ({
+				name: h.name,
+				ticker: h.ticker,
+				price: h.price,
+				changePct: h.change_pct,
+				aum: h.aum_usd,
+				currency: h.currency,
+				pnl: null,
+			}));
+		}
+
+		if (overviewFilter === "Gainers") return rows.filter((r) => r.changePct > 0);
+		if (overviewFilter === "Losers") return rows.filter((r) => r.changePct < 0);
+		return rows;
+	});
+	let hasData = $derived(marketStore.holdings.length > 0);
+	let isLoading = $derived(marketStore.status === "connecting" && !hasData);
 </script>
 
-<div class="dashboard">
-	<!-- Header -->
-	<div class="dashboard-header">
-		<div class="dashboard-title">
-			<PageHeader
-				title="Wealth OS — Dashboard"
-				subtitle="{today}{updatedAt ? ` · Atualizado às ${updatedAt}` : ''}"
-			/>
-		</div>
-		<div class="dashboard-header-meta">
-			{#if regime}
-				<span title={regimeMultiplierLabel(regime) || "No CVaR adjustment"}>
-					<StatusBadge status={regimeBadgeStatus(regime)} label="{regime.replace('_', '_')} ativo" />
-				</span>
-				{#if regimeMultiplierLabel(regime)}
-					<span class="regime-multiplier-hint">{regimeMultiplierLabel(regime)}</span>
+<!-- 12-column master grid — high-density layout, glassmorphism preserved -->
+<div class="grid grid-cols-12 gap-3">
+
+	<!-- ══ Row 1: Total AUM (4 cols) + Portfolio Holdings (8 cols) ══ -->
+
+	<!-- Total AUM — glassmorphism (density-tuned) -->
+	<div class="col-span-4 relative rounded-[24px] overflow-hidden bg-[#0d0d0d]/60 backdrop-blur-[11px] border border-white/5 min-h-[170px]">
+		<div class="absolute inset-0 bg-gradient-to-br from-[#0177fb]/15 via-transparent to-transparent pointer-events-none"></div>
+		<div class="relative flex flex-col justify-between h-full px-5 py-4 gap-2">
+			<div class="flex items-center justify-between">
+				<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd]">Total AUM</span>
+				<div class="flex items-center gap-1">
+					<span class="border border-white/20 rounded-full px-3 py-1 text-[11px] text-white leading-none">{selectedRange}</span>
+					<span class="border border-white/20 rounded-full p-1.5 leading-none">
+						<ChevronDown size={14} class="text-white" />
+					</span>
+				</div>
+			</div>
+
+			{#if isLoading}
+				<div class="h-8 w-44 bg-white/5 rounded animate-pulse"></div>
+			{:else}
+				<p class="text-[32px] font-bold text-white tracking-tight tabular-nums leading-none">
+					{formatCurrency(totalAum)}
+				</p>
+			{/if}
+
+			<div class="flex items-end gap-1.5">
+				<span class="text-xs text-[#85a0bd] uppercase tracking-wider">Return</span>
+				{#if totalReturnPct != null}
+					{#if totalReturnPct >= 0}
+						<TrendingUp size={14} class="text-[#11ec79]" />
+						<span class="text-sm font-semibold text-[#11ec79] tabular-nums">
+							+{formatPercent(totalReturnPct)}{#if totalPnl !== 0} ({formatCurrency(Math.abs(totalPnl))}){/if}
+						</span>
+					{:else}
+						<TrendingDown size={14} class="text-[#fc1a1a]" />
+						<span class="text-sm font-semibold text-[#fc1a1a] tabular-nums">
+							{formatPercent(totalReturnPct)}{#if totalPnl !== 0} ({formatCurrency(Math.abs(totalPnl))}){/if}
+						</span>
+					{/if}
+				{:else if isLoading}
+					<div class="h-3 w-20 bg-white/5 rounded animate-pulse"></div>
+				{:else}
+					<span class="text-sm text-[#85a0bd]">—</span>
 				{/if}
-			{/if}
-			<span class="org-label">Netz Partners</span>
+			</div>
 		</div>
 	</div>
 
-	<!-- Macro Indicators + Regime Timeline -->
-	<MacroIndicatorStrip indicators={riskStore.macroIndicators} />
-	{#if riskStore.regimeHistory.length > 0}
-		<RegimeTimeline history={riskStore.regimeHistory} />
-	{/if}
+	<!-- Portfolio Holdings (8 cols) — density-tuned -->
+	<div class="col-span-8 bg-black rounded-[24px] px-5 py-4">
+		<div class="flex items-center justify-between mb-3">
+			<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd]">Portfolio Holdings</span>
+			<div class="flex items-center gap-1">
+				<a href="/portfolio/approved" class="border border-white/20 rounded-full px-3 py-1 text-[11px] text-white leading-none no-underline hover:bg-white/10 transition-colors">See all</a>
+				<a href="/portfolio/approved" class="border border-white/20 rounded-full p-1.5 leading-none no-underline hover:bg-white/10 transition-colors">
+					<ArrowUpRight size={14} class="text-white" />
+				</a>
+			</div>
+		</div>
 
-	<!-- Portfolio Cards -->
-	<div class="portfolio-cards">
-		{#each PROFILES as profile (profile)}
-			{@const cvar = getCvar(profile)}
-			{@const snap = getSnapshot(profile)}
-			{@const utilPct = cvar?.cvar_utilized_pct ?? null}
-			<a class="portfolio-card" href="/portfolios/{profile}" data-sveltekit-preload-data data-status={cvar?.trigger_status ?? "ok"}>
-				<div class="card-header">
-					<span class="card-title">{profileLabel[profile]}</span>
-					<span class="card-sublabel">{profileSubLabel[profile]}</span>
+		<!-- Cards: 5 across, compact -->
+		<div class="grid grid-cols-5 gap-2">
+			{#if isLoading}
+				{#each Array(5) as _}
+					<div class="rounded-[20px] bg-[#141519] min-h-[88px] animate-pulse"></div>
+				{/each}
+			{:else if topHoldings.length > 0}
+				{#each topHoldings as h, i}
+					{@const positive = h.change_pct >= 0}
+					{@const gradFn = GRADIENTS[i % GRADIENTS.length]!}
+					{@const grad = gradFn(positive)}
+					<button
+						type="button"
+						class="rounded-[20px] p-[1px] text-left w-full transition-transform hover:scale-[1.02]"
+						style:background={grad}
+						onclick={() => selectTicker(h.ticker)}
+					>
+						<div class="bg-[#141519] rounded-[19px] px-3 py-2.5 flex flex-col justify-between min-h-[88px] h-full">
+							<div class="flex flex-col gap-0.5">
+								<span class="text-sm font-bold text-white tabular-nums leading-tight">{formatCurrency(h.price, h.currency)}</span>
+								<span class="text-[10px] tabular-nums {positive ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
+									{positive ? "+" : ""}{formatNumber(h.change, 2)} ({formatNumber(h.change_pct, 1)}%)
+								</span>
+							</div>
+							<div class="flex items-center justify-between mt-auto pt-1.5">
+								<span class="text-xs font-semibold text-white tracking-wide">{h.ticker || h.name.slice(0, 6)}</span>
+								{#if h.weight > 0}
+									<span class="text-[10px] font-bold text-white tabular-nums">{formatNumber(h.weight * 100, 1)}%</span>
+								{/if}
+							</div>
+						</div>
+					</button>
+				{/each}
+			{:else}
+				<div class="col-span-5 flex items-center justify-center h-[88px] text-xs text-white/30 border border-dashed border-white/10 rounded-[16px]">
+					No holdings in portfolio
 				</div>
-				<div class="card-nav">
-					{snap?.nav != null ? `USD ${formatNumber(snap.nav, 0)}` : "—"}
-				</div>
-				<div class="card-ytd">
-					NAV · {snap?.ytd_return != null ? formatPercent(snap.ytd_return) : "—"} YTD
-				</div>
-				<div class="card-metrics">
-					<div class="metric">
-						<span class="metric-label">CVaR 95%</span>
-						<span class="metric-value" style:color={utilizationColor(utilPct)}>
-							{cvar?.cvar_current != null ? formatPercent(cvar.cvar_current) : "—"}
-						</span>
-						{#if cvar?.cvar_limit != null}
-							<span class="metric-limit">lim {formatPercent(cvar.cvar_limit)}</span>
-						{/if}
-					</div>
-					<div class="metric">
-						<span class="metric-label">Utilização</span>
-						<span class="metric-value" style:color={utilizationColor(utilPct)}>
-							{utilPct != null ? formatPercent(utilPct / 100) : "—"}
-						</span>
-					</div>
-				</div>
-				<!-- Utilization bar -->
-				<div class="util-bar-track">
-					<div
-						class="util-bar-fill"
-						style:width="{Math.min(utilPct ?? 0, 100)}%"
-						style:background={utilizationBarColor(utilPct)}
-					></div>
-				</div>
-			</a>
-		{/each}
+			{/if}
+		</div>
 	</div>
 
-	<!-- Alerts Panel -->
-	<div class="bottom-row">
-		<div class="alerts-panel">
-			<h2 class="panel-title">Alertas ativos</h2>
-			{#if dtwAlerts.length === 0 && behaviorAlerts.length === 0}
-				<p class="alerts-empty">Nenhum alerta ativo.</p>
-			{/if}
-			{#each dtwAlerts as alert}
-				<div class="alert-card alert-card--dtw">
-					<span class="alert-dot alert-dot--red"></span>
-					<div class="alert-body">
-						<span class="alert-name">{(alert as { instrument_name: string }).instrument_name}</span>
-						<span class="alert-meta">DTW score: {formatNumber((alert as { dtw_score: number }).dtw_score, 2)}</span>
-					</div>
+	<!-- ══ Row 2: AdvancedMarketChart (8 cols) + LiveNewsFeed (4 cols) ══ -->
+	<div class="col-span-8 bg-black rounded-[24px] px-5 py-4 flex flex-col gap-3">
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div class="flex flex-wrap items-center gap-3">
+				<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd] whitespace-nowrap">Market Chart</span>
+				<div class="flex flex-wrap items-center gap-1">
+					{#each profileFilters as pf}
+						<button
+							type="button"
+							class="h-7 px-3 rounded-full text-[11px] font-medium text-white transition-colors leading-none whitespace-nowrap
+								{selectedProfile === pf
+									? 'bg-[#0177fb]'
+									: 'border border-white/20 hover:bg-white/10'}"
+							onclick={() => selectedProfile = pf}
+						>{pf}</button>
+					{/each}
 				</div>
-			{/each}
-			{#each behaviorAlerts as alert}
-				{@const a = alert as { instrument_name: string; severity: string }}
-				<div class="alert-card" class:alert-card--warn={a.severity === "warning"}>
-					<span class="alert-dot" class:alert-dot--yellow={a.severity === "warning"} class:alert-dot--red={a.severity !== "warning"}></span>
-					<div class="alert-body">
-						<span class="alert-name">{a.instrument_name}</span>
-						<span class="alert-meta">Anomalia comportamental · {a.severity}</span>
-					</div>
-				</div>
-			{/each}
+			</div>
+
+			<div class="flex flex-wrap items-center gap-1">
+				{#each timeRanges as tr}
+					<button
+						type="button"
+						class="h-7 px-3 rounded-full text-[11px] font-medium text-white transition-colors leading-none
+							{selectedRange === tr
+								? 'bg-[#0177fb]'
+								: 'border border-white/20 hover:bg-white/10'}"
+						onclick={() => selectedRange = tr}
+					>{tr}</button>
+				{/each}
+			</div>
 		</div>
+
+		<!-- Chart cola nas bordas internas — sem padding extra -->
+		<div class="-mx-2 -mb-2">
+			<AdvancedMarketChart ticker={activeTicker} height={380} />
+		</div>
+	</div>
+
+	<div class="col-span-4">
+		<LiveNewsFeed
+			tickers={[activeTicker]}
+			limit={20}
+			refreshIntervalMs={60_000}
+			maxHeight={460}
+		/>
+	</div>
+
+	<!-- ���═ Row 3: Portfolio Overview (8 cols) + Watchlist (4 cols) ══ -->
+
+	<!-- Portfolio Overview — high-density table -->
+	<div class="col-span-8 bg-black rounded-[24px] px-5 py-4">
+		<div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+			<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd]">Portfolio Overview</span>
+			<div class="flex flex-wrap items-center gap-1">
+				{#each ["All", "Gainers", "Losers"] as f}
+					<button
+						type="button"
+						class="h-7 px-3 rounded-full text-[11px] font-medium text-white transition-colors leading-none
+							{overviewFilter === f
+								? 'bg-[#0177fb]'
+								: 'border border-white/20 hover:bg-white/10'}"
+						onclick={() => overviewFilter = f}
+					>{f}</button>
+				{/each}
+			</div>
+		</div>
+
+		<table class="w-full">
+			<thead>
+				<tr class="border-b border-white/10">
+					<th class="text-left text-[10px] font-semibold uppercase tracking-wider text-[#85a0bd] pb-2 pr-3">Fund</th>
+					<th class="text-right text-[10px] font-semibold uppercase tracking-wider text-[#85a0bd] pb-2 pr-3">Last Price</th>
+					<th class="text-right text-[10px] font-semibold uppercase tracking-wider text-[#85a0bd] pb-2 pr-3">Change</th>
+					<th class="text-right text-[10px] font-semibold uppercase tracking-wider text-[#85a0bd] pb-2 pr-3">AUM</th>
+					<th class="text-right text-[10px] font-semibold uppercase tracking-wider text-[#85a0bd] pb-2 w-8"></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#if isLoading}
+					{#each Array(5) as _}
+						<tr class="border-b border-white/5">
+							<td class="py-2 pr-3"><div class="h-3 w-32 bg-white/5 rounded animate-pulse"></div></td>
+							<td class="py-2 pr-3"><div class="h-3 w-20 bg-white/5 rounded animate-pulse ml-auto"></div></td>
+							<td class="py-2 pr-3"><div class="h-3 w-14 bg-white/5 rounded animate-pulse ml-auto"></div></td>
+							<td class="py-2 pr-3"><div class="h-3 w-16 bg-white/5 rounded animate-pulse ml-auto"></div></td>
+							<td class="py-2"><div class="h-3 w-3 bg-white/5 rounded animate-pulse ml-auto"></div></td>
+						</tr>
+					{/each}
+				{:else if overviewRows.length > 0}
+					{#each overviewRows as row}
+						{@const positive = row.changePct >= 0}
+						{@const isActive = activeTicker === (row.ticker || "").toUpperCase()}
+						<tr
+							class="border-b border-white/5 cursor-pointer transition-colors hover:bg-white/5 {isActive ? 'bg-[#0177fb]/10' : ''}"
+							onclick={() => selectTicker(row.ticker)}
+						>
+							<td class="py-2 pr-3">
+								<div class="flex flex-col leading-tight">
+									<span class="text-sm text-white">{row.name.length > 28 ? row.name.slice(0, 28) + "…" : row.name}</span>
+									<span class="text-[10px] text-[#85a0bd] tracking-wide">{row.ticker}</span>
+								</div>
+							</td>
+							<td class="py-2 text-sm text-white tabular-nums text-right pr-3">{formatCurrency(row.price, row.currency)}</td>
+							<td class="py-2 text-sm tabular-nums text-right pr-3 {positive ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
+								{positive ? "+" : ""}{formatNumber(row.changePct, 2)}%
+							</td>
+							<td class="py-2 text-sm text-white tabular-nums text-right pr-3">
+								{row.aum ? formatCurrency(row.aum) : "—"}
+							</td>
+							<td class="py-2 text-right">
+								{#if positive}
+									<TrendingUp size={14} class="text-[#11ec79] inline" />
+								{:else}
+									<TrendingDown size={14} class="text-[#fc1a1a] inline" />
+								{/if}
+							</td>
+						</tr>
+					{/each}
+				{:else}
+					<tr>
+						<td colspan="5" class="py-6 text-center text-xs text-white/30">No holdings to display</td>
+					</tr>
+				{/if}
+			</tbody>
+		</table>
+	</div>
+
+	<!-- Watchlist — high-density list -->
+	<div class="col-span-4 bg-black rounded-[24px] px-5 py-4">
+		<div class="flex items-center justify-between gap-2 mb-3">
+			<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd]">Watchlist</span>
+			<div class="flex items-center gap-1">
+				{#each ["Most Viewed", "Gainers", "Losers"] as f}
+					<button
+						type="button"
+						class="h-7 px-2.5 rounded-full text-[10px] font-medium text-white transition-colors leading-none whitespace-nowrap
+							{watchlistFilter === f
+								? 'bg-[#0177fb]'
+								: 'border border-white/20 hover:bg-white/10'}"
+						onclick={() => watchlistFilter = f}
+					>{f}</button>
+				{/each}
+			</div>
+		</div>
+
+		{#if isLoading}
+			{#each Array(5) as _}
+				<div class="flex items-center justify-between py-2 border-b border-white/5">
+					<div class="flex flex-col gap-1">
+						<div class="h-3 w-24 bg-white/5 rounded animate-pulse"></div>
+						<div class="h-2 w-12 bg-white/5 rounded animate-pulse"></div>
+					</div>
+					<div class="flex flex-col gap-1 items-end">
+						<div class="h-3 w-16 bg-white/5 rounded animate-pulse"></div>
+						<div class="h-2 w-10 bg-white/5 rounded animate-pulse"></div>
+					</div>
+				</div>
+			{/each}
+		{:else}
+			{@const watchlistRows = watchlistFilter === "Gainers"
+				? marketStore.holdings.filter(h => h.change_pct > 0).slice(0, 8)
+				: watchlistFilter === "Losers"
+					? marketStore.holdings.filter(h => h.change_pct < 0).slice(0, 8)
+					: marketStore.holdings.slice(0, 8)}
+			{#each watchlistRows as h (h.ticker || h.name)}
+				{@const isActive = activeTicker === (h.ticker || "").toUpperCase()}
+				<button
+					type="button"
+					class="w-full text-left flex items-center justify-between py-2 px-2 -mx-2 border-b border-white/5 last:border-0 cursor-pointer transition-colors hover:bg-white/5 {isActive ? 'bg-[#0177fb]/10' : ''}"
+					onclick={() => selectTicker(h.ticker)}
+				>
+					<div class="flex flex-col gap-0.5 leading-tight min-w-0">
+						<span class="text-sm text-white truncate">{h.name.length > 22 ? h.name.slice(0, 22) + "…" : h.name}</span>
+						<span class="text-[10px] text-[#85a0bd] tracking-wide">{h.ticker}</span>
+					</div>
+					<div class="flex flex-col gap-0.5 items-end leading-tight tabular-nums">
+						<span class="text-sm text-white">{formatCurrency(h.price, h.currency)}</span>
+						<span class="text-[10px] {h.change_pct >= 0 ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
+							{h.change_pct >= 0 ? "+" : ""}{formatNumber(h.change_pct, 2)}%
+						</span>
+					</div>
+				</button>
+			{:else}
+				<div class="py-6 text-center text-xs text-white/30">No items in watchlist</div>
+			{/each}
+		{/if}
 	</div>
 </div>
-
-<style>
-.dashboard { display: flex; flex-direction: column; gap: 24px; padding: 32px 0; }
-
-/* Header */
-.dashboard-header { display: flex; align-items: flex-start; justify-content: space-between; }
-.dashboard-header-meta { display: flex; align-items: center; gap: 12px; padding-top: 6px; }
-.org-label { font-size: 13px; font-weight: 500; color: var(--ii-text-muted); }
-.regime-multiplier-hint { font-size: 11px; font-weight: 500; color: var(--ii-warning); }
-
-/* Portfolio cards grid */
-.portfolio-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-
-.portfolio-card {
-	background: var(--ii-surface-elevated);
-	border: 1px solid var(--ii-border-subtle);
-	border-radius: var(--ii-radius-lg, 12px);
-	padding: 20px 20px 16px;
-	display: flex; flex-direction: column; gap: 6px;
-	text-decoration: none; color: inherit;
-	cursor: pointer;
-	transition: border-color 150ms ease, box-shadow 150ms ease, transform 100ms ease;
-}
-.portfolio-card:hover {
-	border-color: var(--ii-border-focus, var(--ii-brand-primary));
-	box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-	transform: translateY(-1px);
-}
-.portfolio-card[data-status="breach"] { border-color: var(--ii-danger); }
-.portfolio-card[data-status="warning"] { border-color: var(--ii-warning); }
-
-.card-header { display: flex; align-items: baseline; justify-content: space-between; }
-.card-title { font-size: 15px; font-weight: 700; color: var(--ii-text-primary); }
-.card-sublabel { font-size: 11px; color: var(--ii-text-muted); background: var(--ii-surface-alt); padding: 2px 8px; border-radius: 99px; }
-.card-nav { font-size: 28px; font-weight: 700; color: var(--ii-text-primary); font-variant-numeric: tabular-nums; margin-top: 4px; }
-.card-ytd { font-size: 12px; color: var(--ii-text-secondary); }
-
-.card-metrics { display: flex; gap: 24px; margin-top: 8px; }
-.metric { display: flex; flex-direction: column; gap: 2px; }
-.metric-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ii-text-muted); }
-.metric-value { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.metric-limit { font-size: 11px; color: var(--ii-text-muted); }
-
-.util-bar-track { height: 4px; background: var(--ii-border); border-radius: 99px; margin-top: 12px; overflow: hidden; }
-.util-bar-fill { height: 100%; border-radius: 99px; transition: width 600ms ease, background 300ms ease; }
-
-/* Alerts */
-.bottom-row { display: grid; grid-template-columns: 1fr; gap: 16px; }
-.alerts-panel { background: var(--ii-surface-elevated); border: 1px solid var(--ii-border-subtle); border-radius: var(--ii-radius-lg, 12px); padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-.panel-title { font-size: 13px; font-weight: 700; color: var(--ii-text-primary); margin: 0; }
-.alerts-empty { font-size: 13px; color: var(--ii-text-muted); }
-
-.alert-card { display: flex; align-items: flex-start; gap: 10px; background: var(--ii-surface-alt); border-radius: var(--ii-radius-md, 8px); padding: 12px 14px; }
-.alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; background: var(--ii-border); }
-.alert-dot--red { background: var(--ii-danger); }
-.alert-dot--yellow { background: var(--ii-warning); }
-.alert-body { display: flex; flex-direction: column; gap: 2px; }
-.alert-name { font-size: 13px; font-weight: 600; color: var(--ii-text-primary); }
-.alert-meta { font-size: 11px; color: var(--ii-text-muted); }
-
-@media (max-width: 900px) {
-	.portfolio-cards { grid-template-columns: 1fr; }
-}
-</style>

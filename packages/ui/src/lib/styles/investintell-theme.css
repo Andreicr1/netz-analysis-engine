@@ -1,0 +1,20 @@
+/* ============================================================
+ * InvestIntell Shared Theme
+ * Canonical token layer shared by ALL frontends (Wealth, Credit).
+ * Re-exports @netz/ui tokens + typography + spacing + shadows
+ * so admin/shared components using --netz-* tokens work in any
+ * frontend context.
+ *
+ * Usage:
+ *   @import "@netz/ui/investintell-theme";
+ *   — OR —
+ *   @import "packages/ui/src/lib/styles/investintell-theme.css";
+ *
+ * Default: light theme (:root). Dark via [data-theme="dark"].
+ * ============================================================ */
+
+@import "./tokens.css";
+@import "./typography.css";
+@import "./spacing.css";
+@import "./shadows.css";
+@import "./animations.css";

@@ -137,7 +137,8 @@ The engine contains only analytical domains. Operational modules were intentiona
 - **expire_on_commit=False:** Always. Prevents implicit I/O in async context.
 - **lazy="raise":** Set on ALL relationships. Forces explicit `selectinload()`/`joinedload()`.
 - **RLS subselect:** All RLS policies must use `(SELECT current_setting(...))` not bare `current_setting()`. Without subselect, per-row evaluation causes 1000x slowdown.
-- **Global tables:** `macro_data`, `allocation_blocks`, `vertical_config_defaults`, `benchmark_nav`, `macro_regional_snapshots`, `treasury_data`, `ofr_hedge_fund_data`, `bis_statistics`, `imf_weo_forecasts`, `sec_*` tables, `sec_insider_transactions`, `esma_funds`, `esma_managers`, `instruments_universe`, `nav_timeseries`, `sec_fund_prospectus_returns`, `sec_fund_prospectus_stats` have NO `organization_id`, NO RLS. They are shared across all tenants.
+- **Global tables:** `macro_data`, `allocation_blocks`, `vertical_config_defaults`, `benchmark_nav`, `macro_regional_snapshots`, `treasury_data`, `ofr_hedge_fund_data`, `bis_statistics`, `imf_weo_forecasts`, `sec_*` tables, `sec_insider_transactions`, `esma_funds`, `esma_managers`, `instruments_universe`, `nav_timeseries`, `sec_fund_prospectus_returns`, `sec_fund_prospectus_stats`, `fund_risk_metrics` have NO `organization_id`, NO RLS. They are shared across all tenants.
+- **`fund_risk_metrics`** is GLOBAL — pre-computed by `global_risk_metrics` worker (lock 900_071) for ALL active instruments in `instruments_universe`. `organization_id` column is nullable (NULL for global rows). RLS is disabled (hypertable compression incompatible). All tenants see the same risk metrics. Org-scoped `risk_calc` (lock 900_007) can overwrite rows with DTW drift for org-imported instruments, but the base metrics are always global. Routes must NOT filter by `organization_id` when reading risk metrics.
 - **`instruments_universe`** is a GLOBAL catalog (no RLS). Org-scoped instrument selection is via `instruments_org` (has RLS, `organization_id`, `block_id`, `approval_status`). The `Instrument` model has NO `organization_id`, `block_id`, or `approval_status` — those live on `InstrumentOrg`. All queries needing org-scoped instruments must JOIN `instruments_org`.
 - **`nav_timeseries`** is GLOBAL (no RLS, no `organization_id`). Prices are market data shared across all tenants. Org-scoping for NAV queries is via JOIN `instruments_org`.
 - **No module-level asyncio primitives:** Create `Semaphore`, `Lock`, `Event` lazily inside async functions. Module-level causes "attached to different event loop" errors.
@@ -202,7 +203,8 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `ofr_ingestion` | 900_012 | global | `ofr_hedge_fund_data` (3mo chunks) | OFR API (leverage, AUM, strategy, repo, stress) | Weekly |
 | `benchmark_ingest` | 900_004 | global | `benchmark_nav` (1mo chunks) | Yahoo Finance | Daily |
 | `instrument_ingestion` | 900_010 | global | `nav_timeseries` | Yahoo Finance (or pluggable provider) | Daily |
-| `risk_calc` | 900_007 | org | `fund_risk_metrics` | Computed (CVaR, Sharpe, volatility, momentum: RSI, Bollinger, OBV) | Daily |
+| `global_risk_metrics` | 900_071 | global | `fund_risk_metrics` | Computed (CVaR, Sharpe, volatility, momentum, scoring) for ALL instruments_universe | Daily |
+| `risk_calc` | 900_007 | org | `fund_risk_metrics` | Overwrites with DTW drift for org-imported instruments | Daily |
 | `portfolio_eval` | 900_008 | org | `portfolio_snapshots` | Computed (breach status, regime, cascade) | Daily |
 | `nport_ingestion` | 900_018 | global | `sec_nport_holdings` (3mo chunks) | SEC EDGAR N-PORT XML | Weekly |
 | `sec_13f_ingestion` | 900_021 | global | `sec_13f_holdings`, `sec_13f_diffs` | SEC EDGAR 13F-HR (edgartools) | Weekly |
@@ -222,7 +224,7 @@ Background workers ingest all external time-series data into hypertables. Routes
 
 **Credit market_data** reads all macro data from `macro_data` hypertable (zero FRED API calls at runtime, `fred_client.py` eliminated). Regional Case-Shiller (20 metros) also from `macro_data`.
 
-**Momentum signals** (RSI, Bollinger, OBV flow) are pre-computed by `risk_calc` worker into `fund_risk_metrics` columns (`rsi_14`, `bb_position`, `nav_momentum_score`, `flow_momentum_score`, `blended_momentum_score`). Scoring route reads pre-computed values — no in-request TA-Lib computation.
+**Momentum signals** (RSI, Bollinger, OBV flow) are pre-computed by `global_risk_metrics` worker into `fund_risk_metrics` columns (`rsi_14`, `bb_position`, `nav_momentum_score`, `flow_momentum_score`, `blended_momentum_score`). Scoring route reads pre-computed values — no in-request TA-Lib computation. Risk metrics are GLOBAL — all tenants see the same pre-computed scores for any fund in the catalog, without needing to import it first.
 
 **Analytics caching:** `POST /analytics/optimize` results cached in Redis (SHA-256 of inputs including date, 1h TTL). `POST /analytics/optimize/pareto` runs as background job with SSE progress (returns 202 immediately).
 
@@ -254,19 +256,13 @@ The engine is organized around **funds as the primary analytical entity**. Three
 - `strategy_label` — 37 granular strategy categories (Private Credit, Infrastructure, Multi-Strategy, Long/Short Equity, Growth Equity, Buyout, etc.). Derived by 3-layer keyword classifier: (1) fund name regex, (2) hedge sub-strategy refinement, (3) brochure content enrichment. Script: `backend/scripts/backfill_strategy_label.py` (idempotent).
 - **AUM floor:** Embedding worker (`_embed_sec_private_funds`) only processes managers with combined GAV ≥ $1B (2,087 managers, 45,942 funds).
 
-**Dedicated vehicle tables (migration 0064):**
-- `sec_etfs` — 985 ETFs seeded from N-CEN (ETF mechanics, tracking difference, creation units). PK: `series_id`.
-- `sec_bdcs` — 196 BDCs migrated from `sec_registered_funds`. PK: `series_id`. Default `strategy_label = 'Private Credit'`.
-- `sec_money_market_funds` — 373 MMFs seeded from N-MFP (WAM, WAL, 7-day yield, liquidity). PK: `series_id`. `mmf_category` CHECK: Government, Prime, Other Tax Exempt, Single State.
-- `sec_mmf_metrics` — TimescaleDB hypertable (1-month chunks, compression 3 months, segmentby series_id+class_id). 20,270 daily metrics (yield, flows, liquidity). PK: `(metric_date, series_id, class_id)`.
-- `sec_registered_funds` now only contains `mutual_fund`, `closed_end`, `interval_fund` (CHECK constraint enforced). ETF/BDC/MMF rows removed.
-- Seed scripts: `scripts/seed_etfs_ncen.py` (--ncen-dir), `scripts/seed_bdcs_ncen.py` (--bdc-xml), `scripts/seed_mmf_catalog.py` (--nmfp-dir), `scripts/seed_mmf_metrics.py` (--nmfp-dir).
+**Dedicated vehicle tables (migration 0064):** `sec_etfs` (985, PK series_id), `sec_bdcs` (196, PK series_id, default strategy='Private Credit'), `sec_money_market_funds` (373, PK series_id, mmf_category CHECK), `sec_mmf_metrics` (hypertable, 20k daily metrics). `sec_registered_funds` now only mutual_fund/closed_end/interval_fund. Seed scripts in `scripts/seed_*.py`.
 
-**N-CEN enrichment (migration 0065):** `sec_registered_funds` enriched with 27 new columns from EDGAR N-CEN filings (classification flags, LEI, fees, performance, AUM/NAV, operational flags, N-CEN metadata). Processed 16 quarters (2021 Q3 – 2025 Q4). Coverage: 2,232/3,652 mutual funds (61.1%, $11.97T AUM), 1/965 closed-end (CEFs don't file N-CEN). Script: `scripts/seed_registered_funds_ncen.py` (--ncen-dir for parent dir with subdirs, --extra-dir for additional quarters). Note: N-CEN `MANAGEMENT_FEE` is only reported for closed-end/interval funds — open-end mutual fund expense ratios come from XBRL (see migration 0066).
+**N-CEN enrichment (migration 0065):** 27 new columns on `sec_registered_funds` from N-CEN filings (flags, LEI, fees, AUM). 2,232/3,652 MFs (61.1%). N-CEN `MANAGEMENT_FEE` only for closed-end/interval — open-end expense ratios from XBRL.
 
-**XBRL fee enrichment (migration 0066):** `sec_fund_classes` enriched with 11 new columns from N-CSR inline XBRL filings using OEF taxonomy. Per-share-class data: `expense_ratio_pct`, `advisory_fees_paid`, `expenses_paid`, `avg_annual_return_pct`, `net_assets`, `holdings_count`, `portfolio_turnover_pct`, `fund_name`, `perf_inception_date`. Source: `data.sec.gov/submissions/` → N-CSR XBRL instance. Script: `scripts/seed_fund_class_fees_xbrl.py` (asyncio + aiohttp, SEC 10 req/s rate limit).
+**XBRL fee enrichment (migration 0066):** 11 new columns on `sec_fund_classes` from N-CSR XBRL (OEF taxonomy): `expense_ratio_pct`, `advisory_fees_paid`, `avg_annual_return_pct`, `net_assets`, `holdings_count`, `portfolio_turnover_pct`, `perf_inception_date`, etc.
 
-**Fund enrichment at import (2026-03-28):** `import_sec_security()` in `screener.py` enriches instrument attributes with N-CEN flags + XBRL fees at import time. Multi-table lookup chain: SecRegisteredFund → SecFundClass (by ticker) → SecEtf → SecBdc → SecMoneyMarketFund. Enriched attributes include `strategy_label`, `is_index`, `is_target_date`, `is_fund_of_fund`, `expense_ratio_pct`, `holdings_count`, `portfolio_turnover_pct`, `sec_crd`, `fund_inception_date`. These flow into screening, scoring, DD reports, and fee drag without additional queries. Screener layer 1 can use enriched attributes for new eliminatory rules (e.g. `max_expense_ratio_pct`, `excluded_is_index`, `excluded_is_target_date`) without code changes.
+**Fund enrichment at import:** `import_sec_security()` enriches attributes with N-CEN flags + XBRL fees via multi-table lookup (SecRegisteredFund → SecFundClass → SecEtf → SecBdc → SecMMF). Attributes: `strategy_label`, `is_index`, `is_target_date`, `is_fund_of_fund`, `expense_ratio_pct`, `holdings_count`, `portfolio_turnover_pct`, `sec_crd`, `fund_inception_date`. Flows into screening/scoring/DD/fee_drag. Layer 1 can add eliminatory rules on enriched attributes without code changes.
 
 **Fund scoring model (6 default components, sum = 1.0):** `quant_engine/scoring_service.py`. Lipper removed (provider never contracted). `fee_efficiency` is a default component (weight 0.10). `insider_sentiment` is opt-in (add weight > 0 in scoring config to activate). Formula: `fee_efficiency = max(0, 100 - expense_ratio_pct * 50)` — 0% ER → 100, 2% ER → 0, None → 50 (neutral). Components: `return_consistency` (0.20), `risk_adjusted_return` (0.25), `drawdown_control` (0.20), `information_ratio` (0.15), `flows_momentum` (0.10), `fee_efficiency` (0.10).
 
@@ -294,26 +290,7 @@ Portfolio construction is an 11-step pipeline with CLARABEL 4-phase cascade opti
 
 Separate vector table `wealth_vector_chunks` for fund-centric RAG (distinct from credit's deal-centric `vector_chunks`).
 
-**16 embedding sources:**
-
-| Source | entity_type | Scope | Volume |
-|--------|-------------|-------|--------|
-| ADV brochures (10 sections) | `"firm"` | global | ~13k chunks |
-| SEC manager profiles | `"firm"` | global | ~2k chunks |
-| SEC fund profiles (N-CEN + XBRL) | `"fund"` | global | ~4.6k chunks |
-| SEC 13F summaries | `"firm"` | global | ~1k chunks |
-| SEC private funds (GAV ≥ $1B) | `"firm"` | global | ~2k chunks |
-| ESMA funds (+ strategy_label) | `"fund"` | global | ~10k chunks |
-| ESMA managers | `"firm"` | global | ~660 chunks |
-| SEC ETFs (N-CEN) | `"fund"` | global | ~985 chunks |
-| SEC BDCs | `"fund"` | global | ~196 chunks |
-| SEC MMFs (N-MFP) | `"fund"` | global | ~373 chunks |
-| Prospectus stats (RR1 fees/risk) | `"fund"` | global | ~20k chunks |
-| Prospectus returns (RR1 bar chart) | `"fund"` | global | ~2k chunks |
-| N-PORT top holdings (latest quarter) | `"fund"` | global | ~7.7k chunks |
-| Fund share classes | `"fund"` | global | ~5k chunks |
-| DD chapters | `"fund"` | org-scoped | growing |
-| Macro reviews | `"macro"` | org-scoped | growing |
+**16 embedding sources:** Global `"firm"`: ADV brochures, SEC manager profiles, 13F summaries, private funds (GAV ≥ $1B). Global `"fund"`: SEC fund profiles (N-CEN+XBRL), ESMA funds, ETFs, BDCs, MMFs, prospectus stats/returns, N-PORT holdings, share classes. Org-scoped: DD chapters (`"fund"`), macro reviews (`"macro"`).
 
 **entity_type values:** `"firm"` (RIA/ManCo), `"fund"` (instrument), `"macro"` (review). NEVER `"manager"` — manager = PM individual in the system.
 
@@ -330,46 +307,7 @@ Separate vector table `wealth_vector_chunks` for fund-centric RAG (distinct from
 
 ## Environment Variables
 
-```bash
-# Core
-DATABASE_URL=postgresql+asyncpg://...  # Timescale Cloud (prod), docker-compose (dev)
-REDIS_URL=redis://localhost:6379/0     # Upstash (prod), docker-compose (dev)
-
-# Auth
-CLERK_SECRET_KEY=
-CLERK_JWKS_URL=
-
-# AI
-OPENAI_API_KEY=
-OPENAI_EMBEDDING_MODEL=text-embedding-3-large
-
-# Mistral (OCR)
-MISTRAL_API_KEY=
-
-# Storage (LocalStorageClient at .data/lake/ in dev; R2StorageClient in prod)
-FEATURE_R2_ENABLED=false          # Cloudflare R2 (production target)
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=
-R2_ENDPOINT_URL=
-
-# ── DEPRECATED (Azure services eliminated — Milestone 2 simplification, 2026-03-18) ──
-# FEATURE_ADLS_ENABLED=false    # replaced by FEATURE_R2_ENABLED (R2StorageClient)
-# AZURE_OPENAI_ENDPOINT=        # replaced by OpenAI direct with retry backoff
-# AZURE_OPENAI_KEY=             # replaced by OpenAI direct with retry backoff
-# AZURE_SEARCH_ENDPOINT=        # replaced by pgvector (commit 497df51)
-# AZURE_SEARCH_KEY=             # replaced by pgvector
-# SEARCH_CHUNKS_INDEX_NAME=     # replaced by pgvector
-# NETZ_ENV=                     # search index prefixing no longer needed
-# KEYVAULT_URL=                 # replaced by platform env vars (Railway secrets)
-# SERVICE_BUS_NAMESPACE=        # replaced by Redis pub/sub + BackgroundTasks
-# APPLICATIONINSIGHTS_CONNECTION_STRING=  # replaced by structlog → stdout
-# ADLS_ACCOUNT_NAME=            # replaced by R2StorageClient
-# ADLS_ACCOUNT_KEY=
-# ADLS_CONTAINER_NAME=
-# ADLS_CONNECTION_STRING=
-```
+`DATABASE_URL`, `REDIS_URL`, `CLERK_SECRET_KEY`, `CLERK_JWKS_URL`, `OPENAI_API_KEY`, `OPENAI_EMBEDDING_MODEL=text-embedding-3-large`, `MISTRAL_API_KEY`, `FEATURE_R2_ENABLED`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_ENDPOINT_URL`. All Azure env vars deprecated (2026-03-18) — replaced by OpenAI direct, pgvector, R2, Railway secrets, Redis, structlog.
 
 ## Clerk SvelteKit SDK Note
 
@@ -390,19 +328,7 @@ Simplified stack (2026-03-18), ~$100-200/month:
 - **Clerk** — auth (JWT v2)
 - **StorageClient** — LocalStorageClient (dev, filesystem at `.data/lake/`), R2StorageClient (prod target, Cloudflare R2 S3-compatible)
 
-Deprecated Azure services (files kept for rollback, not actively used):
-- Azure Key Vault → platform env vars (Railway secrets)
-- Azure Service Bus → Redis + BackgroundTasks
-- Application Insights → structlog → stdout
-- Azure OpenAI → OpenAI direct (retry replaces fallback)
-- Azure AI Search → pgvector (commit 497df51)
-- ADLS Gen2 → R2StorageClient (ADLSStorageClient kept for rollback)
-
-Scale triggers for re-adding services (Milestone 3+, >50 tenants):
-- **Key Vault / HashiCorp Vault:** regulatory requirement for secret rotation audit trail (SOC2)
-- **Redis Streams:** guaranteed delivery needed for financial transactions
-- **Application Insights:** distributed tracing across microservices (if/when decomposed)
-- **Qdrant or Weaviate:** only if pgvector HNSW performance becomes bottleneck at scale (unlikely before 10M+ chunks)
+Azure services deprecated (2026-03-18, files kept for rollback): Key Vault → Railway secrets, Service Bus → Redis, App Insights → structlog, Azure OpenAI → OpenAI direct, AI Search → pgvector, ADLS → R2. Scale triggers (>50 tenants): Vault for SOC2, Redis Streams for guaranteed delivery, APM for distributed tracing, Qdrant if pgvector bottlenecks at 10M+ chunks.
 
 ## Deployment
 
@@ -415,63 +341,22 @@ Scale triggers for re-adding services (Milestone 3+, >50 tenants):
 
 ## Origins
 
-- **Platform Plan:** `docs/plans/2026-03-14-feat-netz-analysis-engine-platform-plan.md`
-- **Platform Brainstorm:** `docs/brainstorms/2026-03-14-analysis-engine-platform-brainstorm.md`
-- **ProductConfig Plan:** `docs/plans/2026-03-14-feat-customizable-vertical-config-plan.md` (deepened with 7 review agents)
-- **ProductConfig Brainstorm:** `docs/brainstorms/2026-03-14-customizable-vertical-config-brainstorm.md`
-- **Pipeline Refactor Plan:** `docs/plans/2026-03-15-refactor-pipeline-llm-deterministic-alignment-plan.md` (3 phases, all complete — PRs #20, #21, #22)
-- **Pipeline Refactor Brainstorm:** `docs/brainstorms/2026-03-15-pipeline-llm-deterministic-alignment-brainstorm.md`
-- **Credit Modularization Plan:** `docs/plans/2026-03-15-refactor-credit-deep-review-modularization-wave2-plan.md` (Wave 2 — deep review modules)
-- **Wealth Modularization Plan:** `docs/plans/2026-03-15-feat-wealth-vertical-complete-modularization-plan.md`
-- **Infrastructure Completion Plan:** `docs/plans/2026-03-18-feat-duckdb-data-lake-inspection-layer-plan.md`
-- **Fund-Centric Model Reference:** `docs/reference/fund-centric-model-reference.md`
-- **Portfolio Construction v2:** `docs/reference/portfolio-construction-reference-v2-post-quant-upgrade.md`
-- **Portfolio Lifecycle E2E:** `docs/reference/institutional-portfolio-lifecycle-reference.md`
-- **Vector Embedding Reference:** `docs/reference/wealth-vector-embedding-reference.md`
-- **Vector Embedding Spec:** `docs/reference/wealth-vector-embedding-spec.md`
-- **Deploy Checklist:** `docs/reference/deploy-checklist.md`
-- **Private Credit OS:** `C:\Users\andre\projetos\Netz-Private-Credit-OS` (archived after data migration)
-- **Wealth OS:** `C:\Users\andre\projetos\netz-wealth-os` (archived after migration)
+Plans in `docs/plans/`, brainstorms in `docs/brainstorms/`, references in `docs/reference/`. Key docs: `fund-centric-model-reference.md`, `portfolio-construction-reference-v2-post-quant-upgrade.md`, `institutional-portfolio-lifecycle-reference.md`, `wealth-vector-embedding-reference.md`, `deploy-checklist.md`. Archived repos: `Netz-Private-Credit-OS`, `netz-wealth-os` (both in `C:\Users\andre\projetos\`).
 
 
 ## Svelte MCP
 
 When working on any SvelteKit frontend (`frontends/credit/` or `frontends/wealth/`), the Svelte MCP server is available for documentation lookup and code validation.
 
-**Remote MCP (recommended):**
-```json
-{
-  "mcpServers": {
-    "svelte": {
-      "type": "http",
-      "url": "https://mcp.svelte.dev/mcp"
-    }
-  }
-}
-```
-
-**Local MCP (alternative):**
-```bash
-npx @sveltejs/mcp list-sections
-npx @sveltejs/mcp get-documentation "<section1>,<section2>"
-npx @sveltejs/mcp svelte-autofixer ./src/lib/Component.svelte
-```
-
-**Rules for Svelte work:**
-- ALWAYS run `list-sections` first to find relevant documentation sections
-- ALWAYS run `svelte-autofixer` before finalizing any `.svelte` component
-- Use `fetch()` + `ReadableStream` for SSE — NEVER `EventSource` (cannot send auth headers)
-- Svelte 5 runes syntax (`$state`, `$derived`, `$effect`) — escape `$` as `\$` in terminal
+Remote: `https://mcp.svelte.dev/mcp`. Local: `npx @sveltejs/mcp {list-sections|get-documentation|svelte-autofixer}`. Rules: run `list-sections` first, run `svelte-autofixer` before finalizing components, use `fetch()+ReadableStream` for SSE (never EventSource), Svelte 5 runes (`$state`, `$derived`, `$effect`) — escape `$` as `\$` in terminal.
 
 ## UX Sprint 7 — Scope Decisions (2026-03-19)
 
-### C.3 — Portfolio deal-level contract fields: NOT IMPLEMENTED (architecture decision)
+### C.3 — Portfolio deal-level fields: NOT IMPLEMENTED
+Portfolio is asset-centric post-conversion. Tenor/basis/covenant are deal-level (`deal_context.json`), NOT asset attributes. Do not add them to portfolio view — use "Source Deal" link instead.
 
-The portfolio view (`frontends/credit/src/routes/(team)/funds/[fundId]/portfolio/+page.svelte`) is asset-centric post-conversion. Assets are identified by name, type, and strategy with tabs for obligations, alerts, and actions. Fields like tenor, basis, and covenant are deal-level contract fields that live in `deal_context.json` on the deal entity — NOT on portfolio assets. Displaying them per asset row would cross the deal/asset boundary and create misleading attribution (one deal can map to one asset, but deal terms do not become asset attributes post-conversion). Do not add tenor/basis/covenant to the portfolio asset view. If deal-level contract terms need to be visible post-conversion, add a "Source Deal" link from the asset to the originating deal's detail page.
-
-### C.4 — Kanban pipeline board: IMPLEMENTED
-
-`PipelineKanban.svelte` component with `svelte-dnd-action@^0.9.0`. 8 stage columns, drag-drop with ConsequenceDialog + rationale, PATCH to `/pipeline/deals/{deal_id}/stage`. Toggle between list/kanban view modes in PageHeader.
+### C.4 — Kanban: IMPLEMENTED
+`PipelineKanban.svelte` with `svelte-dnd-action@^0.9.0`. 8 stages, drag-drop + ConsequenceDialog, PATCH `/pipeline/deals/{deal_id}/stage`.
 
 ## Audit Trail
 

@@ -404,7 +404,11 @@ def _compute_momentum_from_nav(
     }
 
     if aum.any():
-        slope = compute_flow_momentum(close, aum)
+        # Low-pass filter: 63-day EMA (~3 months) dampens noise from
+        # dividends, splits, merges, and performance fee payouts that
+        # distort the AUM-minus-NAV flow proxy.
+        aum_smooth = _ema_smooth(aum, span=63) if len(aum) >= 63 else aum
+        slope = compute_flow_momentum(close, aum_smooth)
         flow_score = normalize_flow_momentum(slope)
         result["flow_momentum_score"] = round(flow_score, 2)
         if nav_score is not None:
@@ -465,12 +469,14 @@ def _compute_metrics_from_returns(
     metrics["sortino_1y"] = _round_or_none(_compute_sortino(returns, 252, risk_free_rate))
 
     # GARCH(1,1) conditional volatility (BL-11)
+    # Fallback: EWMA(λ=0.94) preserves volatility clustering without
+    # iterative convergence. Avoids mixing conditional (GARCH) with
+    # static (σ_1y) methodologies across the dashboard.
     garch_result = fit_garch(returns)
     if garch_result is not None and garch_result.converged and garch_result.volatility_garch is not None:
         metrics["volatility_garch"] = round(garch_result.volatility_garch, 6)
     else:
-        # Fallback: use sample volatility (already computed above)
-        metrics["volatility_garch"] = metrics.get("volatility_1y")
+        metrics["volatility_garch"] = _ewma_volatility(returns, lam=0.94)
 
     return metrics
 
@@ -498,6 +504,42 @@ async def compute_fund_risk_metrics(
 
 
 _NUMERIC_10_6_MAX = 9999.999999  # Numeric(10,6) max absolute value
+
+
+def _ema_smooth(series: np.ndarray, span: int = 63) -> np.ndarray:
+    """Exponential Moving Average low-pass filter.
+
+    Dampens high-frequency noise (dividends, splits, merges) in AUM series
+    before computing flow momentum. span=63 ≈ 3-month rolling window.
+    """
+    alpha = 2.0 / (span + 1)
+    result = np.empty_like(series, dtype=float)
+    result[0] = series[0]
+    for i in range(1, len(series)):
+        result[i] = alpha * series[i] + (1 - alpha) * result[i - 1]
+    return result
+
+
+def _ewma_volatility(returns: np.ndarray, lam: float = 0.94) -> float | None:
+    """EWMA (RiskMetrics) conditional volatility.
+
+    σ²_t = λ·σ²_{t-1} + (1-λ)·r²_{t-1}
+
+    Preserves volatility clustering like GARCH but without iterative MLE.
+    Used as fallback when GARCH(1,1) fails to converge.
+    λ=0.94 is the J.P. Morgan RiskMetrics standard for daily data.
+
+    Returns annualized volatility (×√252) or None if insufficient data.
+    """
+    if len(returns) < 20:
+        return None
+
+    variance = float(np.var(returns))  # seed with unconditional variance
+    for r in returns:
+        variance = lam * variance + (1 - lam) * (r ** 2)
+
+    ewma_vol = float(np.sqrt(variance) * np.sqrt(252))
+    return round(ewma_vol, 6)
 
 
 def _round_or_none(value: float | None, decimals: int = 6) -> float | None:
@@ -1029,9 +1071,24 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
                     for _, metrics in computed:
                         metrics["cvar_95_conditional"] = None
 
-                # Pass 1.7: compute manager_score from base metrics + momentum
-                for _, metrics in computed:
-                    _score_metrics(metrics)
+                # Pass 1.7: compute manager_score from base metrics + momentum + expense ratio
+                # Batch-fetch expense ratios from mv_unified_funds via ticker
+                batch_tickers = [f.ticker for f in batch if f.ticker]
+                er_map: dict[str, float] = {}
+                if batch_tickers:
+                    placeholders = ", ".join(f"'{t}'" for t in batch_tickers)
+                    er_result = await db.execute(text(f"""
+                        SELECT ticker, expense_ratio_pct
+                        FROM mv_unified_funds
+                        WHERE ticker IN ({placeholders})
+                          AND expense_ratio_pct IS NOT NULL
+                    """))
+                    for row in er_result.mappings().all():
+                        er_map[row["ticker"]] = float(row["expense_ratio_pct"])
+
+                for fund, metrics in computed:
+                    er = er_map.get(fund.ticker) if fund.ticker else None
+                    _score_metrics(metrics, expense_ratio_pct=er)
 
                 # Upsert batch — no DTW drift, no org_id
                 try:
@@ -1060,6 +1117,16 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
                     results["error"] += len(computed)
                     logger.error("global_risk_metrics.batch_failed", batch_start=batch_start, error=str(exc)[:200])
 
+            # Pass 2: Peer percentile ranking (strategy-grouped)
+            # Groups all freshly-computed funds by strategy_label from mv_unified_funds,
+            # then computes percentile rank for sharpe, sortino, return, drawdown.
+            try:
+                peer_updated = await _compute_global_peer_percentiles(db, eval_date)
+                results["peer_ranked"] = peer_updated
+                logger.info("global_risk_metrics.peer_ranking_done", peer_ranked=peer_updated)
+            except Exception:
+                logger.exception("global_risk_metrics.peer_ranking_failed")
+
             logger.info("global_risk_metrics.done", **results)
             return results
         finally:
@@ -1069,6 +1136,111 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
                 )
             except Exception:
                 pass
+
+
+async def _compute_global_peer_percentiles(db: AsyncSession, calc_date: date) -> int:
+    """Compute peer percentile rankings for all funds grouped by strategy.
+
+    For each strategy_label with >= 5 peers, computes percentile rank
+    (0-100, higher = better) for sharpe_1y, sortino_1y, return_1y,
+    max_drawdown_1y. Writes peer_*_pctl + peer_count + peer_strategy_label
+    back into fund_risk_metrics.
+
+    Uses a single SQL query to fetch all metrics + strategy labels,
+    then NumPy vectorized percentile computation per group.
+    """
+    import numpy as np
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    MIN_PEERS = 5
+
+    # Fetch all metrics for today + strategy labels from mv_unified_funds
+    query = text("""
+        SELECT
+            frm.instrument_id,
+            frm.sharpe_1y,
+            frm.sortino_1y,
+            frm.return_1y,
+            frm.max_drawdown_1y,
+            COALESCE(f.strategy_label, f.fund_type, 'Unknown') AS strategy_label
+        FROM fund_risk_metrics frm
+        JOIN instruments_universe iu ON iu.instrument_id = frm.instrument_id
+        LEFT JOIN mv_unified_funds f ON f.ticker = iu.ticker
+        WHERE frm.calc_date = :calc_date
+          AND frm.sharpe_1y IS NOT NULL
+    """)
+    result = await db.execute(query, {"calc_date": calc_date})
+    rows = result.mappings().all()
+
+    if not rows:
+        return 0
+
+    # Group by strategy
+    from collections import defaultdict
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        groups[row["strategy_label"]].append(dict(row))
+
+    updated = 0
+    for strategy, funds in groups.items():
+        if len(funds) < MIN_PEERS:
+            continue
+
+        # Build arrays
+        sharpe_arr = np.array([f["sharpe_1y"] for f in funds if f["sharpe_1y"] is not None], dtype=float)
+        sortino_arr = np.array([f["sortino_1y"] for f in funds if f["sortino_1y"] is not None], dtype=float)
+        return_arr = np.array([f["return_1y"] for f in funds if f["return_1y"] is not None], dtype=float)
+        dd_arr = np.array([f["max_drawdown_1y"] for f in funds if f["max_drawdown_1y"] is not None], dtype=float)
+
+        peer_count = len(funds)
+
+        for fund in funds:
+            # Percentile: higher is better for sharpe/sortino/return, higher (less negative) is better for drawdown
+            sharpe_pctl = _pctl(fund["sharpe_1y"], sharpe_arr) if fund["sharpe_1y"] is not None else None
+            sortino_pctl = _pctl(fund["sortino_1y"], sortino_arr) if fund["sortino_1y"] is not None else None
+            return_pctl = _pctl(fund["return_1y"], return_arr) if fund["return_1y"] is not None else None
+            dd_pctl = _pctl(fund["max_drawdown_1y"], dd_arr) if fund["max_drawdown_1y"] is not None else None
+
+            upsert = pg_insert(FundRiskMetrics).values(
+                instrument_id=fund["instrument_id"],
+                calc_date=calc_date,
+                peer_strategy_label=strategy,
+                peer_sharpe_pctl=sharpe_pctl,
+                peer_sortino_pctl=sortino_pctl,
+                peer_return_pctl=return_pctl,
+                peer_drawdown_pctl=dd_pctl,
+                peer_count=peer_count,
+            )
+            upsert = upsert.on_conflict_do_update(
+                index_elements=["instrument_id", "calc_date"],
+                set_={
+                    "peer_strategy_label": upsert.excluded.peer_strategy_label,
+                    "peer_sharpe_pctl": upsert.excluded.peer_sharpe_pctl,
+                    "peer_sortino_pctl": upsert.excluded.peer_sortino_pctl,
+                    "peer_return_pctl": upsert.excluded.peer_return_pctl,
+                    "peer_drawdown_pctl": upsert.excluded.peer_drawdown_pctl,
+                    "peer_count": upsert.excluded.peer_count,
+                },
+            )
+            await db.execute(upsert)
+            updated += 1
+
+        await db.commit()
+        logger.info(
+            "global_risk_metrics.peer_group_computed",
+            strategy=strategy,
+            peer_count=peer_count,
+        )
+
+    return updated
+
+
+def _pctl(value: float, arr: np.ndarray) -> float:
+    """Percentile rank (0-100, higher = better)."""
+    import numpy as np
+    if len(arr) == 0:
+        return 50.0
+    return round(float(np.sum(arr <= value)) / len(arr) * 100, 2)
 
 
 if __name__ == "__main__":
