@@ -5,11 +5,23 @@
 -->
 <script lang="ts">
 	import { ContextPanel, EmptyState, SectionCard, MetricCard, formatAUM, formatNumber, formatPercent, formatDate } from "@investintell/ui";
+	import { createMountedGuard } from "@investintell/ui/runtime";
 	import { Progress } from "@investintell/ui/components/ui/progress";
 	import * as Tabs from "@investintell/ui/components/ui/tabs";
-	import { getContext } from "svelte";
+	import { getContext, onDestroy, onMount } from "svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
+
+	// Mounted guard — gates every state mutation that might fire
+	// after the panel has been closed/destroyed. The DD-report SSE
+	// loop is async and can complete a `reader.read()` cycle in the
+	// window between component teardown and the AbortController
+	// landing on the underlying fetch; without this guard a late
+	// `ddProgress = ...` write would crash Svelte's reactive graph
+	// (the §7.2 black-screen failure mode in the design spec).
+	const mounted = createMountedGuard();
+	onMount(() => mounted.start());
+	onDestroy(() => mounted.stop());
 
 	// ── Types ──────────────────────────────────────────────────────────────
 
@@ -58,6 +70,31 @@
 
 	let { fund, open, onClose }: Props = $props();
 
+	// ── Defensive derived accessors ────────────────────────────────────────
+	// Optional chaining everywhere — the props can flip to `null`
+	// between renders when the parent unselects a row, and the
+	// template body must never assume a particular field is
+	// present. These accessors return safe fallbacks so the
+	// surrounding `{#if fund}` guard remains the *only* required
+	// truthiness check.
+	const fundName = $derived(fund?.name ?? "—");
+	const fundManager = $derived(fund?.manager ?? null);
+	const fundSubcategory = $derived(fund?.subcategory ?? null);
+	const fundScore = $derived(fund?.score ?? null);
+	const fundAum = $derived(fund?.aum ?? null);
+	const fundStrategy = $derived(fund?.strategy ?? null);
+	const fundIsin = $derived(fund?.isin ?? null);
+	const fundCnpj = $derived(fund?.cnpj ?? null);
+	const fundUpdatedAt = $derived(fund?.updated_at ?? null);
+	const fundInceptionDate = $derived(fund?.inception_date ?? null);
+	const fundAnnualReturn = $derived(fund?.annual_return ?? null);
+	const fundSharpeRatio = $derived(fund?.sharpe_ratio ?? null);
+	const fundMaxDrawdown = $derived(fund?.max_drawdown ?? null);
+	const fundCvar95 = $derived(fund?.cvar_95 ?? null);
+	const fundDdReportId = $derived(fund?.dd_report_id ?? null);
+	const fundDdReportStatus = $derived(fund?.dd_report_status ?? null);
+	const fundFundId = $derived(fund?.id ?? null);
+
 	// ── Tab state ──────────────────────────────────────────────────────────
 
 	type Tab = "resumo" | "dd-report" | "docs" | "screening";
@@ -77,14 +114,19 @@
 	let ddSseStatus = $state<"idle" | "streaming" | "complete" | "error">("idle");
 
 	$effect(() => {
-		const reportId = fund?.dd_report_id;
-		const ddStatus = fund?.dd_report_status;
+		const reportId = fundDdReportId;
+		const ddStatus = fundDdReportStatus;
 		// Only subscribe when report is actively generating
 		if (!reportId || ddStatus !== "generating") return;
 
-		ddSseStatus = "streaming";
-		ddProgress = null;
-		ddProgressMessage = null;
+		// Reset visible progress through the mounted guard so the
+		// reset itself is also a no-op once the panel has been
+		// destroyed (paranoid but cheap).
+		mounted.guard(() => {
+			ddSseStatus = "streaming";
+			ddProgress = null;
+			ddProgressMessage = null;
+		});
 
 		const controller = new AbortController();
 
@@ -101,7 +143,9 @@
 				});
 
 				if (!response.ok || !response.body) {
-					ddSseStatus = "error";
+					mounted.guard(() => {
+						ddSseStatus = "error";
+					});
 					return;
 				}
 
@@ -109,7 +153,12 @@
 				const decoder = new TextDecoder();
 				let buffer = "";
 
-				while (true) {
+				// Local mirror of ddSseStatus so the inner loop can
+				// observe terminal states without re-reading the
+				// reactive `$state` from inside an async tick.
+				let localStatus: "idle" | "streaming" | "complete" | "error" = "streaming";
+
+				while (mounted.mounted) {
 					const { done, value } = await reader.read();
 					if (done) break;
 
@@ -122,16 +171,24 @@
 						try {
 							const event = JSON.parse(line.slice(6)) as DDReportEvent;
 							if (event.type === "progress") {
-								ddProgress = event.progress ?? null;
-								ddProgressMessage = event.message ?? null;
+								mounted.guard(() => {
+									ddProgress = event.progress ?? null;
+									ddProgressMessage = event.message ?? null;
+								});
 							} else if (event.type === "complete") {
-								ddProgress = 100;
-								ddProgressMessage = "Relatório gerado com sucesso";
-								ddSseStatus = "complete";
+								localStatus = "complete";
+								mounted.guard(() => {
+									ddProgress = 100;
+									ddProgressMessage = "Relatório gerado com sucesso";
+									ddSseStatus = "complete";
+								});
 								break;
 							} else if (event.type === "error") {
-								ddProgressMessage = event.message ?? "Erro na geração";
-								ddSseStatus = "error";
+								localStatus = "error";
+								mounted.guard(() => {
+									ddProgressMessage = event.message ?? "Erro na geração";
+									ddSseStatus = "error";
+								});
 								break;
 							}
 						} catch {
@@ -139,11 +196,13 @@
 						}
 					}
 
-					if (ddSseStatus === "complete" || ddSseStatus === "error") break;
+					if (localStatus === "complete" || localStatus === "error") break;
 				}
 			} catch (err: unknown) {
 				if (err instanceof DOMException && err.name === "AbortError") return;
-				ddSseStatus = "error";
+				mounted.guard(() => {
+					ddSseStatus = "error";
+				});
 			}
 		})();
 
@@ -168,20 +227,20 @@
 	}
 </script>
 
-<ContextPanel {open} {onClose} title={fund?.name ?? ""} width="480px">
+<ContextPanel {open} {onClose} title={fundName} width="480px">
 	{#if fund}
 		<!-- Fund identity row -->
 		<div class="mb-5 flex items-start gap-3">
 			<div class="min-w-0 flex-1">
-				<p class="text-xs text-(--ii-text-muted)">{fund.manager ?? "—"}</p>
-				{#if fund.subcategory}
-					<p class="mt-0.5 text-xs text-(--ii-text-muted)">{fund.subcategory}</p>
+				<p class="text-xs text-(--ii-text-muted)">{fundManager ?? "—"}</p>
+				{#if fundSubcategory}
+					<p class="mt-0.5 text-xs text-(--ii-text-muted)">{fundSubcategory}</p>
 				{/if}
 			</div>
 			<div class="flex shrink-0 flex-col items-end gap-1">
-				{#if fund.score !== null}
+				{#if fundScore !== null}
 					<span class="text-lg font-bold text-(--ii-text-primary)">
-						{formatNumber(fund.score, 1, "pt-BR")}
+						{formatNumber(fundScore, 1, "pt-BR")}
 					</span>
 					<span class="text-xs text-(--ii-text-muted)">Score</span>
 				{/if}
@@ -201,33 +260,33 @@
 				<div class="space-y-4">
 					<!-- Key metrics -->
 					<div class="grid grid-cols-2 gap-3">
-						<MetricCard label="AUM" value={formatAum(fund.aum)} />
+						<MetricCard label="AUM" value={formatAum(fundAum)} />
 						<MetricCard
 							label="Score Geral"
-							value={formatNumber(fund.score, 1, "pt-BR")}
+							value={formatNumber(fundScore, 1, "pt-BR")}
 						/>
-						{#if fund.annual_return !== undefined}
+						{#if fundAnnualReturn !== null}
 							<MetricCard
 								label="Retorno Anual"
-								value={formatPct(fund.annual_return ?? null)}
+								value={formatPct(fundAnnualReturn)}
 							/>
 						{/if}
-						{#if fund.sharpe_ratio !== undefined}
+						{#if fundSharpeRatio !== null}
 							<MetricCard
 								label="Sharpe"
-								value={formatNumber(fund.sharpe_ratio, 2, "pt-BR")}
+								value={formatNumber(fundSharpeRatio, 2, "pt-BR")}
 							/>
 						{/if}
-						{#if fund.max_drawdown !== undefined}
+						{#if fundMaxDrawdown !== null}
 							<MetricCard
 								label="Max Drawdown"
-								value={formatPct(fund.max_drawdown ?? null)}
+								value={formatPct(fundMaxDrawdown)}
 							/>
 						{/if}
-						{#if fund.cvar_95 !== undefined}
+						{#if fundCvar95 !== null}
 							<MetricCard
 								label="CVaR 95%"
-								value={formatPct(fund.cvar_95 ?? null)}
+								value={formatPct(fundCvar95)}
 							/>
 						{/if}
 					</div>
@@ -236,34 +295,34 @@
 					<SectionCard title="Informações">
 						{#snippet children()}
 							<dl class="space-y-2 text-sm">
-								{#if fund.isin}
+								{#if fundIsin}
 									<div class="flex justify-between">
 										<dt class="text-(--ii-text-muted)">ISIN</dt>
-										<dd class="font-mono text-(--ii-text-primary)">{fund.isin}</dd>
+										<dd class="font-mono text-(--ii-text-primary)">{fundIsin}</dd>
 									</div>
 								{/if}
-								{#if fund.cnpj}
+								{#if fundCnpj}
 									<div class="flex justify-between">
 										<dt class="text-(--ii-text-muted)">CNPJ</dt>
-										<dd class="font-mono text-(--ii-text-primary)">{fund.cnpj}</dd>
+										<dd class="font-mono text-(--ii-text-primary)">{fundCnpj}</dd>
 									</div>
 								{/if}
 								<div class="flex justify-between">
 									<dt class="text-(--ii-text-muted)">Estratégia</dt>
-									<dd class="text-(--ii-text-primary)">{fund.strategy ?? "—"}</dd>
+									<dd class="text-(--ii-text-primary)">{fundStrategy ?? "—"}</dd>
 								</div>
 								<div class="flex justify-between">
 									<dt class="text-(--ii-text-muted)">Gestor</dt>
-									<dd class="text-(--ii-text-primary)">{fund.manager ?? "—"}</dd>
+									<dd class="text-(--ii-text-primary)">{fundManager ?? "—"}</dd>
 								</div>
 								<div class="flex justify-between">
 									<dt class="text-(--ii-text-muted)">Atualizado</dt>
-									<dd class="text-(--ii-text-primary)">{formatDate(fund.updated_at, "short", "pt-BR")}</dd>
+									<dd class="text-(--ii-text-primary)">{formatDate(fundUpdatedAt, "short", "pt-BR")}</dd>
 								</div>
-								{#if fund.inception_date}
+								{#if fundInceptionDate}
 									<div class="flex justify-between">
 										<dt class="text-(--ii-text-muted)">Início</dt>
-										<dd class="text-(--ii-text-primary)">{formatDate(fund.inception_date, "short", "pt-BR")}</dd>
+										<dd class="text-(--ii-text-primary)">{formatDate(fundInceptionDate, "short", "pt-BR")}</dd>
 									</div>
 								{/if}
 							</dl>
@@ -275,7 +334,7 @@
 			<!-- Tab: DD Report -->
 			<Tabs.Content value="dd-report">
 				<div class="space-y-4">
-					{#if fund.dd_report_status === "complete"}
+					{#if fundDdReportStatus === "complete"}
 						<div class="rounded-lg border border-(--ii-border) bg-(--ii-surface-elevated) p-4">
 							<div class="mb-3 flex items-center justify-between">
 								<span class="text-sm font-medium text-(--ii-text-primary)">DD Report Completo</span>
@@ -287,7 +346,7 @@
 								</span>
 							</div>
 							<a
-								href="/screener/dd-reports/{fund.id}"
+								href="/screener/dd-reports/{fundFundId ?? ''}"
 								class="inline-flex items-center gap-1.5 rounded-md bg-(--ii-brand-primary) px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
 							>
 								Ver Relatório
@@ -297,7 +356,7 @@
 							</a>
 						</div>
 
-					{:else if fund.dd_report_status === "generating" || ddSseStatus === "streaming"}
+					{:else if fundDdReportStatus === "generating" || ddSseStatus === "streaming"}
 						<div class="rounded-lg border border-(--ii-border) bg-(--ii-surface-elevated) p-4">
 							<div class="mb-3 flex items-center justify-between">
 								<span class="text-sm font-medium text-(--ii-text-primary)">Gerando relatório…</span>

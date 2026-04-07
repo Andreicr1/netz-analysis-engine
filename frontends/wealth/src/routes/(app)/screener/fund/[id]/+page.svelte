@@ -5,11 +5,12 @@
   Read-only view — analysis belongs in the Analytics tab.
 -->
 <script lang="ts">
-	import { goto } from "$app/navigation";
+	import { goto, invalidate } from "$app/navigation";
 	import { page as pageState } from "$app/state";
 	import { getContext } from "svelte";
 	import { ArrowLeft } from "lucide-svelte";
 	import { formatCompact, formatPercent, formatDate } from "@investintell/ui";
+	import { PanelEmptyState, PanelErrorState } from "@investintell/ui/runtime";
 	import { UNIVERSE_LABELS } from "$lib/types/catalog";
 	import NavPerformanceChart from "$lib/components/charts/NavPerformanceChart.svelte";
 	import SectorAllocationChart from "$lib/components/charts/SectorAllocationChart.svelte";
@@ -20,6 +21,14 @@
 
 	let { data } = $props();
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
+
+	// ── Route Data Contract ──────────────────────────────────────────
+	// `data.factSheet` is a `RouteData<FactSheetPayload>` from
+	// +page.server.ts. We narrow into three explicit branches in the
+	// template (`error` / empty / `data`) — never assume `data.fund`
+	// exists at the top level.
+	const routeData = $derived(data.factSheet);
+	const factSheet = $derived(routeData.data as Record<string, any> | null);
 
 	// ── Back navigation — return to L2 (manager fund list) if came from there ──
 	const managerId = $derived(pageState.url.searchParams.get("manager"));
@@ -35,28 +44,42 @@
 		}
 	}
 
-	const factSheet = $derived(data.factSheet as Record<string, any>);
-	const fund = $derived(factSheet.fund);
-	const team = $derived(factSheet.team);
-	const top_holdings = $derived(factSheet.top_holdings);
-	const annual_returns = $derived(factSheet.annual_returns);
-	const nav_history = $derived(factSheet.nav_history);
-	const sector_history = $derived(factSheet.sector_history);
-	const share_classes = $derived(factSheet.share_classes);
-	const scoring_metrics = $derived(factSheet.scoring_metrics);
-	const strategy_narrative = $derived(factSheet.strategy_narrative);
-	const firm_description = $derived(factSheet.firm_description);
-	const firm_website = $derived(factSheet.firm_website);
+	function retryLoad() {
+		// Re-runs the +page.server.ts load. Bound to the
+		// PanelErrorState retry button only when the error is
+		// `recoverable` — TIMEOUT and HTTP_5xx are; NOT_FOUND is not.
+		invalidate(pageState.url.pathname);
+	}
+
+	// ── Defensive derived accessors ──────────────────────────────────
+	// Optional chaining (`?.`) on every read. The previous version
+	// crashed when an intermittent fetch dropped a section silently —
+	// the §7.2 black-screen incident was rooted in `factSheet.fund.name`
+	// throwing during a partial response. With Phase 3 the data
+	// branch is only entered when `factSheet !== null`, but the
+	// individual fields can still be missing (e.g. share_classes for
+	// a private fund). Default everything to safe empties.
+	const fund = $derived(factSheet?.fund ?? null);
+	const team = $derived((factSheet?.team as any[] | undefined) ?? []);
+	const top_holdings = $derived((factSheet?.top_holdings as any[] | undefined) ?? []);
+	const annual_returns = $derived((factSheet?.annual_returns as any[] | undefined) ?? []);
+	const nav_history = $derived((factSheet?.nav_history as any[] | undefined) ?? []);
+	const sector_history = $derived((factSheet?.sector_history as any[] | undefined) ?? []);
+	const share_classes = $derived((factSheet?.share_classes as any[] | undefined) ?? []);
+	const scoring_metrics = $derived(factSheet?.scoring_metrics ?? null);
+	const strategy_narrative = $derived(factSheet?.strategy_narrative ?? null);
+	const firm_description = $derived(factSheet?.firm_description ?? null);
+	const firm_website = $derived(factSheet?.firm_website ?? null);
 
 	// ── Derived KPI values ──
-	const latestNav = $derived(nav_history?.at(-1)?.nav ?? null);
-	const prevNav = $derived(nav_history?.at(-2)?.nav ?? null);
+	const latestNav = $derived(nav_history.at(-1)?.nav ?? null);
+	const prevNav = $derived(nav_history.at(-2)?.nav ?? null);
 	const change1d = $derived(
 		(latestNav != null && prevNav != null && prevNav !== 0)
 			? (latestNav - prevNav) / prevNav
 			: null
 	);
-	const asOfDate = $derived(nav_history?.at(-1)?.nav_date ?? null);
+	const asOfDate = $derived(nav_history.at(-1)?.nav_date ?? null);
 
 	function formatAum(val: number | null | undefined) {
 		if (val == null) return "\u2014";
@@ -66,7 +89,7 @@
 	let pdfLoading = $state(false);
 
 	async function handleDownloadPdf() {
-		if (pdfLoading) return;
+		if (pdfLoading || !fund) return;
 		pdfLoading = true;
 		try {
 			const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
@@ -96,9 +119,59 @@
 </script>
 
 <svelte:head>
-	<title>{fund.name} | Fact Sheet</title>
+	<title>{fund?.name ?? "Fund"} | Fact Sheet</title>
 </svelte:head>
 
+{#if routeData.error}
+	<!-- ──────────────────────────────────────────────────────────
+	     Branch 1: load failed → actionable PanelErrorState.
+	     The retry button is only shown when the error is recoverable
+	     (TIMEOUT, HTTP 5xx, AUTH); NOT_FOUND has no retry path.
+	     ────────────────────────────────────────────────────────── -->
+	<div class="fs-container w-full h-full rounded-2xl bg-[var(--ii-bg)] flex flex-col overflow-hidden">
+		<header class="flex-shrink-0 px-4 md:px-6 pt-4 md:pt-6">
+			<button onclick={goBack} class="fs-back fs-no-print">
+				<ArrowLeft size={16} />
+				<span>{managerId ? "Back to Fund List" : "Back to Managers"}</span>
+			</button>
+		</header>
+		<div class="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
+			<PanelErrorState
+				title="Could not load this fund"
+				message={routeData.error.message}
+				onRetry={routeData.error.recoverable ? retryLoad : undefined}
+			/>
+		</div>
+	</div>
+{:else if !fund}
+	<!-- ──────────────────────────────────────────────────────────
+	     Branch 2: load succeeded but the payload is empty/null —
+	     should be vanishingly rare (the upstream returns 404 in
+	     this case, which lands in branch 1) but the contract
+	     forces us to render *something* the user can act on.
+	     ────────────────────────────────────────────────────────── -->
+	<div class="fs-container w-full h-full rounded-2xl bg-[var(--ii-bg)] flex flex-col overflow-hidden">
+		<header class="flex-shrink-0 px-4 md:px-6 pt-4 md:pt-6">
+			<button onclick={goBack} class="fs-back fs-no-print">
+				<ArrowLeft size={16} />
+				<span>{managerId ? "Back to Fund List" : "Back to Managers"}</span>
+			</button>
+		</header>
+		<div class="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
+			<PanelEmptyState
+				title="No fund data available"
+				message="The fact sheet for this fund is empty. Try refreshing or pick another fund from the screener."
+			/>
+		</div>
+	</div>
+{:else}
+<!-- ──────────────────────────────────────────────────────────
+     Branch 3: success — render the FactSheet inside a
+     <svelte:boundary> so any unexpected render-time error
+     in a chart or table degrades to PanelErrorState
+     instead of cratering the whole route (R3.2.2).
+     ────────────────────────────────────────────────────────── -->
+<svelte:boundary>
 <div class="fs-container w-full h-full rounded-2xl bg-[var(--ii-bg)] text-[var(--ii-text-primary)] font-[family-name:var(--ii-font-sans)] flex flex-col overflow-hidden">
 
 	<!-- ════════════════════════════════════════════════════════
@@ -115,7 +188,7 @@
 		<div class="flex items-start justify-between mb-4">
 			<div class="flex flex-col gap-1">
 				<span class="inline-block px-2 py-0.5 bg-[var(--ii-surface-alt)] text-[var(--ii-text-muted)] text-[10px] font-bold rounded tracking-wider uppercase w-fit">
-					{UNIVERSE_LABELS[fund.universe as keyof typeof UNIVERSE_LABELS] ?? fund.universe.replace("_", " ").toUpperCase()}
+					{UNIVERSE_LABELS[fund.universe as keyof typeof UNIVERSE_LABELS] ?? (fund.universe ?? "").toString().replace("_", " ").toUpperCase()}
 				</span>
 				{#if fund.manager_name}
 					<span class="text-sm font-semibold text-[var(--ii-text-muted)]">
@@ -527,3 +600,22 @@
 
 	</div><!-- /fs-body -->
 </div>
+{#snippet failed(error, reset)}
+	<div class="fs-container w-full h-full rounded-2xl bg-[var(--ii-bg)] flex flex-col overflow-hidden">
+		<header class="flex-shrink-0 px-4 md:px-6 pt-4 md:pt-6">
+			<button onclick={goBack} class="fs-back fs-no-print">
+				<ArrowLeft size={16} />
+				<span>{managerId ? "Back to Fund List" : "Back to Managers"}</span>
+			</button>
+		</header>
+		<div class="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
+			<PanelErrorState
+				title="Fact sheet failed to render"
+				message={error instanceof Error ? error.message : String(error)}
+				onRetry={reset}
+			/>
+		</div>
+	</div>
+{/snippet}
+</svelte:boundary>
+{/if}
