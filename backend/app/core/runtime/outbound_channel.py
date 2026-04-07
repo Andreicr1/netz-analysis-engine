@@ -187,7 +187,6 @@ class BoundedOutboundChannel:
         self._drain_task: asyncio.Task[None] | None = None
         self._stopped = False
         self._started = False
-        self._sending = False  # True while a send is in flight (guards stop(drain=True))
         self._metrics = ChannelMetrics()
 
     # ── Lifecycle ──────────────────────────────────────────────
@@ -220,8 +219,18 @@ class BoundedOutboundChannel:
             grace = self._cfg.drain_grace_s
             if grace is None:
                 grace = self._cfg.send_timeout_s
+            # Wait directly on the drain task. With _stopped=True, the
+            # loop exits naturally once the queue is empty and any
+            # in-flight send has completed — the task's own lifecycle
+            # is the event we care about, so polling is unnecessary.
+            # ``asyncio.shield`` prevents ``wait_for`` from cancelling
+            # the drain task on timeout; the explicit cancellation
+            # below is the single, predictable teardown path.
             try:
-                await asyncio.wait_for(self._wait_until_empty(), timeout=grace)
+                await asyncio.wait_for(
+                    asyncio.shield(self._drain_task),
+                    timeout=grace,
+                )
             except asyncio.TimeoutError:
                 logger.debug(
                     "outbound_channel_drain_grace_exceeded queue_size=%d",
@@ -237,17 +246,6 @@ class BoundedOutboundChannel:
             except asyncio.CancelledError:
                 pass
         self._started = False
-
-    async def _wait_until_empty(self) -> None:
-        """Poll until the queue is empty AND no send is in flight.
-
-        Used only by ``stop(drain=True)``. Both conditions matter: a
-        queue length of zero alone is not enough, because the drain
-        loop pops before awaiting ``send_bytes`` and the final payload
-        may still be mid-flight when the queue empties.
-        """
-        while self._queue or self._sending:
-            await asyncio.sleep(0.005)
 
     # ── Publisher API ──────────────────────────────────────────
 
@@ -334,37 +332,33 @@ class BoundedOutboundChannel:
                     continue
                 payload = self._queue.popleft()
                 self._metrics.queued = len(self._queue)
-                self._sending = True
                 try:
-                    try:
-                        await asyncio.wait_for(
-                            self._ws.send_bytes(payload),
-                            timeout=self._cfg.send_timeout_s,
-                        )
-                    except asyncio.TimeoutError:
-                        self._metrics.timeouts += 1
-                        self._metrics.consecutive_failures += 1
-                        self._update_eviction()
-                        logger.debug(
-                            "outbound_channel_send_timeout timeout_s=%.2f failures=%d",
-                            self._cfg.send_timeout_s,
-                            self._metrics.consecutive_failures,
-                        )
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception:  # noqa: BLE001 — transport errors are opaque
-                        self._metrics.send_errors += 1
-                        self._metrics.consecutive_failures += 1
-                        self._update_eviction()
-                        logger.warning(
-                            "outbound_channel_send_error failures=%d",
-                            self._metrics.consecutive_failures,
-                            exc_info=True,
-                        )
-                    else:
-                        self._metrics.sent += 1
-                        self._metrics.consecutive_failures = 0
-                finally:
-                    self._sending = False
+                    await asyncio.wait_for(
+                        self._ws.send_bytes(payload),
+                        timeout=self._cfg.send_timeout_s,
+                    )
+                except asyncio.TimeoutError:
+                    self._metrics.timeouts += 1
+                    self._metrics.consecutive_failures += 1
+                    self._update_eviction()
+                    logger.debug(
+                        "outbound_channel_send_timeout timeout_s=%.2f failures=%d",
+                        self._cfg.send_timeout_s,
+                        self._metrics.consecutive_failures,
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 — transport errors are opaque
+                    self._metrics.send_errors += 1
+                    self._metrics.consecutive_failures += 1
+                    self._update_eviction()
+                    logger.warning(
+                        "outbound_channel_send_error failures=%d",
+                        self._metrics.consecutive_failures,
+                        exc_info=True,
+                    )
+                else:
+                    self._metrics.sent += 1
+                    self._metrics.consecutive_failures = 0
         except asyncio.CancelledError:
             raise
