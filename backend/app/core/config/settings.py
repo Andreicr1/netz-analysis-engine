@@ -89,9 +89,6 @@ class Settings(BaseSettings):
     # ── SEC EDGAR (public identifier — required by SEC policy) ──
     edgar_identity: str = "Netz Analysis Engine tech@netzco.com"
 
-    # ── Internal dispatch (Cloudflare Cron Workers) ──────────
-    worker_dispatch_secret: str = ""
-
     # ── Rate Limiting ─────────────────────────────────────────
     rate_limit_enabled: bool = True
     rate_limit_default_rpm: int = 100

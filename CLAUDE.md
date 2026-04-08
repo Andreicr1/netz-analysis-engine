@@ -352,7 +352,7 @@ Azure services deprecated (2026-03-18, files kept for rollback): Key Vault → R
 
 - **Backend:** `railway.toml` at repo root. Health check: `/health` and `/api/health`. Production: `api.investintell.com` (Railway Pro).
 - **Frontend Wealth:** Production: `wealth.investintell.com` (Railway Pro).
-- **Frontend Credit:** Railway or Cloudflare Pages with SvelteKit adapter.
+- **Frontend Credit:** Railway (SvelteKit `adapter-node`).
 - **Database:** Timescale Cloud managed PostgreSQL 16 with pgvector + TimescaleDB. Alembic uses `DIRECT_DATABASE_URL` (port 5432, not pooler).
 - **Local dev:** `docker-compose up` (PostgreSQL 16 + TimescaleDB + pgvector + Redis 7).
 - **Deploy checklist:** `docs/reference/deploy-checklist.md` — full validation sequence for Railway Pro + Timescale Cloud.

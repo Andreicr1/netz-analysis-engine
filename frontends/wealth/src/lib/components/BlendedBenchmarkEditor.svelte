@@ -279,8 +279,9 @@
 		<!-- Benchmark Name -->
 		<div class="flex items-end gap-3">
 			<div class="flex-1">
-				<label class="mb-1 block text-xs font-medium text-(--ii-text-muted)">Benchmark Name</label>
+				<label class="mb-1 block text-xs font-medium text-(--ii-text-muted)" for="benchmark-name-input">Benchmark Name</label>
 				<Input
+					id="benchmark-name-input"
 					bind:value={benchmarkName}
 					placeholder="e.g. 60/40 Blend, Moderate Custom"
 				/>

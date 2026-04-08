@@ -22,19 +22,33 @@ from httpx import ASGITransport, AsyncClient
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from app.core.config.settings import settings
 from app.core.ws.manager import ConnectionManager
 from app.main import app
 from tests.conftest import DEV_ACTOR_HEADER
+
+# Resolve the dev token from settings so local .env overrides (non-default
+# tokens) still match the WebSocket auth bypass. Tests previously hardcoded
+# "dev-token-change-me" which broke as soon as DEV_TOKEN was set in .env.
+_DEV_TOKEN = settings.dev_token
+_WS_URL = f"/api/v1/market-data/live/ws?token={_DEV_TOKEN}"
 
 # ── Fixtures ────────────────────────────────────────────────
 
 
 @pytest.fixture
 def test_client():
-    """Sync test client for WebSocket testing (starlette TestClient)."""
-    # Ensure ConnectionManager exists on app state
+    """Sync test client for WebSocket testing (starlette TestClient).
+
+    Initializes ws_manager and tiingo_bridge directly on app.state since
+    TestClient does not run the FastAPI lifespan in synchronous mode.
+    """
     if not hasattr(app.state, "ws_manager"):
         app.state.ws_manager = ConnectionManager()
+    if not hasattr(app.state, "tiingo_bridge"):
+        from app.core.ws.tiingo_bridge import TiingoStreamBridge
+
+        app.state.tiingo_bridge = TiingoStreamBridge()
     return TestClient(app)
 
 
@@ -59,7 +73,7 @@ def test_ws_rejects_missing_token(test_client: TestClient):
 def test_ws_accepts_dev_token(test_client: TestClient):
     """WebSocket with valid dev token → connection accepted."""
     with test_client.websocket_connect(
-        "/api/v1/market-data/live/ws?token=dev-token-change-me"
+        _WS_URL
     ) as ws:
         # Should receive initial subscribed message (orjson bytes)
         raw = ws.receive_bytes()
@@ -71,7 +85,7 @@ def test_ws_accepts_dev_token(test_client: TestClient):
 def test_ws_subscribe_protocol(test_client: TestClient):
     """Client can subscribe to tickers and receive confirmation."""
     with test_client.websocket_connect(
-        "/api/v1/market-data/live/ws?token=dev-token-change-me"
+        _WS_URL
     ) as ws:
         # Consume initial message
         ws.receive_bytes()
@@ -87,7 +101,7 @@ def test_ws_subscribe_protocol(test_client: TestClient):
 def test_ws_unsubscribe_protocol(test_client: TestClient):
     """Client can unsubscribe from tickers."""
     with test_client.websocket_connect(
-        "/api/v1/market-data/live/ws?token=dev-token-change-me"
+        _WS_URL
     ) as ws:
         ws.receive_bytes()  # initial
 
@@ -108,7 +122,7 @@ def test_ws_unsubscribe_protocol(test_client: TestClient):
 def test_ws_ping_pong(test_client: TestClient):
     """Client ping → server pong."""
     with test_client.websocket_connect(
-        "/api/v1/market-data/live/ws?token=dev-token-change-me"
+        _WS_URL
     ) as ws:
         ws.receive_bytes()  # initial
 
@@ -121,7 +135,7 @@ def test_ws_ping_pong(test_client: TestClient):
 def test_ws_invalid_json(test_client: TestClient):
     """Sending invalid JSON → error message (not disconnect)."""
     with test_client.websocket_connect(
-        "/api/v1/market-data/live/ws?token=dev-token-change-me"
+        _WS_URL
     ) as ws:
         ws.receive_bytes()  # initial
 
@@ -135,7 +149,7 @@ def test_ws_invalid_json(test_client: TestClient):
 def test_ws_unknown_action(test_client: TestClient):
     """Sending unknown action → error message."""
     with test_client.websocket_connect(
-        "/api/v1/market-data/live/ws?token=dev-token-change-me"
+        _WS_URL
     ) as ws:
         ws.receive_bytes()  # initial
 
@@ -149,7 +163,7 @@ def test_ws_unknown_action(test_client: TestClient):
 def test_ws_subscribe_normalizes_tickers(test_client: TestClient):
     """Tickers are normalized to uppercase."""
     with test_client.websocket_connect(
-        "/api/v1/market-data/live/ws?token=dev-token-change-me"
+        _WS_URL
     ) as ws:
         ws.receive_bytes()  # initial
 

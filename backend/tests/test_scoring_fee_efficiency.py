@@ -61,11 +61,16 @@ class TestFeeEfficiency:
         _, components = compute_fund_score(metrics, expense_ratio_pct=0.0152)
         assert abs(components["fee_efficiency"] - 24.0) < 0.01
 
-    def test_fee_efficiency_none_defaults_neutral(self):
-        """expense_ratio_pct=None → fee_efficiency == 50.0."""
+    def test_fee_efficiency_none_penalty(self):
+        """expense_ratio_pct=None → peer_median - 5 (45.0 default) — penalizes opacity.
+
+        See scoring_service.py line 148: missing ER is treated as slightly below
+        the peer_median neutral (50.0 - 5.0 = 45.0), so funds that disclose their
+        fees are never disadvantaged against those that don't.
+        """
         metrics = _make_metrics()
         _, components = compute_fund_score(metrics, expense_ratio_pct=None)
-        assert components["fee_efficiency"] == 50.0
+        assert components["fee_efficiency"] == 45.0
 
     def test_fee_efficiency_2pct_is_zero(self):
         """expense_ratio_pct=0.02 (2.0%) → fee_efficiency == 0.0."""

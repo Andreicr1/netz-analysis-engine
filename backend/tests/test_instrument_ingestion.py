@@ -60,7 +60,10 @@ class TestResolvePeriod:
         assert _resolve_period(3650) == "10y"
 
     def test_beyond_max(self):
-        assert _resolve_period(5000) == "10y"
+        # >10y maps to "max" (yfinance has no "15y" literal).
+        # See instrument_ingestion.py _LOOKBACK_TO_PERIOD — full history
+        # is required for GFC 2008 / Taper Tantrum 2013 stress scenarios.
+        assert _resolve_period(5000) == "max"
 
 
 @pytest.fixture

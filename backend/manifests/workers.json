@@ -66,21 +66,6 @@
   },
   {
     "method": "POST",
-    "path": "/api/v1/workers/run-library-bundle-builder",
-    "name": "trigger_run_library_bundle_builder"
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/workers/run-library-index-rebuild",
-    "name": "trigger_run_library_index_rebuild"
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/workers/run-library-pins-ttl",
-    "name": "trigger_run_library_pins_ttl"
-  },
-  {
-    "method": "POST",
     "path": "/api/v1/workers/run-macro-ingestion",
     "name": "trigger_run_macro_ingestion"
   },
@@ -158,10 +143,5 @@
     "method": "POST",
     "path": "/api/v1/workers/run-wealth-embedding",
     "name": "trigger_run_wealth_embedding"
-  },
-  {
-    "method": "POST",
-    "path": "/internal/workers/dispatch",
-    "name": "dispatch_workers"
   }
 ]

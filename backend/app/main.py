@@ -2,7 +2,13 @@
 ============================================
 
 Unified backend serving credit and wealth verticals.
-Dual mount pattern: root + /api prefix (for Cloudflare gateway proxy).
+
+Dual mount pattern: routes are exposed at both root and ``/api`` prefix.
+The ``/api`` prefix originally existed because the legacy Cloudflare
+gateway Worker rewrote inbound requests as ``/api/...``; the gateway has
+been removed (Railway now serves the backend directly), but the dual
+mount is kept to remain backwards-compatible with any frontend or
+external client that still hits the ``/api/...`` paths.
 """
 
 from __future__ import annotations
@@ -29,7 +35,6 @@ from app.domains.admin.routes.branding import router as admin_branding_router
 from app.domains.admin.routes.configs import router as admin_configs_router
 from app.domains.admin.routes.health import router as admin_health_router
 from app.domains.admin.routes.inspect import router as admin_inspect_router
-from app.domains.admin.routes.internal import router as internal_router
 from app.domains.admin.routes.prompts import router as admin_prompts_router
 from app.domains.admin.routes.tenants import router as admin_tenants_router
 
@@ -536,7 +541,3 @@ api_v1.include_router(credit_module_documents_router)
 # ── Mount API v1 ─────────────────────────────────────────────
 
 app.include_router(api_v1)
-
-# ── Internal routes (Cloudflare Cron Workers only) ───────────
-# Mounted on root, not under /api/v1 — gateway blocks /internal/* without secret.
-app.include_router(internal_router)

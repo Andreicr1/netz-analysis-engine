@@ -45,6 +45,9 @@ from app.domains.wealth.schemas.portfolio import (
     BlockDriftRead,
     DriftReportRead,
     LiveDriftResponse,
+    PerformancePoint,
+    PortfolioPerformanceSeries,
+    PositionDetail,
 )
 from app.shared.enums import Role
 
@@ -1919,14 +1922,14 @@ def _run_stress(
 
 @router.get(
     "/{portfolio_id}/holdings",
-    response_model=list["PositionDetail"],
+    response_model=list[PositionDetail],
     summary="Detailed holdings with latest prices",
 )
 async def get_holdings(
     portfolio_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-) -> list["PositionDetail"]:
+) -> list[PositionDetail]:
     """Return all positions in a model portfolio with latest prices and P&L.
 
     Reads ``fund_selection_schema`` for weights, joins ``instruments_universe``
@@ -2036,7 +2039,7 @@ async def get_holdings(
 
 @router.get(
     "/{portfolio_id}/performance",
-    response_model="PortfolioPerformanceSeries",
+    response_model=PortfolioPerformanceSeries,
     summary="Historical NAV time series for charting",
 )
 async def get_performance(
@@ -2044,7 +2047,7 @@ async def get_performance(
     timeframe: str = Query("1Y", pattern="^(1M|3M|6M|1Y|YTD|SI)$"),
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-) -> "PortfolioPerformanceSeries":
+) -> PortfolioPerformanceSeries:
     """Return the model portfolio's historical NAV series from ``model_portfolio_nav``.
 
     Timeframes: 1M, 3M, 6M, 1Y, YTD, SI (since inception).
