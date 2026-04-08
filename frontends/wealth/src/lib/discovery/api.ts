@@ -6,7 +6,8 @@
  * component) and build Clerk JWT headers. SSE uses `fetch()` +
  * `ReadableStream` — NEVER `EventSource`, since auth headers are required.
  */
-const BASE = "/api/v1/wealth/discovery";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+const BASE = `${API_BASE}/wealth/discovery`;
 
 export type GetToken = () => Promise<string>;
 

@@ -9,6 +9,8 @@
  */
 import type { PageServerLoad } from "./$types";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+
 type Group = "returns-risk" | "holdings" | "peer";
 type Window = "1y" | "3y" | "5y" | "max";
 
@@ -29,7 +31,7 @@ function parseWindow(raw: string | null): Window {
 
 export const load: PageServerLoad = async ({ fetch, params, url }) => {
 	const fsRes = await fetch(
-		`/api/v1/wealth/discovery/funds/${encodeURIComponent(params.external_id)}/fact-sheet`,
+		`${API_BASE}/wealth/discovery/funds/${encodeURIComponent(params.external_id)}/fact-sheet`,
 	);
 	if (!fsRes.ok) {
 		return {

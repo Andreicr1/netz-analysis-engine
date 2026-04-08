@@ -8,13 +8,15 @@
  */
 import type { PageServerLoad } from "./$types";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+
 interface ManagersResponse {
 	rows: unknown[];
 	next_cursor?: string | null;
 }
 
 export const load: PageServerLoad = async ({ fetch, url }) => {
-	const res = await fetch("/api/v1/wealth/discovery/managers", {
+	const res = await fetch(`${API_BASE}/wealth/discovery/managers`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ filters: {}, limit: 50 }),
