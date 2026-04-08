@@ -90,6 +90,7 @@ from app.domains.wealth.routes.blended_benchmark import router as wealth_blended
 from app.domains.wealth.routes.content import router as wealth_content_router
 from app.domains.wealth.routes.correlation_regime import router as wealth_correlation_regime_router
 from app.domains.wealth.routes.dd_reports import router as wealth_dd_reports_router
+from app.domains.wealth.routes.discovery_fcl import router as wealth_discovery_fcl_router
 from app.domains.wealth.routes.documents import router as wealth_documents_router
 from app.domains.wealth.routes.entity_analytics import router as wealth_entity_analytics_router
 from app.domains.wealth.routes.exposure import router as wealth_exposure_router
@@ -462,6 +463,7 @@ api_v1.include_router(wealth_macro_router)
 api_v1.include_router(wealth_workers_router)
 api_v1.include_router(wealth_library_router)
 api_v1.include_router(wealth_dd_reports_router)
+api_v1.include_router(wealth_discovery_fcl_router)
 api_v1.include_router(wealth_documents_router)
 api_v1.include_router(wealth_universe_router)
 api_v1.include_router(wealth_model_portfolios_router)
