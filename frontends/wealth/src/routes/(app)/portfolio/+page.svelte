@@ -31,8 +31,11 @@
 	import UniverseColumn from "$lib/components/portfolio/UniverseColumn.svelte";
 	import BuilderColumn from "$lib/components/portfolio/BuilderColumn.svelte";
 	import AnalyticsColumn from "$lib/components/portfolio/AnalyticsColumn.svelte";
+	import BuilderRightStack, {
+		type BuilderRightTab,
+	} from "$lib/components/portfolio/BuilderRightStack.svelte";
 	import ModelListPanel from "$lib/components/portfolio/ModelListPanel.svelte";
-	import PolicyPanel from "$lib/components/portfolio/PolicyPanel.svelte";
+	import CalibrationPanel from "$lib/components/portfolio/CalibrationPanel.svelte";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 	import type { PageData } from "./$types";
 
@@ -45,6 +48,26 @@
 	// Reset entry per spec §1.3 — 3rd column always starts closed.
 	onMount(() => {
 		workspace.resetBuilderEntry();
+	});
+
+	// ── BuilderRightStack tab state (Phase 4 Task 4.5) ─────────────
+	// Local to the page for now — Phase 5 will move it to an
+	// allowed-actions-driven host. The Builder center column flips
+	// this via the workspace.runPhase $effect below: on "done" the
+	// active tab auto-switches to Narrative so the PM's "build me
+	// something" intent is answered front-and-center.
+	let rightTab = $state<BuilderRightTab>("calibration");
+
+	$effect(() => {
+		if (workspace.runPhase === "done") {
+			rightTab = "narrative";
+		} else if (
+			workspace.runPhase === "running" ||
+			workspace.runPhase === "optimizer" ||
+			workspace.runPhase === "stress"
+		) {
+			rightTab = "narrative";
+		}
 	});
 
 	// Initial universe load — subsequent re-loads happen when the
@@ -138,7 +161,7 @@
 					{:else if workspace.activeBuilderTab === "universe"}
 						<UniverseColumn onSelectFund={handleSelectFund} />
 					{:else}
-						<PolicyPanel />
+						<CalibrationPanel />
 					{/if}
 				</div>
 			</div>
@@ -149,7 +172,14 @@
 		{/snippet}
 
 	{#snippet rightColumn()}
-		<AnalyticsColumn />
+		{#if workspace.analyticsMode === "fund"}
+			<AnalyticsColumn />
+		{:else}
+			<BuilderRightStack
+				active={rightTab}
+				onActiveChange={(t) => (rightTab = t)}
+			/>
+		{/if}
 	{/snippet}
 
 	<!-- Error toast — preserved from previous design -->

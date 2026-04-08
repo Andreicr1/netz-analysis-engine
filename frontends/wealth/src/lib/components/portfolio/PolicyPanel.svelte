@@ -1,25 +1,27 @@
 <!--
-  PolicyPanel — Adjusts the quantitative constraints for the Clarabel optimizer.
-  Features modern, interactive sliders for intuitive calibration.
-  Design: dark premium treatment (Figma One X).
+  PolicyPanel — DEPRECATED in Phase 4 of the portfolio-enterprise-workbench
+  plan. Scheduled for deletion in Phase 5 Task 5.4. The new
+  ``CalibrationPanel.svelte`` is the canonical calibration surface (DL5).
+  This file is kept alive only so the ``policy`` sub-pill in
+  /portfolio/+page.svelte continues to render until the Phase 5 swap
+  lands — but every interaction is a local-only no-op.
 -->
 <script lang="ts">
     import { workspace } from "$lib/state/portfolio-workspace.svelte";
     import { EmptyState, formatPercent } from "@investintell/ui";
 
-    // Policy constraints are local UI state — backend reads from StrategicAllocation table.
-    // These defaults match the moderate profile; real values load when policy API is wired.
+    // Local-only sliders kept purely for the legacy visual. The real
+    // state lives in ``CalibrationPanel`` (Phase 4 Task 4.1/4.2) and
+    // persists via PUT /model-portfolios/{id}/calibration.
     let cvarLimit = $state(-0.08);
     let maxConcentration = $state(0.15);
 
     function handleCvarChange(e: Event) {
-        const val = parseFloat((e.target as HTMLInputElement).value);
-        workspace.updatePolicy("cvar_limit", val);
+        cvarLimit = parseFloat((e.target as HTMLInputElement).value);
     }
 
     function handleConcentrationChange(e: Event) {
-        const val = parseFloat((e.target as HTMLInputElement).value);
-        workspace.updatePolicy("max_single_fund_weight", val);
+        maxConcentration = parseFloat((e.target as HTMLInputElement).value);
     }
 </script>
 

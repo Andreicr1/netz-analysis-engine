@@ -23,6 +23,111 @@ import type {
 	CorrelationRegimeResult,
 	RiskBudgetResult,
 } from "$lib/types/analytics";
+import type {
+	PortfolioCalibration,
+	PortfolioCalibrationUpdate,
+} from "$lib/types/portfolio-calibration";
+
+/**
+ * Phase 3 Run Construct response payload — flat dict returned from
+ * ``GET /model-portfolios/{portfolio_id}/runs/{run_id}``. Every field
+ * maps to a column on ``portfolio_construction_runs`` (DL4). Consumed
+ * by the ConstructionNarrative + Stress matrix components in Phase 4.
+ */
+export interface ConstructionRunPayload {
+	run_id: string;
+	portfolio_id: string;
+	status: "running" | "succeeded" | "failed" | "superseded";
+	as_of_date: string;
+	requested_by: string;
+	requested_at: string | null;
+	started_at: string | null;
+	completed_at: string | null;
+	wall_clock_ms: number | null;
+	failure_reason: string | null;
+	calibration_snapshot: Record<string, unknown> | null;
+	optimizer_trace: Record<string, unknown> | null;
+	binding_constraints: unknown;
+	regime_context: Record<string, unknown> | null;
+	statistical_inputs: Record<string, unknown> | null;
+	ex_ante_metrics: Record<string, number | null> | null;
+	ex_ante_vs_previous: Record<string, number | null> | null;
+	factor_exposure: Record<string, unknown> | null;
+	stress_results: ConstructionStressResult[] | null;
+	advisor: Record<string, unknown> | null;
+	validation: ConstructionValidationResult | null;
+	narrative: ConstructionNarrativeContent | null;
+	rationale_per_weight: Record<string, unknown> | null;
+	weights_proposed: Record<string, number> | null;
+}
+
+export interface ConstructionStressResult {
+	scenario: string;
+	scenario_kind: "preset" | "user_defined";
+	nav_impact_pct: number | null;
+	cvar_impact_pct: number | null;
+	per_block_impact: Record<string, number> | null;
+	per_instrument_impact: Record<string, number> | null;
+}
+
+export interface ConstructionValidationCheck {
+	id: string;
+	label: string;
+	severity: "block" | "warn";
+	passed: boolean;
+	value: number | null;
+	threshold: number | null;
+	explanation: string;
+}
+
+export interface ConstructionValidationResult {
+	passed: boolean;
+	checks: ConstructionValidationCheck[];
+	warnings: ConstructionValidationCheck[];
+}
+
+export interface ConstructionNarrativeContent {
+	headline?: string;
+	key_points?: string[];
+	constraint_story?: string;
+	holding_changes?: Array<{
+		instrument_id: string;
+		name: string;
+		prev_weight: number | null;
+		next_weight: number;
+		delta: number;
+	}>;
+	client_safe?: string;
+}
+
+/** Phase 3 Job-or-Stream 202 response from POST /{id}/construct. */
+export interface ConstructRunAccepted {
+	run_id: string;
+	portfolio_id: string;
+	status: "running" | "succeeded" | "failed" | "cached";
+	job_id: string;
+	stream_url: string;
+	run_url: string;
+}
+
+/**
+ * SSE event shape emitted by the ``construction_run_executor``.
+ * ``event`` is the type discriminator; the remaining keys are the
+ * event-specific payload.
+ */
+export interface ConstructRunEvent {
+	event:
+		| "run_started"
+		| "optimizer_started"
+		| "stress_started"
+		| "done"
+		| "error";
+	run_id?: string;
+	portfolio_id?: string;
+	status?: string;
+	wall_clock_ms?: number;
+	reason?: string;
+}
 
 // ── Shock mapping: UI macro-shocks → per-block shocks ────────────────
 // The backend stress engine expects shocks keyed by allocation block_id.
@@ -203,6 +308,41 @@ export class PortfolioWorkspaceState {
 	riskBudget = $state.raw<RiskBudgetResult | null>(null);
 	isLoadingRiskBudget = $state(false);
 
+	// ── Phase 4 — Calibration + Construction Narrative ────────────────
+	/**
+	 * Tiered calibration surface (DL5). Loaded on selectPortfolio().
+	 * The Builder's CalibrationPanel reads this as the source-of-truth
+	 * snapshot; editing happens in a local ``draft`` owned by the
+	 * panel and persisted via ``applyCalibration`` on Apply.
+	 */
+	calibration = $state.raw<PortfolioCalibration | null>(null);
+	isLoadingCalibration = $state(false);
+	isApplyingCalibration = $state(false);
+
+	/**
+	 * Phase 3 construct run payload for the current portfolio — loaded
+	 * either after a successful ``runConstructJob`` (via the SSE stream
+	 * terminal ``done`` event) or on-demand via ``loadConstructionRun``.
+	 * Empty means "no run yet" — ConstructionNarrative renders the
+	 * institutional empty state (DL4 + OD-26 strict).
+	 */
+	constructionRun = $state.raw<ConstructionRunPayload | null>(null);
+	isLoadingRun = $state(false);
+
+	/**
+	 * Run Construct SSE state — replaces the legacy ``isConstructing``
+	 * boolean. ``runPhase`` advances as the executor publishes events:
+	 *
+	 *   idle → running → optimizer → stress → done (or error)
+	 *
+	 * Phase 4 Task 4.5 Job-or-Stream wiring (DL18 P2). Consumed by
+	 * BuilderColumn / BuilderRightStack for the "Building…" pill + the
+	 * auto-switch to the Narrative tab on ``done``.
+	 */
+	runPhase = $state<"idle" | "running" | "optimizer" | "stress" | "done" | "error">("idle");
+	runError = $state<string | null>(null);
+	private _activeRunAbort: AbortController | null = null;
+
 	/** Approved universe funds for DnD — loaded from API when portfolio is selected. */
 	universe = $state<UniverseFund[]>([]);
 
@@ -325,6 +465,11 @@ export class PortfolioWorkspaceState {
 	selectPortfolio(p: ModelPortfolio) {
 		// Increment generation to invalidate any in-flight async loads
 		this._generation++;
+		// Cancel any in-flight construction run stream belonging to the
+		// previous portfolio — prevents stale SSE events from clobbering
+		// the newly-selected portfolio.
+		this._activeRunAbort?.abort();
+		this._activeRunAbort = null;
 
 		this.portfolio = p;
 		this.localStress = null;
@@ -339,13 +484,20 @@ export class PortfolioWorkspaceState {
 		this.adviceFetched = false;
 		this.lastError = null;
 		this.navSeries = [];
+		// Phase 4 — calibration + run reset on portfolio switch
+		this.calibration = null;
+		this.constructionRun = null;
+		this.runPhase = "idle";
+		this.runError = null;
 		// Switching models is a hard reset of the analytics context —
 		// the 3rd column closes and the PM starts fresh in Estado B.
 		this.analyticsMode = null;
 		this.selectedAnalyticsFund = null;
-		// Fire-and-forget: load track-record, factor analysis, attribution, drift
+		// Fire-and-forget: load track-record, factor analysis, attribution, drift,
+		// + Phase 4 calibration surface so the Builder right stack can render.
 		this.loadTrackRecord();
 		this.loadDriftAlerts();
+		this.loadCalibration();
 
 		if (p.profile) {
 			this.loadFactorAnalysis(p.profile);
@@ -681,10 +833,91 @@ export class PortfolioWorkspaceState {
 		return true;
 	}
 
-	updatePolicy(key: "cvar_limit" | "max_single_fund_weight", value: number) {
-		if (!this.portfolio) return;
-		// Policy updates are local UI state — the backend reads policy from StrategicAllocation table
-		this.portfolio = { ...this.portfolio };
+	// ── Phase 4 — Calibration load / preview / apply ────────────────
+
+	/** Load the 63-input calibration surface for the active portfolio. */
+	async loadCalibration() {
+		if (!this._getToken || !this.portfolioId) return;
+		const gen = this._generation;
+		this.isLoadingCalibration = true;
+		try {
+			const api = this.api();
+			const result = await api.get<PortfolioCalibration>(
+				`/model-portfolios/${this.portfolioId}/calibration`,
+			);
+			if (gen !== this._generation) return;
+			this.calibration = result;
+		} catch (err) {
+			if (gen !== this._generation) return;
+			this.lastError = {
+				action: "calibration-load",
+				message: err instanceof Error ? err.message : "Failed to load calibration",
+				timestamp: Date.now(),
+			};
+			this.calibration = null;
+		} finally {
+			if (gen === this._generation) this.isLoadingCalibration = false;
+		}
+	}
+
+	/**
+	 * Persist a Builder CalibrationPanel Apply edit. Accepts the
+	 * partial update body and replaces ``this.calibration`` with the
+	 * post-update snapshot returned from the backend.
+	 *
+	 * DL5 — Apply is the ONLY persistence moment. Preview is never
+	 * reactive; it is only fired when the user presses the Preview
+	 * button in the panel (debounced client-side).
+	 */
+	async applyCalibration(patch: PortfolioCalibrationUpdate): Promise<PortfolioCalibration | null> {
+		if (!this._getToken || !this.portfolioId) return null;
+		this.isApplyingCalibration = true;
+		this.lastError = null;
+		try {
+			const api = this.api();
+			const result = await api.put<PortfolioCalibration>(
+				`/model-portfolios/${this.portfolioId}/calibration`,
+				patch,
+			);
+			this.calibration = result;
+			return result;
+		} catch (err) {
+			this.lastError = {
+				action: "calibration-apply",
+				message: err instanceof Error ? err.message : "Failed to apply calibration",
+				timestamp: Date.now(),
+			};
+			return null;
+		} finally {
+			this.isApplyingCalibration = false;
+		}
+	}
+
+	// ── Phase 4 — Construction run loader ───────────────────────────
+
+	/** Fetch a persisted construction run by id into ``constructionRun``. */
+	async loadConstructionRun(runId: string) {
+		if (!this._getToken || !this.portfolioId) return;
+		const gen = this._generation;
+		this.isLoadingRun = true;
+		try {
+			const api = this.api();
+			const result = await api.get<ConstructionRunPayload>(
+				`/model-portfolios/${this.portfolioId}/runs/${runId}`,
+			);
+			if (gen !== this._generation) return;
+			this.constructionRun = result;
+		} catch (err) {
+			if (gen !== this._generation) return;
+			this.lastError = {
+				action: "run-load",
+				message: err instanceof Error ? err.message : "Failed to load construction run",
+				timestamp: Date.now(),
+			};
+			this.constructionRun = null;
+		} finally {
+			if (gen === this._generation) this.isLoadingRun = false;
+		}
 	}
 
 	// ── Construction Advisor (generation-guarded) ───────────────────────────
@@ -747,32 +980,185 @@ export class PortfolioWorkspaceState {
 
 	// ── Construction & Live Rebalance ─────────────────────────────────────────
 
-	async constructPortfolio() {
-		if (!this.portfolioId) return;
+	/**
+	 * Kick off a Phase 3 Job-or-Stream construction run (DL18 P2).
+	 *
+	 * Flow:
+	 *   1. POST /model-portfolios/{id}/construct → 202 ConstructRunAccepted
+	 *   2. Open fetch()+ReadableStream SSE at stream_url (NEVER EventSource
+	 *      — Clerk JWT needs Authorization header, DL15).
+	 *   3. Advance runPhase on each event ('run_started' | 'optimizer_started'
+	 *      | 'stress_started').
+	 *   4. On terminal 'done', fetch the run detail via loadConstructionRun
+	 *      and transition runPhase → 'done'. Callers that care about the
+	 *      resolution await the returned promise; it settles on terminal.
+	 *   5. On terminal 'error', set runError + runPhase → 'error'.
+	 *
+	 * The legacy ``isConstructing`` boolean is kept in sync for
+	 * backwards-compatibility with components that still read it.
+	 */
+	async runConstructJob(): Promise<ConstructionRunPayload | null> {
+		if (!this._getToken || !this.portfolioId) return null;
+
+		// Cancel any in-flight stream if the user re-presses Run Construct.
+		this._activeRunAbort?.abort();
+		const abort = new AbortController();
+		this._activeRunAbort = abort;
+
+		this.runPhase = "running";
+		this.runError = null;
 		this.isConstructing = true;
 		this.lastError = null;
 
 		try {
+			// ── 1. POST /construct → 202 ──
 			const api = this.api();
-			// POST /model-portfolios/{id}/construct — no body required.
-			// Backend reads approved universe + strategic allocation from DB.
-			// Timeout extended: CLARABEL optimizer can take 10-30s.
-			const result = await api.post<ModelPortfolio>(
+			const accepted = await api.post<ConstructRunAccepted>(
 				`/model-portfolios/${this.portfolioId}/construct`,
 				undefined,
-				{ timeoutMs: 60_000 },
+				{ timeoutMs: 130_000 }, // backend bound is 120s + 10s margin
 			);
 
-			// Update local state with the full portfolio returned (includes fund_selection_schema)
-			this.portfolio = result;
+			// If the worker completed synchronously (cached or very fast),
+			// skip the SSE dance and load the run immediately.
+			if (accepted.status === "succeeded" || accepted.status === "cached") {
+				await this.loadConstructionRun(accepted.run_id);
+				this.runPhase = "done";
+				return this.constructionRun;
+			}
+			if (accepted.status === "failed") {
+				this.runPhase = "error";
+				this.runError = "Construction failed before streaming started";
+				return null;
+			}
+
+			// ── 2. Stream SSE until terminal ──
+			// The backend emits stream_url as ``/api/v1/jobs/{id}/stream``.
+			// VITE_API_BASE_URL already contains the ``/api/v1`` suffix
+			// (e.g. http://localhost:8000/api/v1), so we strip that before
+			// concatenating the absolute stream path.
+			const token = await this._getToken();
+			const envBase =
+				(import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+				"http://localhost:8000/api/v1";
+			const host = envBase.replace(/\/api\/v1\/?$/, "");
+			const streamUrl = accepted.stream_url.startsWith("http")
+				? accepted.stream_url
+				: `${host}${accepted.stream_url}`;
+
+			const res = await fetch(streamUrl, {
+				headers: {
+					Authorization: `Bearer ${token}`,
+					Accept: "text/event-stream",
+				},
+				signal: abort.signal,
+			});
+
+			if (!res.ok || !res.body) {
+				throw new Error(`SSE stream failed: HTTP ${res.status}`);
+			}
+
+			const reader = res.body.getReader();
+			const decoder = new TextDecoder();
+			let buffer = "";
+			let currentData = "";
+			let terminal: ConstructRunEvent | null = null;
+
+			streamLoop: while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				buffer += decoder.decode(value, { stream: true });
+				buffer = buffer.replace(/\r\n/g, "\n");
+				const lines = buffer.split("\n");
+				buffer = lines.pop() ?? "";
+
+				for (const line of lines) {
+					if (line.startsWith("data:")) {
+						currentData += (currentData ? "\n" : "") + line.slice(5).replace(/^ /, "");
+					} else if (line === "") {
+						if (currentData) {
+							let parsed: ConstructRunEvent | null = null;
+							try {
+								parsed = JSON.parse(currentData) as ConstructRunEvent;
+							} catch {
+								parsed = null;
+							}
+							if (parsed) {
+								this._applyRunEvent(parsed);
+								if (parsed.event === "done" || parsed.event === "error") {
+									terminal = parsed;
+									break streamLoop;
+								}
+							}
+							currentData = "";
+						}
+					}
+				}
+			}
+
+			reader.cancel().catch(() => {
+				/* ignore abort noise */
+			});
+
+			if (!terminal) {
+				this.runPhase = "error";
+				this.runError = "Stream closed before terminal event";
+				return null;
+			}
+
+			if (terminal.event === "error") {
+				this.runPhase = "error";
+				this.runError = terminal.reason ?? "Construction failed";
+				return null;
+			}
+
+			// ── 3. Fetch the persisted run ──
+			const runId = terminal.run_id ?? accepted.run_id;
+			await this.loadConstructionRun(runId);
+			this.runPhase = "done";
+			return this.constructionRun;
 		} catch (err) {
+			if ((err as { name?: string } | null)?.name === "AbortError") {
+				return null;
+			}
+			this.runPhase = "error";
+			this.runError = err instanceof Error ? err.message : "Construction failed";
 			this.lastError = {
 				action: "construct",
-				message: err instanceof Error ? err.message : "Construction failed",
+				message: this.runError,
 				timestamp: Date.now(),
 			};
+			return null;
 		} finally {
 			this.isConstructing = false;
+			if (this._activeRunAbort === abort) this._activeRunAbort = null;
+		}
+	}
+
+	/** Legacy alias — kept so existing components can still call ``constructPortfolio``. */
+	async constructPortfolio() {
+		await this.runConstructJob();
+	}
+
+	/** Apply a single SSE event to ``runPhase``. */
+	private _applyRunEvent(ev: ConstructRunEvent) {
+		switch (ev.event) {
+			case "run_started":
+				this.runPhase = "running";
+				break;
+			case "optimizer_started":
+				this.runPhase = "optimizer";
+				break;
+			case "stress_started":
+				this.runPhase = "stress";
+				break;
+			case "done":
+				this.runPhase = "done";
+				break;
+			case "error":
+				this.runPhase = "error";
+				this.runError = ev.reason ?? "Construction failed";
+				break;
 		}
 	}
 

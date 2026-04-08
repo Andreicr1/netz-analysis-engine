@@ -33,7 +33,13 @@
 	import { portfolioDisplayName } from "$lib/constants/blocks";
 
 	function handleConstruct() {
-		workspace.constructPortfolio();
+		// Phase 4 Task 4.5 — Run Construct is now a Job-or-Stream flow
+		// (DL18 P2). Opening the 3rd column in "portfolio" mode makes
+		// the BuilderRightStack visible so the PM sees the Narrative
+		// tab advance through the runPhase SSE events and auto-switch
+		// to the Narrative tab on "done".
+		workspace.openAnalyticsForPortfolio();
+		void workspace.runConstructJob();
 	}
 
 	function handleStressNav() {
@@ -42,10 +48,11 @@
 	}
 
 	function handleViewChart() {
-		// Opens Estado C (3rd column) with MainPortfolioChart loaded
-		// in "portfolio" mode. The chart was previously pinned at the
-		// top of this column — moved to the 3rd column in Phase B
-		// polish so the allocation blocks get full vertical space.
+		// Opens Estado C (3rd column) which hosts the BuilderRightStack
+		// (Calibration | Narrative | Stress | Chart). The page handles
+		// the tab selection — pressing "View Chart" is the spiritual
+		// successor of the legacy behaviour so the Chart tab is the
+		// reasonable landing spot.
 		workspace.openAnalyticsForPortfolio();
 	}
 
