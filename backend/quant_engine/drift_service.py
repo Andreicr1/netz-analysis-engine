@@ -175,7 +175,15 @@ def compute_dtw_drift(
     """Compute derivative DTW distance between fund and benchmark return series.
 
     Uses ddtw_distance (derivative DTW) — naturally scale-invariant.
-    Result is length-normalized (raw / window) for cross-fund comparability.
+
+    S5-H — the score is normalised by ``√window`` so that drift scores
+    computed on different rolling windows remain comparable across funds.
+    Raw DTW distance scales roughly linearly with the warping path length
+    (≈ ``window``), but the variance of the distance scales with
+    ``√window``; dividing by the window itself shrinks long-window scores
+    artificially toward zero, which the previous implementation did and
+    which corrupted cross-fund rankings whenever windows differed.
+    Dividing by ``√window`` is the unbiased length normalisation.
 
     Args:
         max_lookback_days: Sliding window cap (~2 years trading days).
@@ -213,8 +221,10 @@ def compute_dtw_drift(
 
     try:
         raw = ddtw_distance(f, b, window=0.1)
+        # S5-H: √window normalisation, not raw / window.
+        normaliser = float(np.sqrt(max(len(f), 1)))
         return DtwDriftResult(
-            score=float(raw / max(len(f), 1)),
+            score=float(raw / normaliser),
             status=DtwDriftStatus.ok,
         )
     except Exception as e:
@@ -270,9 +280,11 @@ def compute_dtw_drift_batch(
         benchmark_distances = dist_matrix[-1, :-1]
 
         actual_window = fund_slice.shape[1]
+        # S5-H: √window normalisation, see ``compute_dtw_drift`` rationale.
+        normaliser = float(np.sqrt(max(actual_window, 1)))
         return [
             DtwDriftResult(
-                score=float(d / max(actual_window, 1)),
+                score=float(d / normaliser),
                 status=DtwDriftStatus.ok,
             )
             for d in benchmark_distances
