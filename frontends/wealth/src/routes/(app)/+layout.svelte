@@ -12,7 +12,7 @@
 	import GlobalSearch from "$lib/components/GlobalSearch.svelte";
 	import {
 		LayoutDashboard, FileSearch, Table2, Library, Globe,
-		Settings, Menu, Bell, Cpu, Mic,
+		Settings, Menu, Bell, Cpu, Mic, Compass,
 	} from "lucide-svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -48,6 +48,7 @@
 
 	const navItems = [
 		{ label: "Dashboard", href: "/dashboard",         icon: LayoutDashboard },
+		{ label: "Discovery", href: "/discovery",         icon: Compass },
 		{ label: "Screener",  href: "/screener",          icon: FileSearch },
 		{ label: "Portfolio", href: "/portfolio",         icon: Table2 },
 		{ label: "Library",   href: "/library",           icon: Library },
@@ -65,7 +66,7 @@
 	// horizontal pixel — the 12-column Universe table alone demands
 	// ~1074px, and at 45% of workspace that requires > 2000px of
 	// canvas. Those routes opt out of the cage here.
-	const FULL_BLEED_PATHS = ["/portfolio"];
+	const FULL_BLEED_PATHS = ["/portfolio", "/discovery"];
 	const isFullBleed = $derived(
 		FULL_BLEED_PATHS.some(
 			(p) => $page.url.pathname === p || $page.url.pathname.startsWith(p + "/"),
