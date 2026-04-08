@@ -205,6 +205,25 @@ def gold_long_form_report_path(
     return f"gold/{org_id}/wealth/reports/long-form-dd-{portfolio_id}/{job_id}.pdf"
 
 
+def gold_library_bundle_path(org_id: UUID, bundle_id: str) -> str:
+    """``gold/{org_id}/wealth/library/bundles/{bundle_id}/bundle.zip``
+
+    Stores generated Wealth Library Committee Pack ZIPs (multi-document
+    bundles produced on-demand by the ``library_bundle_builder`` worker).
+    """
+    _validate_segment(bundle_id, "bundle_id")
+    return f"gold/{org_id}/wealth/library/bundles/{bundle_id}/bundle.zip"
+
+
+def gold_library_bundle_manifest_path(org_id: UUID, bundle_id: str) -> str:
+    """``gold/{org_id}/wealth/library/bundles/{bundle_id}/manifest.json``
+
+    Stores the manifest JSON describing the contents of a library bundle.
+    """
+    _validate_segment(bundle_id, "bundle_id")
+    return f"gold/{org_id}/wealth/library/bundles/{bundle_id}/manifest.json"
+
+
 # ── Global paths (no org_id, no vertical) ──────────────────────────
 
 
