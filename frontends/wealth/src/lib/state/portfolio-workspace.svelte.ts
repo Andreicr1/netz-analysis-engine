@@ -27,6 +27,10 @@ import type {
 	PortfolioCalibration,
 	PortfolioCalibrationUpdate,
 } from "$lib/types/portfolio-calibration";
+import type {
+	PortfolioAlertCount,
+	UnifiedAlertInbox,
+} from "$lib/types/alerts";
 
 /**
  * Phase 3 Run Construct response payload — flat dict returned from
@@ -890,6 +894,125 @@ export class PortfolioWorkspaceState {
 			return null;
 		} finally {
 			this.isApplyingCalibration = false;
+		}
+	}
+
+	// ── Phase 7 — Alerts Unification ────────────────────────────────
+
+	/**
+	 * Phase 7 Alerts Unification — global alerts inbox slice.
+	 *
+	 * The slice holds the latest UnifiedAlertInbox response from
+	 * GET /alerts/inbox plus loading + error state. The
+	 * GlobalAlertInbox bell icon dropdown subscribes via $derived;
+	 * the PortfolioSubNav 'Live' pill badge reads ``unread_count``
+	 * for the global indicator.
+	 *
+	 * Polling is opt-in: the layout component calls
+	 * ``startAlertsPolling()`` on mount and ``stopAlertsPolling()``
+	 * on destroy. Default interval is 60s — institutional cadence,
+	 * not real-time. SSE upgrade lands in a follow-up sprint when
+	 * the workers writing to portfolio_alerts ship.
+	 *
+	 * Per DL15 — zero localStorage. Read/unread state lives on the
+	 * backend ``acknowledged_at`` columns. The frontend's
+	 * "unread_count" is purely a re-fetch of /alerts/inbox after
+	 * any acknowledge call.
+	 */
+	alertsInbox = $state.raw<UnifiedAlertInbox | null>(null);
+	isLoadingAlerts = $state(false);
+	alertsError = $state<string | null>(null);
+
+	private _alertsPollHandle: ReturnType<typeof setInterval> | null = null;
+	private _alertsGen = 0;
+
+	/**
+	 * Fetch the unified alerts inbox. Idempotent — safe to call from
+	 * effects, on-mount hooks, or polling intervals.
+	 */
+	async loadAlertsInbox(opts: { unreadOnly?: boolean; limit?: number } = {}): Promise<void> {
+		if (!this._getToken) return;
+		const gen = ++this._alertsGen;
+		this.isLoadingAlerts = true;
+		this.alertsError = null;
+		try {
+			const api = this.api();
+			const params = new URLSearchParams();
+			if (opts.unreadOnly) params.set("unread_only", "true");
+			if (opts.limit) params.set("limit", String(opts.limit));
+			const qs = params.toString() ? `?${params.toString()}` : "";
+			const result = await api.get<UnifiedAlertInbox>(`/alerts/inbox${qs}`);
+			if (gen !== this._alertsGen) return;
+			this.alertsInbox = result;
+		} catch (err) {
+			if (gen !== this._alertsGen) return;
+			this.alertsError = err instanceof Error ? err.message : "Failed to load alerts";
+			// Do NOT clobber the existing alertsInbox on error — keeps
+			// the bell badge from blinking to zero on a transient failure.
+		} finally {
+			if (gen === this._alertsGen) this.isLoadingAlerts = false;
+		}
+	}
+
+	/**
+	 * Acknowledge a single alert. Re-fetches the inbox on success so
+	 * the bell badge updates without a separate refresh round trip.
+	 *
+	 * Per DL15 — the acknowledged state IS the backend write; the
+	 * frontend never persists read state to localStorage.
+	 */
+	async acknowledgeAlert(source: string, alertId: string): Promise<void> {
+		if (!this._getToken) return;
+		try {
+			const api = this.api();
+			await api.post(`/alerts/${source}/${alertId}/acknowledge`, {});
+			// Re-fetch the full inbox so unread_count + per-source
+			// counts both update. Cheaper than maintaining a local
+			// optimistic patch and avoids the consistency hazard of
+			// the polling tick racing with the local update.
+			await this.loadAlertsInbox();
+		} catch (err) {
+			this.alertsError = err instanceof Error ? err.message : "Failed to acknowledge alert";
+		}
+	}
+
+	/**
+	 * Start polling /alerts/inbox at the given interval. Idempotent —
+	 * calling twice does not stack intervals. The default 60s cadence
+	 * matches the institutional polling rhythm; faster polling should
+	 * wait for the SSE bridge in a follow-up sprint.
+	 */
+	startAlertsPolling(intervalMs = 60_000) {
+		this.stopAlertsPolling();
+		void this.loadAlertsInbox();
+		this._alertsPollHandle = setInterval(() => {
+			void this.loadAlertsInbox();
+		}, intervalMs);
+	}
+
+	/** Clear the polling interval — call from onDestroy hooks. */
+	stopAlertsPolling() {
+		if (this._alertsPollHandle !== null) {
+			clearInterval(this._alertsPollHandle);
+			this._alertsPollHandle = null;
+		}
+	}
+
+	/**
+	 * Per-portfolio open-alert count for the Phase 5 PortfolioSubNav
+	 * 'Live' pill badge. Returns 0 on any error so the badge falls
+	 * back to "no alerts" rather than blinking on transient failures.
+	 */
+	async fetchPortfolioAlertCount(portfolioId: string): Promise<number> {
+		if (!this._getToken) return 0;
+		try {
+			const api = this.api();
+			const result = await api.get<PortfolioAlertCount>(
+				`/alerts/portfolio/${portfolioId}/count`,
+			);
+			return result.open_count;
+		} catch {
+			return 0;
 		}
 	}
 
