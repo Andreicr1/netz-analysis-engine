@@ -92,6 +92,8 @@
 	}
 
 	// ── Selection state ─────────────────────────────────────────────
+	// Intentional single capture — URL-driven updates flow through the $effect below.
+	// svelte-ignore state_referenced_locally
 	let selectedFundId = $state(initialFundId);
 	let fundWindow = $state("1y");
 	const windows = ["3m", "6m", "1y", "3y", "5y"] as const;

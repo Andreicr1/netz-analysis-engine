@@ -89,9 +89,16 @@
 		effective_weight: number;
 	};
 
+	// Local mutable copies seeded from SSR props. The $effect below re-syncs
+	// whenever props change (profile switch via goto). Initial capture is
+	// intentional — local edits must not be immediately overwritten by props.
+	// svelte-ignore state_referenced_locally
 	let blocks = $state<BlockMeta[]>(ssrBlocks as BlockMeta[]);
+	// svelte-ignore state_referenced_locally
 	let strategic = $state<StrategicRow[]>(ssrStrategic as StrategicRow[]);
+	// svelte-ignore state_referenced_locally
 	let tactical = $state<TacticalRow[]>(ssrTactical as TacticalRow[]);
+	// svelte-ignore state_referenced_locally
 	let effective = $state<EffectiveRow[]>(ssrEffective as EffectiveRow[]);
 
 	// Keep local state in sync when SSR props change (profile switch via goto)
