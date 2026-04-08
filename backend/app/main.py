@@ -2,7 +2,13 @@
 ============================================
 
 Unified backend serving credit and wealth verticals.
-Dual mount pattern: root + /api prefix (for Cloudflare gateway proxy).
+
+Dual mount pattern: routes are exposed at both root and ``/api`` prefix.
+The ``/api`` prefix originally existed because the legacy Cloudflare
+gateway Worker rewrote inbound requests as ``/api/...``; the gateway has
+been removed (Railway now serves the backend directly), but the dual
+mount is kept to remain backwards-compatible with any frontend or
+external client that still hits the ``/api/...`` paths.
 """
 
 from __future__ import annotations
