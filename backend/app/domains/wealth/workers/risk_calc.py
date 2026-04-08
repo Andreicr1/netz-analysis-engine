@@ -59,6 +59,26 @@ MIN_STRESS_OBS = 10  # Minimum stress observations for conditional CVaR
 # Diagnosed 2026-03-30: 15 funds with flat NAV producing Sharpe = -9999.
 MIN_ANNUALIZED_VOL = 0.01
 
+# Implausible daily return threshold. Any |return_1d| above this value is
+# rejected at fetch-time from all NAV series consumed by the risk worker
+# (base metrics, regime-conditional CVaR, DTW drift). A 50% single-day loss
+# on an unleveraged fund is physically impossible; on a 3x-leveraged product
+# it requires the underlying to fall >16.7% in one session (an event that
+# has occurred only a handful of times in market history — e.g. Black Monday
+# 1987, COVID 2020-03-16). Any return beyond this cap is almost always a
+# corporate-action / distribution / reverse-split not adjusted by the NAV
+# ingestion worker, and propagating it would contaminate Sharpe, volatility,
+# CVaR, drawdown, manager_score, and peer percentile rankings across the
+# entire cross-section.
+#
+# Diagnosed 2026-04-08: 7 funds with unadjusted corporate-action ghosts
+# (CHNTX, RYSHX, DSMLX, SFPIX, MRVNX, MMTLX, MMTQX) producing cvar_95_conditional
+# values down to -188% and annualized vol up to 406%. Real 2x-leveraged
+# single-stock ETFs (MSTZ/MSTU on MSTR) are correctly preserved because
+# their legitimate extreme days (~70%) are explainable by underlying rallies
+# of ~35% and are defensible against prospectus disclosures.
+MAX_DAILY_RETURN_ABS = 0.5
+
 
 async def get_risk_free_rate(db: AsyncSession) -> float:
     """Get latest Fed Funds Rate from macro_data, fallback to 4%.
@@ -230,6 +250,7 @@ async def _batch_fetch_nav_returns(
     arith_fund_ids = [fid for fid in fund_ids if return_type_by_fund.get(str(fid), "log") == "arithmetic"]
 
     raw_by_fund: dict[str, list[float]] = {}
+    rejected_by_fund: dict[str, int] = {}
 
     for type_label, typed_ids in [("log", log_fund_ids), ("arithmetic", arith_fund_ids)]:
         if not typed_ids:
@@ -249,7 +270,20 @@ async def _batch_fetch_nav_returns(
         result = await db.execute(stmt)
         for row_instrument_id, return_1d in result.all():
             fid = str(row_instrument_id)
-            raw_by_fund.setdefault(fid, []).append(float(return_1d))
+            r = float(return_1d)
+            if abs(r) > MAX_DAILY_RETURN_ABS:
+                rejected_by_fund[fid] = rejected_by_fund.get(fid, 0) + 1
+                continue
+            raw_by_fund.setdefault(fid, []).append(r)
+
+    if rejected_by_fund:
+        logger.warning(
+            "nav_returns_rejected_implausible_daily",
+            affected_funds=len(rejected_by_fund),
+            total_rejected_obs=sum(rejected_by_fund.values()),
+            threshold=MAX_DAILY_RETURN_ABS,
+            sample_fund_ids=list(rejected_by_fund.keys())[:5],
+        )
 
     return raw_by_fund
 
@@ -300,6 +334,7 @@ async def _batch_fetch_dated_returns(
     arith_fund_ids = [fid for fid in fund_ids if return_type_by_fund.get(str(fid), "log") == "arithmetic"]
 
     raw_by_fund: dict[str, list[tuple[date, float]]] = {}
+    rejected_by_fund: dict[str, int] = {}
 
     for type_label, typed_ids in [("log", log_fund_ids), ("arithmetic", arith_fund_ids)]:
         if not typed_ids:
@@ -319,7 +354,20 @@ async def _batch_fetch_dated_returns(
         result = await db.execute(stmt)
         for row_instrument_id, nav_date, return_1d in result.all():
             fid = str(row_instrument_id)
-            raw_by_fund.setdefault(fid, []).append((nav_date, float(return_1d)))
+            r = float(return_1d)
+            if abs(r) > MAX_DAILY_RETURN_ABS:
+                rejected_by_fund[fid] = rejected_by_fund.get(fid, 0) + 1
+                continue
+            raw_by_fund.setdefault(fid, []).append((nav_date, r))
+
+    if rejected_by_fund:
+        logger.warning(
+            "dated_nav_returns_rejected_implausible_daily",
+            affected_funds=len(rejected_by_fund),
+            total_rejected_obs=sum(rejected_by_fund.values()),
+            threshold=MAX_DAILY_RETURN_ABS,
+            sample_fund_ids=list(rejected_by_fund.keys())[:5],
+        )
 
     return raw_by_fund
 
@@ -577,14 +625,29 @@ async def _fetch_block_returns_batch(
     result = await db.execute(stmt)
     rows = result.all()
 
-    # Group rows by fund_id; track which return types are present per fund
+    # Group rows by fund_id; track which return types are present per fund.
+    # Reject any |return_1d| > MAX_DAILY_RETURN_ABS (see constant docstring).
     raw_by_fund: dict[str, dict[str, list[float]]] = {}
+    rejected_by_fund: dict[str, int] = {}
     for row_instrument_id, return_1d, return_type in rows:
         fid = str(row_instrument_id)
+        r = float(return_1d)
+        if abs(r) > MAX_DAILY_RETURN_ABS:
+            rejected_by_fund[fid] = rejected_by_fund.get(fid, 0) + 1
+            continue
         if fid not in raw_by_fund:
             raw_by_fund[fid] = {"log": [], "arithmetic": []}
         rtype = return_type if return_type in ("log", "arithmetic") else "arithmetic"
-        raw_by_fund[fid][rtype].append(float(return_1d))
+        raw_by_fund[fid][rtype].append(r)
+
+    if rejected_by_fund:
+        logger.warning(
+            "block_returns_rejected_implausible_daily",
+            affected_funds=len(rejected_by_fund),
+            total_rejected_obs=sum(rejected_by_fund.values()),
+            threshold=MAX_DAILY_RETURN_ABS,
+            sample_fund_ids=list(rejected_by_fund.keys())[:5],
+        )
 
     # Select the preferred return type per fund (log > arithmetic)
     filtered: dict[str, list[float]] = {}
