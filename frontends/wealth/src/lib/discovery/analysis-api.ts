@@ -8,7 +8,7 @@
  * from how the JWT is resolved at the layout level.
  */
 
-const BASE = "/api/wealth/discovery";
+const BASE = "/api/v1/wealth/discovery";
 
 export type GetToken = () => Promise<string>;
 

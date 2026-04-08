@@ -6,7 +6,7 @@
  * component) and build Clerk JWT headers. SSE uses `fetch()` +
  * `ReadableStream` — NEVER `EventSource`, since auth headers are required.
  */
-const BASE = "/api/wealth/discovery";
+const BASE = "/api/v1/wealth/discovery";
 
 export type GetToken = () => Promise<string>;
 

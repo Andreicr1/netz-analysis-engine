@@ -14,7 +14,7 @@ interface ManagersResponse {
 }
 
 export const load: PageServerLoad = async ({ fetch, url }) => {
-	const res = await fetch("/api/wealth/discovery/managers", {
+	const res = await fetch("/api/v1/wealth/discovery/managers", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ filters: {}, limit: 50 }),

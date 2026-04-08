@@ -29,7 +29,7 @@ function parseWindow(raw: string | null): Window {
 
 export const load: PageServerLoad = async ({ fetch, params, url }) => {
 	const fsRes = await fetch(
-		`/api/wealth/discovery/funds/${encodeURIComponent(params.external_id)}/fact-sheet`,
+		`/api/v1/wealth/discovery/funds/${encodeURIComponent(params.external_id)}/fact-sheet`,
 	);
 	if (!fsRes.ok) {
 		return {
