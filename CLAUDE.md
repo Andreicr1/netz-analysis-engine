@@ -95,7 +95,7 @@ frontends/
   wealth/           ← SvelteKit "netz-wealth-os"
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0095_mv_unified_funds_share_class`.
+**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0105_portfolio_calibration_fk_on_construction_runs`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header. **Tenant and user management is 100% via Clerk Dashboard** — no custom admin UI. Organizations, user invites, and role assignment (`ADMIN`, `INVESTMENT_TEAM`, `investor`) are all managed in Clerk. `ConfigService` defaults mean new tenants work immediately without provisioning.
 
@@ -237,6 +237,9 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `library_index_rebuild` | 900_080 | org | `wealth_library_index` | Self-heal cross-check via EXCEPT/MINUS vs source tables | Nightly |
 | `library_pins_ttl` | 900_081 | org | `wealth_library_pins` | Prune `recent` pins > 20 per user | 6h |
 | `library_bundle_builder` | 900_082 | org | `wealth_library_index`, R2 storage | On-demand Committee Pack ZIP + manifest + SSE emit | On-demand |
+| `live_price_poll` | 900_100 | org | Redis `live:px:v1` hash (TTL 180s) | Yahoo Finance batch quote (≤250 symbols/call) for instruments held by `live`/`paused` portfolios; emits `price_staleness` alerts | 60s |
+| `construction_run_executor` | 900_101 | org | `portfolio_construction_runs`, `portfolio_stress_results` | Computed (optimizer cascade + stress + advisor + validation + Jinja2 narrative); bound at 120s | On-demand |
+| `alert_sweeper` | 900_102 | org | `portfolio_alerts` | Auto-dismiss stale open alerts past `auto_dismiss_at`; keeps the partial index small | Hourly |
 
 **Materialized views** (migration 0078-0079): `mv_unified_funds` (6-universe fund catalog with prospectus stats), `mv_unified_assets` (global instrument search), `mv_macro_latest` (latest macro indicator values), `mv_macro_regional_summary` (regional macro aggregation). Refreshed by `view_refresh.py` (screener views, after universe_sync) and `macro_view_refresh.py` (macro views, after macro/treasury ingestion). Workers call refresh after data ingestion.
 
