@@ -267,7 +267,7 @@ class TestRegistryHelpers:
         batches = build_fetch_configs("2016-01-01")
         assert {"US", "EUROPE", "ASIA", "EM", "GLOBAL"}.issubset(batches.keys())
         assert "CREDIT" in batches  # credit-only series batch
-        assert len(batches["US"]) == 14
+        assert len(batches["US"]) == 15
         assert len(batches["GLOBAL"]) == 11
 
         # Credit batch contains only series not already in other batches

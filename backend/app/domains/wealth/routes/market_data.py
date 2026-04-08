@@ -685,7 +685,7 @@ async def screener_catalog(
             f.fund_type,
             f.strategy_label,
             f.currency,
-            f.aum,
+            f.aum_usd AS aum,
             f.expense_ratio_pct,
             f.inception_date,
             ln.nav AS last_price,
@@ -700,7 +700,7 @@ async def screener_catalog(
         LEFT JOIN latest_nav ln ON ln.instrument_id = iu.instrument_id
         LEFT JOIN prev_nav pn ON pn.instrument_id = iu.instrument_id
         {where_sql}
-        ORDER BY COALESCE(f.aum, 0) DESC
+        ORDER BY COALESCE(f.aum_usd, 0) DESC
         LIMIT :page_size OFFSET :offset
     """)
 

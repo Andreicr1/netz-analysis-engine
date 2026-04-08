@@ -7,6 +7,8 @@ Covers:
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -60,7 +62,8 @@ async def test_portfolio_holdings_empty_fallback(async_client: AsyncClient):
     assert resp.status_code == 200
     data = resp.json()
     assert data["holdings"] == []
-    assert data["portfolio_nav"] == 0
+    # Pydantic v2 serializes Decimal as string by default.
+    assert Decimal(data["portfolio_nav"]) == 0
 
 
 @pytest.mark.asyncio

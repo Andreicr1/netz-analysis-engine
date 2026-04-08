@@ -178,7 +178,7 @@ class TestCrossEngineIntegration:
         for mod in [attr_mod, corr_mod]:
             source = mod.__file__
             assert source is not None
-            with open(source) as f:
+            with open(source, encoding="utf-8") as f:
                 content = f.read()
             assert "app.domains.wealth" not in content
             assert "vertical_engines.wealth" not in content
