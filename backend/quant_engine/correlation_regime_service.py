@@ -88,6 +88,129 @@ def _resolve_config(config: dict[str, Any] | None) -> dict[str, Any]:
     return defaults
 
 
+def _ledoit_wolf_constant_correlation(
+    returns: np.ndarray,  # type: ignore[type-arg]
+) -> tuple[np.ndarray, float]:  # type: ignore[type-arg]
+    """Ledoit & Wolf (2003) shrinkage toward a constant-correlation target.
+
+    ``sklearn.covariance.LedoitWolf`` shrinks toward a *scaled identity*
+    (``μ·I`` where ``μ = trace(S)/N``), which destroys the correlation
+    structure that downstream diversification, regime, and optimization code
+    depends on. For stress regimes (short windows, T in the tens) this is
+    the difference between a usable covariance and an unusable one.
+
+    This implementation targets the Ledoit-Wolf 2003 constant-correlation
+    matrix F, defined as
+
+        F_ii = S_ii
+        F_ij = r_bar * sqrt(S_ii * S_jj)    (i ≠ j)
+
+    where ``r_bar`` is the grand mean of the sample correlation matrix's
+    off-diagonal entries. The optimal shrinkage intensity δ is derived from
+    the paper's closed-form estimator:
+
+        δ = max(0, min(1, κ / T))
+        κ = (π - ρ) / γ
+
+    with π, ρ, γ estimated from the sample. The result
+    ``Σ_hat = δ·F + (1 − δ)·S`` preserves the empirical correlation
+    structure while stabilising eigenvalues at small T.
+
+    Parameters
+    ----------
+    returns : np.ndarray
+        (T, N) de-meaning is handled internally.
+
+    Returns
+    -------
+    tuple[np.ndarray, float]
+        (shrunk_covariance, shrinkage_intensity_delta)
+    """
+    T, N = returns.shape
+    if T < 2 or N < 2:
+        # Degenerate — fall back to plain sample covariance.
+        cov = np.cov(returns, rowvar=False) if T > 1 else np.zeros((N, N))
+        return np.asarray(cov), 0.0
+
+    X = returns - returns.mean(axis=0, keepdims=True)
+
+    # Sample covariance with 1/T bias (LW paper convention, not 1/(T-1)).
+    S = (X.T @ X) / T
+
+    var = np.diag(S).copy()
+    std = np.sqrt(np.maximum(var, 1e-20))
+    std_outer = np.outer(std, std)
+
+    # Sample correlation matrix.
+    R = S / std_outer
+    np.fill_diagonal(R, 1.0)
+
+    # Average off-diagonal correlation (r_bar).
+    if N > 1:
+        mask = ~np.eye(N, dtype=bool)
+        r_bar = float(R[mask].mean())
+    else:
+        r_bar = 0.0
+
+    # Constant-correlation target F.
+    F = r_bar * std_outer
+    np.fill_diagonal(F, var)
+
+    # π̂ — asymptotic variance of √T · s_ij, summed over i, j.
+    X2 = X ** 2
+    pi_mat = (X2.T @ X2) / T - S ** 2
+    pi_hat = float(pi_mat.sum())
+
+    # ρ̂ — asymptotic covariance between √T · s_ij and √T · f_ij.
+    # Diagonal contribution:
+    rho_diag = float(np.sum(np.diag(pi_mat)))
+
+    # Off-diagonal contribution (LW 2003 eq. A.1):
+    # (1/T) Σ_t (x_{t,i}² − s_ii)(x_{t,i}x_{t,j} − s_ij)
+    X3 = X ** 3
+    term1 = (X3.T @ X) / T - var[:, None] * S      # θ_{ii, ij}
+    term2 = (X.T @ X3) / T - S * var[None, :]      # θ_{jj, ij}
+
+    std_ratio_ji = std[None, :] / std[:, None]     # σ_j / σ_i
+    std_ratio_ij = std[:, None] / std[None, :]     # σ_i / σ_j
+
+    rho_off_mat = (r_bar / 2.0) * (std_ratio_ji * term1 + std_ratio_ij * term2)
+    np.fill_diagonal(rho_off_mat, 0.0)
+    rho_off = float(rho_off_mat.sum())
+    rho_hat = rho_diag + rho_off
+
+    # γ̂ — squared Frobenius distance between target and sample.
+    gamma_hat = float(np.sum((F - S) ** 2))
+
+    if gamma_hat < 1e-12:
+        delta = 0.0
+    else:
+        kappa = (pi_hat - rho_hat) / gamma_hat
+        delta = float(np.clip(kappa / T, 0.0, 1.0))
+
+    shrunk = delta * F + (1.0 - delta) * S
+    return np.asarray(shrunk), delta
+
+
+def _shrink_covariance(returns: np.ndarray, regime: str) -> np.ndarray:  # type: ignore[type-arg]
+    """Apply constant-correlation Ledoit-Wolf shrinkage and log the intensity.
+
+    Applied to BOTH the recent (potentially stress) window and the baseline
+    window — stress windows need shrinkage the most because T is small.
+    """
+    cov, delta = _ledoit_wolf_constant_correlation(returns)
+    if cov.ndim == 0:
+        cov = np.array([[float(cov)]])
+    logger.debug(
+        "ledoit_wolf_constant_correlation_applied",
+        regime=regime,
+        delta=round(delta, 6),
+        T=int(returns.shape[0]),
+        N=int(returns.shape[1]) if returns.ndim > 1 else 1,
+    )
+    return cov
+
+
 def _marchenko_pastur_denoise(corr_matrix: np.ndarray, q: float) -> np.ndarray:
     """Apply Marchenko-Pastur denoising to correlation matrix.
 
@@ -246,10 +369,12 @@ def compute_correlation_regime(
     baseline_returns = returns_matrix[:-window] if window < T else returns_matrix
 
     # Covariance and correlation — recent window
+    # NOTE: Recent windows are short (~60d) and frequently capture stress
+    # regimes — precisely where shrinkage matters most. Constant-correlation
+    # target (Ledoit-Wolf 2003) preserves cross-asset dependence structure;
+    # the sklearn default (scaled identity) erases it.
     if cfg["apply_shrinkage"]:
-        from sklearn.covariance import LedoitWolf
-        lw = LedoitWolf().fit(recent_returns)
-        cov_recent = lw.covariance_
+        cov_recent = _shrink_covariance(recent_returns, regime="recent")
     else:
         cov_recent = np.cov(recent_returns, rowvar=False)
 
@@ -268,12 +393,10 @@ def compute_correlation_regime(
         q = N / len(recent_returns)
         corr_recent = _marchenko_pastur_denoise(corr_recent, q)
 
-    # Baseline correlation
+    # Baseline correlation — same constant-correlation shrinkage
     if len(baseline_returns) >= cfg["min_observations"]:
         if cfg["apply_shrinkage"]:
-            from sklearn.covariance import LedoitWolf
-            lw_base = LedoitWolf().fit(baseline_returns)
-            cov_base = lw_base.covariance_
+            cov_base = _shrink_covariance(baseline_returns, regime="baseline")
         else:
             cov_base = np.cov(baseline_returns, rowvar=False)
 
