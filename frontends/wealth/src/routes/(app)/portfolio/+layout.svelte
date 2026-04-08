@@ -18,14 +18,25 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import PortfolioSubNav from "$lib/components/portfolio/PortfolioSubNav.svelte";
+  import { workspace } from "$lib/state/portfolio-workspace.svelte";
 
   let { children }: { children: Snippet } = $props();
+
+  // Phase 7 — feed the "Live" pill badge from the unified alerts
+  // inbox. The GlobalAlertInbox in (app)/+layout.svelte owns the
+  // polling lifecycle; this layout is a pure reader. Drift alerts
+  // are instrument-keyed and not portfolio-attributable without
+  // the holdings join (deferred to a follow-up sprint), so the
+  // badge reflects only the portfolio-sourced count.
+  const liveAlertsCount = $derived(
+    workspace.alertsInbox?.by_source?.portfolio ?? 0,
+  );
 </script>
 
 <div class="pw-layout">
   <!-- ── Phase 5 sub-nav ribbon (DL1) ── -->
   <header class="pw-nav">
-    <PortfolioSubNav />
+    <PortfolioSubNav {liveAlertsCount} />
   </header>
 
   <!-- ── Child Content ── -->
