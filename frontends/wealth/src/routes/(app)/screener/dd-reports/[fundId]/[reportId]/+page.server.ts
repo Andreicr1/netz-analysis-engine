@@ -1,107 +1,72 @@
 /**
- * DD Report detail load — Stability Guardrails Route Data Contract (§3.2).
+ * Legacy redirect — `/screener/dd-reports/{fundId}/{reportId}` →
+ * `/library/due-diligence/by-fund/{slug}/v{version}`.
  *
- * Returns the full report plus actor context for approval. `report` is
- * a `RouteData<DDReportFull>` so the page component renders the three
- * explicit branches (error / empty / data) instead of falling into the
- * SvelteKit default error boundary. Fetch hard-capped at 8 s.
+ * Phase 7 of the Wealth Library sprint (spec §2.4 + §4.6). The
+ * loader hits the backend resolver
+ * `GET /library/redirect-dd-report/{fundId}/{reportId}` which
+ * returns a 308 with the canonical Library deep link. We capture
+ * the response WITHOUT following it (`redirect: "manual"`) so we
+ * can re-emit the redirect from the SvelteKit layer with the same
+ * Location and 308 status.
+ *
+ * Failure modes
+ * -------------
+ * The backend resolver answers a soft-fall 308 to `/library` for
+ * archived reports. We treat any non-redirect status as a hard
+ * failure and fall through to `/library?q={fundId}` so the user
+ * still lands somewhere useful instead of seeing a 404.
  */
 
+import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
-import { okData, errData, type RouteData } from "@investintell/ui/runtime";
-import { createServerApiClient } from "$lib/api/client";
-import type { DDReportFull } from "$lib/types/dd-report";
 
-const REPORT_TIMEOUT_MS = 8000;
+const API_BASE =
+	import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
-interface DDReportLoadResult {
-	report: RouteData<DDReportFull>;
-	fundId: string;
-	reportId: string;
-	actorId: string | null;
-	actorRole: string | null;
-}
-
-export const load: PageServerLoad = async ({ parent, params }): Promise<DDReportLoadResult> => {
-	const { token, actor } = await parent();
-	const api = createServerApiClient(token);
+export const load: PageServerLoad = async ({ parent, params, fetch }) => {
+	const { token } = await parent();
 	const fundId = params.fundId!;
 	const reportId = params.reportId!;
-	const actorId = actor?.user_id ?? null;
-	const actorRole = actor?.role ?? null;
 
 	try {
-		const report = await api.get<DDReportFull>(
-			`/dd-reports/${reportId}`,
-			undefined,
-			{ signal: AbortSignal.timeout(REPORT_TIMEOUT_MS) },
+		const response = await fetch(
+			`${API_BASE}/library/redirect-dd-report/${fundId}/${reportId}`,
+			{
+				method: "GET",
+				headers: {
+					Authorization: `Bearer ${token}`,
+				},
+				redirect: "manual",
+			},
 		);
-		return { report: okData(report), fundId, reportId, actorId, actorRole };
+
+		// 308 (or any 3xx) → forward the canonical Library URL.
+		if (response.status >= 300 && response.status < 400) {
+			const location = response.headers.get("location");
+			if (location) {
+				throw redirect(308, location);
+			}
+		}
 	} catch (err: unknown) {
-		if (err instanceof DOMException && err.name === "TimeoutError") {
-			return {
-				report: errData(
-					"TIMEOUT",
-					`Loading the DD report took longer than ${REPORT_TIMEOUT_MS / 1000}s. Please try again.`,
-					true,
-				),
-				fundId,
-				reportId,
-				actorId,
-				actorRole,
-			};
+		// `redirect()` throws a special HttpError-like object — let it
+		// propagate so SvelteKit emits the 308 cleanly. Anything else
+		// falls through to the search-based fallback below.
+		if (
+			err &&
+			typeof err === "object" &&
+			"status" in err &&
+			"location" in err
+		) {
+			throw err;
 		}
-		if (err && typeof err === "object" && "status" in err) {
-			const status = (err as { status: number }).status;
-			if (status === 404) {
-				return {
-					report: errData(
-						"NOT_FOUND",
-						"This DD report no longer exists. It may have been regenerated or archived.",
-						false,
-					),
-					fundId,
-					reportId,
-					actorId,
-					actorRole,
-				};
-			}
-			if (status === 401 || status === 403) {
-				return {
-					report: errData(
-						`HTTP_${status}`,
-						"You do not have permission to view this DD report.",
-						true,
-					),
-					fundId,
-					reportId,
-					actorId,
-					actorRole,
-				};
-			}
-			return {
-				report: errData(
-					`HTTP_${status}`,
-					"The DD report service returned an error. Please try again in a moment.",
-					true,
-				),
-				fundId,
-				reportId,
-				actorId,
-				actorRole,
-			};
-		}
-		console.error("dd_report_load_unknown_error", { fundId, reportId, err });
-		return {
-			report: errData(
-				"UNKNOWN",
-				err instanceof Error ? err.message : "Failed to load DD report.",
-				true,
-			),
-			fundId,
-			reportId,
-			actorId,
-			actorRole,
-		};
 	}
+
+	// Resolver failed or returned no Location — fall through to a
+	// Library search seeded with the legacy fund id so the user still
+	// lands somewhere coherent.
+	throw redirect(
+		308,
+		fundId ? `/library?q=${encodeURIComponent(fundId)}` : "/library",
+	);
 };
