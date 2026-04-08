@@ -24,6 +24,7 @@
 	import AnalysisFilters from "$lib/components/discovery/analysis/AnalysisFilters.svelte";
 	import ReturnsRiskView from "$lib/components/discovery/analysis/ReturnsRiskView.svelte";
 	import HoldingsView from "$lib/components/discovery/analysis/HoldingsView.svelte";
+	import PeerView from "$lib/components/discovery/analysis/PeerView.svelte";
 	import type { AnalysisWindow } from "$lib/discovery/analysis-api";
 
 	type Group = "returns-risk" | "holdings" | "peer";
@@ -106,7 +107,7 @@
 				{:else if group === "holdings"}
 					<HoldingsView fundId={data.fundId} />
 				{:else}
-					<div class="ap-placeholder">Peer Analysis — Phase 7</div>
+					<PeerView fundId={data.fundId} />
 				{/if}
 			</main>
 		</div>
@@ -179,11 +180,6 @@
 		min-width: 0;
 		overflow-y: auto;
 		container-type: inline-size;
-	}
-	.ap-placeholder {
-		padding: 80px 40px;
-		text-align: center;
-		color: var(--ii-text-muted);
 	}
 	.ap-error {
 		padding: 40px;

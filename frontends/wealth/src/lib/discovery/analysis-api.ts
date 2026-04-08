@@ -90,6 +90,54 @@ export async function fetchStyleDrift(
 }
 
 /**
+ * GET /funds/{id}/analysis/peers?limit=N
+ *
+ * Returns: `{ peers: [...], subject: {...} | null }`. Each peer has
+ * `external_id, name, ticker, strategy_label, aum_usd, expense_ratio_pct,
+ * volatility_1y, sharpe_1y, max_drawdown_1y, cvar_95, is_subject`. The
+ * subject fund is also included in the `peers` array (with `is_subject:
+ * true`) so charts can highlight it inline.
+ */
+export async function fetchPeerComparison(
+	getToken: GetToken,
+	fundId: string,
+	signal: AbortSignal,
+): Promise<unknown> {
+	const res = await fetch(
+		`${BASE}/funds/${encodeURIComponent(fundId)}/analysis/peers`,
+		{
+			headers: await authHeaders(getToken),
+			signal,
+		},
+	);
+	if (!res.ok) throw new Error(`peers fetch: ${res.status}`);
+	return res.json();
+}
+
+/**
+ * GET /funds/{id}/analysis/institutional-reveal?categories=...
+ *
+ * Returns: `{ institutions, overlap_matrix, holdings }`. `institutions` may
+ * be empty if the curated CIK backfill has not run yet — `holdings` still
+ * populates so the heatmap can show holdings as labels with no overlap data.
+ */
+export async function fetchInstitutionalReveal(
+	getToken: GetToken,
+	fundId: string,
+	signal: AbortSignal,
+): Promise<unknown> {
+	const res = await fetch(
+		`${BASE}/funds/${encodeURIComponent(fundId)}/analysis/institutional-reveal`,
+		{
+			headers: await authHeaders(getToken),
+			signal,
+		},
+	);
+	if (!res.ok) throw new Error(`institutional-reveal fetch: ${res.status}`);
+	return res.json();
+}
+
+/**
  * GET /holdings/{cusip}/reverse-lookup?limit=N
  *
  * Returns: `{ nodes, edges, target_cusip }`. Aggregates all 13F and N-PORT
