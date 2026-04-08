@@ -7,12 +7,11 @@ return histogram in pure Python.
 
 Shape matches the Analysis page contract consumed by
 ``discovery_analysis.py``. Keep helpers pure — rolling/histogram run
-synchronously after the gathered DB round-trips.
+synchronously after the sequential DB round-trips.
 """
 
 from __future__ import annotations
 
-import asyncio
 import math
 from typing import Any, Literal
 
@@ -46,18 +45,34 @@ async def _nav_series(
 async def _monthly_returns(
     db: AsyncSession, instrument_id: str, window: Window,
 ) -> list[dict[str, Any]]:
-    # nav_monthly_returns_agg columns (migration 0069): instrument_id,
-    # month, compound_log_return, compound_return, trading_days, min_nav,
-    # max_nav. No organization_id, no month_end_nav.
+    # nav_monthly_returns_agg real columns (verified against live schema):
+    # instrument_id, month, nav_open, nav_close, trading_days,
+    # avg_daily_return, daily_volatility. Compound return is computed
+    # inline as (nav_close / nav_open) - 1 with a NULLIF guard to avoid
+    # divide-by-zero on stale-NAV instruments. The earlier implementation
+    # referenced columns (``compound_return``, ``compound_log_return``,
+    # ``min_nav``, ``max_nav``) that do not exist — it blew up in
+    # production but was shielded from tests by the pre-existing
+    # ``asyncio.gather`` short-circuit in ``fetch_returns_risk``.
     sql = f"""
-        SELECT month, compound_return, compound_log_return, trading_days
+        SELECT
+            month,
+            trading_days,
+            (nav_close / NULLIF(nav_open, 0)) - 1 AS compound_return
         FROM nav_monthly_returns_agg
         WHERE instrument_id = :id
           AND month >= NOW() - INTERVAL '{WINDOW_INTERVAL[window]}'
         ORDER BY month ASC
     """
     res = await db.execute(text(sql), {"id": instrument_id})
-    return [dict(r) for r in res.mappings().all()]
+    return [
+        {
+            "month": r["month"],
+            "trading_days": int(r["trading_days"]) if r["trading_days"] is not None else 0,
+            "compound_return": float(r["compound_return"]) if r["compound_return"] is not None else None,
+        }
+        for r in res.mappings().all()
+    ]
 
 
 # Explicit projection — the frontend contract is pinned to these keys.
@@ -171,12 +186,18 @@ async def fetch_returns_risk(
     instrument_id: str,
     window: Window = "3y",
 ) -> dict[str, Any]:
-    """Aggregate returns + risk payload for the Analysis page."""
-    nav, monthly, risk = await asyncio.gather(
-        _nav_series(db, instrument_id, window),
-        _monthly_returns(db, instrument_id, window),
-        _risk_metrics(db, instrument_id),
-    )
+    """Aggregate returns + risk payload for the Analysis page.
+
+    The three DB reads run sequentially on the shared ``AsyncSession``.
+    ``asyncio.gather`` is incompatible with ``asyncpg`` on a single
+    connection ("another operation is in progress") and opening parallel
+    sessions would break the RLS ``SET LOCAL`` context. The endpoint is
+    behind a 1-hour Redis cache, so the ~30 ms added by serialization is
+    not user-visible at steady state.
+    """
+    nav = await _nav_series(db, instrument_id, window)
+    monthly = await _monthly_returns(db, instrument_id, window)
+    risk = await _risk_metrics(db, instrument_id)
     rolling = _compute_rolling(nav)
     distribution = _compute_return_distribution(monthly)
     return {
