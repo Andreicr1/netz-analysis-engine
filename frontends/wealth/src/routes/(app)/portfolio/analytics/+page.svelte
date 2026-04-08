@@ -20,6 +20,8 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
+	import { getContext, onDestroy } from "svelte";
+	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import PortfolioAnalyticsShell from "$lib/components/portfolio/PortfolioAnalyticsShell.svelte";
 	import {
 		parseScopeParam,
@@ -38,6 +40,12 @@
 	import type { PageData } from "./$types";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 	import type { ApprovedUniverseFund } from "./+page.server";
+
+	// Inject the JWT getter into the workspace so loadAnalyticsSubject
+	// can authenticate against the backend. Same pattern as the Builder
+	// page wires it on mount.
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	workspace.setGetToken(getToken);
 
 	let { data }: { data: PageData } = $props();
 
@@ -92,6 +100,21 @@
 	);
 
 	const subjects = $derived(subjectsByScope[scope]);
+
+	// ── Phase 6 Block B — load analytics slice when subject changes ──
+	// Only model_portfolios scope triggers the workspace fetch; the
+	// approved_universe scope shows the "Open in Discovery" CTA so no
+	// data load is needed. The $effect re-runs whenever ``subjectId``
+	// or ``scope`` flips because both are URL-derived.
+	$effect(() => {
+		if (scope === "model_portfolios" && subjectId) {
+			void workspace.loadAnalyticsSubject(subjectId);
+		}
+	});
+
+	onDestroy(() => {
+		workspace.resetAnalyticsSubject();
+	});
 
 	// ── URL mutation helpers ───────────────────────────────────
 

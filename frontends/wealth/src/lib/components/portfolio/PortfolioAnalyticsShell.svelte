@@ -24,17 +24,29 @@
   <svelte:boundary> with PanelErrorState failed snippet.
 -->
 <script lang="ts">
+	import { goto } from "$app/navigation";
 	import {
 		FilterRail,
 		AnalysisGrid,
 		ChartCard,
 		BottomTabDock,
+		EmptyState,
+		Button,
 		type BottomTabItem,
 	} from "@investintell/ui";
 	import { PanelErrorState } from "@investintell/ui/runtime";
 	import ScopeSwitcher from "./ScopeSwitcher.svelte";
 	import AnalyticsSubjectList from "./AnalyticsSubjectList.svelte";
 	import AnalyticsPlaceholderCell from "./AnalyticsPlaceholderCell.svelte";
+	import HoldingsTreemapChart from "./charts/HoldingsTreemapChart.svelte";
+	import FactorExposureBarChart from "./charts/FactorExposureBarChart.svelte";
+	import BrinsonWaterfallChart from "./charts/BrinsonWaterfallChart.svelte";
+	import RiskAttributionBarChart from "./charts/RiskAttributionBarChart.svelte";
+	import ConstituentCorrelationHeatmap from "./charts/ConstituentCorrelationHeatmap.svelte";
+	import StressImpactMatrixChart from "./charts/StressImpactMatrixChart.svelte";
+	import PortfolioNavHeroChart from "./charts/PortfolioNavHeroChart.svelte";
+	import PortfolioDrawdownUnderwaterChart from "./charts/PortfolioDrawdownUnderwaterChart.svelte";
+	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import {
 		ANALYTICS_GROUPS,
 		ANALYTICS_GROUP_LABEL,
@@ -82,6 +94,20 @@
 
 	const gridSpec = $derived(buildGridSpec(scope, group));
 
+	// ── Phase 6 Block B — chart data slices from workspace ──────
+	// All slices come from ``workspace.loadAnalyticsSubject`` which
+	// the parent page calls in an $effect when the selected subject
+	// changes. Strict empty states render when slices are null
+	// (OD-26 — never fabricate values).
+	const analyticsPortfolio = $derived(workspace.analyticsPortfolio);
+	const analyticsLatestRun = $derived(workspace.analyticsLatestRun);
+	const analyticsAttribution = $derived(workspace.analyticsAttribution);
+	const analyticsFactor = $derived(workspace.analyticsFactor);
+	const analyticsCorrelation = $derived(workspace.analyticsCorrelationRegime);
+	const analyticsRiskBudget = $derived(workspace.analyticsRiskBudget);
+	const analyticsNavSeries = $derived(workspace.analyticsNavSeries);
+	const isLoadingAnalytics = $derived(workspace.isLoadingAnalyticsSubject);
+
 	// ── BottomTabDock generic adapter ───────────────────────────
 	// The dock is generic over ``T extends BottomTabItem`` but Svelte 5
 	// component prop variance is strict — passing AnalyticsTab handlers
@@ -94,6 +120,15 @@
 	}
 	function adaptClose(tab: BottomTabItem) {
 		onCloseTab(tab as AnalyticsTab);
+	}
+
+	// Block B "Open in Discovery" CTA for approved_universe scope.
+	// Per the recon report, the instrument_id ↔ external_id bridge
+	// requires backend work that is out of scope for Block B. The CTA
+	// links to the top-level Discovery route and lets the PM search
+	// from there. Future sprint can deep-link via mv_unified_funds JOIN.
+	function goToDiscovery() {
+		void goto("/discovery");
 	}
 </script>
 
@@ -162,23 +197,75 @@
 					<div class="pas-grid-empty">
 						<AnalyticsPlaceholderCell
 							chartName="Compare Both"
-							description="Multi-subject diff lands in v1.1. Use Model Portfolios or Approved Universe in Phase 6 Block A."
+							description="Multi-subject diff lands in v1.1. Use Model Portfolios or Approved Universe."
 							span={3}
 						/>
+					</div>
+				{:else if scope === "approved_universe"}
+					<!--
+					  Approved Universe scope — Discovery is the canonical
+					  surface for fund-level analytics. Block B ships
+					  CTA-only cells that link out instead of duplicating
+					  Discovery's chart suite. The instrument_id ↔
+					  external_id bridge lands in a follow-up sprint.
+					-->
+					<div class="pas-grid-empty">
+						<div class="pas-discovery-cta">
+							<EmptyState
+								title="Fund-level analytics live in Discovery"
+								message="Open Discovery to dig into the selected fund's NAV history, holdings, peer comparison, and risk metrics."
+							/>
+							<div class="pas-discovery-actions">
+								<Button variant="default" onclick={() => goToDiscovery()}>
+									Open in Discovery →
+								</Button>
+							</div>
+						</div>
 					</div>
 				{:else}
 					<AnalysisGrid>
 						{#each gridSpec.cells as cell (cell.id)}
 							<ChartCard
 								title={cell.chartName}
-								subtitle="Block A placeholder"
+								subtitle={isLoadingAnalytics ? "Loading…" : ""}
 								span={cell.span ?? 1}
-								minHeight="280px"
+								minHeight="320px"
 							>
-								<AnalyticsPlaceholderCell
-									chartName={cell.chartName}
-									description={cell.description}
-								/>
+								{#if isLoadingAnalytics}
+									<EmptyState
+										title="Loading…"
+										message="Fetching the analytics slice for this subject."
+									/>
+								{:else if !analyticsPortfolio}
+									<EmptyState
+										title="Select a subject"
+										message="Pick a model portfolio from the left rail to populate this cell."
+									/>
+								{:else if cell.id === "nav-hero"}
+									<PortfolioNavHeroChart navSeries={analyticsNavSeries} />
+								{:else if cell.id === "drawdown-underwater"}
+									<PortfolioDrawdownUnderwaterChart navSeries={analyticsNavSeries} />
+								{:else if cell.id === "factor-exposure"}
+									<FactorExposureBarChart
+										factorAnalysis={analyticsFactor}
+										latestRun={analyticsLatestRun}
+									/>
+								{:else if cell.id === "brinson-attribution"}
+									<BrinsonWaterfallChart attribution={analyticsAttribution} />
+								{:else if cell.id === "holdings-treemap"}
+									<HoldingsTreemapChart portfolio={analyticsPortfolio} />
+								{:else if cell.id === "risk-attribution"}
+									<RiskAttributionBarChart riskBudget={analyticsRiskBudget} />
+								{:else if cell.id === "constituent-correlation"}
+									<ConstituentCorrelationHeatmap correlation={analyticsCorrelation} />
+								{:else if cell.id === "stress-impact-matrix"}
+									<StressImpactMatrixChart latestRun={analyticsLatestRun} />
+								{:else}
+									<AnalyticsPlaceholderCell
+										chartName={cell.chartName}
+										description={cell.description}
+									/>
+								{/if}
 							</ChartCard>
 						{/each}
 					</AnalysisGrid>

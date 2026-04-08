@@ -49,19 +49,27 @@ const RETURNS_RISK_CELLS: PlaceholderSpec[] = [
 		id: "nav-hero",
 		chartName: "NAV Hero",
 		description:
-			"Cumulative NAV curve with regime overlay markAreas and benchmark line.",
-	},
-	{
-		id: "rolling-risk",
-		chartName: "Rolling Risk",
-		description:
-			"Rolling 60d volatility, downside deviation, and max drawdown.",
+			"Cumulative NAV curve with drawdown overlay (Discovery NavHeroChart adapter).",
+		span: 2,
 	},
 	{
 		id: "drawdown-underwater",
 		chartName: "Drawdown Underwater",
 		description:
 			"Underwater curve with peak/trough markers and recovery shading.",
+	},
+	{
+		id: "factor-exposure",
+		chartName: "Factor Exposures",
+		description:
+			"PCA / style factor loadings vs the equilibrium prior. Diverging bars highlight tilts.",
+	},
+	{
+		id: "brinson-attribution",
+		chartName: "Brinson Attribution",
+		description:
+			"Allocation + selection effects per sector vs the policy benchmark (basis points).",
+		span: 2,
 	},
 ];
 
@@ -70,30 +78,24 @@ const HOLDINGS_CELLS: PlaceholderSpec[] = [
 		id: "holdings-treemap",
 		chartName: "Holdings Treemap",
 		description:
-			"Treemap of effective weights, sized by NAV exposure and coloured by sector.",
+			"Treemap of effective weights grouped by allocation block.",
 		span: 2,
 	},
 	{
-		id: "return-distribution",
-		chartName: "Return Distribution",
+		id: "risk-attribution",
+		chartName: "Risk Attribution",
 		description:
-			"Histogram of monthly returns with normal-fit overlay and skew/kurtosis chips.",
+			"Block-level percentage contribution to volatility and tail loss (PCTR + PCETL).",
 	},
 ];
 
 const PEER_CELLS: PlaceholderSpec[] = [
 	{
-		id: "monthly-returns-heatmap",
-		chartName: "Monthly Returns Heatmap",
+		id: "constituent-correlation",
+		chartName: "Constituent Correlation",
 		description:
-			"Calendar heatmap of monthly returns with peer-relative diverging colour scale.",
-		span: 2,
-	},
-	{
-		id: "risk-metrics-bullet",
-		chartName: "Risk Metrics Bullet",
-		description:
-			"Bullet chart of CVaR, Sharpe, Sortino, Calmar vs peer-group quartiles.",
+			"Marchenko-Pastur denoised correlation matrix across portfolio constituents.",
+		span: 3,
 	},
 ];
 
@@ -102,7 +104,7 @@ const STRESS_CELLS: PlaceholderSpec[] = [
 		id: "stress-impact-matrix",
 		chartName: "Stress Impact Matrix",
 		description:
-			"NAV impact and CVaR impact across the 4 canonical DL7 stress scenarios.",
+			"NAV impact and tail loss impact across the 4 canonical DL7 stress scenarios.",
 		span: 3,
 	},
 ];
