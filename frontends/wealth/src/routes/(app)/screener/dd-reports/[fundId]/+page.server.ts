@@ -1,20 +1,22 @@
-/** DD Reports for fund — list report versions. */
+/**
+ * Legacy redirect — `/screener/dd-reports/{fundId}` → `/library?q={fundId}`.
+ *
+ * Phase 7 of the Wealth Library sprint (spec §2.4). The fund-only
+ * variant of the legacy DD Reports list has no canonical
+ * Library URL — the documents now live under
+ * `/library/due-diligence/by-fund/{slug}` and we cannot resolve the
+ * slug without an extra round trip. The pragmatic fall-through is a
+ * Library search seeded with the legacy `fundId`, which lands the
+ * user on the right fund's documents in one step.
+ */
+
+import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
-import { createServerApiClient } from "$lib/api/client";
-import type { DDReportSummary } from "$lib/types/dd-report";
 
-export const load: PageServerLoad = async ({ parent, params }) => {
-	const { token } = await parent();
-	const api = createServerApiClient(token);
-
-	const [reports, fund] = await Promise.all([
-		api.get<DDReportSummary[]>(`/dd-reports/funds/${params.fundId}`).catch(() => [] as DDReportSummary[]),
-		api.get<{ id: string; name: string; ticker: string | null }>(`/funds/${params.fundId}`).catch(() => null),
-	]);
-
-	return {
-		reports,
-		fund,
-		fundId: params.fundId!,
-	};
+export const load: PageServerLoad = ({ params }) => {
+	const fundId = params.fundId ?? "";
+	throw redirect(
+		308,
+		fundId ? `/library?q=${encodeURIComponent(fundId)}` : "/library",
+	);
 };
