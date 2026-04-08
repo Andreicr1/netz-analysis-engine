@@ -31,6 +31,10 @@ from app.domains.wealth.models.risk import FundRiskMetrics
 from quant_engine.cvar_service import compute_cvar_from_returns
 from quant_engine.drift_service import DtwDriftResult, DtwDriftStatus, compute_dtw_drift_batch
 from quant_engine.garch_service import fit_garch
+from quant_engine.return_statistics_service import (
+    compute_sharpe_ratio,
+    compute_sortino_ratio,
+)
 from quant_engine.scoring_service import compute_fund_score
 from quant_engine.talib_momentum_service import (
     compute_flow_momentum,
@@ -123,45 +127,33 @@ def _compute_max_drawdown(returns: np.ndarray, days: int) -> float | None:
 
 
 def _compute_sharpe(returns: np.ndarray, days: int, risk_free_rate: float = 0.04) -> float | None:
-    """Compute annualized Sharpe ratio.
+    """Window-slicing adapter around the canonical Sharpe helper.
 
-    Returns None when annualized volatility < MIN_ANNUALIZED_VOL (1%).
-    Stale NAV data (flat prices from Yahoo Finance for closed/merged funds)
-    produces near-zero vol, causing Sharpe to diverge to ±infinity.
+    Preserves the historical ``(returns, days, rf)`` signature used
+    throughout the worker while delegating the actual math to
+    :func:`quant_engine.return_statistics_service.compute_sharpe_ratio`
+    — the single source of truth shared with the screener (S4-P0).
     """
     if len(returns) < days:
         return None
-    window = returns[-days:]
-    excess = window - risk_free_rate / TRADING_DAYS_PER_YEAR
-    vol = float(np.std(excess, ddof=1))
-    if vol == 0:
-        return None
-    annualized_vol = vol * np.sqrt(TRADING_DAYS_PER_YEAR)
-    if annualized_vol < MIN_ANNUALIZED_VOL:
-        return None
-    return float(np.mean(excess) / vol * np.sqrt(TRADING_DAYS_PER_YEAR))
+    return compute_sharpe_ratio(
+        returns[-days:],
+        risk_free_rate=risk_free_rate,
+        trading_days_per_year=TRADING_DAYS_PER_YEAR,
+        min_annualized_vol=MIN_ANNUALIZED_VOL,
+    )
 
 
 def _compute_sortino(returns: np.ndarray, days: int, risk_free_rate: float = 0.04) -> float | None:
-    """Compute annualized Sortino ratio.
-
-    Same MIN_ANNUALIZED_VOL guard as Sharpe — stale NAV produces
-    near-zero downside vol, causing Sortino to diverge.
-    """
+    """Window-slicing adapter around the canonical Sortino helper."""
     if len(returns) < days:
         return None
-    window = returns[-days:]
-    excess = window - risk_free_rate / TRADING_DAYS_PER_YEAR
-    downside = excess[excess < 0]
-    if len(downside) == 0:
-        return None
-    downside_vol = float(np.std(downside, ddof=1))
-    if downside_vol == 0:
-        return None
-    annualized_downside_vol = downside_vol * np.sqrt(TRADING_DAYS_PER_YEAR)
-    if annualized_downside_vol < MIN_ANNUALIZED_VOL:
-        return None
-    return float(np.mean(excess) / downside_vol * np.sqrt(TRADING_DAYS_PER_YEAR))
+    return compute_sortino_ratio(
+        returns[-days:],
+        risk_free_rate=risk_free_rate,
+        trading_days_per_year=TRADING_DAYS_PER_YEAR,
+        min_annualized_vol=MIN_ANNUALIZED_VOL,
+    )
 
 
 async def _batch_resolve_return_types(

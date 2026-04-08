@@ -13,6 +13,8 @@ from typing import Any, Protocol
 
 import structlog
 
+from quant_engine.expense_ratio_validator import to_decimal_fraction
+
 logger = structlog.get_logger()
 
 
@@ -107,16 +109,24 @@ def compute_fund_score(
     pm = peer_medians or {}
     components: dict[str, float] = {}
 
-    ret_1y = float(metrics.return_1y) if metrics.return_1y else None
+    # S4-QW1: use ``is not None`` instead of truthy checks.
+    # ``Decimal("0.0")`` and ``float(0.0)`` are both falsy in Python, so the
+    # historical ``if metrics.return_1y:`` idiom treated a fund that
+    # **legitimately** returned exactly 0 % as "missing data" and assigned
+    # the peer-median minus 5 opacity penalty. The fund then fell several
+    # ranks below peers for a non-existent data gap. Strict ``is not None``
+    # distinguishes "value available and equal to zero" from "value
+    # unavailable".
+    ret_1y = float(metrics.return_1y) if metrics.return_1y is not None else None
     components["return_consistency"] = _normalize(ret_1y, -0.20, 0.40, pm.get("return_consistency"))
 
-    sharpe = float(metrics.sharpe_1y) if metrics.sharpe_1y else None
+    sharpe = float(metrics.sharpe_1y) if metrics.sharpe_1y is not None else None
     components["risk_adjusted_return"] = _normalize(sharpe, -1.0, 3.0, pm.get("risk_adjusted_return"))
 
-    dd = float(metrics.max_drawdown_1y) if metrics.max_drawdown_1y else None
+    dd = float(metrics.max_drawdown_1y) if metrics.max_drawdown_1y is not None else None
     components["drawdown_control"] = _normalize(dd, -0.50, 0.0, pm.get("drawdown_control"))
 
-    ir = float(metrics.information_ratio_1y) if metrics.information_ratio_1y else None
+    ir = float(metrics.information_ratio_1y) if metrics.information_ratio_1y is not None else None
     components["information_ratio"] = _normalize(ir, -1.0, 2.0, pm.get("information_ratio"))
 
     components["flows_momentum"] = flows_momentum_score
@@ -124,9 +134,14 @@ def compute_fund_score(
     # Fee efficiency — default component (replaces Lipper rating).
     # 0% ER → 100 (best), 2% ER → 0 (worst).
     # Missing ER → peer_median - 5 (penalizes opacity).
-    if expense_ratio_pct is not None:
-        # expense_ratio_pct is a pure decimal fraction (0.015 = 1.5%)
-        er_human_pct = float(expense_ratio_pct) * 100.0
+    #
+    # S4-QW4: route the input through the canonical unit validator so a
+    # value stored as "1.5" (whole percent) is not silently treated as
+    # "150 %" — the historical bug that zeroed fee_efficiency for every
+    # fund whose source feed used the percent convention.
+    er_fraction = to_decimal_fraction(expense_ratio_pct)
+    if er_fraction is not None:
+        er_human_pct = er_fraction * 100.0  # decimal → percent for scoring
         components["fee_efficiency"] = max(0.0, 100.0 - er_human_pct * 50.0)
     else:
         fee_pm = pm.get("fee_efficiency")

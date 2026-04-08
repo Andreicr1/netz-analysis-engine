@@ -18,6 +18,84 @@ from dataclasses import dataclass
 
 import numpy as np
 
+# ── Canonical risk-ratio constants ────────────────────────────────────────────
+# A single source of truth for every quant consumer (risk_calc worker,
+# screener quant metrics, DD report, fact sheets). Prior to S4 the Sharpe
+# calculation diverged across modules: risk_calc used rf=0.04, the screener
+# used rf=0.05 and a compounded annual-return formula, and a silent
+# |r| < 0.5 filter masked data-quality issues. The three implementations
+# produced different numbers for the same fund. We now converge on the
+# arithmetic-mean daily-excess formula annualised by √252, with a minimum
+# volatility guard to protect against stale NAV series.
+TRADING_DAYS_PER_YEAR = 252
+MIN_ANNUALIZED_VOL = 0.01  # 1% — stale NAV flattens σ and Sharpe diverges
+DEFAULT_RISK_FREE_RATE = 0.04
+
+
+def compute_sharpe_ratio(
+    daily_returns: np.ndarray,  # type: ignore[type-arg]
+    risk_free_rate: float = DEFAULT_RISK_FREE_RATE,
+    *,
+    trading_days_per_year: int = TRADING_DAYS_PER_YEAR,
+    min_annualized_vol: float = MIN_ANNUALIZED_VOL,
+) -> float | None:
+    """Annualised Sharpe ratio from a daily return series.
+
+    Formula (canonical, matches every Netz risk writer):
+
+        excess    = daily_returns − rf / trading_days
+        σ         = std(excess, ddof=1)
+        σ_ann     = σ · √trading_days
+        sharpe    = mean(excess) / σ · √trading_days
+                  = annualised_excess_return / annualised_vol
+
+    Returns ``None`` when:
+      * the series is shorter than 2 observations (σ is undefined);
+      * σ collapses to zero (constant series — stale NAV artefact);
+      * the annualised vol is below ``min_annualized_vol`` (1 %). Yahoo
+        Finance continues to emit prices for merged / delisted funds
+        as a flat line, which would otherwise make Sharpe diverge.
+    """
+    if len(daily_returns) < 2:
+        return None
+    excess = daily_returns - risk_free_rate / trading_days_per_year
+    vol = float(np.std(excess, ddof=1))
+    if vol == 0 or not np.isfinite(vol):
+        return None
+    annualized_vol = vol * np.sqrt(trading_days_per_year)
+    if annualized_vol < min_annualized_vol:
+        return None
+    return float(np.mean(excess) / vol * np.sqrt(trading_days_per_year))
+
+
+def compute_sortino_ratio(
+    daily_returns: np.ndarray,  # type: ignore[type-arg]
+    risk_free_rate: float = DEFAULT_RISK_FREE_RATE,
+    *,
+    trading_days_per_year: int = TRADING_DAYS_PER_YEAR,
+    min_annualized_vol: float = MIN_ANNUALIZED_VOL,
+) -> float | None:
+    """Annualised Sortino ratio (downside deviation denominator).
+
+    Same canonical Netz formula as :func:`compute_sharpe_ratio`, but the
+    denominator only penalises **negative** excess returns. Returns
+    ``None`` when there are no losses (Sortino is undefined) or when the
+    annualised downside vol collapses below ``min_annualized_vol``.
+    """
+    if len(daily_returns) < 2:
+        return None
+    excess = daily_returns - risk_free_rate / trading_days_per_year
+    downside = excess[excess < 0]
+    if len(downside) == 0:
+        return None
+    downside_vol = float(np.std(downside, ddof=1))
+    if downside_vol == 0 or not np.isfinite(downside_vol):
+        return None
+    annualized_downside_vol = downside_vol * np.sqrt(trading_days_per_year)
+    if annualized_downside_vol < min_annualized_vol:
+        return None
+    return float(np.mean(excess) / downside_vol * np.sqrt(trading_days_per_year))
+
 
 @dataclass(frozen=True, slots=True)
 class ReturnStatisticsResult:
