@@ -13,6 +13,7 @@ from typing import Any
 
 import structlog
 
+from quant_engine.expense_ratio_validator import to_decimal_fraction
 from vertical_engines.wealth.fee_drag.models import (
     FeeBreakdown,
     FeeDragResult,
@@ -185,15 +186,22 @@ class FeeDragService:
 
         Converts decimal fraction percentages (e.g. 0.015) to percentage
         points (1.5) as expected by the FeeDragService logic.
+
+        S4-QW4: the ``expense_ratio_pct`` column arrives as either a
+        decimal fraction (XBRL, canonical), a whole percent (some N-CEN
+        CSV exports) or occasionally basis points. The previous code
+        blindly multiplied by 100, so a fund whose ``expense_ratio_pct``
+        was stored as ``1.5`` became **150 percentage points** of fees —
+        a 75× overstatement that eliminated the entire gross return on a
+        single instrument. Route every read through
+        :func:`quant_engine.expense_ratio_validator.to_decimal_fraction`
+        so the unit is unambiguous before any arithmetic.
         """
-        # Prefer XBRL expense_ratio_pct (authoritative) over manual management_fee_pct
-        # Both are stored as pure decimal fractions (0.015 = 1.5%)
-        raw_mgmt = (
-            attributes.get("expense_ratio_pct")
-            or attributes.get("management_fee_pct")
-            or 0.0
-        )
-        mgmt = max(0.0, _safe_float(raw_mgmt) * 100.0)
+        raw_mgmt = attributes.get("expense_ratio_pct")
+        if raw_mgmt is None:
+            raw_mgmt = attributes.get("management_fee_pct")
+        mgmt_fraction = to_decimal_fraction(raw_mgmt) if raw_mgmt is not None else None
+        mgmt = max(0.0, (mgmt_fraction or 0.0) * 100.0)
 
         # performance_fee_pct is already stored as percentage points in attributes
         perf = max(0.0, _safe_float(attributes.get("performance_fee_pct", 0.0)))
