@@ -8,7 +8,13 @@
   import { getContext } from "svelte";
   import { goto } from "$app/navigation";
   import { page as pageState } from "$app/state";
-  import { Search, Download, ChevronDown } from "lucide-svelte";
+  import {
+    Search,
+    Download,
+    ChevronDown,
+    Maximize2,
+    ChartLine,
+  } from "lucide-svelte";
   import { CatalogTableV2 } from "$lib/components/screener";
   import ManagerDetailPanel from "$lib/components/screener/ManagerDetailPanel.svelte";
   import FundFactSheetContent from "$lib/components/screener/FundFactSheetContent.svelte";
@@ -404,6 +410,26 @@
       selectedFundId = id;
     });
   }
+
+  // ── Sheet → full-screen navigation ─────────────────────────────
+  // The floating Sheet shows only the Fact Sheet. To reach the Risk
+  // Analysis tab (the presentation star) the user navigates to the
+  // full-screen fund detail route which carries the fund-level tab
+  // strip from /screener/fund/[id]/+layout.svelte.
+
+  function expandToFactSheet(): void {
+    const id = selectedFundId;
+    if (!id) return;
+    closeFundPreview();
+    goto(`/screener/fund/${encodeURIComponent(id)}`);
+  }
+
+  function expandToRiskAnalysis(): void {
+    const id = selectedFundId;
+    if (!id) return;
+    closeFundPreview();
+    goto(`/screener/fund/${encodeURIComponent(id)}/analysis`);
+  }
 </script>
 
 <svelte:head>
@@ -530,6 +556,39 @@
     class="!z-[60] w-[min(100vw,960px)] !max-w-[960px] sm:!max-w-[960px] p-0 gap-0 overflow-y-auto fs-sheet-content"
     showCloseButton={true}
   >
+    <!--
+      Action bar pinned at the top of the Sheet (inside the scroll
+      container, so it scrolls with the content — no position: sticky
+      per the Notion-style rule). Offers two explicit escape hatches
+      to the full-screen detail view where the [Fact Sheet] /
+      [Risk Analysis] tab strip lives. Without these buttons the
+      Risk Analysis tab would be unreachable from the Screener grid
+      flow, because clicking a fund row lands the user in the Sheet
+      and the Sheet alone cannot host both tabs.
+    -->
+    <div class="fs-sheet-actions">
+      <button
+        type="button"
+        class="fs-sheet-action fs-sheet-action--primary"
+        onclick={expandToRiskAnalysis}
+        disabled={!selectedFundId}
+        title="Open the Risk Analysis tab full-screen"
+      >
+        <ChartLine size={14} strokeWidth={2.25} />
+        <span>Risk Analysis</span>
+      </button>
+      <button
+        type="button"
+        class="fs-sheet-action"
+        onclick={expandToFactSheet}
+        disabled={!selectedFundId}
+        title="Open this fact sheet full-screen"
+      >
+        <Maximize2 size={14} strokeWidth={2.25} />
+        <span>Full view</span>
+      </button>
+    </div>
+
     {#if factSheetLoading && !factSheetRouteData.data && !factSheetRouteData.error}
       <div class="fs-sheet-loading">Loading fact sheet…</div>
     {:else}
@@ -785,5 +844,56 @@
     font-family: "Urbanist", sans-serif;
     font-size: 13px;
     color: var(--ii-text-muted);
+  }
+
+  /* ── Sheet action bar (Risk Analysis / Full view escape hatches) ── */
+  .fs-sheet-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 16px 56px 0 24px; /* right padding leaves room for the close X */
+    background: transparent;
+  }
+
+  .fs-sheet-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: #d1d5db;
+    font-family: "Urbanist", system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 120ms, border-color 120ms, color 120ms;
+  }
+
+  .fs-sheet-action:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.28);
+    color: #ffffff;
+  }
+
+  .fs-sheet-action:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .fs-sheet-action--primary {
+    background: #0177fb;
+    border-color: #0177fb;
+    color: #ffffff;
+  }
+
+  .fs-sheet-action--primary:hover {
+    background: #0166d9;
+    border-color: #0166d9;
+    color: #ffffff;
   }
 </style>

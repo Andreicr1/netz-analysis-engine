@@ -249,7 +249,7 @@
                     toggleFilterPopover("manager_name");
                   }}
                 >
-                  <Filter size={12} strokeWidth={2.25} />
+                  <Filter size={14} strokeWidth={2.5} />
                 </button>
               {/if}
             </div>
@@ -276,7 +276,7 @@
                     toggleFilterPopover("fund_types");
                   }}
                 >
-                  <Filter size={12} strokeWidth={2.25} />
+                  <Filter size={14} strokeWidth={2.5} />
                 </button>
               {/if}
             </div>
@@ -313,7 +313,7 @@
                     toggleFilterPopover("total_aum");
                   }}
                 >
-                  <Filter size={12} strokeWidth={2.25} />
+                  <Filter size={14} strokeWidth={2.5} />
                 </button>
               {/if}
             </div>
@@ -340,7 +340,7 @@
                     toggleFilterPopover("country");
                   }}
                 >
-                  <Filter size={12} strokeWidth={2.25} />
+                  <Filter size={14} strokeWidth={2.5} />
                 </button>
               {/if}
             </div>
@@ -579,27 +579,29 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 28px;
+    height: 28px;
     padding: 0;
-    border-radius: 4px;
-    background: transparent;
-    border: 1px solid transparent;
-    color: #6b7280;
+    border-radius: 6px;
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    color: #93c5fd;
     cursor: pointer;
-    transition: background 120ms, color 120ms, border-color 120ms;
+    transition: background 120ms, color 120ms, border-color 120ms, transform 120ms;
   }
 
   .ct2-th-filter-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #e5e7eb;
-    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(59, 130, 246, 0.22);
+    color: #ffffff;
+    border-color: #0177fb;
+    transform: translateY(-1px);
   }
 
   .ct2-th-filter-btn.active {
-    background: rgba(59, 130, 246, 0.18);
-    color: #93c5fd;
-    border-color: rgba(59, 130, 246, 0.45);
+    background: #0177fb;
+    color: #ffffff;
+    border-color: #0177fb;
+    box-shadow: 0 0 0 2px rgba(1, 119, 251, 0.32);
   }
 
   .sort-stacked {

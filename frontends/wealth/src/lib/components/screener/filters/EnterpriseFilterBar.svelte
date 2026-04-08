@@ -14,7 +14,7 @@
 -->
 <script lang="ts">
 	import { formatAUM } from "@investintell/ui";
-	import { X } from "lucide-svelte";
+	import { Filter, X } from "lucide-svelte";
 	import type { ColumnFiltersState } from "@investintell/ui/components/ui/data-table";
 	import {
 		isActiveFilterValue,
@@ -101,9 +101,15 @@
 	}
 </script>
 
-{#if activeChips.length > 0}
-	<div class="efb-root" role="group" aria-label="Active filters">
-		<span class="efb-leading">Filters</span>
+<!--
+  The bar is ALWAYS rendered so users discover the filtering feature
+  even before they apply their first filter. When `activeChips` is
+  empty we show an institutional hint that points to the funnel
+  icons in the column headers.
+-->
+<div class="efb-root" role="group" aria-label="Active filters">
+	<span class="efb-leading">Filters</span>
+	{#if activeChips.length > 0}
 		<ul class="efb-chips">
 			{#each activeChips as chip (chip.id)}
 				<li class="efb-chip-wrap">
@@ -132,8 +138,16 @@
 		<button type="button" class="efb-clear-all" onclick={onClearAll}>
 			Clear all
 		</button>
-	</div>
-{/if}
+	{:else}
+		<span class="efb-empty-hint">
+			No filters applied · Click the
+			<span class="efb-icon-badge" aria-hidden="true">
+				<Filter size={10} strokeWidth={2.5} />
+			</span>
+			icon on any column header to start filtering
+		</span>
+	{/if}
+</div>
 
 <style>
 	.efb-root {
@@ -232,5 +246,26 @@
 	.efb-clear-all:hover {
 		color: #f3f4f6;
 		border-color: rgba(255, 255, 255, 0.32);
+	}
+
+	.efb-empty-hint {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		color: #9ca3af;
+		font-size: 11px;
+		font-style: italic;
+	}
+	.efb-icon-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		border-radius: 4px;
+		background: rgba(59, 130, 246, 0.18);
+		border: 1px solid rgba(59, 130, 246, 0.45);
+		color: #93c5fd;
+		vertical-align: middle;
 	}
 </style>
