@@ -11,7 +11,15 @@
   import { CatalogTableV2 } from "$lib/components/screener";
   import ManagerDetailPanel from "$lib/components/screener/ManagerDetailPanel.svelte";
   import type { ManagerCatalogItem } from "$lib/types/catalog";
+  import { FUND_TYPE_LABELS } from "$lib/types/catalog";
   import type { PageData } from "./$types";
+  import type { ColumnFiltersState } from "@investintell/ui/components/ui/data-table";
+  import {
+    EnterpriseFilterBar,
+    decodeFilters,
+    writeFiltersToParams,
+    type ColumnFilterMeta,
+  } from "$lib/components/screener/filters";
 
   let { data }: { data: PageData } = $props();
 
@@ -125,6 +133,121 @@
     }
     activeFundTypes = next;
   }
+
+  // ══════════════════════════════════════════════════════════════
+  //  Enterprise column filters (Branch #4)
+  // ══════════════════════════════════════════════════════════════
+  //
+  // State ownership: the Screener page owns `columnFilters` and the
+  // `openFilterColumn` UI toggle. CatalogTableV2 consumes both as props
+  // and invokes the callbacks back up — this is the "lift state" pattern
+  // that keeps URL sync in one place.
+
+  // Column metadata — derived from the current catalog page so enum
+  // options (fund types, countries) reflect what is actually loaded. The
+  // popover will not try to filter on columns the user cannot see.
+  const fundTypeOptions = $derived.by(() => {
+    const seen = new Set<string>();
+    for (const item of data.catalog.items) {
+      for (const ft of item.fund_types) seen.add(ft);
+    }
+    return Array.from(seen)
+      .sort()
+      .map((value) => ({
+        value,
+        label: FUND_TYPE_LABELS[value] ?? value,
+      }));
+  });
+
+  const countryOptions = $derived.by(() => {
+    const seen = new Set<string>();
+    for (const item of data.catalog.items) {
+      if (item.country) seen.add(item.country);
+    }
+    return Array.from(seen)
+      .sort()
+      .map((value) => ({ value, label: value }));
+  });
+
+  const filterColumns = $derived<ColumnFilterMeta[]>([
+    { id: "manager_name", label: "Manager", type: "text" },
+    { id: "total_aum", label: "AUM", type: "numeric", unit: "currency" },
+    {
+      id: "fund_types",
+      label: "Fund type",
+      type: "enum",
+      arrayCell: true,
+      options: fundTypeOptions,
+    },
+    {
+      id: "country",
+      label: "Country",
+      type: "enum",
+      options: countryOptions,
+    },
+  ]);
+
+  // Column filter state — hydrated from URL on mount/navigation, lifted
+  // from CatalogTableV2, fed back into the URL via writeFiltersToParams.
+  let columnFilters = $state<ColumnFiltersState>(
+    decodeFilters(pageState.url.searchParams),
+  );
+  let openFilterColumn = $state<string | null>(null);
+
+  // URL sync — fires on every filter mutation. `replaceState` avoids a
+  // history entry per keystroke; `noScroll` + `keepFocus` keep the popover
+  // input focused while the user types.
+  let lastSyncedUrlKey = $state<string>("");
+
+  $effect(() => {
+    // Read columnFilters reactively.
+    const current = columnFilters;
+    const params = new URLSearchParams(pageState.url.searchParams);
+    writeFiltersToParams(params, current);
+    const qs = params.toString();
+    const target = `/screener${qs ? `?${qs}` : ""}`;
+    // Avoid a goto loop: only sync when the resulting URL differs from
+    // what we last wrote.
+    if (target !== lastSyncedUrlKey) {
+      lastSyncedUrlKey = target;
+      // Also skip if the URL is already in sync (initial mount case).
+      if (target !== pageState.url.pathname + pageState.url.search) {
+        goto(target, {
+          replaceState: true,
+          noScroll: true,
+          keepFocus: true,
+        });
+      }
+    }
+  });
+
+  // Re-hydrate from URL on navigation (e.g. browser back/forward). When
+  // the URL changes but columnFilters has not, adopt the URL as source of
+  // truth.
+  $effect(() => {
+    const urlFilters = decodeFilters(pageState.url.searchParams);
+    const localKey = JSON.stringify(columnFilters);
+    const urlKey = JSON.stringify(urlFilters);
+    if (localKey !== urlKey) {
+      columnFilters = urlFilters;
+    }
+  });
+
+  function removeFilter(columnId: string): void {
+    columnFilters = columnFilters.filter(
+      (f: ColumnFiltersState[number]) => f.id !== columnId,
+    );
+    if (openFilterColumn === columnId) openFilterColumn = null;
+  }
+
+  function clearAllFilters(): void {
+    columnFilters = [];
+    openFilterColumn = null;
+  }
+
+  function openEditFor(columnId: string): void {
+    openFilterColumn = columnId;
+  }
 </script>
 
 <svelte:head>
@@ -194,6 +317,17 @@
       </div>
     </div>
 
+    <!-- ── Enterprise Filter Bar (Branch #4) ── -->
+    <div class="scr-filter-bar">
+      <EnterpriseFilterBar
+        filters={columnFilters}
+        columns={filterColumns}
+        onRemove={removeFilter}
+        onEdit={openEditFor}
+        onClearAll={clearAllFilters}
+      />
+    </div>
+
     <!-- ── Table ── -->
     <div class="scr-content">
       <CatalogTableV2
@@ -206,6 +340,11 @@
         sort={data.sort || "aum_desc"}
         onPageChange={onPageChange}
         onSelectManager={onSelectManager}
+        {columnFilters}
+        onColumnFiltersChange={(next) => (columnFilters = next)}
+        {filterColumns}
+        {openFilterColumn}
+        onOpenFilterChange={(id) => (openFilterColumn = id)}
       />
     </div>
   {/if}
@@ -403,6 +542,14 @@
 
   .scr-toggle--active:hover {
     background: #0166d9;
+  }
+
+  /* ── Filter bar (Branch #4) ── */
+  .scr-filter-bar {
+    padding: 0 24px;
+  }
+  .scr-filter-bar:empty {
+    display: none;
   }
 
   /* ── Content ── */

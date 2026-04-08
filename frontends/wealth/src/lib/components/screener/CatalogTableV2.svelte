@@ -3,11 +3,32 @@
   Rows = Managers grouped by CRD. Columns: CRD, Manager, Funds (badges), AUM, Location, Website.
   Row click → Level 2 ManagerDetailPanel (80vw Sheet).
   Design: Dark graphite panel, neon badges, Urbanist font.
+
+  Filtering: Enterprise filter bar sits above the table in `+page.svelte`;
+  this component owns the TanStack table instance and renders a small
+  filter icon in each filterable column header that opens a
+  ``ColumnFilterPopover``. Filter state is lifted to the parent page so
+  the URL-sync effect stays in one place.
 -->
 <script lang="ts">
   import { formatAUM } from "@investintell/ui";
   import type { ManagerCatalogItem } from "$lib/types/catalog";
   import { FUND_TYPE_BADGE_MAP } from "$lib/types/catalog";
+  import {
+    createSvelteTable,
+    getCoreRowModel,
+    getFilteredRowModel,
+    type ColumnDef,
+    type ColumnFiltersState,
+  } from "@investintell/ui/components/ui/data-table";
+  import {
+    ColumnFilterPopover,
+    makeEnumFilterFn,
+    makeNumericFilterFn,
+    makeTextFilterFn,
+    type ColumnFilterMeta,
+    type ColumnFilterValue,
+  } from "$lib/components/screener/filters";
 
   interface Props {
     items: ManagerCatalogItem[];
@@ -19,6 +40,13 @@
     sort?: string;
     onPageChange?: (page: number) => void;
     onSelectManager?: (manager: ManagerCatalogItem) => void;
+    /** Lifted filter state — owned by `+page.svelte`. */
+    columnFilters: ColumnFiltersState;
+    onColumnFiltersChange: (next: ColumnFiltersState) => void;
+    filterColumns: readonly ColumnFilterMeta[];
+    /** Column id to auto-open the popover for (e.g. from EnterpriseFilterBar chip edit). */
+    openFilterColumn?: string | null;
+    onOpenFilterChange?: (columnId: string | null) => void;
   }
 
   let {
@@ -31,11 +59,105 @@
     sort = "aum_desc",
     onPageChange,
     onSelectManager,
+    columnFilters,
+    onColumnFiltersChange,
+    filterColumns,
+    openFilterColumn = null,
+    onOpenFilterChange,
   }: Props = $props();
 
   import { page as pageState } from "$app/state";
   import { goto } from "$app/navigation";
-  import { ChevronUp, ChevronDown } from "lucide-svelte";
+  import { ChevronUp, ChevronDown, Filter } from "lucide-svelte";
+
+  // ── TanStack table wiring ──
+  // Column defs live INSIDE this component because every filterable cell
+  // needs an accessor — but the meta (label, type, options) is passed in
+  // from the parent so `EnterpriseFilterBar` and the popover can render
+  // the same labels without duplication.
+  const columns: ColumnDef<ManagerCatalogItem>[] = [
+    {
+      id: "manager_name",
+      accessorKey: "manager_name",
+      filterFn: makeTextFilterFn<ManagerCatalogItem>(),
+    },
+    {
+      id: "total_aum",
+      accessorKey: "total_aum",
+      filterFn: makeNumericFilterFn<ManagerCatalogItem>(),
+    },
+    {
+      id: "fund_count",
+      accessorKey: "fund_count",
+      filterFn: makeNumericFilterFn<ManagerCatalogItem>(),
+    },
+    {
+      id: "fund_types",
+      accessorKey: "fund_types",
+      filterFn: makeEnumFilterFn<ManagerCatalogItem>({ arrayCell: true }),
+    },
+    {
+      id: "country",
+      accessorKey: "country",
+      filterFn: makeEnumFilterFn<ManagerCatalogItem>(),
+    },
+  ];
+
+  const table = createSvelteTable({
+    get data() {
+      return items;
+    },
+    columns,
+    state: {
+      get columnFilters() {
+        return columnFilters;
+      },
+    },
+    onColumnFiltersChange: (updater) => {
+      const next =
+        typeof updater === "function" ? updater(columnFilters) : updater;
+      onColumnFiltersChange(next);
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+
+  // Filtered rows — client-side overlay on top of the server page.
+  const filteredRows = $derived(table.getFilteredRowModel().rows);
+
+  // Map column id → meta for the header filter icons.
+  const filterMetaById = $derived(
+    new Map<string, ColumnFilterMeta>(filterColumns.map((c) => [c.id, c])),
+  );
+
+  type FilterEntry = ColumnFiltersState[number];
+
+  function currentValueFor(columnId: string): ColumnFilterValue | null {
+    const hit = columnFilters.find((f: FilterEntry) => f.id === columnId);
+    return (hit?.value as ColumnFilterValue) ?? null;
+  }
+
+  function applyFilter(
+    columnId: string,
+    next: ColumnFilterValue | null,
+  ): void {
+    const without = columnFilters.filter(
+      (f: FilterEntry) => f.id !== columnId,
+    );
+    if (next == null) {
+      onColumnFiltersChange(without);
+      return;
+    }
+    onColumnFiltersChange([...without, { id: columnId, value: next }]);
+  }
+
+  function toggleFilterPopover(columnId: string): void {
+    onOpenFilterChange?.(openFilterColumn === columnId ? null : columnId);
+  }
+
+  function closeFilterPopover(): void {
+    onOpenFilterChange?.(null);
+  }
 
   function setSort(col: "name" | "aum") {
     const params = new URLSearchParams(pageState.url.searchParams);
@@ -103,27 +225,140 @@
       <thead>
         <tr class="ct2-thead-row">
           <th class="ct2-th ct2-th--crd">CRD</th>
-          <th class="ct2-th ct2-th--manager ct2-th--sortable" onclick={() => setSort("name")}>
-            Manager
-            <div class="sort-stacked">
-              <ChevronUp size={12} color={sort === "name_asc" ? "#fff" : "#52525b"} strokeWidth={sort === "name_asc" ? 3 : 2} />
-              <ChevronDown size={12} color={sort === "name_desc" ? "#fff" : "#52525b"} strokeWidth={sort === "name_desc" ? 3 : 2} />
+          <th class="ct2-th ct2-th--manager">
+            <div class="ct2-th-inner">
+              <button
+                type="button"
+                class="ct2-th-label ct2-th-label--sortable"
+                onclick={() => setSort("name")}
+              >
+                Manager
+                <span class="sort-stacked">
+                  <ChevronUp size={12} color={sort === "name_asc" ? "#fff" : "#52525b"} strokeWidth={sort === "name_asc" ? 3 : 2} />
+                  <ChevronDown size={12} color={sort === "name_desc" ? "#fff" : "#52525b"} strokeWidth={sort === "name_desc" ? 3 : 2} />
+                </span>
+              </button>
+              {#if filterMetaById.has("manager_name")}
+                <button
+                  type="button"
+                  class="ct2-th-filter-btn"
+                  class:active={currentValueFor("manager_name") != null}
+                  aria-label="Filter Manager"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    toggleFilterPopover("manager_name");
+                  }}
+                >
+                  <Filter size={12} strokeWidth={2.25} />
+                </button>
+              {/if}
             </div>
+            {#if openFilterColumn === "manager_name" && filterMetaById.get("manager_name")}
+              <ColumnFilterPopover
+                column={filterMetaById.get("manager_name")!}
+                value={currentValueFor("manager_name")}
+                onApply={(v) => applyFilter("manager_name", v)}
+                onClose={closeFilterPopover}
+              />
+            {/if}
           </th>
-          <th class="ct2-th ct2-th--funds">Funds</th>
-          <th class="ct2-th ct2-th--aum ct2-th--sortable" onclick={() => setSort("aum")}>
-            AUM
-            <div class="sort-stacked">
-              <ChevronUp size={12} color={sort === "aum_asc" ? "#fff" : "#52525b"} strokeWidth={sort === "aum_asc" ? 3 : 2} />
-              <ChevronDown size={12} color={sort === "aum_desc" ? "#fff" : "#52525b"} strokeWidth={sort === "aum_desc" ? 3 : 2} />
+          <th class="ct2-th ct2-th--funds">
+            <div class="ct2-th-inner">
+              <span class="ct2-th-label">Funds</span>
+              {#if filterMetaById.has("fund_types")}
+                <button
+                  type="button"
+                  class="ct2-th-filter-btn"
+                  class:active={currentValueFor("fund_types") != null}
+                  aria-label="Filter Fund types"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    toggleFilterPopover("fund_types");
+                  }}
+                >
+                  <Filter size={12} strokeWidth={2.25} />
+                </button>
+              {/if}
             </div>
+            {#if openFilterColumn === "fund_types" && filterMetaById.get("fund_types")}
+              <ColumnFilterPopover
+                column={filterMetaById.get("fund_types")!}
+                value={currentValueFor("fund_types")}
+                onApply={(v) => applyFilter("fund_types", v)}
+                onClose={closeFilterPopover}
+              />
+            {/if}
           </th>
-          <th class="ct2-th ct2-th--location">Location</th>
+          <th class="ct2-th ct2-th--aum">
+            <div class="ct2-th-inner ct2-th-inner--right">
+              <button
+                type="button"
+                class="ct2-th-label ct2-th-label--sortable"
+                onclick={() => setSort("aum")}
+              >
+                AUM
+                <span class="sort-stacked">
+                  <ChevronUp size={12} color={sort === "aum_asc" ? "#fff" : "#52525b"} strokeWidth={sort === "aum_asc" ? 3 : 2} />
+                  <ChevronDown size={12} color={sort === "aum_desc" ? "#fff" : "#52525b"} strokeWidth={sort === "aum_desc" ? 3 : 2} />
+                </span>
+              </button>
+              {#if filterMetaById.has("total_aum")}
+                <button
+                  type="button"
+                  class="ct2-th-filter-btn"
+                  class:active={currentValueFor("total_aum") != null}
+                  aria-label="Filter AUM"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    toggleFilterPopover("total_aum");
+                  }}
+                >
+                  <Filter size={12} strokeWidth={2.25} />
+                </button>
+              {/if}
+            </div>
+            {#if openFilterColumn === "total_aum" && filterMetaById.get("total_aum")}
+              <ColumnFilterPopover
+                column={filterMetaById.get("total_aum")!}
+                value={currentValueFor("total_aum")}
+                onApply={(v) => applyFilter("total_aum", v)}
+                onClose={closeFilterPopover}
+              />
+            {/if}
+          </th>
+          <th class="ct2-th ct2-th--location">
+            <div class="ct2-th-inner">
+              <span class="ct2-th-label">Location</span>
+              {#if filterMetaById.has("country")}
+                <button
+                  type="button"
+                  class="ct2-th-filter-btn"
+                  class:active={currentValueFor("country") != null}
+                  aria-label="Filter Country"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    toggleFilterPopover("country");
+                  }}
+                >
+                  <Filter size={12} strokeWidth={2.25} />
+                </button>
+              {/if}
+            </div>
+            {#if openFilterColumn === "country" && filterMetaById.get("country")}
+              <ColumnFilterPopover
+                column={filterMetaById.get("country")!}
+                value={currentValueFor("country")}
+                onApply={(v) => applyFilter("country", v)}
+                onClose={closeFilterPopover}
+              />
+            {/if}
+          </th>
           <th class="ct2-th ct2-th--website">Website</th>
         </tr>
       </thead>
       <tbody>
-        {#each items as item (item.manager_id)}
+        {#each filteredRows as row (row.original.manager_id)}
+          {@const item = row.original}
           <tr
             class="ct2-row"
             onclick={() => openManagerPanel(item)}
@@ -189,7 +424,9 @@
         {:else}
           <tr>
             <td colspan="6" class="ct2-empty">
-              {searchQuery ? "No managers match your search." : "No managers found."}
+              {searchQuery || columnFilters.length > 0
+                ? "No managers match your filters."
+                : "No managers found."}
             </td>
           </tr>
         {/each}
@@ -297,6 +534,72 @@
 
   .ct2-th--sortable:hover {
     color: #fff;
+  }
+
+  /* Allow filter popover to escape the th without breaking sticky header. */
+  .ct2-th {
+    position: sticky;
+    overflow: visible;
+  }
+
+  .ct2-th-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+  }
+
+  .ct2-th-inner--right {
+    justify-content: flex-end;
+    width: 100%;
+  }
+
+  .ct2-th-label {
+    display: inline-flex;
+    align-items: center;
+    color: inherit;
+    font: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
+    background: transparent;
+    border: none;
+    padding: 0;
+  }
+
+  .ct2-th-label--sortable {
+    cursor: pointer;
+    transition: color 100ms ease;
+  }
+
+  .ct2-th-label--sortable:hover {
+    color: #fff;
+  }
+
+  .ct2-th-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border-radius: 4px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: #6b7280;
+    cursor: pointer;
+    transition: background 120ms, color 120ms, border-color 120ms;
+  }
+
+  .ct2-th-filter-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #e5e7eb;
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+
+  .ct2-th-filter-btn.active {
+    background: rgba(59, 130, 246, 0.18);
+    color: #93c5fd;
+    border-color: rgba(59, 130, 246, 0.45);
   }
 
   .sort-stacked {
