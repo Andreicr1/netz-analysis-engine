@@ -28,6 +28,7 @@ from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.model_portfolio import (
     ModelPortfolio,
+    PortfolioCalibration,
     PortfolioConstructionRun,
 )
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
@@ -40,6 +41,8 @@ from app.domains.wealth.schemas.model_portfolio import (
     ModelPortfolioRead,
     ModelPortfolioUpdate,
     OverlapResultRead,
+    PortfolioCalibrationRead,
+    PortfolioCalibrationUpdate,
     RebalancePreviewRequest,
     RebalancePreviewResponse,
     RegimeCurrentRead,
@@ -361,6 +364,170 @@ async def construct_portfolio(
         stream_url=f"/api/v1/jobs/{job_id}/stream",
         run_url=f"/api/v1/model-portfolios/{portfolio_id}/runs/{run.id}",
     )
+
+
+# ── Phase 4 — Portfolio calibration GET / PUT ─────────────────────────────
+
+
+_BASIC_FIELDS: tuple[str, ...] = (
+    "mandate",
+    "cvar_limit",
+    "max_single_fund_weight",
+    "turnover_cap",
+    "stress_scenarios_active",
+)
+_ADVANCED_FIELDS: tuple[str, ...] = (
+    "regime_override",
+    "bl_enabled",
+    "bl_view_confidence_default",
+    "garch_enabled",
+    "turnover_lambda",
+    "stress_severity_multiplier",
+    "advisor_enabled",
+    "cvar_level",
+    "lambda_risk_aversion",
+    "shrinkage_intensity_override",
+)
+
+
+async def _ensure_calibration(
+    db: AsyncSession, portfolio_id: uuid.UUID, organization_id: uuid.UUID | str,
+) -> PortfolioCalibration:
+    """Fetch-or-create the ``portfolio_calibration`` row for a portfolio.
+
+    DL5 makes the calibration row a one-to-one peer of the portfolio
+    (UNIQUE on ``portfolio_id``). The row is created on first access
+    with the migration 0100 server defaults so the CalibrationPanel's
+    Basic tier starts from the org-wide institutional baseline instead
+    of an empty form. The frontend never needs to handle the
+    ``no calibration`` case.
+    """
+    existing = await db.execute(
+        select(PortfolioCalibration).where(
+            PortfolioCalibration.portfolio_id == portfolio_id,
+        ),
+    )
+    row = existing.scalar_one_or_none()
+    if row is not None:
+        return row
+
+    org_uuid = (
+        organization_id
+        if isinstance(organization_id, uuid.UUID)
+        else uuid.UUID(str(organization_id))
+    )
+    row = PortfolioCalibration(
+        organization_id=org_uuid,
+        portfolio_id=portfolio_id,
+    )
+    db.add(row)
+    await db.flush()
+    await db.refresh(row)
+    return row
+
+
+@router.get(
+    "/{portfolio_id}/calibration",
+    response_model=PortfolioCalibrationRead,
+    summary="Fetch the portfolio's 63-input calibration surface (DL5)",
+)
+async def get_portfolio_calibration(
+    portfolio_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    org_id: str = Depends(get_org_id),
+) -> PortfolioCalibrationRead:
+    """Read the Builder CalibrationPanel state for a portfolio.
+
+    Creates the calibration row on first access so the Basic tier always
+    has the migration 0100 server defaults. The frontend never has to
+    handle a missing row.
+    """
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    row = await _ensure_calibration(db, portfolio_id, org_id)
+    return PortfolioCalibrationRead.model_validate(row)
+
+
+@router.put(
+    "/{portfolio_id}/calibration",
+    response_model=PortfolioCalibrationRead,
+    summary="Apply a Builder CalibrationPanel edit (DL5)",
+)
+async def update_portfolio_calibration(
+    portfolio_id: uuid.UUID,
+    payload: PortfolioCalibrationUpdate,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+    org_id: str = Depends(get_org_id),
+) -> PortfolioCalibrationRead:
+    """Persist the Builder CalibrationPanel Apply action.
+
+    The body is a partial update — only the fields that the user
+    touched are sent. Typed Basic + Advanced fields are assigned
+    directly; ``expert_overrides`` is merged (shallow) into the
+    existing JSONB so the frontend can edit individual Expert knobs
+    without re-sending the full blob.
+
+    Requires IC role. ``updated_by`` is stamped from the actor.
+    """
+    _require_ic_role(actor)
+
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    row = await _ensure_calibration(db, portfolio_id, org_id)
+
+    data = payload.model_dump(exclude_unset=True)
+
+    # Typed Basic + Advanced columns — assign only provided fields.
+    for field in _BASIC_FIELDS + _ADVANCED_FIELDS:
+        if field in data and data[field] is not None:
+            setattr(row, field, data[field])
+
+    # stress_scenarios_active is nullable in the update but must not
+    # land as NULL in the DB (column is NOT NULL). Explicit guard.
+    if "stress_scenarios_active" in data and data["stress_scenarios_active"] is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="stress_scenarios_active cannot be null — send an empty list to disable all",
+        )
+
+    # Expert tier — shallow merge so individual knobs can be edited.
+    if "expert_overrides" in data and data["expert_overrides"] is not None:
+        merged = dict(row.expert_overrides or {})
+        merged.update(data["expert_overrides"])
+        row.expert_overrides = merged
+
+    row.updated_by = actor.actor_id
+
+    await db.flush()
+    await db.refresh(row)
+
+    logger.info(
+        "portfolio_calibration_updated",
+        portfolio_id=str(portfolio_id),
+        actor_id=actor.actor_id,
+        fields=sorted(data.keys()),
+    )
+
+    return PortfolioCalibrationRead.model_validate(row)
 
 
 @router.get(

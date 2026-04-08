@@ -72,6 +72,43 @@ async def test_get_model_portfolio_route_exists(client: AsyncClient):
     assert resp.status_code != 404
 
 
+# ── Phase 4 calibration GET/PUT smoke tests ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_calibration_requires_auth(client: AsyncClient):
+    """Phase 4 Task 4 — GET /{id}/calibration must require auth."""
+    resp = await client.get(f"{BASE}/{PORTFOLIO_ID}/calibration")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_calibration_route_exists(client: AsyncClient):
+    """401 (not 404) proves the calibration GET route is mounted."""
+    resp = await client.get(f"{BASE}/{PORTFOLIO_ID}/calibration")
+    assert resp.status_code != 404
+
+
+@pytest.mark.asyncio
+async def test_put_portfolio_calibration_requires_auth(client: AsyncClient):
+    """Phase 4 Task 4 — PUT /{id}/calibration must require auth."""
+    resp = await client.put(
+        f"{BASE}/{PORTFOLIO_ID}/calibration",
+        json={"mandate": "moderate"},
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_put_portfolio_calibration_route_exists(client: AsyncClient):
+    """401 (not 404) proves the calibration PUT route is mounted."""
+    resp = await client.put(
+        f"{BASE}/{PORTFOLIO_ID}/calibration",
+        json={"mandate": "moderate"},
+    )
+    assert resp.status_code != 404
+
+
 # ── Helper unit tests for _serialize_with_actions ─────────────────
 
 

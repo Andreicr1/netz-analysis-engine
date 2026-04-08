@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 import structlog
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -51,7 +51,7 @@ class ModelPortfolioRead(BaseModel):
     status: str
     # ── State machine (migration 0098, Phase 1 Task 1.4) ──────────
     state: PortfolioState = "draft"
-    state_metadata: dict = Field(default_factory=dict)
+    state_metadata: dict[str, Any] = Field(default_factory=dict)
     state_changed_at: datetime | None = None
     state_changed_by: str | None = None
     #: Allowed actions for the current state, computed by
@@ -60,9 +60,9 @@ class ModelPortfolioRead(BaseModel):
     #: Empty list means the portfolio is in a terminal state.
     allowed_actions: list[str] = Field(default_factory=list)
 
-    fund_selection_schema: dict | None = None
-    backtest_result: dict | None = None
-    stress_result: dict | None = None
+    fund_selection_schema: dict[str, Any] | None = None
+    backtest_result: dict[str, Any] | None = None
+    stress_result: dict[str, Any] | None = None
     created_at: datetime
     created_by: str | None = None
     weight_warning: bool = False
@@ -111,6 +111,90 @@ class ModelPortfolioUpdate(BaseModel):
     benchmark_composite: str | None = None
     inception_date: date | None = None
     backtest_start_date: date | None = None
+
+
+# ── Portfolio Calibration (Phase 4 — Builder CalibrationPanel spine) ───────
+
+
+class PortfolioCalibrationRead(BaseModel):
+    """Full calibration surface for the Builder's CalibrationPanel.
+
+    The 5 Basic tier columns + 10 Advanced tier columns are exposed as
+    typed fields so the frontend can bind them to paired slider/number
+    inputs (OD-2). The remaining Expert tier lives in
+    ``expert_overrides`` as an untyped JSONB blob — CalibrationPanel
+    renders it via an accordion of key/value rows and ships any edits
+    back verbatim.
+
+    ``schema_version`` lets the backend evolve the surface without
+    breaking older frontends. DL5 explicit.
+    """
+
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
+
+    id: uuid.UUID
+    portfolio_id: uuid.UUID
+    schema_version: int
+
+    # ── Basic tier (5) ──
+    mandate: str
+    cvar_limit: Decimal
+    max_single_fund_weight: Decimal
+    turnover_cap: Decimal | None = None
+    stress_scenarios_active: list[str]
+
+    # ── Advanced tier (10) ──
+    regime_override: str | None = None
+    bl_enabled: bool
+    bl_view_confidence_default: Decimal
+    garch_enabled: bool
+    turnover_lambda: Decimal | None = None
+    stress_severity_multiplier: Decimal
+    advisor_enabled: bool
+    cvar_level: Decimal
+    lambda_risk_aversion: Decimal | None = None
+    shrinkage_intensity_override: Decimal | None = None
+
+    # ── Expert tier (48 inputs) ──
+    expert_overrides: dict[str, Any]
+
+    # ── Audit ──
+    created_at: datetime
+    updated_at: datetime
+    updated_by: str | None = None
+
+
+class PortfolioCalibrationUpdate(BaseModel):
+    """Apply payload for PUT /{portfolio_id}/calibration.
+
+    Every field is optional so the frontend can send partial updates —
+    the route merges the body into the existing row and returns the
+    post-update snapshot. Unknown fields are ignored (``extra="ignore"``)
+    because the Expert tier sends arbitrary knobs via
+    ``expert_overrides``.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    # Basic tier
+    mandate: str | None = None
+    cvar_limit: Decimal | None = None
+    max_single_fund_weight: Decimal | None = None
+    turnover_cap: Decimal | None = None
+    stress_scenarios_active: list[str] | None = None
+    # Advanced tier
+    regime_override: str | None = None
+    bl_enabled: bool | None = None
+    bl_view_confidence_default: Decimal | None = None
+    garch_enabled: bool | None = None
+    turnover_lambda: Decimal | None = None
+    stress_severity_multiplier: Decimal | None = None
+    advisor_enabled: bool | None = None
+    cvar_level: Decimal | None = None
+    lambda_risk_aversion: Decimal | None = None
+    shrinkage_intensity_override: Decimal | None = None
+    # Expert tier — merged into the JSONB column on write
+    expert_overrides: dict[str, Any] | None = None
 
 
 # ── Construction Run (Phase 3 — Job-or-Stream) ─────────────────────────────
