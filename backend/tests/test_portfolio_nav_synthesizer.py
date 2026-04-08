@@ -131,8 +131,18 @@ class TestFloatingPointPrecision:
         nav_decimal = Decimal(str(round(nav_float, 6)))
         assert float(nav_decimal) == pytest.approx(1023.456789, abs=1e-6)
 
-    def test_weight_renormalization(self):
-        """When one fund is missing, renormalization preserves total exposure."""
+    def test_no_weight_renormalization_on_missing_fund(self):
+        """P0-3 fix: missing-fund days do NOT renormalize the surviving weights.
+
+        Renormalisation distorts mandate-target weights and produces NAVs
+        whose value depends on data-arrival timing rather than mandate
+        composition. The missing fund's price move is implicitly captured
+        when it next reports (close-to-close return spans the gap).
+
+        This test asserts the post-fix invariant: the portfolio return is
+        the unrenormalised dot product of mandate weights with the
+        per-day return vector (zero contribution from missing funds).
+        """
         weights = {
             "a": 0.30,
             "b": 0.25,
@@ -140,23 +150,28 @@ class TestFloatingPointPrecision:
             "d": 0.15,
             "e": 0.10,
         }
-        # Fund "c" has no data today
-        available = {k: v for k, v in weights.items() if k != "c"}
-        active_weight = sum(available.values())
-        total_weight = sum(weights.values())
+        # Fund "c" has no data today.
+        returns_today = {"a": 0.001, "b": -0.002, "d": 0.0015, "e": 0.0005}
 
-        returns = {"a": 0.001, "b": -0.002, "d": 0.0015, "e": 0.0005}
+        # Replicate the synthesizer's loop verbatim — must match the logic
+        # in synthesize_portfolio_nav so this test catches future regressions.
+        portfolio_return = 0.0
+        for fid, w in weights.items():
+            r = returns_today.get(fid)
+            if r is not None:
+                portfolio_return += w * r
 
-        raw_return = sum(weights[k] * returns[k] for k in returns)
-        renorm_return = raw_return * (total_weight / active_weight)
-
-        # Renormalized return should be higher in absolute value
-        # (scaling up to account for missing fund)
-        assert abs(renorm_return) >= abs(raw_return)
-
-        # Check scale factor
-        scale = total_weight / active_weight
-        assert abs(scale - 1.0 / 0.80) < 1e-10
+        expected = (
+            0.30 * 0.001
+            + 0.25 * (-0.002)
+            + 0.15 * 0.0015
+            + 0.10 * 0.0005
+        )
+        assert abs(portfolio_return - expected) < 1e-15
+        # And the (wrong, pre-fix) renormalised value must NOT be what we use.
+        active_weight = 0.30 + 0.25 + 0.15 + 0.10  # 0.80
+        renormalised = expected * (1.0 / active_weight)
+        assert abs(portfolio_return - renormalised) > 1e-9
 
 
 # ── NAV synthesis integration tests (mocked DB) ────────────────────────────
@@ -222,11 +237,12 @@ class TestSynthesizePortfolioNav:
         mock_last = MagicMock()
         mock_last.one_or_none.return_value = None
 
-        # Mock _fetch_fund_returns → 3 days of returns
+        # Mock _fetch_fund_returns → 3 days of returns. return_type is now
+        # consumed by the synthesizer (P0-3 fix), so each row exposes it.
         returns_data = [
-            MagicMock(nav_date=dates[0], instrument_id=fid, return_1d=Decimal("0.01")),
-            MagicMock(nav_date=dates[1], instrument_id=fid, return_1d=Decimal("-0.005")),
-            MagicMock(nav_date=dates[2], instrument_id=fid, return_1d=Decimal("0.008")),
+            MagicMock(nav_date=dates[0], instrument_id=fid, return_1d=Decimal("0.01"), return_type="arithmetic"),
+            MagicMock(nav_date=dates[1], instrument_id=fid, return_1d=Decimal("-0.005"), return_type="arithmetic"),
+            MagicMock(nav_date=dates[2], instrument_id=fid, return_1d=Decimal("0.008"), return_type="arithmetic"),
         ]
         mock_returns = MagicMock()
         mock_returns.all.return_value = returns_data
@@ -317,6 +333,183 @@ class TestDuckTypingPolymorphism:
 
         assert mp_nav_type.precision == nt_nav_type.precision
         assert mp_nav_type.scale == nt_nav_type.scale
+
+
+# ── P0-3 regression tests: return_type unification + carry-forward ─────────
+
+
+class TestReturnTypeUnification:
+    """Regression tests for the P0-3 fix in ``_fetch_fund_returns``.
+
+    Pre-fix: ``portfolio_nav_synthesizer`` summed log returns linearly,
+    which is mathematically invalid (``Σ wᵢ·log(1+rᵢ) ≠ log(1+Σ wᵢ·rᵢ)``).
+    Post-fix: log returns are converted to arithmetic at fetch time using
+    ``math.expm1``.
+    """
+
+    @pytest.mark.asyncio
+    async def test_log_returns_converted_to_arithmetic(self):
+        """A row with ``return_type='log'`` must be converted via expm1."""
+        import math
+
+        from app.domains.wealth.workers.portfolio_nav_synthesizer import _fetch_fund_returns
+
+        fid = uuid.uuid4()
+        d = date.today()
+        log_value = 0.05  # log(1.0513...) ≈ 0.05 → arithmetic ≈ 0.05127
+        row = MagicMock(nav_date=d, instrument_id=fid, return_1d=Decimal(str(log_value)), return_type="log")
+
+        mock_result = MagicMock()
+        mock_result.all.return_value = [row]
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=mock_result)
+
+        out = await _fetch_fund_returns(db, [fid], d, d)
+        assert d in out
+        assert fid in out[d]
+        expected_arith = math.expm1(log_value)
+        assert abs(out[d][fid] - expected_arith) < 1e-15
+
+    @pytest.mark.asyncio
+    async def test_arithmetic_returns_passed_through(self):
+        """A row with ``return_type='arithmetic'`` must be unchanged."""
+        from app.domains.wealth.workers.portfolio_nav_synthesizer import _fetch_fund_returns
+
+        fid = uuid.uuid4()
+        d = date.today()
+        arith_value = 0.05
+        row = MagicMock(nav_date=d, instrument_id=fid, return_1d=Decimal(str(arith_value)), return_type="arithmetic")
+
+        mock_result = MagicMock()
+        mock_result.all.return_value = [row]
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=mock_result)
+
+        out = await _fetch_fund_returns(db, [fid], d, d)
+        assert abs(out[d][fid] - arith_value) < 1e-15
+
+    @pytest.mark.asyncio
+    async def test_mixed_log_and_arithmetic_in_same_batch(self):
+        """A batch with both return_types must convert each row independently.
+
+        This is the realistic production scenario: ``instrument_ingestion``
+        writes ``log`` for new series while legacy rows still carry the
+        ``arithmetic`` server_default.
+        """
+        import math
+
+        from app.domains.wealth.workers.portfolio_nav_synthesizer import _fetch_fund_returns
+
+        fid_log = uuid.uuid4()
+        fid_arith = uuid.uuid4()
+        d = date.today()
+
+        rows = [
+            MagicMock(nav_date=d, instrument_id=fid_log, return_1d=Decimal("0.02"), return_type="log"),
+            MagicMock(nav_date=d, instrument_id=fid_arith, return_1d=Decimal("0.02"), return_type="arithmetic"),
+        ]
+        mock_result = MagicMock()
+        mock_result.all.return_value = rows
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=mock_result)
+
+        out = await _fetch_fund_returns(db, [fid_log, fid_arith], d, d)
+        # Different conversion: math.expm1(0.02) ≈ 0.02020 vs 0.02 raw.
+        assert out[d][fid_log] == pytest.approx(math.expm1(0.02), abs=1e-15)
+        assert out[d][fid_arith] == pytest.approx(0.02, abs=1e-15)
+        # And they must NOT be equal — proves the branch fired.
+        assert out[d][fid_log] != out[d][fid_arith]
+
+
+# ── P0-2 regression test: DD report ordering ────────────────────────────────
+
+
+class TestDDReportOrdering:
+    """Regression test for the P0-2 fix in ``quant_injection.gather_quant_metrics``.
+
+    Pre-fix: ``order_by(organization_id NULLS LAST, calc_date DESC)`` —
+    a stale tenant row from 30 days ago beat a fresh global row from today.
+    Post-fix: ``order_by(calc_date DESC, organization_id NULLS LAST)`` —
+    freshness wins; tenant row only beats global on the same date.
+    """
+
+    def test_order_by_clause_calc_date_first(self):
+        """Inspect the SQLAlchemy query produced by gather_quant_metrics.
+
+        We assert the compiled SQL has ``calc_date DESC`` BEFORE the
+        ``organization_id`` ordering — the exact bug we are guarding against.
+        """
+        from unittest.mock import MagicMock as _MM
+
+        from app.domains.wealth.models.risk import FundRiskMetrics
+        from vertical_engines.wealth.dd_report.quant_injection import gather_quant_metrics
+
+        captured: dict = {}
+
+        class _CapturingQuery:
+            def filter(self, *args, **_kwargs):
+                return self
+
+            def order_by(self, *args):
+                captured["order_by"] = args
+                return self
+
+            def first(self):
+                return None
+
+        db = _MM()
+        db.query = _MM(return_value=_CapturingQuery())
+
+        # Call — we don't care about the return value, only the captured order_by.
+        gather_quant_metrics(
+            db,
+            instrument_id="00000000-0000-0000-0000-000000000001",
+            organization_id="00000000-0000-0000-0000-000000000002",
+        )
+
+        order_by_args = captured.get("order_by")
+        assert order_by_args is not None, "order_by() was never called"
+        assert len(order_by_args) >= 2, "expected at least two ordering keys"
+
+        # The first ordering key MUST be the calc_date column descending.
+        first_key = order_by_args[0]
+        # SQLAlchemy desc() wraps the column; the underlying element is the column.
+        underlying = getattr(first_key, "element", first_key)
+        assert underlying is FundRiskMetrics.calc_date or getattr(
+            underlying, "key", None,
+        ) == "calc_date", (
+            f"expected calc_date as first ORDER BY key, got {first_key!r} — "
+            "P0-2 regression: organization_id must NOT come first"
+        )
+
+
+# ── P0-1 model regression: composite identity tuple ─────────────────────────
+
+
+class TestFundRiskMetricsCompositeIdentity:
+    """Regression test for the P0-1 fix in the ORM mapping.
+
+    Pre-fix: PK = (instrument_id, calc_date). Two writers (global +
+    org-scoped) clobbered each other on UPSERT.
+    Post-fix: identity tuple = (instrument_id, calc_date, organization_id),
+    backed by a UNIQUE INDEX … NULLS NOT DISTINCT (migration 0093).
+    """
+
+    def test_organization_id_is_part_of_primary_key(self):
+        from app.domains.wealth.models.risk import FundRiskMetrics
+
+        pk_columns = {c.name for c in FundRiskMetrics.__table__.primary_key.columns}
+        assert pk_columns == {"instrument_id", "calc_date", "organization_id"}, (
+            f"P0-1 regression: composite identity must be "
+            f"(instrument_id, calc_date, organization_id), got {pk_columns}"
+        )
+
+    def test_organization_id_is_nullable(self):
+        """Global rows are written with organization_id IS NULL."""
+        from app.domains.wealth.models.risk import FundRiskMetrics
+
+        org_col = FundRiskMetrics.__table__.c.organization_id
+        assert org_col.nullable is True
 
 
 # ── Edge cases ──────────────────────────────────────────────────────────────

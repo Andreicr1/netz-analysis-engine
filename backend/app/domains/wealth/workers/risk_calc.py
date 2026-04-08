@@ -935,9 +935,17 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
 
                     metrics["organization_id"] = org_id
                     upsert = pg_insert(FundRiskMetrics).values(**metrics)
+                    # Conflict target includes organization_id so this org's
+                    # row is the only one updated; the global (NULL) row and
+                    # other tenants' rows stay untouched. PG matches the
+                    # NULLS NOT DISTINCT unique index from migration 0093.
                     upsert = upsert.on_conflict_do_update(
-                        index_elements=["instrument_id", "calc_date"],
-                        set_={k: upsert.excluded[k] for k in metrics if k not in ("instrument_id", "calc_date")},
+                        index_elements=["instrument_id", "calc_date", "organization_id"],
+                        set_={
+                            k: upsert.excluded[k]
+                            for k in metrics
+                            if k not in ("instrument_id", "calc_date", "organization_id")
+                        },
                     )
                     await db.execute(upsert)
                     results[fund.ticker or str(fund.instrument_id)] = 1
@@ -1096,12 +1104,16 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
                         metrics["organization_id"] = None
                         metrics["dtw_drift_score"] = None
                         upsert = pg_insert(FundRiskMetrics).values(**metrics)
+                        # Conflict target includes organization_id (NULL here);
+                        # NULLS NOT DISTINCT unique index from migration 0093
+                        # ensures only the global row is updated, never any
+                        # tenant-scoped row.
                         upsert = upsert.on_conflict_do_update(
-                            index_elements=["instrument_id", "calc_date"],
+                            index_elements=["instrument_id", "calc_date", "organization_id"],
                             set_={
                                 k: upsert.excluded[k]
                                 for k in metrics
-                                if k not in ("instrument_id", "calc_date")
+                                if k not in ("instrument_id", "calc_date", "organization_id")
                             },
                         )
                         await db.execute(upsert)
@@ -1201,9 +1213,14 @@ async def _compute_global_peer_percentiles(db: AsyncSession, calc_date: date) ->
             return_pctl = _pctl(fund["return_1y"], return_arr) if fund["return_1y"] is not None else None
             dd_pctl = _pctl(fund["max_drawdown_1y"], dd_arr) if fund["max_drawdown_1y"] is not None else None
 
+            # Peer percentiles are a global concept — they belong on the
+            # global row (organization_id IS NULL). Explicitly target it so
+            # the NULLS NOT DISTINCT unique index from migration 0093
+            # routes the upsert to the global row, never to a tenant row.
             upsert = pg_insert(FundRiskMetrics).values(
                 instrument_id=fund["instrument_id"],
                 calc_date=calc_date,
+                organization_id=None,
                 peer_strategy_label=strategy,
                 peer_sharpe_pctl=sharpe_pctl,
                 peer_sortino_pctl=sortino_pctl,
@@ -1212,7 +1229,7 @@ async def _compute_global_peer_percentiles(db: AsyncSession, calc_date: date) ->
                 peer_count=peer_count,
             )
             upsert = upsert.on_conflict_do_update(
-                index_elements=["instrument_id", "calc_date"],
+                index_elements=["instrument_id", "calc_date", "organization_id"],
                 set_={
                     "peer_strategy_label": upsert.excluded.peer_strategy_label,
                     "peer_sharpe_pctl": upsert.excluded.peer_sharpe_pctl,

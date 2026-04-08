@@ -16,6 +16,7 @@ Lock ID: 900_030
 """
 
 import asyncio
+import math
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
@@ -75,7 +76,14 @@ async def _fetch_fund_returns(
 ) -> dict[date, dict[uuid.UUID, float]]:
     """Fetch daily returns for funds, organized by date.
 
-    Returns: {date: {instrument_id: return_1d}}
+    P0-3 fix: ``nav_timeseries.return_1d`` is stored in two flavours —
+    ``return_type='log'`` (written by ``instrument_ingestion`` for new
+    series) and ``return_type='arithmetic'`` (legacy default and column
+    server_default). Linearly weighting log returns is mathematically
+    invalid (``Σ wᵢ·log(1+rᵢ) ≠ log(1 + Σ wᵢ·rᵢ)``), so we normalise to
+    arithmetic at fetch time using ``expm1`` for numerical stability.
+
+    Returns: ``{date: {instrument_id: arithmetic_return}}``.
     """
     if not fund_ids:
         return {}
@@ -85,6 +93,7 @@ async def _fetch_fund_returns(
             NavTimeseries.nav_date,
             NavTimeseries.instrument_id,
             NavTimeseries.return_1d,
+            NavTimeseries.return_type,
         )
         .where(
             NavTimeseries.instrument_id.in_(fund_ids),
@@ -98,7 +107,9 @@ async def _fetch_fund_returns(
 
     by_date: dict[date, dict[uuid.UUID, float]] = {}
     for row in result.all():
-        by_date.setdefault(row.nav_date, {})[row.instrument_id] = float(row.return_1d)
+        r_raw = float(row.return_1d)
+        r_arith = math.expm1(r_raw) if row.return_type == "log" else r_raw
+        by_date.setdefault(row.nav_date, {})[row.instrument_id] = r_arith
 
     return by_date
 
@@ -165,23 +176,22 @@ async def synthesize_portfolio_nav(
 
     # Compute daily NAV
     rows_to_upsert: list[dict[str, Any]] = []
-    weight_sum = sum(weights.values())
 
     for d in sorted_dates:
         day_returns = returns_by_date[d]
 
-        # Weighted return: Σ(w_i × r_i) / Σ(w_i) — normalize for missing funds
+        # P0-3 fix: arithmetic returns from _fetch_fund_returns are summed
+        # linearly with the mandate weights. Funds with missing data on day
+        # `d` contribute zero — we do NOT renormalise the surviving weights.
+        # Renormalisation distorts mandate-target weights and produces NAVs
+        # whose value depends on data-arrival timing rather than mandate
+        # composition. The missing fund's price move is implicitly captured
+        # on the next day it reports (close-to-close return spans the gap).
         portfolio_return = 0.0
-        active_weight = 0.0
         for fid, w in weights.items():
             r = day_returns.get(fid)
             if r is not None:
                 portfolio_return += w * r
-                active_weight += w
-
-        # Renormalize if some funds are missing for this day
-        if active_weight > 0 and active_weight < weight_sum * 0.999:
-            portfolio_return = portfolio_return * (weight_sum / active_weight)
 
         current_nav = current_nav * (1.0 + portfolio_return)
 

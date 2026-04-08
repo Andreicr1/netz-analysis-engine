@@ -21,6 +21,11 @@
   },
   {
     "method": "DELETE",
+    "path": "/api/v1/library/pins/{pin_id}",
+    "name": "delete_pin"
+  },
+  {
+    "method": "DELETE",
     "path": "/api/v1/model-portfolios/{portfolio_id}/views/{view_id}",
     "name": "delete_view"
   },
@@ -776,6 +781,41 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/library/bundle/{bundle_id}/download",
+    "name": "download_bundle"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/library/documents/{document_id}",
+    "name": "get_document_detail"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/library/folders/{path:path}/children",
+    "name": "list_folder_children"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/library/pins",
+    "name": "list_pins"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/library/redirect-dd-report/{old_fund_id}/{old_report_id}",
+    "name": "redirect_dd_report"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/library/search",
+    "name": "search_library"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/library/tree",
+    "name": "get_library_tree"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/macro/bis",
     "name": "get_bis_data"
   },
@@ -886,6 +926,16 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/market-data/historical/{ticker}",
+    "name": "market_historical"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/market-data/news",
+    "name": "market_news"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/market-data/portfolio/{portfolio_id}/holdings",
     "name": "portfolio_holdings"
   },
@@ -928,6 +978,16 @@
     "method": "GET",
     "path": "/api/v1/model-portfolios/{portfolio_id}/performance",
     "name": "get_performance"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/reports",
+    "name": "list_portfolio_reports"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/reports/stream/{job_id}",
+    "name": "stream_report_progress"
   },
   {
     "method": "GET",
@@ -1811,6 +1871,16 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/library/bundle",
+    "name": "create_bundle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/library/pins",
+    "name": "create_pin"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/macro/reviews/generate",
     "name": "generate_review"
   },
@@ -1853,6 +1923,11 @@
     "method": "POST",
     "path": "/api/v1/model-portfolios/{portfolio_id}/rebalance/preview",
     "name": "rebalance_preview"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/reports/generate",
+    "name": "generate_portfolio_report"
   },
   {
     "method": "POST",
@@ -1928,6 +2003,16 @@
     "method": "POST",
     "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/monthly-report",
     "name": "generate_monthly_report"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/screener/catalog/{external_id}/fact-sheet/pdf",
+    "name": "generate_fund_fact_sheet_pdf"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/screener/fast-track-approval",
+    "name": "fast_track_approval"
   },
   {
     "method": "POST",
@@ -2048,6 +2133,21 @@
     "method": "POST",
     "path": "/api/v1/workers/run-instrument-ingestion",
     "name": "trigger_run_instrument_ingestion"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-library-bundle-builder",
+    "name": "trigger_run_library_bundle_builder"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-library-index-rebuild",
+    "name": "trigger_run_library_index_rebuild"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-library-pins-ttl",
+    "name": "trigger_run_library_pins_ttl"
   },
   {
     "method": "POST",
