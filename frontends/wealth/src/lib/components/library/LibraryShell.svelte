@@ -28,9 +28,16 @@
 		createTreeLoader,
 		type TreeLoader,
 	} from "$lib/state/library/tree-loader.svelte";
+	import {
+		createUrlAdapter,
+		type UrlAdapter,
+	} from "$lib/state/library/url-adapter.svelte";
 	import type { LibraryNode, LibraryTree } from "$lib/types/library";
 	import LibraryBreadcrumbs from "./LibraryBreadcrumbs.svelte";
+	import LibraryFilterBar from "./LibraryFilterBar.svelte";
+	import LibrarySearchInput from "./LibrarySearchInput.svelte";
 	import LibraryTreeView from "./LibraryTree.svelte";
+	import LibraryViewToggle from "./LibraryViewToggle.svelte";
 
 	interface Props {
 		tree: LibraryTree;
@@ -42,8 +49,12 @@
 	const getToken =
 		getContext<() => Promise<string>>("netz:getToken");
 
+	// URL adapter must be created synchronously during script init so
+	// the $effect inside it registers with the component lifecycle.
+	const adapter: UrlAdapter = createUrlAdapter();
+
 	let loader: TreeLoader | null = $state(null);
-	let selectedPath = $state<string | null>(initialPath);
+	let selectedPath = $state<string | null>(untrack(() => initialPath));
 	let selectedNode = $state<LibraryNode | null>(null);
 
 	onMount(() => {
@@ -68,6 +79,7 @@
 	onDestroy(() => {
 		loader?.dispose();
 		loader = null;
+		adapter.dispose();
 	});
 
 	function handleSelect(node: LibraryNode): void {
@@ -94,17 +106,45 @@
 </script>
 
 <div class="library-shell">
+	<header class="library-header">
+		<div class="library-header__left">
+			<LibrarySearchInput {adapter} />
+		</div>
+		<div class="library-header__right">
+			<LibraryViewToggle {adapter} />
+		</div>
+	</header>
+
+	<LibraryFilterBar {adapter} />
 	<LibraryBreadcrumbs {selectedPath} onNavigate={handleNavigate} />
 
 	<div class="library-grid">
 		<aside class="pane pane--tree" aria-label="Library navigation">
-			{#if loader}
-				<LibraryTreeView
-					{tree}
-					{loader}
-					{selectedPath}
-					onSelect={handleSelect}
-				/>
+			{#if adapter.state.view === "tree"}
+				{#if loader}
+					<LibraryTreeView
+						{tree}
+						{loader}
+						{selectedPath}
+						onSelect={handleSelect}
+					/>
+				{/if}
+			{:else if adapter.state.view === "list"}
+				<div class="view-placeholder">
+					<p class="view-placeholder__title">List view</p>
+					<p class="view-placeholder__sub">
+						Flat list rendering ships in the next sprint. The
+						URL contract is already wired so deep-links survive.
+					</p>
+				</div>
+			{:else}
+				<div class="view-placeholder">
+					<p class="view-placeholder__title">Grid view</p>
+					<p class="view-placeholder__sub">
+						Card grid ships in the next sprint. The URL contract
+						is already wired so deep-links survive.
+					</p>
+				</div>
 			{/if}
 		</aside>
 
@@ -148,6 +188,49 @@
 		font-family: var(--ii-font-sans, "Urbanist", system-ui, sans-serif);
 		border-radius: 12px;
 		overflow: hidden;
+	}
+
+	.library-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		padding: 12px 20px;
+		background: #141519;
+		border-bottom: 1px solid #404249;
+	}
+
+	.library-header__left {
+		flex: 1;
+		display: flex;
+		min-width: 0;
+	}
+
+	.library-header__right {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.view-placeholder {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding: 24px;
+		color: #85a0bd;
+	}
+
+	.view-placeholder__title {
+		font-size: 14px;
+		font-weight: 700;
+		color: #ffffff;
+		margin: 0;
+	}
+
+	.view-placeholder__sub {
+		font-size: 12px;
+		margin: 0;
+		line-height: 1.5;
 	}
 
 	.library-grid {
