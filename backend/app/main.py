@@ -88,6 +88,7 @@ from app.domains.credit.reporting.routes.report_packs import router as credit_re
 from app.domains.credit.reporting.routes.reports import router as credit_reports_router
 from app.domains.credit.reporting.routes.schedules import router as credit_schedules_router
 from app.domains.wealth.routes.agent import router as wealth_agent_router
+from app.domains.wealth.routes.alerts import router as wealth_alerts_router
 from app.domains.wealth.routes.allocation import router as wealth_allocation_router
 from app.domains.wealth.routes.analytics import router as wealth_analytics_router
 from app.domains.wealth.routes.attribution import router as wealth_attribution_router
@@ -493,6 +494,7 @@ api_v1.include_router(wealth_manager_screener_router)
 api_v1.include_router(wealth_strategy_drift_router)
 api_v1.include_router(wealth_attribution_router)
 api_v1.include_router(wealth_correlation_regime_router)
+api_v1.include_router(wealth_alerts_router)
 api_v1.include_router(wealth_exposure_router)
 api_v1.include_router(wealth_blended_benchmark_router)
 api_v1.include_router(wealth_agent_router)
