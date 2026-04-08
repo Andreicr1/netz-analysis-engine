@@ -36,6 +36,7 @@
 	} from "$lib/components/portfolio/BuilderRightStack.svelte";
 	import ModelListPanel from "$lib/components/portfolio/ModelListPanel.svelte";
 	import CalibrationPanel from "$lib/components/portfolio/CalibrationPanel.svelte";
+	import NewPortfolioDialog from "$lib/components/portfolio/NewPortfolioDialog.svelte";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 	import type { PageData } from "./$types";
 
@@ -57,6 +58,11 @@
 	// active tab auto-switches to Narrative so the PM's "build me
 	// something" intent is answered front-and-center.
 	let rightTab = $state<BuilderRightTab>("calibration");
+
+	// ── New Portfolio dialog state (Phase 5 Task 5.1) ──────────────
+	// Closes the dead "+Portfolio" button flagged by Phase 0 Task 0.1
+	// Step 2 (the legacy <button class="bld-pill--new"> had no onclick).
+	let newPortfolioOpen = $state(false);
 
 	$effect(() => {
 		if (workspace.runPhase === "done") {
@@ -135,7 +141,11 @@
 	{#snippet leftColumn()}
 			<div class="bld-left">
 				<div class="bld-left-header">
-					<button type="button" class="bld-pill bld-pill--new">
+					<button
+						type="button"
+						class="bld-pill bld-pill--new"
+						onclick={() => (newPortfolioOpen = true)}
+					>
 						<Plus size={16} />
 						<span>New Portfolio</span>
 					</button>
@@ -181,6 +191,13 @@
 			/>
 		{/if}
 	{/snippet}
+
+	<!-- Phase 5 Task 5.1 — New Portfolio dialog -->
+	<NewPortfolioDialog
+		open={newPortfolioOpen}
+		onOpenChange={(v) => (newPortfolioOpen = v)}
+		{portfolios}
+	/>
 
 	<!-- Error toast — preserved from previous design -->
 	{#if workspace.lastError}
