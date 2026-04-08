@@ -21,11 +21,6 @@
   },
   {
     "method": "DELETE",
-    "path": "/api/v1/library/pins/{pin_id}",
-    "name": "delete_pin"
-  },
-  {
-    "method": "DELETE",
     "path": "/api/v1/model-portfolios/{portfolio_id}/views/{view_id}",
     "name": "delete_view"
   },
@@ -778,41 +773,6 @@
     "method": "GET",
     "path": "/api/v1/jobs/{job_id}/stream",
     "name": "stream_job"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/library/bundle/{bundle_id}/download",
-    "name": "download_bundle"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/library/documents/{document_id}",
-    "name": "get_document_detail"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/library/folders/{path:path}/children",
-    "name": "list_folder_children"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/library/pins",
-    "name": "list_pins"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/library/redirect-dd-report/{old_fund_id}/{old_report_id}",
-    "name": "redirect_dd_report"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/library/search",
-    "name": "search_library"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/library/tree",
-    "name": "get_library_tree"
   },
   {
     "method": "GET",
@@ -1871,16 +1831,6 @@
   },
   {
     "method": "POST",
-    "path": "/api/v1/library/bundle",
-    "name": "create_bundle"
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/library/pins",
-    "name": "create_pin"
-  },
-  {
-    "method": "POST",
     "path": "/api/v1/macro/reviews/generate",
     "name": "generate_review"
   },
@@ -2136,21 +2086,6 @@
   },
   {
     "method": "POST",
-    "path": "/api/v1/workers/run-library-bundle-builder",
-    "name": "trigger_run_library_bundle_builder"
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/workers/run-library-index-rebuild",
-    "name": "trigger_run_library_index_rebuild"
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/workers/run-library-pins-ttl",
-    "name": "trigger_run_library_pins_ttl"
-  },
-  {
-    "method": "POST",
     "path": "/api/v1/workers/run-macro-ingestion",
     "name": "trigger_run_macro_ingestion"
   },
@@ -2228,11 +2163,6 @@
     "method": "POST",
     "path": "/api/v1/workers/run-wealth-embedding",
     "name": "trigger_run_wealth_embedding"
-  },
-  {
-    "method": "POST",
-    "path": "/internal/workers/dispatch",
-    "name": "dispatch_workers"
   },
   {
     "method": "PUT",
