@@ -19,9 +19,21 @@ logger = structlog.get_logger()
 
 @dataclass(frozen=True)
 class GarchResult:
-    """Result of GARCH(1,1) fit."""
+    """Result of GARCH(1,1) fit.
+
+    Exposes BOTH the conditional (1-step-ahead) annualised volatility
+    — which is what risk dashboards want for tail-of-the-day headlines —
+    and the unconditional long-run volatility
+    ``σ_∞ = sqrt(ω / (1 − α − β))``, which is what strategic allocation,
+    long-horizon scoring and model-portfolio construction should consume.
+
+    Penalising a fund on its last-week conditional volatility makes sense
+    for a VaR report; it does not make sense for a 5-year strategic view.
+    Callers now get to choose which regime applies to their horizon.
+    """
 
     volatility_garch: float | None  # annualized 1-step-ahead conditional vol
+    volatility_long_run: float | None  # annualized unconditional vol (σ_∞)
     omega: float | None
     alpha: float | None
     beta: float | None
@@ -77,6 +89,7 @@ def fit_garch(
             logger.warning("garch_did_not_converge", flag=result.convergence_flag)
             return GarchResult(
                 volatility_garch=None,
+                volatility_long_run=None,
                 omega=None,
                 alpha=None,
                 beta=None,
@@ -99,8 +112,35 @@ def fit_garch(
         daily_vol = np.sqrt(variance_1step) / 100.0
         annual_vol = daily_vol * np.sqrt(trading_days_per_year)
 
+        # ── Long-run (unconditional) volatility ───────────────────────────
+        # For a stationary GARCH(1,1) with α + β < 1 the unconditional
+        # variance is σ²_∞ = ω / (1 − α − β). This is the variance the
+        # process reverts to after every shock decays, and it's the right
+        # number for strategic-horizon consumers (scoring, strategic
+        # allocation, long-form DD).
+        #
+        # ``ω`` comes out of ``arch`` in the same units as the input
+        # (here: percentage squared, because we fed percentage returns).
+        # We therefore annualise through the same √(trading_days) ladder
+        # as the conditional vol to keep the two numbers comparable.
+        long_run_vol: float | None
+        stationary_gap = 1.0 - persistence
+        if stationary_gap > 1e-6:
+            long_run_daily_var_pct = omega / stationary_gap
+            long_run_daily_vol = np.sqrt(max(long_run_daily_var_pct, 0.0)) / 100.0
+            long_run_annual_vol = long_run_daily_vol * np.sqrt(trading_days_per_year)
+            long_run_vol = round(float(long_run_annual_vol), 6)
+        else:
+            # Non-stationary / IGARCH fit — no finite long-run variance.
+            logger.warning(
+                "garch_non_stationary_no_long_run_vol",
+                persistence=round(persistence, 6),
+            )
+            long_run_vol = None
+
         return GarchResult(
             volatility_garch=round(float(annual_vol), 6),
+            volatility_long_run=long_run_vol,
             omega=round(omega, 8),
             alpha=round(alpha, 6),
             beta=round(beta, 6),
@@ -113,6 +153,7 @@ def fit_garch(
         logger.warning("garch_fit_failed", error=str(e))
         return GarchResult(
             volatility_garch=None,
+            volatility_long_run=None,
             omega=None,
             alpha=None,
             beta=None,
