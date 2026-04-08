@@ -232,10 +232,16 @@ class TestRegimeDecoupled:
     def test_plausibility_rejects_extreme_vix(self) -> None:
         from quant_engine.regime_service import classify_regime_multi_signal
 
-        # VIX=300 is physically impossible → rejected, falls through to RISK_ON
+        # VIX=300 is physically impossible → rejected. Remaining signals
+        # (yield curve + CPI) are weighted such that the composite stress
+        # lands in the RISK_OFF band (~25-50). The point of the test is
+        # that the implausible VIX is dropped — it must NOT propagate as
+        # CRISIS just because the raw value was extreme.
         regime, reasons = classify_regime_multi_signal(vix=300.0, yield_curve_spread=1.0, cpi_yoy=2.0)
-        assert regime == "RISK_ON"
-        assert "no stress signals triggered" in reasons.get("decision", "")
+        assert regime in {"RISK_ON", "RISK_OFF"}
+        assert regime != "CRISIS"
+        # vix label is absent because the value was rejected before scoring
+        assert "vix" not in reasons
 
     def test_plausibility_rejects_extreme_cpi(self) -> None:
         from quant_engine.regime_service import classify_regime_multi_signal

@@ -477,13 +477,13 @@ class TestFeatureFlags:
     def test_feature_wealth_content_exists(self):
         from app.core.config.settings import Settings
 
-        s = Settings()
-        assert hasattr(s, "feature_wealth_content")
-        assert s.feature_wealth_content is False  # Default off
+        # Check the field default declared on the model — instantiating
+        # Settings() loads .env which may override the default in dev.
+        assert "feature_wealth_content" in Settings.model_fields
+        assert Settings.model_fields["feature_wealth_content"].default is False
 
     def test_feature_wealth_monitoring_exists(self):
         from app.core.config.settings import Settings
 
-        s = Settings()
-        assert hasattr(s, "feature_wealth_monitoring")
-        assert s.feature_wealth_monitoring is False  # Default off
+        assert "feature_wealth_monitoring" in Settings.model_fields
+        assert Settings.model_fields["feature_wealth_monitoring"].default is False
