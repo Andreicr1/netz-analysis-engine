@@ -127,17 +127,30 @@ def _fit_markov_regime(vix_series: list[float]) -> list[float] | None:
     filtered_probs = res.filtered_marginal_probabilities  # shape (nobs, 2)
 
     # Enforce consistent regime label: lower mean log-VIX = low-vol regime (index 0)
-    # This prevents regime index from flipping between weekly re-fits
+    # This prevents regime index from flipping between weekly re-fits.
+    # Statsmodels 0.14+ returns res.params as a plain ndarray (not a labelled
+    # Series), so we zip against res.model.param_names to build a name→value
+    # map that works across versions.
     try:
-        means = [float(res.params[f"const[{i}]"]) for i in range(2)]
-    except KeyError:
-        # Fallback for different param naming conventions across statsmodels versions
-        all_params = dict(res.params)
-        const_params = sorted(
-            [(k, float(v)) for k, v in all_params.items() if "const" in k.lower()],
-            key=lambda x: x[0],
-        )
-        means = [v for _, v in const_params[:2]] if len(const_params) >= 2 else [0.0, 1.0]
+        param_names = list(res.model.param_names)
+        params_by_name = dict(zip(param_names, [float(v) for v in res.params]))
+        means = [params_by_name[f"const[{i}]"] for i in range(2)]
+    except (KeyError, IndexError, TypeError, AttributeError):
+        # Final fallback: pull any params whose name contains "const", sorted
+        # by name so const[0] precedes const[1] deterministically.
+        try:
+            param_names = list(res.model.param_names)
+            const_pairs = sorted(
+                [
+                    (name, float(val))
+                    for name, val in zip(param_names, [float(v) for v in res.params])
+                    if "const" in name.lower()
+                ],
+                key=lambda x: x[0],
+            )
+            means = [v for _, v in const_pairs[:2]] if len(const_pairs) >= 2 else [0.0, 1.0]
+        except Exception:
+            means = [0.0, 1.0]
 
     low_vol_idx = int(np.argmin(means))   # lower mean log-VIX = low-vol = risk-on
     high_vol_col = 1 - low_vol_idx
