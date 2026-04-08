@@ -15,10 +15,19 @@ const authHook = createClerkHook({
 });
 
 /**
- * Security headers hook — CSP is handled by static/_headers (Cloudflare Pages).
- * SSR-level CSP was removed because dual headers cause nonce/unsafe-inline conflicts:
- * Cloudflare may inject nonces which per CSP3 spec disables unsafe-inline,
- * blocking the FOUC prevention script in app.html.
+ * Security headers hook.
+ *
+ * NOTE — CSP is currently still authored in `static/_headers`, a file
+ * format that ONLY Cloudflare Pages reads. The frontend now ships on
+ * Railway via `@sveltejs/adapter-node`, which does not parse `_headers`,
+ * so **production has no CSP enforced today**.
+ *
+ * TODO (backlog): migrate the CSP rules from `static/_headers` into this
+ * Node hook (or an upstream reverse-proxy layer) and then delete the
+ * `_headers` file. Care is needed around the FOUC-prevention script in
+ * `app.html` — adding a CSP nonce there will require either passing the
+ * nonce through SvelteKit's `transformPageChunk` or reverting to
+ * `unsafe-inline` for that one script tag.
  */
 const securityHeadersHook: Handle = async ({ event, resolve }) => {
 	const response = await resolve(event);
