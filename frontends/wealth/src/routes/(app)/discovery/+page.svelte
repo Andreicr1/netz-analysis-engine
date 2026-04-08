@@ -12,7 +12,7 @@
 	import { FlexibleColumnLayout, type FCLRatios } from "@investintell/ui";
 	import { getContext } from "svelte";
 	import { useDiscoveryUrlState } from "$lib/discovery/fcl-state.svelte";
-	import { fetchFundsByManager } from "$lib/discovery/api";
+	import { fetchManagers, fetchFundsByManager } from "$lib/discovery/api";
 	import DiscoveryManagersTable from "$lib/components/discovery/DiscoveryManagersTable.svelte";
 	import DiscoveryFundsTable from "$lib/components/discovery/DiscoveryFundsTable.svelte";
 	import FactSheetPanel from "$lib/components/discovery/col3/FactSheetPanel.svelte";
@@ -22,16 +22,33 @@
 		FundRowView,
 	} from "$lib/components/discovery/columns";
 
-	let { data } = $props();
-
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const fcl = useDiscoveryUrlState();
 
-	let managers = $state<ManagerRow[]>(
-		(data.initialManagers ?? []) as ManagerRow[],
-	);
+	let managers = $state<ManagerRow[]>([]);
+	let managersError = $state<string | null>(null);
+	let managersLoading = $state<boolean>(true);
 	let funds = $state<FundRowView[]>([]);
 	let fundsError = $state<string | null>(null);
+
+	// Initial managers fetch (client-side so we can use Clerk token).
+	$effect(() => {
+		const ctrl = new AbortController();
+		managersError = null;
+		managersLoading = true;
+		fetchManagers(getToken, { filters: {}, limit: 50 }, ctrl.signal)
+			.then((body) => {
+				managers = (body.rows ?? []) as ManagerRow[];
+				managersLoading = false;
+			})
+			.catch((e: unknown) => {
+				if ((e as Error).name !== "AbortError") {
+					managersError = (e as Error).message;
+					managersLoading = false;
+				}
+			});
+		return () => ctrl.abort();
+	});
 
 	const SCREENER_RATIOS: FCLRatios = {
 		"expand-1": [1, 0, 0],
@@ -63,8 +80,10 @@
 
 <svelte:head><title>Discovery — Netz Wealth</title></svelte:head>
 
-{#if data.status === "error"}
-	<div class="col-error">Failed to load managers: {data.error}</div>
+{#if managersError}
+	<div class="col-error">Failed to load managers: {managersError}</div>
+{:else if managersLoading && managers.length === 0}
+	<div class="col-loading">Loading managers…</div>
 {:else}
 	<FlexibleColumnLayout
 		state={fcl.state}

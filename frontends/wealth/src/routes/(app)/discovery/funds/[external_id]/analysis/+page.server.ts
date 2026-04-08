@@ -1,15 +1,12 @@
 /**
  * Analysis page server load.
  *
- * Fetches the fact-sheet header (fund name, ticker, strategy) so the first
- * paint shows a fully labeled header while the group-specific view queries
- * its own dataset client-side. Uses the RouteData<T>-style shape
- * (status: 'ok' | 'error') — never `throw error()` — so the route renders
- * a panel error state without tripping the global error boundary.
+ * Kept minimal: only parses URL params and passes the external_id.
+ * The fact-sheet header + group-specific data are fetched client-side
+ * via `fetchFundFactSheet(getToken, ...)` because Clerk auth tokens
+ * are only available in the browser context.
  */
 import type { PageServerLoad } from "./$types";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 type Group = "returns-risk" | "holdings" | "peer";
 type Window = "1y" | "3y" | "5y" | "max";
@@ -29,24 +26,9 @@ function parseWindow(raw: string | null): Window {
 		: "3y";
 }
 
-export const load: PageServerLoad = async ({ fetch, params, url }) => {
-	const fsRes = await fetch(
-		`${API_BASE}/wealth/discovery/funds/${encodeURIComponent(params.external_id)}/fact-sheet`,
-	);
-	if (!fsRes.ok) {
-		return {
-			status: "error" as const,
-			error: `fact-sheet load: ${fsRes.status}`,
-			fundId: params.external_id,
-			initialGroup: parseGroup(url.searchParams.get("group")),
-			initialWindow: parseWindow(url.searchParams.get("window")),
-		};
-	}
-	const header = await fsRes.json();
+export const load: PageServerLoad = async ({ params, url }) => {
 	return {
-		status: "ok" as const,
 		fundId: params.external_id,
-		header,
 		initialGroup: parseGroup(url.searchParams.get("group")),
 		initialWindow: parseWindow(url.searchParams.get("window")),
 	};

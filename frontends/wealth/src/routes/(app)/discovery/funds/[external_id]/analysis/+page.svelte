@@ -20,16 +20,20 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
+	import { getContext } from "svelte";
 	import { FilterRail } from "@investintell/ui";
 	import AnalysisFilters from "$lib/components/discovery/analysis/AnalysisFilters.svelte";
 	import ReturnsRiskView from "$lib/components/discovery/analysis/ReturnsRiskView.svelte";
 	import HoldingsView from "$lib/components/discovery/analysis/HoldingsView.svelte";
 	import PeerView from "$lib/components/discovery/analysis/PeerView.svelte";
+	import { fetchFundFactSheet } from "$lib/discovery/api";
 	import type { AnalysisWindow } from "$lib/discovery/analysis-api";
 
 	type Group = "returns-risk" | "holdings" | "peer";
 
 	let { data } = $props();
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	const group = $derived(
 		(page.url.searchParams.get("group") ?? data.initialGroup ?? "returns-risk") as Group,
@@ -38,7 +42,28 @@
 		(page.url.searchParams.get("window") ?? data.initialWindow ?? "3y") as AnalysisWindow,
 	);
 
-	const header = $derived(data.status === "ok" ? data.header : null);
+	// Client-side fact sheet fetch (Clerk token only available in browser).
+	let header = $state<unknown>(null);
+	let headerError = $state<string | null>(null);
+
+	$effect(() => {
+		const fid = data.fundId;
+		if (!fid) return;
+		const ctrl = new AbortController();
+		header = null;
+		headerError = null;
+		fetchFundFactSheet(getToken, fid, ctrl.signal)
+			.then((h) => {
+				header = h;
+			})
+			.catch((e: unknown) => {
+				if ((e as Error).name !== "AbortError") {
+					headerError = (e as Error).message;
+				}
+			});
+		return () => ctrl.abort();
+	});
+
 	const fundName = $derived(
 		(header as { fund?: { name?: string } } | null)?.fund?.name ?? data.fundId,
 	);
@@ -87,8 +112,8 @@
 		</nav>
 	</header>
 
-	{#if data.status === "error"}
-		<div class="ap-error">Failed to load fund header: {data.error}</div>
+	{#if headerError}
+		<div class="ap-error">Failed to load fund header: {headerError}</div>
 	{:else}
 		<div class="ap-body">
 			<FilterRail>
