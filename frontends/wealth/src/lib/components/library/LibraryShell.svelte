@@ -25,6 +25,10 @@
 	import { getContext, onDestroy, onMount, untrack } from "svelte";
 	import { goto } from "$app/navigation";
 	import {
+		createPreviewLoader,
+		type PreviewLoader,
+	} from "$lib/state/library/preview-loader.svelte";
+	import {
 		createTreeLoader,
 		type TreeLoader,
 	} from "$lib/state/library/tree-loader.svelte";
@@ -35,6 +39,7 @@
 	import type { LibraryNode, LibraryTree } from "$lib/types/library";
 	import LibraryBreadcrumbs from "./LibraryBreadcrumbs.svelte";
 	import LibraryFilterBar from "./LibraryFilterBar.svelte";
+	import LibraryPreviewPane from "./LibraryPreviewPane.svelte";
 	import LibrarySearchInput from "./LibrarySearchInput.svelte";
 	import LibraryTreeView from "./LibraryTree.svelte";
 	import LibraryViewToggle from "./LibraryViewToggle.svelte";
@@ -54,11 +59,23 @@
 	const adapter: UrlAdapter = createUrlAdapter();
 
 	let loader: TreeLoader | null = $state(null);
+	let previewLoader: PreviewLoader | null = $state(null);
 	let selectedPath = $state<string | null>(untrack(() => initialPath));
 	let selectedNode = $state<LibraryNode | null>(null);
 
 	onMount(() => {
 		loader = createTreeLoader(getToken);
+		previewLoader = createPreviewLoader(getToken);
+		previewLoader.start();
+		// Bridge the URL adapter to the preview loader: any change to
+		// the selected document id (URL ↔ click ↔ back/forward) drives
+		// a fresh single-flight fetch. The loader's AbortController
+		// guarantees the previous request is cancelled before the new
+		// one starts, so a fast click between docs cannot leak.
+		const initialId = untrack(() => adapter.state.selectedId);
+		if (initialId) {
+			void previewLoader.loadDocument(initialId);
+		}
 		// If the URL deep-linked into a folder path, expand every
 		// ancestor so the row is visible. We snapshot via `untrack`
 		// because the expansion is a one-shot action on mount; the
@@ -76,24 +93,43 @@
 		}
 	});
 
+	// Bridge selectedId → preview loader. Runs on every change to
+	// `adapter.state.selectedId` — including back/forward and direct
+	// URL paste — so the preview pane stays in lock-step with the URL
+	// without the click handler having to call the loader manually.
+	$effect(() => {
+		const id = adapter.state.selectedId;
+		if (!previewLoader) return;
+		void previewLoader.loadDocument(id);
+	});
+
 	onDestroy(() => {
 		loader?.dispose();
 		loader = null;
+		previewLoader?.dispose();
+		previewLoader = null;
 		adapter.dispose();
 	});
 
 	function handleSelect(node: LibraryNode): void {
 		selectedNode = node;
 		selectedPath = node.path;
-		// Mirror selection into the URL via SvelteKit's `goto`. The
-		// catch-all route handles deep-linking back; query params are
-		// preserved so future filters survive navigation.
-		const target =
-			node.node_type === "file" && node.id
-				? `/library/${node.path}?id=${node.id}`
-				: `/library/${node.path}`;
-		void goto(target, { keepFocus: true, noScroll: true });
+		// File selection flows through the URL adapter so the
+		// preview-loader effect picks it up; folder navigation still
+		// uses goto because it changes the pathname rather than just
+		// the search params.
+		if (node.node_type === "file" && node.id) {
+			adapter.setSelectedId(node.id);
+		} else {
+			adapter.setSelectedId(null);
+			void goto(`/library/${node.path}`, {
+				keepFocus: true,
+				noScroll: true,
+			});
+		}
 	}
+
+	const isFullscreen = $derived(adapter.state.preview === "fullscreen");
 
 	function handleNavigate(path: string | null): void {
 		selectedPath = path;
@@ -105,75 +141,78 @@
 	}
 </script>
 
-<div class="library-shell">
-	<header class="library-header">
-		<div class="library-header__left">
-			<LibrarySearchInput {adapter} />
-		</div>
-		<div class="library-header__right">
-			<LibraryViewToggle {adapter} />
-		</div>
-	</header>
-
-	<LibraryFilterBar {adapter} />
-	<LibraryBreadcrumbs {selectedPath} onNavigate={handleNavigate} />
-
-	<div class="library-grid">
-		<aside class="pane pane--tree" aria-label="Library navigation">
-			{#if adapter.state.view === "tree"}
-				{#if loader}
-					<LibraryTreeView
-						{tree}
-						{loader}
-						{selectedPath}
-						onSelect={handleSelect}
-					/>
-				{/if}
-			{:else if adapter.state.view === "list"}
-				<div class="view-placeholder">
-					<p class="view-placeholder__title">List view</p>
-					<p class="view-placeholder__sub">
-						Flat list rendering ships in the next sprint. The
-						URL contract is already wired so deep-links survive.
-					</p>
-				</div>
-			{:else}
-				<div class="view-placeholder">
-					<p class="view-placeholder__title">Grid view</p>
-					<p class="view-placeholder__sub">
-						Card grid ships in the next sprint. The URL contract
-						is already wired so deep-links survive.
-					</p>
-				</div>
-			{/if}
-		</aside>
-
-		<section class="pane pane--content" aria-label="Library content">
-			<div class="content-empty">
-				<p class="content-empty__title">
-					{#if selectedNode}
-						{selectedNode.label}
-					{:else if selectedPath}
-						{selectedPath}
-					{:else}
-						Welcome to your Library
-					{/if}
-				</p>
-				<p class="content-empty__sub">
-					Pick a folder on the left to browse documents. The
-					content list ships in the next sprint.
-				</p>
+<div class="library-shell" class:library-shell--fullscreen={isFullscreen}>
+	{#if !isFullscreen}
+		<header class="library-header">
+			<div class="library-header__left">
+				<LibrarySearchInput {adapter} />
 			</div>
-		</section>
+			<div class="library-header__right">
+				<LibraryViewToggle {adapter} />
+			</div>
+		</header>
+
+		<LibraryFilterBar {adapter} />
+		<LibraryBreadcrumbs {selectedPath} onNavigate={handleNavigate} />
+	{/if}
+
+	<div
+		class="library-grid"
+		class:library-grid--fullscreen={isFullscreen}
+	>
+		{#if !isFullscreen}
+			<aside class="pane pane--tree" aria-label="Library navigation">
+				{#if adapter.state.view === "tree"}
+					{#if loader}
+						<LibraryTreeView
+							{tree}
+							{loader}
+							{selectedPath}
+							onSelect={handleSelect}
+						/>
+					{/if}
+				{:else if adapter.state.view === "list"}
+					<div class="view-placeholder">
+						<p class="view-placeholder__title">List view</p>
+						<p class="view-placeholder__sub">
+							Flat list rendering ships in the next sprint. The
+							URL contract is already wired so deep-links survive.
+						</p>
+					</div>
+				{:else}
+					<div class="view-placeholder">
+						<p class="view-placeholder__title">Grid view</p>
+						<p class="view-placeholder__sub">
+							Card grid ships in the next sprint. The URL contract
+							is already wired so deep-links survive.
+						</p>
+					</div>
+				{/if}
+			</aside>
+
+			<section class="pane pane--content" aria-label="Library content">
+				<div class="content-empty">
+					<p class="content-empty__title">
+						{#if selectedNode}
+							{selectedNode.label}
+						{:else if selectedPath}
+							{selectedPath}
+						{:else}
+							Welcome to your Library
+						{/if}
+					</p>
+					<p class="content-empty__sub">
+						Pick a folder on the left to browse documents. The
+						content list ships in the next sprint.
+					</p>
+				</div>
+			</section>
+		{/if}
 
 		<aside class="pane pane--preview" aria-label="Library preview">
-			<div class="preview-empty">
-				<p class="preview-empty__title">Preview</p>
-				<p class="preview-empty__sub">
-					Select a document to read it inline. Reader integration
-					is delivered in Phase 5.
-				</p>
-			</div>
+			{#if previewLoader}
+				<LibraryPreviewPane loader={previewLoader} {adapter} />
+			{/if}
 		</aside>
 	</div>
 </div>
@@ -240,6 +279,14 @@
 		min-height: 0;
 	}
 
+	.library-grid--fullscreen {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.library-shell--fullscreen .pane--preview {
+		border-left: none;
+	}
+
 	.pane {
 		min-height: 0;
 		overflow: hidden;
@@ -265,8 +312,7 @@
 		overflow-y: auto;
 	}
 
-	.content-empty,
-	.preview-empty {
+	.content-empty {
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
@@ -274,16 +320,14 @@
 		color: #85a0bd;
 	}
 
-	.content-empty__title,
-	.preview-empty__title {
+	.content-empty__title {
 		font-size: 18px;
 		font-weight: 700;
 		color: #ffffff;
 		margin: 0;
 	}
 
-	.content-empty__sub,
-	.preview-empty__sub {
+	.content-empty__sub {
 		font-size: 13px;
 		color: #85a0bd;
 		margin: 0;
