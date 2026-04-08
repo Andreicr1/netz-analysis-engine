@@ -197,6 +197,31 @@
 		</p>
 	</div>
 {:else}
+	{#snippet cellSnippet(row: Holding, col: ColumnDef<Holding>)}
+		{#if col.id === "actions"}
+			{#if row.cusip}
+				<button
+					type="button"
+					class="rev-btn"
+					class:active={row.cusip === selectedCusip}
+					onclick={(e) => {
+						e.stopPropagation();
+						selectedCusip = row.cusip;
+					}}
+					title="Reverse lookup — who else holds this"
+				>
+					Reverse →
+				</button>
+			{:else}
+				<span class="rev-na">—</span>
+			{/if}
+		{:else if col.format}
+			{col.format(col.accessor(row), row)}
+		{:else}
+			{col.accessor(row) ?? ""}
+		{/if}
+	{/snippet}
+
 	<AnalysisGrid>
 		<ChartCard
 			title="Top 25 Holdings"
@@ -204,30 +229,6 @@
 			span={2}
 			minHeight="420px"
 		>
-			{#snippet cellSnippet(row: Holding, col: ColumnDef<Holding>)}
-				{#if col.id === "actions"}
-					{#if row.cusip}
-						<button
-							type="button"
-							class="rev-btn"
-							class:active={row.cusip === selectedCusip}
-							onclick={(e) => {
-								e.stopPropagation();
-								selectedCusip = row.cusip;
-							}}
-							title="Reverse lookup — who else holds this"
-						>
-							Reverse →
-						</button>
-					{:else}
-						<span class="rev-na">—</span>
-					{/if}
-				{:else if col.format}
-					{col.format(col.accessor(row), row)}
-				{:else}
-					{col.accessor(row) ?? ""}
-				{/if}
-			{/snippet}
 			<EnterpriseTable
 				rows={holdingsRows}
 				{columns}
