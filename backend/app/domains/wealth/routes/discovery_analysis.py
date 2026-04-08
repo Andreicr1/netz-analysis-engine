@@ -153,7 +153,9 @@ async def analysis_holdings_top(
             "fund": fund,
         }
     else:
-        data = await fetch_top_holdings(db, str(cik))
+        data = await fetch_top_holdings(
+            db, str(cik), series_id=fund.get("effective_series_id"),
+        )
         payload = {
             **data,
             "disclosure": {"has_holdings": len(data["top_holdings"]) > 0},
@@ -190,7 +192,12 @@ async def analysis_holdings_style_drift(
             "fund": fund,
         }
     else:
-        data = await fetch_style_drift(db, str(cik), quarters=quarters)
+        data = await fetch_style_drift(
+            db,
+            str(cik),
+            quarters=quarters,
+            series_id=fund.get("effective_series_id"),
+        )
         payload = {
             **data,
             "disclosure": {"has_holdings": len(data["snapshots"]) > 0},
