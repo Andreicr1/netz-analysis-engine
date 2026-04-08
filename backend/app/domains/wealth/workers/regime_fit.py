@@ -133,7 +133,7 @@ def _fit_markov_regime(vix_series: list[float]) -> list[float] | None:
     # map that works across versions.
     try:
         param_names = list(res.model.param_names)
-        params_by_name = dict(zip(param_names, [float(v) for v in res.params]))
+        params_by_name = dict(zip(param_names, [float(v) for v in res.params], strict=False))
         means = [params_by_name[f"const[{i}]"] for i in range(2)]
     except (KeyError, IndexError, TypeError, AttributeError):
         # Final fallback: pull any params whose name contains "const", sorted
@@ -143,7 +143,7 @@ def _fit_markov_regime(vix_series: list[float]) -> list[float] | None:
             const_pairs = sorted(
                 [
                     (name, float(val))
-                    for name, val in zip(param_names, [float(v) for v in res.params])
+                    for name, val in zip(param_names, [float(v) for v in res.params], strict=False)
                     if "const" in name.lower()
                 ],
                 key=lambda x: x[0],
