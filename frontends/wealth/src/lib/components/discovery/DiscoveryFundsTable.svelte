@@ -173,21 +173,21 @@
 		transition: all 150ms;
 	}
 	.act-btn:hover {
-		border-color: var(--ii-accent, #0066ff);
-		color: var(--ii-accent, #0066ff);
+		border-color: var(--ii-brand-accent, #0066ff);
+		color: var(--ii-brand-accent, #0066ff);
 	}
 	.act-btn.active {
-		background: var(--ii-accent, #0066ff);
+		background: var(--ii-brand-accent, #0066ff);
 		color: white;
-		border-color: var(--ii-accent, #0066ff);
+		border-color: var(--ii-brand-accent, #0066ff);
 	}
 	.act-btn--primary {
-		background: var(--ii-accent-subtle, rgba(0, 102, 255, 0.08));
-		color: var(--ii-accent, #0066ff);
-		border-color: var(--ii-accent, #0066ff);
+		background: var(--ii-border-accent, rgba(0, 102, 255, 0.08));
+		color: var(--ii-brand-accent, #0066ff);
+		border-color: var(--ii-brand-accent, #0066ff);
 	}
 	.act-btn--primary:hover {
-		background: var(--ii-accent, #0066ff);
+		background: var(--ii-brand-accent, #0066ff);
 		color: white;
 	}
 </style>

@@ -30,6 +30,6 @@
 
 <style>
 	:global([data-selected="true"] td) {
-		background: var(--ii-bg-selected, rgba(80, 140, 255, 0.12)) !important;
+		background: var(--ii-surface-accent, rgba(80, 140, 255, 0.12)) !important;
 	}
 </style>

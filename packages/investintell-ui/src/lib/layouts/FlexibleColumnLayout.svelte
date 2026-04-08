@@ -90,7 +90,7 @@
 		height: 100%;
 		min-height: 0;
 		gap: 0;
-		background: var(--ii-bg-canvas, #0e0f13);
+		background: var(--ii-bg, #0e0f13);
 		border: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.4));
 		transition: grid-template-columns 240ms cubic-bezier(0.4, 0, 0.2, 1);
 		container-type: inline-size;
@@ -100,7 +100,7 @@
 		min-width: 0;
 		min-height: 0;
 		overflow: auto;
-		background: var(--ii-bg-surface, #141519);
+		background: var(--ii-surface, #141519);
 		position: relative;
 	}
 	.fcl-col-2,

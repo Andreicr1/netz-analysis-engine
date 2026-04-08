@@ -46,7 +46,7 @@
 	.cc-card {
 		display: flex;
 		flex-direction: column;
-		background: var(--ii-bg-surface, #141519);
+		background: var(--ii-surface, #141519);
 		border: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.4));
 		border-radius: 6px;
 		padding: 20px 24px 24px;

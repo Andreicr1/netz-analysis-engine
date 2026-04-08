@@ -144,7 +144,7 @@
 		display: flex;
 		flex-direction: column;
 		height: calc(100vh - 88px);
-		background: var(--ii-bg-canvas, #0e0f13);
+		background: var(--ii-bg, #0e0f13);
 		font-family: "Urbanist", system-ui, sans-serif;
 	}
 	.ap-header {
@@ -162,7 +162,7 @@
 		text-decoration: none;
 	}
 	.ap-back a:hover {
-		color: var(--ii-accent);
+		color: var(--ii-brand-accent);
 	}
 	.ap-titles h1 {
 		font-size: 18px;
@@ -191,9 +191,9 @@
 		cursor: pointer;
 	}
 	.ap-tabs button.active {
-		background: var(--ii-accent);
+		background: var(--ii-brand-accent);
 		color: white;
-		border-color: var(--ii-accent);
+		border-color: var(--ii-brand-accent);
 	}
 	.ap-body {
 		display: flex;

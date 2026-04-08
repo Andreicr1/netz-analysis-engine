@@ -34,7 +34,7 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
-		background: var(--ii-bg-surface-alt, #1a1c22);
+		background: var(--ii-surface-alt, #1a1c22);
 		border-right: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.4));
 		font-family: "Urbanist", system-ui, sans-serif;
 	}

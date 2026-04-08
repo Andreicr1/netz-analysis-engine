@@ -153,7 +153,7 @@
 	}
 	.fs-classes li {
 		padding: 6px 0;
-		border-bottom: 1px solid var(--ii-border-hairline);
+		border-bottom: 1px solid var(--ii-border-subtle);
 		font-variant-numeric: tabular-nums;
 	}
 	.fs-loading,
@@ -164,6 +164,6 @@
 		font-family: "Urbanist", system-ui, sans-serif;
 	}
 	.fs-error {
-		color: var(--ii-error);
+		color: var(--ii-danger);
 	}
 </style>

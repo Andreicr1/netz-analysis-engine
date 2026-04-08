@@ -111,17 +111,17 @@
 		color: var(--ii-text-muted);
 	}
 	.status[data-state="streaming"] {
-		color: var(--ii-accent);
+		color: var(--ii-brand-accent);
 	}
 	.status[data-state="done"] {
 		color: var(--ii-success);
 	}
 	.status[data-state="error"] {
-		color: var(--ii-error);
+		color: var(--ii-danger);
 	}
 	.dd-chapter {
 		padding: 16px 0;
-		border-bottom: 1px solid var(--ii-border-hairline);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 	.dd-chapter h3 {
 		font-size: 13px;
@@ -145,6 +145,6 @@
 		color: var(--ii-text-muted);
 	}
 	.dd-error {
-		color: var(--ii-error);
+		color: var(--ii-danger);
 	}
 </style>

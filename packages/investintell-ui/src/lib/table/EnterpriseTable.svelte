@@ -104,7 +104,7 @@
 		color: var(--ii-text-primary, #e6e8ec);
 	}
 	.et-table thead th {
-		background: var(--ii-bg-surface-alt, #1a1c22);
+		background: var(--ii-surface-alt, #1a1c22);
 		color: var(--ii-text-muted, #85a0bd);
 		font-weight: 600;
 		font-size: 11px;
@@ -124,18 +124,18 @@
 	.et-freeze tbody td:first-child {
 		position: sticky;
 		left: 0;
-		background: var(--ii-bg-surface, #141519);
+		background: var(--ii-surface, #141519);
 		z-index: 1;
 	}
 	.et-freeze thead th:first-child {
 		z-index: 3;
 	}
 	.et-table tbody tr:nth-child(even) td {
-		background: var(--ii-bg-surface-alt, rgba(255, 255, 255, 0.015));
+		background: var(--ii-surface-alt, rgba(255, 255, 255, 0.015));
 	}
 	.et-table tbody td {
 		padding: 8px 12px;
-		border-bottom: 1px solid var(--ii-border-hairline, rgba(64, 66, 73, 0.2));
+		border-bottom: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.2));
 		white-space: nowrap;
 	}
 	[data-density="comfortable"] .et-table tbody td {
@@ -155,7 +155,7 @@
 		cursor: pointer;
 	}
 	.et-clickable:hover td {
-		background: var(--ii-bg-hover, rgba(80, 140, 255, 0.06));
+		background: var(--ii-surface-highlight, rgba(80, 140, 255, 0.06));
 	}
 
 	@container (max-width: 900px) {

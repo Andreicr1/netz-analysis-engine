@@ -136,6 +136,6 @@
 		font-family: "Urbanist", system-ui, sans-serif;
 	}
 	.col-error {
-		color: var(--ii-error);
+		color: var(--ii-danger);
 	}
 </style>

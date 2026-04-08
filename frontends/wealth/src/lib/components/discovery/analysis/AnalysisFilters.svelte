@@ -99,7 +99,7 @@
 	.af-section input[type="checkbox"],
 	.af-section input[type="radio"] {
 		margin-right: 8px;
-		accent-color: var(--ii-accent);
+		accent-color: var(--ii-brand-accent);
 	}
 	.af-radio-group {
 		display: flex;
@@ -115,9 +115,9 @@
 		font-weight: 600;
 	}
 	.af-radio-group label.active {
-		background: var(--ii-accent);
+		background: var(--ii-brand-accent);
 		color: white;
-		border-color: var(--ii-accent);
+		border-color: var(--ii-brand-accent);
 	}
 	.af-radio-group input {
 		display: none;

@@ -321,15 +321,15 @@
 		font-weight: 600;
 		padding: 4px 10px;
 		border-radius: 4px;
-		background: var(--ii-accent-subtle, rgba(0, 102, 255, 0.08));
-		border: 1px solid var(--ii-accent, #0066ff);
-		color: var(--ii-accent, #0066ff);
+		background: var(--ii-border-accent, rgba(0, 102, 255, 0.08));
+		border: 1px solid var(--ii-brand-accent, #0066ff);
+		color: var(--ii-brand-accent, #0066ff);
 		cursor: pointer;
 		transition: all 150ms;
 	}
 	.rev-btn:hover,
 	.rev-btn.active {
-		background: var(--ii-accent, #0066ff);
+		background: var(--ii-brand-accent, #0066ff);
 		color: white;
 	}
 	.rev-na {
