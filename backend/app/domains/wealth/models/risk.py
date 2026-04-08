@@ -14,18 +14,24 @@ from app.core.db.base import Base
 class FundRiskMetrics(Base):
     __tablename__ = "fund_risk_metrics"
 
-    # Nullable: global risk_metrics worker writes with NULL org_id,
-    # org-scoped run_risk_calc overwrites with actual org_id + DTW drift.
-    organization_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True),
-        nullable=True,
-        index=True,
-    )
-
+    # Composite identity: (instrument_id, calc_date, organization_id).
+    # organization_id is part of the identity tuple so global rows
+    # (org_id=NULL, written by run_global_risk_metrics) coexist with
+    # tenant-scoped rows (written by run_risk_calc with DTW drift).
+    # The DB-level constraint is a UNIQUE INDEX … NULLS NOT DISTINCT
+    # (migration 0093) — PRIMARY KEY cannot include nullable columns,
+    # but SQLAlchemy's ORM identity map only needs the tuple to be
+    # collision-free, which the unique index guarantees.
     instrument_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("instruments_universe.instrument_id"), primary_key=True,
     )
     calc_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=True,
+        primary_key=True,
+        index=True,
+    )
 
     # CVaR windows (95% confidence)
     cvar_95_1m: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
