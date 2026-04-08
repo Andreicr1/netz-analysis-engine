@@ -17,3 +17,34 @@
 	--font-sans: var(--ii-font-sans), "Inter", system-ui, sans-serif;
 	--font-mono: var(--ii-font-mono), "Geist Mono", "Menlo", monospace;
 }
+
+/* ── Chart palette — Discovery FCL sprint (Phase 1.3) ──────────
+ * HSL triplets consumed by chart-tokens.ts via hsl(var(--chart-*)).
+ * Alpha-baked tokens (regime-*) include slash-alpha for tinted fills.
+ */
+:root {
+	--chart-primary: 214 100% 50%;
+	--chart-benchmark: 220 15% 55%;
+	--chart-positive: 150 70% 40%;
+	--chart-negative: 0 72% 50%;
+	--chart-regime-stress: 30 95% 55% / 0.08;
+	--chart-regime-normal: 210 30% 50% / 0.04;
+	--chart-grid: 220 15% 90%;
+	--chart-axis-label: 220 15% 35%;
+	--chart-tooltip-bg: 0 0% 100%;
+	--chart-tooltip-border: 220 15% 85%;
+	--chart-font: 'Urbanist', system-ui, sans-serif;
+}
+
+:root.dark {
+	--chart-primary: 214 100% 60%;
+	--chart-benchmark: 220 10% 60%;
+	--chart-positive: 150 60% 50%;
+	--chart-negative: 0 65% 55%;
+	--chart-regime-stress: 30 85% 60% / 0.12;
+	--chart-regime-normal: 210 25% 45% / 0.06;
+	--chart-grid: 220 10% 20%;
+	--chart-axis-label: 220 10% 65%;
+	--chart-tooltip-bg: 220 15% 12%;
+	--chart-tooltip-border: 220 10% 25%;
+}
