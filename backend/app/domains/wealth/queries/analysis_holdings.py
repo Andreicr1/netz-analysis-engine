@@ -16,11 +16,19 @@ Schema notes (verified against ``backend/app/shared/models.py``):
 
 * ``sec_nport_holdings``: ``cik``, ``report_date``, ``cusip``, ``issuer_name``,
   ``sector`` (NOT ``security_type``), ``pct_of_nav`` (NOT ``percent_value``),
-  ``market_value``.
+  ``market_value``, ``series_id`` (nullable — migration 0059+).
 * ``sec_13f_holdings``: ``cik`` (NOT ``filer_cik``), ``report_date``, ``cusip``,
   ``issuer_name``, ``market_value`` (NOT ``value``).
 * ``sec_managers``: PK is ``crd_number`` — the foreign ``cik`` column is
   nullable but used to join 13F filers back to firm names.
+
+Branch #1 fix: ``fetch_top_holdings`` and ``fetch_style_drift`` now
+accept an optional ``series_id`` filter so umbrella-trust CIKs (e.g.
+Invesco CIK 277751 with 49 series, BlackRock with 343) don't melt into
+a cross-series top-25. When ``series_id`` is supplied, the SQL is
+branched at construction time — we do NOT use a ``:param IS NULL OR``
+predicate because asyncpg/SQLAlchemy mis-renders the inline ``::text``
+cast when the same bind appears twice.
 """
 
 from __future__ import annotations
@@ -31,32 +39,50 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-async def fetch_top_holdings(db: AsyncSession, cik: str) -> dict[str, Any]:
+async def fetch_top_holdings(
+    db: AsyncSession,
+    cik: str,
+    series_id: str | None = None,
+) -> dict[str, Any]:
     """Top 25 positions + sector breakdown from the latest N-PORT report.
 
     Args:
         db: Async SQLAlchemy session (RLS not required — table is global).
         cik: Fund CIK (matches ``sec_nport_holdings.cik``).
+        series_id: Optional series_id to filter umbrella-trust CIKs.
+            When non-null, adds ``AND series_id = :series_id`` to each
+            query and narrows the result to a single series within the
+            CIK. When null, behavior is unchanged (back-compat).
 
     Returns:
         ``{"top_holdings": [...], "sector_breakdown": [...], "as_of": date|None}``.
-        Lists are empty when no N-PORT filing exists for the CIK.
+        Lists are empty when no N-PORT filing exists for the CIK/series.
     """
+    # Branch SQL at construction time so we never ship a bound param
+    # twice with an inline cast (asyncpg + SQLAlchemy mis-render that).
+    series_clause = "AND series_id = :series_id" if series_id else ""
+    params: dict[str, Any] = {"cik": cik}
+    if series_id:
+        params["series_id"] = series_id
+
     as_of_sql = text(
-        """
+        f"""
         SELECT MAX(report_date) AS as_of
         FROM sec_nport_holdings
         WHERE cik = :cik
-        """,
+          {series_clause}
+        """,  # noqa: S608 — series_clause is a static literal, not user input
     )
-    as_of_row = (await db.execute(as_of_sql, {"cik": cik})).mappings().first()
+    as_of_row = (await db.execute(as_of_sql, params)).mappings().first()
     as_of = as_of_row["as_of"] if as_of_row else None
 
     if as_of is None:
         return {"top_holdings": [], "sector_breakdown": [], "as_of": None}
 
+    params_dated = {**params, "as_of": as_of}
+
     top_sql = text(
-        """
+        f"""
         SELECT
             issuer_name,
             cusip,
@@ -66,16 +92,15 @@ async def fetch_top_holdings(db: AsyncSession, cik: str) -> dict[str, Any]:
         FROM sec_nport_holdings
         WHERE cik = :cik
           AND report_date = :as_of
+          {series_clause}
         ORDER BY pct_of_nav DESC NULLS LAST
         LIMIT 25
-        """,
+        """,  # noqa: S608
     )
-    top_rows = (
-        await db.execute(top_sql, {"cik": cik, "as_of": as_of})
-    ).mappings().all()
+    top_rows = (await db.execute(top_sql, params_dated)).mappings().all()
 
     sector_sql = text(
-        """
+        f"""
         SELECT
             COALESCE(sector, 'Unknown') AS sector,
             SUM(pct_of_nav) AS weight,
@@ -83,13 +108,12 @@ async def fetch_top_holdings(db: AsyncSession, cik: str) -> dict[str, Any]:
         FROM sec_nport_holdings
         WHERE cik = :cik
           AND report_date = :as_of
+          {series_clause}
         GROUP BY COALESCE(sector, 'Unknown')
         ORDER BY weight DESC NULLS LAST
-        """,
+        """,  # noqa: S608
     )
-    sector_rows = (
-        await db.execute(sector_sql, {"cik": cik, "as_of": as_of})
-    ).mappings().all()
+    sector_rows = (await db.execute(sector_sql, params_dated)).mappings().all()
 
     return {
         "top_holdings": [
@@ -115,15 +139,33 @@ async def fetch_top_holdings(db: AsyncSession, cik: str) -> dict[str, Any]:
 
 
 async def fetch_style_drift(
-    db: AsyncSession, cik: str, quarters: int = 8,
+    db: AsyncSession,
+    cik: str,
+    quarters: int = 8,
+    series_id: str | None = None,
 ) -> dict[str, Any]:
-    """Sector weight history across the last ``quarters`` N-PORT reports."""
+    """Sector weight history across the last ``quarters`` N-PORT reports.
+
+    Args:
+        db: Async SQLAlchemy session.
+        cik: Fund CIK.
+        quarters: Number of N-PORT reports to walk back.
+        series_id: Optional series_id filter for umbrella trusts — see
+            :func:`fetch_top_holdings` for rationale.
+    """
+    series_clause_inner = "AND series_id = :series_id" if series_id else ""
+    series_clause_outer = "AND h.series_id = :series_id" if series_id else ""
+    params: dict[str, Any] = {"cik": cik, "quarters": quarters}
+    if series_id:
+        params["series_id"] = series_id
+
     sql = text(
-        """
+        f"""
         WITH q AS (
             SELECT DISTINCT report_date
             FROM sec_nport_holdings
             WHERE cik = :cik
+              {series_clause_inner}
             ORDER BY report_date DESC
             LIMIT :quarters
         )
@@ -134,13 +176,12 @@ async def fetch_style_drift(
         FROM sec_nport_holdings h
         JOIN q ON q.report_date = h.report_date
         WHERE h.cik = :cik
+          {series_clause_outer}
         GROUP BY h.report_date, COALESCE(h.sector, 'Unknown')
         ORDER BY h.report_date ASC, weight DESC NULLS LAST
-        """,
+        """,  # noqa: S608
     )
-    rows = (
-        await db.execute(sql, {"cik": cik, "quarters": quarters})
-    ).mappings().all()
+    rows = (await db.execute(sql, params)).mappings().all()
 
     snapshots: list[dict[str, Any]] = []
     current_quarter = None

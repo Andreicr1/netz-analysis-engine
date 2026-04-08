@@ -60,19 +60,56 @@ async def _monthly_returns(
     return [dict(r) for r in res.mappings().all()]
 
 
+# Explicit projection — the frontend contract is pinned to these keys.
+# Do not add columns here without updating the wealth-os TS types.
+# ``peer_strategy_label`` is renamed to ``peer_strategy`` at the payload
+# boundary for parity with the Screener's ``scoring_metrics.peer_strategy``
+# key — keeps cross-path consistency for the charting agent.
+RISK_METRICS_COLUMNS: tuple[str, ...] = (
+    "sharpe_1y",
+    "volatility_1y",
+    "volatility_garch",
+    "cvar_95_12m",
+    "cvar_95_conditional",
+    "max_drawdown_1y",
+    "return_1y",
+    "manager_score",
+    "blended_momentum_score",
+    "peer_sharpe_pctl",
+    "peer_sortino_pctl",
+    "peer_return_pctl",
+    "peer_drawdown_pctl",
+    "peer_count",
+    "peer_strategy_label",
+    "calc_date",
+)
+
+
 async def _risk_metrics(
     db: AsyncSession, instrument_id: str,
 ) -> dict[str, Any] | None:
-    sql = """
-        SELECT *
+    """Latest ``fund_risk_metrics`` row for the instrument.
+
+    Returns a flat dict with exactly the keys declared in
+    :data:`RISK_METRICS_COLUMNS`, with ``peer_strategy_label`` renamed
+    to ``peer_strategy`` at the boundary. Missing rows → ``None``.
+    """
+    sql = text(
+        f"""
+        SELECT {", ".join(RISK_METRICS_COLUMNS)}
         FROM fund_risk_metrics
         WHERE instrument_id = :id
         ORDER BY calc_date DESC
         LIMIT 1
-    """
-    res = await db.execute(text(sql), {"id": instrument_id})
+        """,
+    )
+    res = await db.execute(sql, {"id": instrument_id})
     row = res.mappings().first()
-    return dict(row) if row else None
+    if row is None:
+        return None
+    payload = {col: row[col] for col in RISK_METRICS_COLUMNS}
+    payload["peer_strategy"] = payload.pop("peer_strategy_label")
+    return payload
 
 
 def _compute_rolling(
