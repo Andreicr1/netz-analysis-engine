@@ -23,6 +23,7 @@
 	import { FilterRail } from "@investintell/ui";
 	import AnalysisFilters from "$lib/components/discovery/analysis/AnalysisFilters.svelte";
 	import ReturnsRiskView from "$lib/components/discovery/analysis/ReturnsRiskView.svelte";
+	import HoldingsView from "$lib/components/discovery/analysis/HoldingsView.svelte";
 	import type { AnalysisWindow } from "$lib/discovery/analysis-api";
 
 	type Group = "returns-risk" | "holdings" | "peer";
@@ -103,7 +104,7 @@
 				{#if group === "returns-risk"}
 					<ReturnsRiskView fundId={data.fundId} {window} />
 				{:else if group === "holdings"}
-					<div class="ap-placeholder">Holdings Analysis — Phase 6</div>
+					<HoldingsView fundId={data.fundId} />
 				{:else}
 					<div class="ap-placeholder">Peer Analysis — Phase 7</div>
 				{/if}

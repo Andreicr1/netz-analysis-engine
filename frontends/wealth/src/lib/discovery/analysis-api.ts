@@ -42,3 +42,73 @@ export async function fetchReturnsRisk(
 	if (!res.ok) throw new Error(`returns-risk fetch: ${res.status}`);
 	return res.json();
 }
+
+/**
+ * GET /funds/{id}/analysis/holdings/top
+ *
+ * Returns: `{ top_holdings, sector_breakdown, as_of, disclosure }`. Only
+ * N-PORT universes (registered, ETF, BDC) expose holdings; private funds
+ * return `disclosure.has_holdings === false`.
+ */
+export async function fetchHoldingsTop(
+	getToken: GetToken,
+	fundId: string,
+	signal: AbortSignal,
+): Promise<unknown> {
+	const res = await fetch(
+		`${BASE}/funds/${encodeURIComponent(fundId)}/analysis/holdings/top`,
+		{
+			headers: await authHeaders(getToken),
+			signal,
+		},
+	);
+	if (!res.ok) throw new Error(`holdings/top fetch: ${res.status}`);
+	return res.json();
+}
+
+/**
+ * GET /funds/{id}/analysis/holdings/style-drift?quarters=N
+ *
+ * Returns: `{ snapshots: [{ quarter, sectors: [{name, weight}] }] }`. Used
+ * by StyleDriftFlow to render a stacked area chart across the last N filings.
+ */
+export async function fetchStyleDrift(
+	getToken: GetToken,
+	fundId: string,
+	quarters: number,
+	signal: AbortSignal,
+): Promise<unknown> {
+	const res = await fetch(
+		`${BASE}/funds/${encodeURIComponent(fundId)}/analysis/holdings/style-drift?quarters=${quarters}`,
+		{
+			headers: await authHeaders(getToken),
+			signal,
+		},
+	);
+	if (!res.ok) throw new Error(`style-drift fetch: ${res.status}`);
+	return res.json();
+}
+
+/**
+ * GET /holdings/{cusip}/reverse-lookup?limit=N
+ *
+ * Returns: `{ nodes, edges, target_cusip }`. Aggregates all 13F and N-PORT
+ * filers reporting a position in the given CUSIP so HoldingsNetworkChart can
+ * draw the "who holds this" network.
+ */
+export async function fetchReverseLookup(
+	getToken: GetToken,
+	cusip: string,
+	signal: AbortSignal,
+	limit = 30,
+): Promise<unknown> {
+	const res = await fetch(
+		`${BASE}/holdings/${encodeURIComponent(cusip)}/reverse-lookup?limit=${limit}`,
+		{
+			headers: await authHeaders(getToken),
+			signal,
+		},
+	);
+	if (!res.ok) throw new Error(`reverse-lookup fetch: ${res.status}`);
+	return res.json();
+}
