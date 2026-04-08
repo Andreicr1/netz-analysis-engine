@@ -1,9 +1,15 @@
 <!--
-  AnalysisGrid — responsive grid for ChartCard tiles on the Analysis page.
+  AnalysisGrid — responsive grid for ChartCard tiles.
+
+  Part of the Analytics primitive set in @investintell/ui (promoted from
+  `frontends/wealth/src/lib/components/discovery/analysis/AnalysisGrid.svelte`
+  in Phase 4 Task 4.0 of the portfolio-enterprise-workbench plan).
+
   Uses container queries (parent sets `container-type: inline-size`) so
-  breakpoints are relative to the main column width, not the viewport. This
-  matters because the FilterRail may or may not be open, and the FCL is out
-  of scope on this standalone page.
+  the breakpoints are relative to the main column width, not the viewport.
+  That matters because the surrounding FilterRail may or may not be open,
+  and any FCL that hosts this grid can change its width independently of
+  the viewport.
 -->
 <script lang="ts">
 	import type { Snippet } from "svelte";

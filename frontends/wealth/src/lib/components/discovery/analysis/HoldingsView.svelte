@@ -19,10 +19,8 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { EnterpriseTable, formatPercent } from "@investintell/ui";
+	import { EnterpriseTable, formatPercent, ChartCard, AnalysisGrid } from "@investintell/ui";
 	import type { ColumnDef } from "@investintell/ui";
-	import ChartCard from "./ChartCard.svelte";
-	import AnalysisGrid from "./AnalysisGrid.svelte";
 	import HoldingsNetworkChart from "$lib/components/charts/discovery/HoldingsNetworkChart.svelte";
 	import TopHoldingsSunburst from "$lib/components/charts/discovery/TopHoldingsSunburst.svelte";
 	import SectorTreemap from "$lib/components/charts/discovery/SectorTreemap.svelte";

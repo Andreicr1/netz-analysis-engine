@@ -1,9 +1,16 @@
 <!--
-  ChartCard — wrapper for a single analytical chart tile on the standalone
-  Analysis page. Institutional aesthetic (no marketing flourish): 20px padding,
-  13px uppercase-ish title, optional subtitle + actions slot.
+  ChartCard — wrapper for a single analytical chart tile.
 
-  Span controls grid-column span inside an AnalysisGrid (1 / 2 / 3).
+  Part of the Analytics primitive set in @investintell/ui (promoted from
+  `frontends/wealth/src/lib/components/discovery/analysis/ChartCard.svelte`
+  in Phase 4 Task 4.0 of the portfolio-enterprise-workbench plan). The
+  Portfolio Analytics surface (Phase 6) and the existing Discovery
+  Analysis page both consume this component — keeping one copy in the
+  shared design system is the only way to guarantee they stay in sync.
+
+  Institutional aesthetic: 20px padding, 13px uppercase-ish title,
+  optional subtitle + actions snippet. `span` controls the grid-column
+  span inside an `AnalysisGrid` (1 / 2 / 3).
 -->
 <script lang="ts">
 	import type { Snippet } from "svelte";

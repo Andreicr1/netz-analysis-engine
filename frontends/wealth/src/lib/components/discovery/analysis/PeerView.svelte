@@ -14,8 +14,7 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import ChartCard from "./ChartCard.svelte";
-	import AnalysisGrid from "./AnalysisGrid.svelte";
+	import { ChartCard, AnalysisGrid } from "@investintell/ui";
 	import PeerScatterChart from "$lib/components/charts/discovery/PeerScatterChart.svelte";
 	import PeerRankingLadder from "$lib/components/charts/discovery/PeerRankingLadder.svelte";
 	import InstitutionalRevealMatrix from "$lib/components/charts/discovery/InstitutionalRevealMatrix.svelte";

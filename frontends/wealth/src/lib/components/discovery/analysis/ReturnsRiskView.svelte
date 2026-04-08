@@ -9,8 +9,7 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { fetchReturnsRisk, type AnalysisWindow } from "$lib/discovery/analysis-api";
-	import AnalysisGrid from "./AnalysisGrid.svelte";
-	import ChartCard from "./ChartCard.svelte";
+	import { AnalysisGrid, ChartCard } from "@investintell/ui";
 	import NavHeroChart from "$lib/components/charts/discovery/NavHeroChart.svelte";
 	import RollingRiskChart from "$lib/components/charts/discovery/RollingRiskChart.svelte";
 	import MonthlyReturnsHeatmap from "$lib/components/charts/discovery/MonthlyReturnsHeatmap.svelte";
