@@ -73,6 +73,10 @@ export { default as ContextPanel } from "./components/layouts/ContextPanel.svelt
 export { default as InvestorShell } from "./components/layouts/InvestorShell.svelte";
 export { default as PageHeader } from "./components/layouts/PageHeader.svelte";
 
+// ── Tables ───────────────────────────────────────────────────
+export { default as EnterpriseTable } from "./table/EnterpriseTable.svelte";
+export type { ColumnDef } from "./table/types.js";
+
 // ── Charts ───────────────────────────────────────────────────
 export {
 	ChartContainer,
