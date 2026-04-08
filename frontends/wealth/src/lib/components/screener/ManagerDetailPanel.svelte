@@ -16,9 +16,18 @@
   interface Props {
     manager: ManagerCatalogItem;
     onBack: () => void;
+    /**
+     * Optional callback invoked when a fund row is clicked. When
+     * provided, the callback is called instead of the default
+     * `goto(/screener/fund/...)` navigation — enabling the screener
+     * page to intercept the click and open the floating fact sheet
+     * Sheet instead of navigating away. Backwards compatible: when
+     * unset (e.g. deep links), the old goto behaviour is preserved.
+     */
+    onFundClick?: (fund: UnifiedFundItem) => void;
   }
 
-  let { manager, onBack }: Props = $props();
+  let { manager, onBack, onFundClick }: Props = $props();
 
   const getToken = getContext<() => Promise<string>>("netz:getToken");
   const api = createClientApiClient(getToken);
@@ -72,6 +81,16 @@
   }
 
   function openFactSheet(fund: UnifiedFundItem) {
+    // When the parent page wants to intercept (e.g. to open the
+    // floating preview Sheet on the Screener grid), it passes an
+    // `onFundClick` callback and we short-circuit the navigation.
+    // Otherwise we keep the legacy behaviour of navigating to the
+    // standalone fact sheet route — still used by the PDF shell and
+    // by deep links from portfolio/universe screens.
+    if (onFundClick) {
+      onFundClick(fund);
+      return;
+    }
     const params = new URLSearchParams({
       manager: manager.manager_id,
       manager_name: manager.manager_name,

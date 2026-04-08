@@ -5,12 +5,15 @@
   No Sheet/modal — pure canvas swap.
 -->
 <script lang="ts">
+  import { getContext } from "svelte";
   import { goto } from "$app/navigation";
   import { page as pageState } from "$app/state";
   import { Search, Download, ChevronDown } from "lucide-svelte";
   import { CatalogTableV2 } from "$lib/components/screener";
   import ManagerDetailPanel from "$lib/components/screener/ManagerDetailPanel.svelte";
-  import type { ManagerCatalogItem } from "$lib/types/catalog";
+  import FundFactSheetContent from "$lib/components/screener/FundFactSheetContent.svelte";
+  import * as Sheet from "@investintell/ui/components/ui/sheet";
+  import type { ManagerCatalogItem, UnifiedFundItem } from "$lib/types/catalog";
   import { FUND_TYPE_LABELS } from "$lib/types/catalog";
   import type { PageData } from "./$types";
   import type { ColumnFiltersState } from "@investintell/ui/components/ui/data-table";
@@ -22,6 +25,8 @@
   } from "$lib/components/screener/filters";
 
   let { data }: { data: PageData } = $props();
+
+  const getToken = getContext<() => Promise<string>>("netz:getToken");
 
   // ── Canvas swap state: null = L1, manager = L2 ──
   let selectedManager = $state<ManagerCatalogItem | null>(null);
@@ -248,6 +253,157 @@
   function openEditFor(columnId: string): void {
     openFilterColumn = columnId;
   }
+
+  // ══════════════════════════════════════════════════════════════
+  //  Floating Fact Sheet preview (Branch #3)
+  // ══════════════════════════════════════════════════════════════
+  //
+  // Instead of navigating to /screener/fund/[id], clicking a fund
+  // inside ManagerDetailPanel sets `?fund=EXTERNAL_ID` in the URL
+  // and opens a right-side Sheet containing FundFactSheetContent.
+  // The standalone route is preserved as the PDF generation shell.
+
+  interface FactSheetRouteData {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: Record<string, any> | null;
+    error: {
+      code?: string;
+      message: string;
+      recoverable: boolean;
+    } | null;
+  }
+
+  const API_BASE =
+    import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+  const FACT_SHEET_TIMEOUT_MS = 8000;
+
+  let selectedFundId = $state<string | null>(
+    pageState.url.searchParams.get("fund"),
+  );
+  let factSheetRouteData = $state<FactSheetRouteData>({
+    data: null,
+    error: null,
+  });
+  let factSheetLoading = $state(false);
+  let previewOpen = $derived(selectedFundId != null);
+
+  // Fetch the fact sheet payload whenever selectedFundId changes.
+  // Uses the same endpoint the +page.server.ts route load hits, with
+  // a matching 8s timeout + recoverable error handling so the same
+  // FundFactSheetContent three-branch narrowing works identically.
+  $effect(() => {
+    const id = selectedFundId;
+    if (!id || !getToken) {
+      factSheetRouteData = { data: null, error: null };
+      return;
+    }
+    const ctrl = new AbortController();
+    factSheetLoading = true;
+    factSheetRouteData = { data: null, error: null };
+
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(
+          `${API_BASE}/screener/catalog/${encodeURIComponent(id)}/fact-sheet`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.any([
+              ctrl.signal,
+              AbortSignal.timeout(FACT_SHEET_TIMEOUT_MS),
+            ]),
+          },
+        );
+        if (!res.ok) {
+          const recoverable = res.status >= 500 || res.status === 401 || res.status === 403;
+          factSheetRouteData = {
+            data: null,
+            error: {
+              code: `HTTP_${res.status}`,
+              message:
+                res.status === 404
+                  ? "This fund is no longer in the catalog."
+                  : `The fact sheet service returned ${res.status}.`,
+              recoverable,
+            },
+          };
+          return;
+        }
+        const payload = await res.json();
+        factSheetRouteData = { data: payload, error: null };
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+        const isTimeout =
+          err instanceof DOMException && err.name === "TimeoutError";
+        factSheetRouteData = {
+          data: null,
+          error: {
+            code: isTimeout ? "TIMEOUT" : "UNKNOWN",
+            message: isTimeout
+              ? `Loading the fund took longer than ${FACT_SHEET_TIMEOUT_MS / 1000}s. Please try again.`
+              : err instanceof Error
+                ? err.message
+                : "Failed to load fund data.",
+            recoverable: true,
+          },
+        };
+      } finally {
+        factSheetLoading = false;
+      }
+    })();
+
+    return () => ctrl.abort();
+  });
+
+  // Bidirectional URL sync for `?fund=ID`. Writes on state mutation,
+  // re-hydrates on browser back/forward.
+  let lastSyncedFundUrl = $state<string>("");
+
+  $effect(() => {
+    const id = selectedFundId;
+    const params = new URLSearchParams(pageState.url.searchParams);
+    if (id) {
+      params.set("fund", id);
+    } else {
+      params.delete("fund");
+    }
+    const qs = params.toString();
+    const target = `/screener${qs ? `?${qs}` : ""}`;
+    if (target !== lastSyncedFundUrl) {
+      lastSyncedFundUrl = target;
+      if (target !== pageState.url.pathname + pageState.url.search) {
+        goto(target, {
+          replaceState: true,
+          noScroll: true,
+          keepFocus: true,
+        });
+      }
+    }
+  });
+
+  $effect(() => {
+    const urlFundId = pageState.url.searchParams.get("fund");
+    if (urlFundId !== selectedFundId) {
+      selectedFundId = urlFundId;
+    }
+  });
+
+  function openFundPreview(fund: UnifiedFundItem): void {
+    selectedFundId = fund.external_id;
+  }
+
+  function closeFundPreview(): void {
+    selectedFundId = null;
+  }
+
+  function retryFactSheet(): void {
+    // Bounce through null to re-trigger the fetch effect.
+    const id = selectedFundId;
+    selectedFundId = null;
+    queueMicrotask(() => {
+      selectedFundId = id;
+    });
+  }
 </script>
 
 <svelte:head>
@@ -257,7 +413,11 @@
 <div class="scr-page">
   {#if selectedManager}
     <!-- ══ L2: Manager Fund Drill-down (canvas swap) ══ -->
-    <ManagerDetailPanel manager={selectedManager} onBack={onBack} />
+    <ManagerDetailPanel
+      manager={selectedManager}
+      onBack={onBack}
+      onFundClick={openFundPreview}
+    />
   {:else}
     <!-- ══ L1: Manager Catalog ══ -->
 
@@ -349,6 +509,38 @@
     </div>
   {/if}
 </div>
+
+<!--
+  ══ Fact Sheet floating preview (Branch #3) ══
+  Right-side Sheet, w-[min(100vw,960px)], !z-[60] to sit above the
+  AI Drawer (which defaults to z-50). Overlay is bg-black/10 so the
+  user still sees the filtered grid behind — a direct sightline to
+  the underlying state is the whole point of using a preview rather
+  than a full-page navigation. `!` prefixes override the shadcn-svelte
+  Sheet defaults that ship with bits-ui.
+-->
+<Sheet.Root
+  open={previewOpen}
+  onOpenChange={(v) => {
+    if (!v) closeFundPreview();
+  }}
+>
+  <Sheet.Content
+    side="right"
+    class="!z-[60] w-[min(100vw,960px)] !max-w-[960px] sm:!max-w-[960px] p-0 gap-0 overflow-y-auto fs-sheet-content"
+    showCloseButton={true}
+  >
+    {#if factSheetLoading && !factSheetRouteData.data && !factSheetRouteData.error}
+      <div class="fs-sheet-loading">Loading fact sheet…</div>
+    {:else}
+      <FundFactSheetContent
+        routeData={factSheetRouteData}
+        showBackButton={false}
+        onRetry={retryFactSheet}
+      />
+    {/if}
+  </Sheet.Content>
+</Sheet.Root>
 
 <style>
   .scr-page {
@@ -556,5 +748,42 @@
   .scr-content {
     flex: 1;
     min-height: 0;
+  }
+
+  /* ══ Fact Sheet Sheet (Branch #3) ═══════════════════════════
+     Notion-style single-scroll container + z-index above the AI
+     Drawer. The Sheet primitive bakes a `z-50` overlay and we
+     cannot pass a class to sheet-overlay (not exposed by
+     @investintell/ui) — so we target the overlay via :global
+     scoped to the page.
+
+     The max-w-sm default shipped by bits-ui at the sm breakpoint
+     overrides our width — we flatten it with a :global rule on
+     the sheet-content slot.
+     ══════════════════════════════════════════════════════════ */
+  :global([data-slot="sheet-overlay"]) {
+    z-index: 60 !important;
+    background: rgba(0, 0, 0, 0.18) !important;
+  }
+
+  :global(.fs-sheet-content) {
+    background: var(--ii-bg) !important;
+    border-left: 1px solid var(--ii-border-subtle) !important;
+    width: min(100vw, 960px) !important;
+    max-width: 960px !important;
+  }
+
+  @media (min-width: 640px) {
+    :global(.fs-sheet-content) {
+      max-width: 960px !important;
+    }
+  }
+
+  .fs-sheet-loading {
+    padding: 48px 24px;
+    text-align: center;
+    font-family: "Urbanist", sans-serif;
+    font-size: 13px;
+    color: var(--ii-text-muted);
   }
 </style>
