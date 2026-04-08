@@ -17,14 +17,17 @@
   const api = createClientApiClient(getToken);
 
   const TABS = [
+    // DD Reviews pill removed in Phase 7 of the Wealth Library
+    // sprint (spec §2.4) — the entire reading workbench moved into
+    // /library. Screener keeps its two clean pillars: Screening and
+    // Analytics. Legacy /screener/dd-reports/* URLs still resolve via
+    // 308 redirects in the route loaders.
     { key: "screening", href: "/screener",           label: "Screening" },
     { key: "analytics", href: "/screener/analytics",  label: "Analytics" },
-    { key: "dd-reviews", href: "/screener/dd-reports", label: "DD Reviews" },
   ] as const;
 
   let activeTab = $derived.by(() => {
     const path = $page.url.pathname;
-    if (path.startsWith("/screener/dd-reports")) return "dd-reviews";
     if (path.startsWith("/screener/analytics")) return "analytics";
     return "screening";
   });
@@ -33,10 +36,7 @@
   let showBack = $derived.by(() => {
     const path = $page.url.pathname;
     if (path.startsWith("/screener/fund/")) return false;
-    return (
-      path.startsWith("/screener/runs/") ||
-      /^\/screener\/dd-reports\/[^/]+\//.test(path)
-    );
+    return path.startsWith("/screener/runs/");
   });
 
   /** Are we on a fund fact-sheet page? */
@@ -60,7 +60,10 @@
       const result = await api.post<{ id: string; instrument_id: string }>("/dd-reports/generate", {
         instrument_external_id: fundPageId,
       });
-      goto(`/screener/dd-reports/${result.instrument_id}/${result.id}`);
+      // Send users straight into the Library — the legacy URL would
+      // still work via the Phase 7 308 redirect, but the canonical
+      // landing avoids the extra hop.
+      goto(`/library?id=${result.id}`);
     } catch {
       ddGenerating = false;
     }
