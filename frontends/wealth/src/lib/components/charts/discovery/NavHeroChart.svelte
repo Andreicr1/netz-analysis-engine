@@ -16,6 +16,7 @@
 -->
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
+	import { formatPercent } from "@investintell/ui";
 	import { chartTokens } from "../chart-tokens";
 	import { navTooltipFormatter } from "../tooltips";
 
@@ -80,7 +81,7 @@
 				gridIndex: 0,
 				axisLabel: {
 					color: tokens.axisLabel,
-					formatter: (v: number) => `${Math.round(v * 100)}%`,
+					formatter: (v: number) => formatPercent(v, 0),
 				},
 				splitLine: { lineStyle: { color: tokens.grid, type: "dashed" } },
 			},
@@ -89,7 +90,7 @@
 				gridIndex: 1,
 				axisLabel: {
 					color: tokens.axisLabel,
-					formatter: (v: number) => `${Math.round(v * 100)}%`,
+					formatter: (v: number) => formatPercent(v, 0),
 				},
 				splitLine: { lineStyle: { color: tokens.grid, type: "dashed" } },
 				max: 0,

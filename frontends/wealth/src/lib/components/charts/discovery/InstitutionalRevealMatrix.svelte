@@ -12,10 +12,11 @@
 -->
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
+	import { formatCompact } from "@investintell/ui";
 	import { chartTokens } from "../chart-tokens";
 
 	interface Institution {
-		id: string;
+		institution_id: string;
 		name: string;
 		category: string;
 	}
@@ -39,7 +40,7 @@
 		const out: [number, number, number][] = [];
 		institutions.forEach((inst, y) => {
 			xHoldings.forEach((h, x) => {
-				const v = matrix[inst.id]?.[h.cusip] ?? 0;
+				const v = matrix[inst.institution_id]?.[h.cusip] ?? 0;
 				out.push([x, y, v > 0 ? Math.log10(v + 1) : 0]);
 			});
 		});
@@ -73,9 +74,8 @@
 				const inst = institutions[p.data[1]];
 				const h = xHoldings[p.data[0]];
 				if (!inst || !h) return "";
-				const v = matrix[inst.id]?.[h.cusip] ?? 0;
-				const valueDisplay =
-					v > 0 ? `$${(v / 1e6).toFixed(1)}M` : "no overlap";
+				const v = matrix[inst.institution_id]?.[h.cusip] ?? 0;
+				const valueDisplay = v > 0 ? formatCompact(v) : "Not held";
 				return `<strong>${inst.name}</strong><br/>${h.issuer_name}<br/><span style="color:${tokens.axisLabel}">${valueDisplay}</span>`;
 			},
 		},
@@ -110,7 +110,7 @@
 			bottom: 16,
 			inRange: { color: [tokens.grid, tokens.primary] },
 			textStyle: { color: tokens.axisLabel, fontSize: 10 },
-			text: ["high", "low"],
+			text: ["larger position", "smaller position"],
 		},
 		series: [
 			{
@@ -125,4 +125,8 @@
 	});
 </script>
 
-<ChartContainer {option} height={540} ariaLabel="Institutional reveal heatmap" />
+<ChartContainer
+	{option}
+	height={540}
+	ariaLabel="Institutional holdings overlap heatmap"
+/>

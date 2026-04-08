@@ -21,6 +21,34 @@ async function authHeaders(getToken: GetToken): Promise<HeadersInit> {
 export type AnalysisWindow = "1y" | "3y" | "5y" | "max";
 
 /**
+ * Flat risk metrics payload emitted by `/funds/{id}/analysis/returns-risk`.
+ *
+ * Keys mirror the `fund_risk_metrics` columns the backend agent locked as
+ * the stable contract for the Discovery Analysis view (Branch #1 of the
+ * 2026-04-08 fix sprint). All numeric fields are nullable because the
+ * backend returns `None` when the underlying computation has no data
+ * (e.g. private funds with no public NAV series).
+ */
+export interface RiskMetricsPayload {
+	sharpe_1y: number | null;
+	volatility_1y: number | null;
+	volatility_garch: number | null;
+	cvar_95_12m: number | null;
+	cvar_95_conditional: number | null;
+	max_drawdown_1y: number | null;
+	return_1y: number | null;
+	manager_score: number | null;
+	blended_momentum_score: number | null;
+	peer_sharpe_pctl: number | null;
+	peer_sortino_pctl: number | null;
+	peer_return_pctl: number | null;
+	peer_drawdown_pctl: number | null;
+	peer_count: number | null;
+	peer_strategy: string | null;
+	calc_date: string | null;
+}
+
+/**
  * GET /funds/{id}/analysis/returns-risk?window={window}
  *
  * Returns: `{ window, nav_series, monthly_returns, rolling_metrics,

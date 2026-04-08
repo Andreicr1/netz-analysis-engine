@@ -9,6 +9,7 @@
 -->
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
+	import { formatCompact } from "@investintell/ui";
 	import { chartTokens } from "../chart-tokens";
 
 	interface Node {
@@ -45,13 +46,14 @@
 				if (p.dataType === "edge") return "";
 				const d = p.data ?? {};
 				const src = d.source ? ` · ${String(d.source).toUpperCase()}` : "";
-				const val = typeof d.value === "number" ? `<br/>$${(d.value / 1e6).toFixed(1)}M` : "";
+				const val =
+					typeof d.value === "number" ? `<br/>${formatCompact(d.value)}` : "";
 				return `<strong>${d.name ?? ""}</strong>${src}${val}`;
 			},
 		},
 		legend: [
 			{
-				data: ["Holding", "Holder"],
+				data: ["Security", "Institutional holder"],
 				textStyle: { color: tokens.axisLabel },
 				bottom: 8,
 			},
@@ -70,8 +72,11 @@
 					fontSize: 10,
 				},
 				categories: [
-					{ name: "Holding", itemStyle: { color: tokens.primary } },
-					{ name: "Holder", itemStyle: { color: tokens.benchmark } },
+					{ name: "Security", itemStyle: { color: tokens.primary } },
+					{
+						name: "Institutional holder",
+						itemStyle: { color: tokens.benchmark },
+					},
 				],
 				data: nodes.map((n) => ({
 					id: n.id,

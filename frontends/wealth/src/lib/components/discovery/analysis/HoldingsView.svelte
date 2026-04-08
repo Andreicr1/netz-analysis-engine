@@ -35,11 +35,11 @@
 		issuer_name: string;
 		cusip: string | null;
 		sector: string | null;
-		pct_of_nav: number;
+		weight: number;
 		market_value: number | null;
 	}
 	interface SectorBreakdown {
-		sector: string;
+		name: string;
 		weight: number;
 		holdings_count: number;
 	}
@@ -167,7 +167,7 @@
 			header: "Weight",
 			numeric: true,
 			width: "100px",
-			accessor: (r) => r.pct_of_nav,
+			accessor: (r) => r.weight,
 			format: (v) => (v == null ? "—" : formatPercent(v as number, 2)),
 		},
 		{

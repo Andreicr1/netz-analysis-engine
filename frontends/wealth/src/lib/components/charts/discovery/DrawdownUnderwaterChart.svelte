@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
+	import { formatPercent } from "@investintell/ui";
 	import { chartTokens } from "../chart-tokens";
 
 	interface NavPoint {
@@ -47,7 +48,7 @@
 				const v = Array.isArray(p.value) ? (p.value[1] ?? 0) : 0;
 				return `<div style="font-family:${tokens.fontFamily};font-size:11px;">
 					<div style="color:${tokens.axisLabel};">${p.axisValueLabel ?? ""}</div>
-					<div style="color:${tokens.negative};font-weight:600;">${(v * 100).toFixed(2)}%</div>
+					<div style="color:${tokens.negative};font-weight:600;">${formatPercent(v, 2)}</div>
 				</div>`;
 			},
 		},
@@ -62,7 +63,7 @@
 			max: 0,
 			axisLabel: {
 				color: tokens.axisLabel,
-				formatter: (v: number) => `${Math.round(v * 100)}%`,
+				formatter: (v: number) => formatPercent(v, 0),
 			},
 			splitLine: { lineStyle: { color: tokens.grid, type: "dashed" } },
 		},

@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
+	import { formatPercent } from "@investintell/ui";
 	import { chartTokens } from "../chart-tokens";
 
 	interface SectorPoint {
@@ -46,7 +47,7 @@
 			emphasis: { focus: "series" },
 			data: snapshots.map((snap) => {
 				const found = snap.sectors.find((s) => s.name === sectorName);
-				return found ? found.weight * 100 : 0;
+				return found ? found.weight : 0;
 			}),
 		})),
 	);
@@ -60,7 +61,7 @@
 			borderWidth: 1,
 			padding: 10,
 			textStyle: { color: tokens.axisLabel, fontSize: 11 },
-			valueFormatter: (v: number) => `${v.toFixed(1)}%`,
+			valueFormatter: (v: number) => formatPercent(v, 1),
 		},
 		legend: {
 			data: allSectors,
@@ -78,10 +79,10 @@
 		},
 		yAxis: {
 			type: "value",
-			max: 100,
+			max: 1,
 			axisLabel: {
 				color: tokens.axisLabel,
-				formatter: (v: number) => `${v.toFixed(0)}%`,
+				formatter: (v: number) => formatPercent(v, 0),
 			},
 			splitLine: { lineStyle: { color: tokens.grid, type: "dashed" } },
 		},
