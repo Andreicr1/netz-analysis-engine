@@ -82,10 +82,23 @@ def upgrade() -> None:
         cursor.close()
 
     # ── 2. Ensure _cusip_resolve_queue has proper indexes ──
+    # The queue table is created lazily by the cusip_resolution worker
+    # the first time it runs; on a fresh CI database the table does not
+    # yet exist, so the bare CREATE INDEX would fail with UndefinedTable.
+    # Wrap in a DO block that only creates the index when the table is
+    # already there. Idempotent and safe across both fresh and live DBs.
     op.execute("""
-        CREATE INDEX IF NOT EXISTS idx_cusip_resolve_queue_issuer
-        ON _cusip_resolve_queue (issuer_name)
-        WHERE issuer_name IS NOT NULL
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM pg_tables
+                WHERE tablename = '_cusip_resolve_queue'
+            ) THEN
+                CREATE INDEX IF NOT EXISTS idx_cusip_resolve_queue_issuer
+                ON _cusip_resolve_queue (issuer_name)
+                WHERE issuer_name IS NOT NULL;
+            END IF;
+        END $$;
     """)
 
 
