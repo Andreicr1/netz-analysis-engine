@@ -893,6 +893,89 @@ export class PortfolioWorkspaceState {
 		}
 	}
 
+	// ── Phase 5 Task 5.2 — State machine transitions ─────────────────
+
+	/**
+	 * POST /model-portfolios/{id}/transitions — apply a state-machine
+	 * action and refresh ``this.portfolio`` with the freshly-serialized
+	 * response (carrying new ``state``, ``state_changed_at``, and
+	 * ``allowed_actions``).
+	 *
+	 * The Builder action bar (Phase 5 Task 5.2) calls this directly.
+	 * Returns the updated portfolio so the caller can branch on
+	 * success/failure without re-reading the store.
+	 *
+	 * Per DL3 — never inspect ``state`` to decide whether to render
+	 * a button. The backend's ``allowed_actions`` is the only source
+	 * of truth for action visibility.
+	 */
+	async applyTransition(
+		action: string,
+		opts: { reason?: string; metadata?: Record<string, unknown> } = {},
+	): Promise<ModelPortfolio | null> {
+		if (!this._getToken || !this.portfolioId) return null;
+		this.lastError = null;
+		try {
+			const api = this.api();
+			const body: Record<string, unknown> = { action };
+			if (opts.reason && opts.reason.trim().length > 0) {
+				body.reason = opts.reason.trim();
+			}
+			if (opts.metadata && Object.keys(opts.metadata).length > 0) {
+				body.metadata = opts.metadata;
+			}
+			const updated = await api.post<ModelPortfolio>(
+				`/model-portfolios/${this.portfolioId}/transitions`,
+				body,
+			);
+			// Refresh the workspace's portfolio view so action buttons
+			// re-render against the new ``allowed_actions`` immediately.
+			this.portfolio = updated;
+			return updated;
+		} catch (err) {
+			this.lastError = {
+				action: `transition:${action}`,
+				message: err instanceof Error ? err.message : "Failed to apply transition",
+				timestamp: Date.now(),
+			};
+			return null;
+		}
+	}
+
+	// ── Phase 5 Task 5.1 — Create new portfolio (NewPortfolioDialog) ──
+
+	/**
+	 * POST /model-portfolios — create a new draft portfolio.
+	 *
+	 * The backend (Phase 5 Task 5.1 backend extension) hydrates the
+	 * response with ``allowed_actions`` from the state machine and
+	 * seeds the paired ``portfolio_calibration`` row with migration
+	 * 0100 defaults so the Builder can immediately render the
+	 * canonical ``[construct, archive]`` action set on success.
+	 *
+	 * Caller is responsible for navigating to the new portfolio —
+	 * this method only persists and returns the new row.
+	 */
+	async createPortfolio(payload: Record<string, unknown>): Promise<ModelPortfolio | null> {
+		if (!this._getToken) return null;
+		this.lastError = null;
+		try {
+			const api = this.api();
+			const created = await api.post<ModelPortfolio>(
+				"/model-portfolios",
+				payload,
+			);
+			return created;
+		} catch (err) {
+			this.lastError = {
+				action: "create-portfolio",
+				message: err instanceof Error ? err.message : "Failed to create portfolio",
+				timestamp: Date.now(),
+			};
+			return null;
+		}
+	}
+
 	// ── Phase 4 — Construction run loader ───────────────────────────
 
 	/** Fetch a persisted construction run by id into ``constructionRun``. */

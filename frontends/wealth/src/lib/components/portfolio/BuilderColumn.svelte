@@ -21,14 +21,11 @@
   per §3.2 of the design spec.
 -->
 <script lang="ts">
-	import { goto } from "$app/navigation";
 	import { PanelErrorState } from "@investintell/ui/runtime";
 	import { formatPercent } from "@investintell/ui";
-	import Play from "lucide-svelte/icons/play";
-	import BarChart2 from "lucide-svelte/icons/bar-chart-2";
 	import LineChart from "lucide-svelte/icons/line-chart";
-	import Loader2 from "lucide-svelte/icons/loader-2";
 	import BuilderTable from "$lib/components/portfolio/BuilderTable.svelte";
+	import BuilderActionBar from "$lib/components/portfolio/BuilderActionBar.svelte";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import { portfolioDisplayName } from "$lib/constants/blocks";
 
@@ -40,11 +37,6 @@
 		// to the Narrative tab on "done".
 		workspace.openAnalyticsForPortfolio();
 		void workspace.runConstructJob();
-	}
-
-	function handleStressNav() {
-		workspace.activeModelTab = "stress";
-		goto("/portfolio/model");
 	}
 
 	function handleViewChart() {
@@ -91,6 +83,11 @@
 			</div>
 
 			<div class="bc-actions">
+				<!--
+				  View Chart is a layout shortcut, not a state-machine
+				  action — it just opens Estado C with the chart tab. It
+				  stays as a static pill so the muscle memory survives.
+				-->
 				<button
 					type="button"
 					class="bc-pill"
@@ -100,29 +97,15 @@
 					<LineChart size={16} />
 					<span>View Chart</span>
 				</button>
-				<button
-					type="button"
-					class="bc-pill"
-					disabled={!workspace.portfolioId || workspace.isConstructing}
-					onclick={handleConstruct}
-				>
-					{#if workspace.isConstructing}
-						<Loader2 size={16} class="bc-pill-spinner" />
-						<span>Building…</span>
-					{:else}
-						<Play size={16} />
-						<span>Construct</span>
-					{/if}
-				</button>
-				<button
-					type="button"
-					class="bc-pill"
-					disabled={!workspace.portfolioId}
-					onclick={handleStressNav}
-				>
-					<BarChart2 size={16} />
-					<span>Stress Test</span>
-				</button>
+
+				<!--
+				  Phase 5 Task 5.2 — every state-machine button comes
+				  from ``portfolio.allowed_actions`` (DL3). Construct is
+				  the only action that does not POST to the transition
+				  dispatcher; it has its own Job-or-Stream route which
+				  the action bar fires via the ``onConstruct`` callback.
+				-->
+				<BuilderActionBar onConstruct={handleConstruct} />
 			</div>
 		</header>
 
