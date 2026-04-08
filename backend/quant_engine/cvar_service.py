@@ -92,34 +92,57 @@ class BreachStatus:
     consecutive_breach_days: int
 
 
-def compute_regime_cvar(
-    returns: np.ndarray,
-    regime_probs: np.ndarray,
+# Minimum stress observations required to compute a *conditional* regime CVaR
+# instead of falling back to the unconditional distribution. 30 is the
+# convention used by the existing risk worker; surfaced here so callers and
+# tests can inspect the threshold without re-deriving it.
+MIN_STRESS_OBSERVATIONS = 30
+
+
+@dataclass(frozen=True, slots=True)
+class RegimeCVaRResult:
+    """Audited result of a regime-conditional CVaR computation.
+
+    S5-I — the bare ``compute_regime_cvar`` historically returned a single
+    float and silently fell back to the *unconditional* distribution
+    whenever fewer than 30 observations belonged to the stress regime.
+    Risk dashboards then displayed an "in-stress CVaR" that was nothing
+    of the sort, with no audit trail. This dataclass exposes the same
+    number alongside the metadata an auditor needs to interpret it:
+
+    * ``is_conditional``: ``True`` only when the value was actually
+      computed on the stress subset; ``False`` whenever the function
+      fell back to the full series.
+    * ``audit_note``: human-readable reason — ``"insufficient_stress_obs"``
+      when the fallback fired, ``"conditional"`` when it did not, or
+      ``"length_mismatch_truncated"`` when the inputs were realigned.
+    * ``n_stress_obs`` / ``n_total_obs``: the raw counts so the caller
+      can decide whether to trust the number, request a longer window,
+      or surface a warning to the user.
+    """
+
+    value: float
+    is_conditional: bool
+    audit_note: str
+    n_stress_obs: int
+    n_total_obs: int
+
+
+def compute_regime_cvar_audited(
+    returns: np.ndarray,  # type: ignore[type-arg]
+    regime_probs: np.ndarray,  # type: ignore[type-arg]
     confidence: float = 0.95,
     regime_threshold: float = 0.5,
-) -> float:
-    """CVaR conditional on stress regime.
+) -> RegimeCVaRResult:
+    """Compute regime-conditional CVaR with full audit metadata.
 
-    Uses only observations where regime_probs > threshold.
-    Falls back to unconditional CVaR if stress subset has < 30 observations.
-
-    Parameters
-    ----------
-    returns : np.ndarray
-        (T,) portfolio returns.
-    regime_probs : np.ndarray
-        (T,) probability of being in stress regime per observation.
-    confidence : float
-        Confidence level (e.g. 0.95).
-    regime_threshold : float
-        Minimum regime probability to classify as stress.
-
-    Returns
-    -------
-    float
-        Conditional CVaR (negative = loss).
-
+    Same statistical contract as :func:`compute_regime_cvar`, but the
+    return value is an audited :class:`RegimeCVaRResult`. New callers
+    should prefer this function so the conditional / fallback distinction
+    is never lost in the cracks.
     """
+    audit_notes: list[str] = []
+
     if len(returns) != len(regime_probs):
         logger.warning(
             "regime_cvar_length_mismatch",
@@ -129,16 +152,57 @@ def compute_regime_cvar(
         min_len = min(len(returns), len(regime_probs))
         returns = returns[-min_len:]
         regime_probs = regime_probs[-min_len:]
+        audit_notes.append("length_mismatch_truncated")
 
     stress_mask = regime_probs > regime_threshold
-    if stress_mask.sum() >= 30:
+    n_stress = int(stress_mask.sum())
+    n_total = int(len(returns))
+
+    if n_stress >= MIN_STRESS_OBSERVATIONS:
         stress_returns = returns[stress_mask]
+        is_conditional = True
+        audit_notes.append("conditional")
     else:
-        logger.warning("cvar_conditional_insufficient_data", n=int(stress_mask.sum()))
+        logger.warning(
+            "cvar_conditional_insufficient_data",
+            n=n_stress,
+            min_required=MIN_STRESS_OBSERVATIONS,
+        )
         stress_returns = returns
+        is_conditional = False
+        audit_notes.append("insufficient_stress_obs_fallback_to_unconditional")
 
     cvar, _ = compute_cvar_from_returns(stress_returns, confidence)
-    return cvar
+
+    return RegimeCVaRResult(
+        value=cvar,
+        is_conditional=is_conditional,
+        audit_note=";".join(audit_notes),
+        n_stress_obs=n_stress,
+        n_total_obs=n_total,
+    )
+
+
+def compute_regime_cvar(
+    returns: np.ndarray,
+    regime_probs: np.ndarray,
+    confidence: float = 0.95,
+    regime_threshold: float = 0.5,
+) -> float:
+    """CVaR conditional on stress regime — returns a bare float.
+
+    Backwards-compatible thin wrapper around
+    :func:`compute_regime_cvar_audited`. Existing callers (and tests)
+    keep their float contract; new callers that need to know whether
+    the fallback fired should call ``compute_regime_cvar_audited``
+    directly.
+    """
+    return compute_regime_cvar_audited(
+        returns=returns,
+        regime_probs=regime_probs,
+        confidence=confidence,
+        regime_threshold=regime_threshold,
+    ).value
 
 
 def compute_cvar_from_returns(

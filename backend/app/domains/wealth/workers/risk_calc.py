@@ -1158,7 +1158,16 @@ async def _compute_global_peer_percentiles(db: AsyncSession, calc_date: date) ->
 
     MIN_PEERS = 5
 
-    # Fetch all metrics for today + strategy labels from mv_unified_funds
+    # Fetch all metrics for today + strategy labels from mv_unified_funds.
+    #
+    # S5 universe-collapse guard — the LEFT JOIN to mv_unified_funds is on
+    # ticker. Two distinct fund universes (e.g. an ETF and a money-market
+    # fund) can share a NULL ticker, which would let any row from
+    # mv_unified_funds match any row from instruments_universe whose
+    # ticker is also NULL — non-deterministic strategy labels and silent
+    # cross-universe peer contamination. We require both sides to have a
+    # non-NULL ticker on the JOIN; rows without a ticker fall through the
+    # COALESCE to the 'Unknown' strategy bucket where they belong.
     query = text("""
         SELECT
             frm.instrument_id,
@@ -1169,7 +1178,10 @@ async def _compute_global_peer_percentiles(db: AsyncSession, calc_date: date) ->
             COALESCE(f.strategy_label, f.fund_type, 'Unknown') AS strategy_label
         FROM fund_risk_metrics frm
         JOIN instruments_universe iu ON iu.instrument_id = frm.instrument_id
-        LEFT JOIN mv_unified_funds f ON f.ticker = iu.ticker
+        LEFT JOIN mv_unified_funds f
+               ON f.ticker = iu.ticker
+              AND iu.ticker IS NOT NULL
+              AND f.ticker IS NOT NULL
         WHERE frm.calc_date = :calc_date
           AND frm.sharpe_1y IS NOT NULL
     """)
@@ -1189,6 +1201,27 @@ async def _compute_global_peer_percentiles(db: AsyncSession, calc_date: date) ->
     for strategy, funds in groups.items():
         if len(funds) < MIN_PEERS:
             continue
+
+        # S5 — instruments_universe enumerates only *currently active*
+        # funds (Yahoo Finance / SEC stops emitting data for liquidated
+        # / merged funds, and they age out of the catalog). The peer
+        # percentile is therefore biased upward: every fund is being
+        # ranked against survivors, not the full population that
+        # included the funds that died for being terrible. We cannot
+        # inject the dead funds without a separate historical universe,
+        # but we can audit-log the bias so analysts know the rank is
+        # an upper-bound estimate.
+        logger.warning(
+            "peer_percentile_survivorship_biased",
+            data_quality_flag="survivorship_biased",
+            strategy=strategy,
+            peer_count=len(funds),
+            note=(
+                "instruments_universe contains only currently-listed funds; "
+                "rank is computed against survivors only and is therefore an "
+                "upper bound on the fund's true peer percentile"
+            ),
+        )
 
         # Build arrays
         sharpe_arr = np.array([f["sharpe_1y"] for f in funds if f["sharpe_1y"] is not None], dtype=float)
