@@ -39,9 +39,9 @@
     return path.startsWith("/screener/runs/");
   });
 
-  /** Are we on a fund fact-sheet page? */
+  /** Are we on any fund detail page (fact sheet OR risk analysis sub-tab)? */
   let fundPageId = $derived.by(() => {
-    const match = $page.url.pathname.match(/^\/screener\/fund\/([^/]+)$/);
+    const match = $page.url.pathname.match(/^\/screener\/fund\/([^/]+)(?:\/.*)?$/);
     return match ? match[1] : null;
   });
 

@@ -93,21 +93,17 @@
 	<title>{pageTitle} | Fact Sheet</title>
 </svelte:head>
 
-<div class="fs-route-shell rounded-2xl bg-[var(--ii-bg)] overflow-y-auto">
-	<FundFactSheetContent
-		{routeData}
-		showBackButton={true}
-		onBack={goBack}
-		{backLabel}
-		onDownloadPdf={handleDownloadPdf}
-		{pdfLoading}
-		onRetry={retryLoad}
-	/>
-</div>
-
-<style>
-	.fs-route-shell {
-		width: 100%;
-		height: 100%;
-	}
-</style>
+<!--
+  The outer scroll + rounded-2xl background lives in the parent
+  fund-detail +layout.svelte now, so both Fact Sheet and Risk
+  Analysis inherit the same shell. This page renders content only.
+-->
+<FundFactSheetContent
+	{routeData}
+	showBackButton={true}
+	onBack={goBack}
+	{backLabel}
+	onDownloadPdf={handleDownloadPdf}
+	{pdfLoading}
+	onRetry={retryLoad}
+/>
