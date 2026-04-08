@@ -14,7 +14,18 @@ import datetime as dt
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Uuid, func
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    Uuid,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -54,6 +65,14 @@ class StrategyDriftAlert(OrganizationScopedMixin, Base):
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
     )
+
+    # Phase 7 — Alerts Unification. Read/unread state persisted via the
+    # backend API (DL15 — never localStorage). NULL = unread; non-null
+    # = the moment the actor acknowledged via GlobalAlertInbox.
+    acknowledged_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    acknowledged_by: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationship (lazy="raise" per CLAUDE.md)
     instrument = relationship("Instrument", lazy="raise")
