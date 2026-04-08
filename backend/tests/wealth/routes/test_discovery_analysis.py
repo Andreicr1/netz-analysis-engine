@@ -40,6 +40,7 @@ from app.domains.wealth.queries.analysis_holdings import (
 from app.domains.wealth.queries.analysis_returns import (
     RISK_METRICS_COLUMNS,
     _risk_metrics,
+    fetch_returns_risk,
 )
 from app.domains.wealth.queries.fund_resolver import resolve_fund
 
@@ -233,6 +234,70 @@ async def test_returns_risk_resolves_class_id_without_ticker() -> None:
             expected.discard("peer_strategy_label")
             expected.add("peer_strategy")
             assert set(rm.keys()) == expected
+
+
+@pytest.mark.asyncio
+async def test_fetch_returns_risk_sequentialized_end_to_end() -> None:
+    """Regression guard for the sequentialize fix.
+
+    ``fetch_returns_risk`` previously used ``asyncio.gather`` over three
+    queries on the same ``AsyncSession``, which asyncpg rejects with
+    "another operation is in progress". This test exercises the full
+    function against a real session so the next time someone reaches
+    for ``gather`` they get an immediate test failure instead of a
+    production 500. Picks any active instrument with at least one
+    ``fund_risk_metrics`` row — the resolver→payload chain is what we
+    want to prove, not a specific fund's numbers.
+    """
+    async with _fresh_session() as db:
+        row = (
+            await db.execute(
+                text(
+                    """
+                    SELECT frm.instrument_id::text AS iid
+                    FROM fund_risk_metrics frm
+                    JOIN nav_timeseries nt
+                      ON nt.instrument_id = frm.instrument_id
+                    GROUP BY frm.instrument_id
+                    HAVING COUNT(*) > 30
+                    LIMIT 1
+                    """,
+                ),
+            )
+        ).mappings().first()
+        if row is None:
+            pytest.skip("no instrument with both risk metrics and nav history")
+
+        payload = await fetch_returns_risk(db, row["iid"], window="1y")
+
+        # Contract surface — the frontend pins these keys.
+        assert set(payload.keys()) == {
+            "window",
+            "nav_series",
+            "monthly_returns",
+            "rolling_metrics",
+            "return_distribution",
+            "risk_metrics",
+            "disclosure",
+        }
+        assert payload["window"] == "1y"
+        assert isinstance(payload["nav_series"], list)
+        assert isinstance(payload["monthly_returns"], list)
+        assert isinstance(payload["rolling_metrics"], list)
+        assert isinstance(payload["return_distribution"], dict)
+        assert "bins" in payload["return_distribution"]
+        assert "counts" in payload["return_distribution"]
+        assert payload["disclosure"] == {"has_nav": len(payload["nav_series"]) > 0}
+
+        # risk_metrics may be None for instruments with no row in
+        # fund_risk_metrics, but when present it must expose the explicit
+        # RISK_METRICS_COLUMNS contract (peer_strategy_label →
+        # peer_strategy at the payload boundary).
+        if payload["risk_metrics"] is not None:
+            expected = set(RISK_METRICS_COLUMNS)
+            expected.discard("peer_strategy_label")
+            expected.add("peer_strategy")
+            assert set(payload["risk_metrics"].keys()) == expected
 
 
 @pytest.mark.asyncio
