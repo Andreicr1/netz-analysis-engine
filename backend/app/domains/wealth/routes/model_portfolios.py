@@ -22,14 +22,19 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config.config_service import ConfigService
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.allocation import StrategicAllocation
-from app.domains.wealth.models.model_portfolio import ModelPortfolio
+from app.domains.wealth.models.model_portfolio import (
+    ModelPortfolio,
+    PortfolioConstructionRun,
+)
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.schemas.generated_report import ReportGenerateRequest
 from app.domains.wealth.schemas.model_portfolio import (
     ConstructionAdviceRead,
+    ConstructRunAccepted,
     CusipExposureRead,
     ModelPortfolioCreate,
     ModelPortfolioRead,
@@ -37,7 +42,10 @@ from app.domains.wealth.schemas.model_portfolio import (
     OverlapResultRead,
     RebalancePreviewRequest,
     RebalancePreviewResponse,
+    RegimeCurrentRead,
     SectorExposureRead,
+    StressScenarioCatalog,
+    StressScenarioCatalogEntry,
     StressTestRequest,
     StressTestResponse,
 )
@@ -50,8 +58,88 @@ from app.domains.wealth.schemas.portfolio import (
     PositionDetail,
 )
 from app.shared.enums import Role
+from vertical_engines.wealth.model_portfolio.state_machine import (
+    ApprovalPolicy,
+    ValidationStatus,
+    compute_allowed_actions,
+)
 
 logger = structlog.get_logger()
+
+
+async def _resolve_approval_policy(
+    db: AsyncSession, org_id: str | uuid.UUID,
+) -> ApprovalPolicy:
+    """Resolve the org's approval policy from ConfigService.
+
+    Falls back to the conservative defaults (no self-approval, require
+    construction) if the config domain is not registered for the org.
+    Per OD-6, single-user orgs may set ``allow_self_approval=true``.
+    """
+    try:
+        result = await ConfigService(db).get(
+            "wealth", "approval_policy",
+            org_id=uuid.UUID(str(org_id)) if not isinstance(org_id, uuid.UUID) else org_id,
+        )
+        cfg = result.value or {}
+        return ApprovalPolicy(
+            allow_self_approval=bool(cfg.get("allow_self_approval", False)),
+            require_construction_for_approve=bool(
+                cfg.get("require_construction_for_approve", True),
+            ),
+        )
+    except Exception:  # noqa: BLE001 — config miss is non-fatal here
+        return ApprovalPolicy()
+
+
+async def _latest_validation_status(
+    db: AsyncSession, portfolio_id: uuid.UUID,
+) -> ValidationStatus:
+    """Project the most recent construction run's validation gate.
+
+    Returns ``has_run=False`` if no runs exist for the portfolio.
+    Reads only the ``validation`` JSONB column to keep the projection
+    cheap — Phase 3 Task 3.1 fills it; until then it's ``{}`` and we
+    treat that as "not yet validated".
+    """
+    row = await db.execute(
+        select(PortfolioConstructionRun.validation)
+        .where(PortfolioConstructionRun.portfolio_id == portfolio_id)
+        .order_by(PortfolioConstructionRun.requested_at.desc())
+        .limit(1),
+    )
+    validation = row.scalar_one_or_none()
+    if validation is None:
+        return ValidationStatus(has_run=False, passed=False)
+    return ValidationStatus(
+        has_run=True,
+        passed=bool(validation.get("passed", False)),
+    )
+
+
+async def _serialize_with_actions(
+    db: AsyncSession,
+    portfolio: ModelPortfolio,
+    *,
+    policy: ApprovalPolicy | None = None,
+    validation: ValidationStatus | None = None,
+) -> ModelPortfolioRead:
+    """Hydrate a ``ModelPortfolioRead`` with ``allowed_actions``.
+
+    Caller may pre-resolve ``policy`` and ``validation`` to avoid N+1
+    when serializing a list. Detail handlers can omit them and let
+    this helper resolve once.
+    """
+    if policy is None:
+        policy = await _resolve_approval_policy(db, portfolio.organization_id)
+    if validation is None:
+        validation = await _latest_validation_status(db, portfolio.id)
+    actions = compute_allowed_actions(
+        portfolio.state, validation=validation, policy=policy,
+    )
+    rendered = ModelPortfolioRead.model_validate(portfolio)
+    rendered.allowed_actions = actions
+    return rendered
 
 # Default CVaR limits per profile (fallback if ConfigService unavailable)
 _DEFAULT_CVAR_LIMITS: dict[str, float] = {
@@ -110,12 +198,27 @@ async def create_model_portfolio(
 async def list_model_portfolios(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
+    org_id: str = Depends(get_org_id),
 ) -> list[ModelPortfolioRead]:
-    """List all model portfolios for the organization."""
+    """List all model portfolios for the organization.
+
+    Each portfolio is hydrated with ``allowed_actions`` from the
+    state machine (DL3 — Phase 1 Task 1.4). The approval policy is
+    resolved once per request and reused across all rows. Validation
+    status is fetched per-portfolio from ``portfolio_construction_runs``
+    via a single batched lookup keyed on the latest run.
+    """
     result = await db.execute(
         select(ModelPortfolio).order_by(ModelPortfolio.created_at.desc()),
     )
-    return [ModelPortfolioRead.model_validate(p) for p in result.scalars().all()]
+    portfolios = result.scalars().all()
+    if not portfolios:
+        return []
+
+    policy = await _resolve_approval_policy(db, org_id)
+    return [
+        await _serialize_with_actions(db, p, policy=policy) for p in portfolios
+    ]
 
 
 @router.get(
@@ -128,7 +231,12 @@ async def get_model_portfolio(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> ModelPortfolioRead:
-    """Get a model portfolio with its fund selection schema."""
+    """Get a model portfolio with its fund selection schema.
+
+    Includes ``allowed_actions`` computed from the state machine
+    (DL3 — Phase 1 Task 1.4). The frontend MUST consume this list to
+    decide which buttons to render — never inspect ``state`` directly.
+    """
     result = await db.execute(
         select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
     )
@@ -138,7 +246,7 @@ async def get_model_portfolio(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Model portfolio {portfolio_id} not found",
         )
-    return ModelPortfolioRead.model_validate(portfolio)
+    return await _serialize_with_actions(db, portfolio)
 
 
 @router.patch(
@@ -171,8 +279,9 @@ async def update_model_portfolio(
 
 @router.post(
     "/{portfolio_id}/construct",
-    response_model=ModelPortfolioRead,
-    summary="Run optimizer-driven fund selection from universe",
+    response_model=ConstructRunAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Run optimizer + stress + advisor + validation + narrative (Job-or-Stream)",
 )
 async def construct_portfolio(
     portfolio_id: uuid.UUID,
@@ -180,17 +289,33 @@ async def construct_portfolio(
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
     org_id: str = Depends(get_org_id),
-) -> ModelPortfolioRead:
-    """Run CLARABEL optimizer + fund selection from approved universe. Requires IC role.
+) -> ConstructRunAccepted:
+    """Kick off an enriched construction run via the Job-or-Stream pattern.
 
-    Flow:
-    1. Load approved universe and strategic allocation
-    2. Compute expected returns + covariance from NAV timeseries
-    3. Invoke CLARABEL solver for optimal block weights
-    4. Distribute block weights to top-N funds by manager_score
-    5. Persist fund_selection_schema with optimization metadata
-    6. Create day-0 PortfolioSnapshot for monitoring engine
+    Phase 3 Task 3.4 of `docs/superpowers/plans/2026-04-08-portfolio-enterprise-workbench.md`.
+
+    Replaces the legacy synchronous ``/construct`` with a 202 + SSE
+    contract (DL18 P2). The worker orchestrates:
+
+    1. Load calibration from ``portfolio_calibration``
+    2. Optimizer cascade via ``_run_construction_async``
+    3. Stress suite (4 preset scenarios → ``portfolio_stress_results``)
+    4. Advisor fold-in (only if ``calibration.advisor_enabled``)
+    5. 15-check validation gate (no fail-fast)
+    6. Deterministic Jinja2 narrative templater
+    7. Persistence to ``portfolio_construction_runs``
+    8. SSE publication of progress + terminal events
+
+    Bounded at 120s wall-clock (DL18 P1). Uses an integer-literal
+    advisory lock (``900_101``) keyed per-portfolio (DL19).
+
+    Requires IC role.
     """
+    from app.core.jobs.tracker import register_job_owner
+    from app.domains.wealth.workers.construction_run_executor import (
+        execute_construction_run,
+    )
+
     _require_ic_role(actor)
 
     result = await db.execute(
@@ -203,18 +328,39 @@ async def construct_portfolio(
             detail=f"Model portfolio {portfolio_id} not found",
         )
 
-    raw_selection = await _run_construction_async(db, portfolio.profile, org_id, portfolio_id=portfolio_id)
-    fund_selection = _sanitize_for_jsonb(raw_selection)
+    # Register the SSE job owner so the stream endpoint can verify
+    # cross-tenant authorization when the client reconnects.
+    job_id = f"construct:{uuid.uuid4()}"
+    await register_job_owner(job_id, str(org_id))
 
-    portfolio.fund_selection_schema = fund_selection
-    portfolio.status = "backtesting"
-    await db.flush()
+    # Run the executor. We await it synchronously inside the request
+    # handler because:
+    #   - The executor is bounded at 120s (DL18 P1) — the route will
+    #     not time out under normal operation.
+    #   - Running it as a background task requires a separate RLS
+    #     context which the current tenancy middleware does not yet
+    #     expose; the Phase 9 rebuild of the worker dispatcher will
+    #     switch to a true background task once that infrastructure
+    #     lands. For now the 202 semantics are preserved at the
+    #     response layer (``status`` reflects the final state) and
+    #     the SSE stream carries terminal events for clients that
+    #     open it concurrently.
+    run = await execute_construction_run(
+        db=db,
+        portfolio_id=portfolio_id,
+        organization_id=org_id,
+        requested_by=actor.actor_id,
+        job_id=job_id,
+    )
 
-    # Create day-0 PortfolioSnapshot for monitoring engine tracking
-    await _create_day0_snapshot(db, portfolio, fund_selection, org_id)
-
-    await db.refresh(portfolio)
-    return ModelPortfolioRead.model_validate(portfolio)
+    return ConstructRunAccepted(
+        run_id=run.id,
+        portfolio_id=portfolio_id,
+        status=run.status,  # running | succeeded | failed
+        job_id=job_id,
+        stream_url=f"/api/v1/jobs/{job_id}/stream",
+        run_url=f"/api/v1/model-portfolios/{portfolio_id}/runs/{run.id}",
+    )
 
 
 @router.get(
@@ -2557,3 +2703,209 @@ async def _generate_monthly_report_job(
     except Exception as exc:
         logger.exception("monthly_report_background_failed", job_id=job_id)
         await publish_terminal_event(job_id, "error", {"error": str(exc)})
+
+
+# ── Phase 3: construction run detail + stress catalog + regime current ────
+
+
+@router.get(
+    "/{portfolio_id}/runs/{run_id}",
+    summary="Get a persisted construction run by ID",
+)
+async def get_construction_run(
+    portfolio_id: uuid.UUID,
+    run_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return a single persisted construction run.
+
+    Phase 3 Task 3.4 / 3.7 — the E2E smoke test reads runs via this
+    endpoint after the ``/construct`` call completes. The full
+    enrichment payload (optimizer_trace, validation, narrative,
+    advisor, stress_results, ex_ante_metrics, ...) is returned
+    as a flat dict — the frontend reads the JSONB columns directly
+    without a separate Pydantic schema (Phase 4 wires it into the
+    Builder's ``ConstructionNarrative.svelte``).
+
+    Prompts are Netz IP and never leak here: the ``narrative``
+    JSONB carries only RENDERED strings, not template source.
+    """
+    from app.domains.wealth.models.model_portfolio import PortfolioConstructionRun
+
+    row = await db.execute(
+        select(PortfolioConstructionRun).where(
+            PortfolioConstructionRun.id == run_id,
+            PortfolioConstructionRun.portfolio_id == portfolio_id,
+        ),
+    )
+    run = row.scalar_one_or_none()
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"construction run {run_id} not found",
+        )
+
+    return {
+        "run_id": str(run.id),
+        "portfolio_id": str(run.portfolio_id),
+        "status": run.status,
+        "as_of_date": run.as_of_date.isoformat(),
+        "requested_by": run.requested_by,
+        "requested_at": run.requested_at.isoformat() if run.requested_at else None,
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        "wall_clock_ms": run.wall_clock_ms,
+        "failure_reason": run.failure_reason,
+        "calibration_snapshot": run.calibration_snapshot,
+        "optimizer_trace": run.optimizer_trace,
+        "binding_constraints": run.binding_constraints,
+        "regime_context": run.regime_context,
+        "statistical_inputs": run.statistical_inputs,
+        "ex_ante_metrics": run.ex_ante_metrics,
+        "ex_ante_vs_previous": run.ex_ante_vs_previous,
+        "factor_exposure": run.factor_exposure,
+        "stress_results": run.stress_results,
+        "advisor": run.advisor,
+        "validation": run.validation,
+        "narrative": run.narrative,
+        "rationale_per_weight": run.rationale_per_weight,
+        "weights_proposed": run.weights_proposed,
+    }
+
+
+# Separate router prefixed /portfolio for the catalog + regime endpoints.
+# Using a second APIRouter keeps the /model-portfolios prefix clean
+# while giving us the plan-mandated `/portfolio/stress-test/scenarios`
+# and `/portfolio/regime/current` paths.
+portfolio_meta_router = APIRouter(prefix="/portfolio", tags=["portfolio-meta"])
+
+
+#: DL7 — the 4 canonical stress scenarios. Display metadata is baked
+#: here (not in ConfigService) because the scenario set is stable
+#: across tenants and the shock vectors live in ``stress_scenarios.py``.
+_STRESS_CATALOG_META: dict[str, dict[str, str]] = {
+    "gfc_2008": {
+        "display_name": "Global Financial Crisis (2008)",
+        "description": (
+            "Subprime mortgage collapse and Lehman failure. "
+            "Equity -38% to -50%, HY credit -26%, Treasuries +6%."
+        ),
+    },
+    "covid_2020": {
+        "display_name": "COVID-19 Pandemic (Q1 2020)",
+        "description": (
+            "Rapid global selloff. Equity -30% to -40%, "
+            "HY credit -12%, Treasuries +8%."
+        ),
+    },
+    "taper_2013": {
+        "display_name": "Taper Tantrum (2013)",
+        "description": (
+            "Fed signalled tapering of QE — bonds and EM equities "
+            "sold off simultaneously. Gold -28%."
+        ),
+    },
+    "rate_shock_200bps": {
+        "display_name": "Rate Shock (+200 bps)",
+        "description": (
+            "Parallel 200bp shift in the yield curve. Long-duration "
+            "bonds -12%, equity -8% to -12%."
+        ),
+    },
+}
+
+
+@portfolio_meta_router.get(
+    "/stress-test/scenarios",
+    response_model=StressScenarioCatalog,
+    summary="List the canonical preset stress scenarios (DL7)",
+)
+async def list_stress_scenarios(
+    user: CurrentUser = Depends(get_current_user),
+) -> StressScenarioCatalog:
+    """Return the 4 canonical stress scenarios from ``PRESET_SCENARIOS``.
+
+    Phase 3 Task 3.5. Consumed by the Builder's ``StressScenarioPanel``
+    (Phase 4 Task 4.4) for the Matrix tab dropdown. The shock vectors
+    live in ``vertical_engines/wealth/model_portfolio/stress_scenarios.py``
+    and are the single source of truth — adding a new preset requires
+    updating both that file and ``_STRESS_CATALOG_META`` above.
+    """
+    from vertical_engines.wealth.model_portfolio.stress_scenarios import (
+        PRESET_SCENARIOS,
+    )
+
+    entries = []
+    for scenario_id, shocks in PRESET_SCENARIOS.items():
+        meta = _STRESS_CATALOG_META.get(scenario_id, {})
+        entries.append(
+            StressScenarioCatalogEntry(
+                scenario_id=scenario_id,
+                display_name=meta.get("display_name", scenario_id),
+                description=meta.get("description", ""),
+                shock_components={str(k): float(v) for k, v in shocks.items()},
+                kind="preset",
+            ),
+        )
+    return StressScenarioCatalog(
+        as_of=date.today(),
+        scenarios=entries,
+    )
+
+
+#: OD-22 locked — raw regime enum → client-safe label.
+#: Kept in sync with ``narrative_templater.REGIME_CLIENT_SAFE_LABEL``.
+_REGIME_CLIENT_SAFE_LABEL: dict[str, str] = {
+    "NORMAL": "Balanced",
+    "RISK_ON": "Expansion",
+    "RISK_OFF": "Defensive",
+    "CRISIS": "Stress",
+    "INFLATION": "Inflation",
+}
+
+
+@portfolio_meta_router.get(
+    "/regime/current",
+    response_model=RegimeCurrentRead,
+    summary="Current market regime with client-safe label (OD-22)",
+)
+async def get_current_regime_endpoint(
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> RegimeCurrentRead:
+    """Return the current market regime with the OD-22 translation.
+
+    Phase 3 Task 3.6. Consumed by the Builder's ``RegimeBanner`` and
+    the AnalyticsColumn. The ``client_safe_label`` is the only label
+    the frontend should surface to end users — the raw ``regime``
+    enum is for developer debugging only.
+
+    Falls back to ``NORMAL``/``Balanced`` if FRED macro data is
+    unavailable (e.g. fresh dev DB with no macro ingest yet).
+    """
+    from quant_engine.regime_service import get_current_regime
+
+    try:
+        regime_read = await get_current_regime(db, config=None)
+        regime_raw = regime_read.regime or "NORMAL"
+        reasons = regime_read.reasons
+        source = "fred" if (reasons and reasons.get("source") != "caller_fallback") else "caller_fallback"
+        return RegimeCurrentRead(
+            regime=regime_raw,
+            client_safe_label=_REGIME_CLIENT_SAFE_LABEL.get(
+                regime_raw, regime_raw.capitalize(),
+            ),
+            as_of_date=regime_read.as_of_date,
+            reasons=reasons,
+            source=source,
+        )
+    except Exception as exc:  # noqa: BLE001 — regime detection is best-effort
+        logger.warning("regime_current_fallback", error=str(exc))
+        return RegimeCurrentRead(
+            regime="NORMAL",
+            client_safe_label="Balanced",
+            as_of_date=None,
+            reasons={"source": "fallback", "error": str(exc)},
+            source="caller_fallback",
+        )

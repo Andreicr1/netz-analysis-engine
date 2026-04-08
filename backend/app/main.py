@@ -112,7 +112,12 @@ from app.domains.wealth.routes.long_form_reports import router as wealth_long_fo
 from app.domains.wealth.routes.macro import router as wealth_macro_router
 from app.domains.wealth.routes.manager_screener import router as wealth_manager_screener_router
 from app.domains.wealth.routes.market_data import router as wealth_market_data_router
-from app.domains.wealth.routes.model_portfolios import router as wealth_model_portfolios_router
+from app.domains.wealth.routes.model_portfolios import (
+    portfolio_meta_router as wealth_portfolio_meta_router,
+)
+from app.domains.wealth.routes.model_portfolios import (
+    router as wealth_model_portfolios_router,
+)
 from app.domains.wealth.routes.monitoring import router as wealth_monitoring_router
 from app.domains.wealth.routes.monthly_report import router as wealth_monthly_report_router
 from app.domains.wealth.routes.portfolio_views import router as wealth_portfolio_views_router
@@ -476,6 +481,7 @@ api_v1.include_router(wealth_discovery_analysis_router)
 api_v1.include_router(wealth_documents_router)
 api_v1.include_router(wealth_universe_router)
 api_v1.include_router(wealth_model_portfolios_router)
+api_v1.include_router(wealth_portfolio_meta_router)
 api_v1.include_router(wealth_portfolio_views_router)
 api_v1.include_router(wealth_rebalancing_router)
 api_v1.include_router(wealth_fact_sheets_router)

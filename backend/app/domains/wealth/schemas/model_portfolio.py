@@ -1,4 +1,12 @@
-"""Model Portfolio Pydantic schemas for API serialization."""
+"""Model Portfolio Pydantic schemas for API serialization.
+
+Phase 1 Task 1.4 (2026-04-08) added the lifecycle state machine fields
+to ``ModelPortfolioRead``: ``state``, ``state_metadata``,
+``state_changed_at``, ``state_changed_by``, and ``allowed_actions``.
+
+The frontend MUST consume ``allowed_actions`` to render buttons —
+zero ``if state === "validated"`` conditionals in Svelte (DL3).
+"""
 
 from __future__ import annotations
 
@@ -8,9 +16,25 @@ from decimal import Decimal
 from typing import Literal
 
 import structlog
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 logger = structlog.get_logger()
+
+
+# Canonical state set — kept in sync with the CHECK constraint in
+# migration 0098 and ``state_machine.TRANSITIONS``. Using a Literal
+# here gives the OpenAPI schema a typed enum and lets the SvelteKit
+# type generator emit the same union on the frontend.
+PortfolioState = Literal[
+    "draft",
+    "constructed",
+    "validated",
+    "approved",
+    "live",
+    "paused",
+    "archived",
+    "rejected",
+]
 
 
 class ModelPortfolioRead(BaseModel):
@@ -25,6 +49,17 @@ class ModelPortfolioRead(BaseModel):
     backtest_start_date: date | None = None
     inception_nav: Decimal
     status: str
+    # ── State machine (migration 0098, Phase 1 Task 1.4) ──────────
+    state: PortfolioState = "draft"
+    state_metadata: dict = Field(default_factory=dict)
+    state_changed_at: datetime | None = None
+    state_changed_by: str | None = None
+    #: Allowed actions for the current state, computed by
+    #: ``state_machine.compute_allowed_actions``. Populated by the
+    #: route handler before serialization — never read from the DB.
+    #: Empty list means the portfolio is in a terminal state.
+    allowed_actions: list[str] = Field(default_factory=list)
+
     fund_selection_schema: dict | None = None
     backtest_result: dict | None = None
     stress_result: dict | None = None
@@ -76,6 +111,64 @@ class ModelPortfolioUpdate(BaseModel):
     benchmark_composite: str | None = None
     inception_date: date | None = None
     backtest_start_date: date | None = None
+
+
+# ── Construction Run (Phase 3 — Job-or-Stream) ─────────────────────────────
+
+
+class ConstructRunAccepted(BaseModel):
+    """202 response for POST /{portfolio_id}/construct.
+
+    The client polls the SSE stream at ``stream_url`` for progress
+    events and retrieves the completed run via ``run_url``. DL18 P2
+    Job-or-Stream contract.
+    """
+
+    run_id: uuid.UUID
+    portfolio_id: uuid.UUID
+    status: Literal["running", "succeeded", "failed", "cached"]
+    job_id: str
+    stream_url: str
+    run_url: str
+
+
+class StressScenarioCatalogEntry(BaseModel):
+    """One entry in the stress catalog returned by GET /portfolio/stress-test/scenarios."""
+
+    scenario_id: str
+    display_name: str
+    description: str
+    shock_components: dict[str, float]
+    kind: Literal["preset", "user_defined"] = "preset"
+
+
+class StressScenarioCatalog(BaseModel):
+    """Catalog of stress scenarios (DL7 — 4 canonical presets)."""
+
+    as_of: date
+    scenarios: list[StressScenarioCatalogEntry]
+
+
+# ── Regime (Phase 3 Task 3.6) ──────────────────────────────────────────────
+
+
+class RegimeCurrentRead(BaseModel):
+    """Response for GET /portfolio/regime/current.
+
+    ``client_safe_label`` applies the OD-22 translation table so the
+    frontend can surface jargon-free text without re-implementing the
+    mapping (smart-backend / dumb-frontend).
+    """
+
+    regime: str
+    """Raw regime enum: NORMAL | RISK_ON | RISK_OFF | CRISIS | INFLATION."""
+
+    client_safe_label: str
+    """OD-22 translation: Balanced | Expansion | Defensive | Stress | Inflation."""
+
+    as_of_date: date | None = None
+    reasons: dict[str, str] | None = None
+    source: Literal["fred", "caller_fallback", "override"] = "fred"
 
 
 # ── Parametric Stress Test ──────────────────────────────────────────────────
