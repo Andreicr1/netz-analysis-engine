@@ -3160,6 +3160,68 @@ async def get_construction_run(
     }
 
 
+@router.get(
+    "/{portfolio_id}/runs/latest",
+    summary="Get the most recent persisted construction run for a portfolio",
+)
+async def get_latest_construction_run(
+    portfolio_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any] | None:
+    """Return the most recent succeeded/failed construction run.
+
+    Phase 6 Block B added this endpoint so the Portfolio Analytics
+    surface can render the FactorExposure + StressImpactMatrix charts
+    without first triggering a new construct. Returns ``None`` (200
+    with null body) when the portfolio has no runs yet — strict empty
+    state per OD-26.
+
+    Identical response shape to ``GET /{portfolio_id}/runs/{run_id}``
+    so the frontend's ``ConstructionRunPayload`` decoder works for
+    both endpoints. The order is ``requested_at DESC`` so the most
+    recent run wins, regardless of status.
+    """
+    from app.domains.wealth.models.model_portfolio import PortfolioConstructionRun
+
+    row = await db.execute(
+        select(PortfolioConstructionRun)
+        .where(PortfolioConstructionRun.portfolio_id == portfolio_id)
+        .order_by(PortfolioConstructionRun.requested_at.desc())
+        .limit(1),
+    )
+    run = row.scalar_one_or_none()
+    if run is None:
+        return None
+
+    return {
+        "run_id": str(run.id),
+        "portfolio_id": str(run.portfolio_id),
+        "status": run.status,
+        "as_of_date": run.as_of_date.isoformat(),
+        "requested_by": run.requested_by,
+        "requested_at": run.requested_at.isoformat() if run.requested_at else None,
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        "wall_clock_ms": run.wall_clock_ms,
+        "failure_reason": run.failure_reason,
+        "calibration_snapshot": run.calibration_snapshot,
+        "optimizer_trace": run.optimizer_trace,
+        "binding_constraints": run.binding_constraints,
+        "regime_context": run.regime_context,
+        "statistical_inputs": run.statistical_inputs,
+        "ex_ante_metrics": run.ex_ante_metrics,
+        "ex_ante_vs_previous": run.ex_ante_vs_previous,
+        "factor_exposure": run.factor_exposure,
+        "stress_results": run.stress_results,
+        "advisor": run.advisor,
+        "validation": run.validation,
+        "narrative": run.narrative,
+        "rationale_per_weight": run.rationale_per_weight,
+        "weights_proposed": run.weights_proposed,
+    }
+
+
 # Separate router prefixed /portfolio for the catalog + regime endpoints.
 # Using a second APIRouter keeps the /model-portfolios prefix clean
 # while giving us the plan-mandated `/portfolio/stress-test/scenarios`
