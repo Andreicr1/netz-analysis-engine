@@ -61,6 +61,9 @@ export { default as CodeEditor } from "./components/analytical/CodeEditor.svelte
 export { resolveAdminStatus } from "./utils/admin-status.js";
 
 // ── Layouts ──────────────────────────────────────────────────
+export { default as FlexibleColumnLayout } from "./layouts/FlexibleColumnLayout.svelte";
+export type { FCLState, FCLRatios } from "./layouts/FlexibleColumnLayout.svelte";
+export { DEFAULT_RATIOS as FCL_DEFAULT_RATIOS } from "./layouts/FlexibleColumnLayout.svelte";
 export { default as AppLayout } from "./components/layouts/AppLayout.svelte";
 export { default as AppShell } from "./components/layouts/AppShell.svelte";
 export { default as Sidebar } from "./components/layouts/Sidebar.svelte";
