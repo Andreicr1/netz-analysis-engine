@@ -1,7 +1,13 @@
 /**
- * SvelteKit server hook — Clerk JWT + theme injection + CSP header.
+ * SvelteKit server hook — Clerk JWT + CSP header.
+ *
+ * Theme: wealth is dark-only (see docs memory feedback_shell_architecture +
+ * feedback_light_mode_tokens). app.html has data-theme="dark" hardcoded and
+ * we intentionally do NOT use createThemeHook — any stale ii-theme=light
+ * cookie would flip --ii-* tokens to light values, breaking the dark-first
+ * design system that Tailwind bg-black classes assume.
  */
-import { createClerkHook, createThemeHook } from "@investintell/ui/utils";
+import { createClerkHook } from "@investintell/ui/utils";
 import type { Handle } from "@sveltejs/kit";
 import { sequence } from "@sveltejs/kit/hooks";
 import { env } from "$env/dynamic/private";
@@ -49,4 +55,4 @@ const securityHeadersHook: Handle = async ({ event, resolve }) => {
 	return response;
 };
 
-export const handle: Handle = sequence(authHook, createThemeHook({ defaultTheme: "dark" }), securityHeadersHook);
+export const handle: Handle = sequence(authHook, securityHeadersHook);
