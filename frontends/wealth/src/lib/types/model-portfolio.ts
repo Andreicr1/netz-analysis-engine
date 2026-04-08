@@ -3,6 +3,39 @@
 /** Universal cash instrument ID — matches backend CASH_INSTRUMENT_ID. */
 export const CASH_INSTRUMENT_ID = "00000000-0000-0000-0000-000000000000";
 
+/**
+ * Canonical lifecycle state set — kept in sync with the CHECK constraint
+ * in migration 0098 and ``state_machine.TRANSITIONS`` (Phase 1 Task 1.1).
+ * Never read this directly in Svelte to decide whether to render a
+ * button — always use ``allowed_actions`` instead (DL3).
+ */
+export type PortfolioState =
+	| "draft"
+	| "constructed"
+	| "validated"
+	| "approved"
+	| "live"
+	| "paused"
+	| "archived"
+	| "rejected";
+
+/**
+ * Action strings the backend state machine returns in ``allowed_actions``.
+ * Phase 5 Task 5.2 maps each value to a button label, variant, icon, and
+ * onclick handler. Adding a new entry here is a coordinated change with
+ * ``backend/vertical_engines/wealth/model_portfolio/state_machine.py``.
+ */
+export type PortfolioAction =
+	| "construct"
+	| "validate"
+	| "approve"
+	| "activate"
+	| "pause"
+	| "resume"
+	| "archive"
+	| "reject"
+	| "rebuild_draft";
+
 export interface ModelPortfolio {
 	id: string;
 	profile: string;
@@ -13,6 +46,18 @@ export interface ModelPortfolio {
 	backtest_start_date: string | null;
 	inception_nav: number;
 	status: string;
+	// ── State machine (migration 0098, Phase 1 Task 1.4) ──────────
+	state: PortfolioState;
+	state_metadata: Record<string, unknown>;
+	state_changed_at: string | null;
+	state_changed_by: string | null;
+	/**
+	 * Action strings the backend state machine has computed for the
+	 * current state. The Builder action bar renders one button per
+	 * entry — DL3 forbids ``if state === "validated"`` conditionals
+	 * anywhere in the wealth frontend.
+	 */
+	allowed_actions: PortfolioAction[];
 	fund_selection_schema: SelectionSchema | null;
 	created_at: string;
 	created_by: string | null;

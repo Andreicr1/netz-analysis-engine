@@ -92,7 +92,48 @@ class ModelPortfolioRead(BaseModel):
         return self
 
 
+class PortfolioTransitionRequest(BaseModel):
+    """Body for ``POST /{portfolio_id}/transitions`` (Phase 5 Task 5.2).
+
+    The Builder action bar dispatches every state-machine action through
+    a single route so the frontend has one canonical mutation point. The
+    ``action`` field is one of the strings the backend's
+    ``compute_allowed_actions`` returned for the current state — the
+    server validates the edge against ``state_machine.TRANSITIONS`` and
+    raises 409 on illegal moves (DL3).
+
+    ``reason`` is captured into the ``portfolio_state_transitions``
+    audit row. ``self_approved`` (OD-6) and ``override_validation``
+    (OD-5) flow through the optional ``metadata`` blob.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    action: Literal[
+        "validate",
+        "approve",
+        "activate",
+        "pause",
+        "resume",
+        "archive",
+        "reject",
+        "rebuild_draft",
+    ]
+    reason: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
 class ModelPortfolioCreate(BaseModel):
+    """Phase 5 Task 5.1 — Builder ``NewPortfolioDialog`` create payload.
+
+    The optional ``copy_from`` field clones the calibration row + the
+    fund_selection_schema (composition seed) from an existing portfolio
+    so PMs can fork an existing model without re-doing the 63-input
+    calibration setup. ``mandate`` is captured here for the calibration
+    row's Basic tier; the Pydantic schema field name remains ``profile``
+    for backward compatibility but the dialog labels it ``Mandate``.
+    """
+
     model_config = ConfigDict(extra="ignore")
 
     profile: str
@@ -101,6 +142,8 @@ class ModelPortfolioCreate(BaseModel):
     benchmark_composite: str | None = None
     inception_date: date | None = None
     backtest_start_date: date | None = None
+    #: Optional source portfolio to clone calibration + composition from.
+    copy_from: uuid.UUID | None = None
 
 
 class ModelPortfolioUpdate(BaseModel):

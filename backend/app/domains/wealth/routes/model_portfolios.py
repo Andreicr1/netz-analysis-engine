@@ -14,7 +14,7 @@ import math
 import uuid
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, Final
 
 import numpy as np
 import structlog
@@ -43,6 +43,7 @@ from app.domains.wealth.schemas.model_portfolio import (
     OverlapResultRead,
     PortfolioCalibrationRead,
     PortfolioCalibrationUpdate,
+    PortfolioTransitionRequest,
     RebalancePreviewRequest,
     RebalancePreviewResponse,
     RegimeCurrentRead,
@@ -62,9 +63,19 @@ from app.domains.wealth.schemas.portfolio import (
 )
 from app.shared.enums import Role
 from vertical_engines.wealth.model_portfolio.state_machine import (
+    ACTION_ACTIVATE,
+    ACTION_APPROVE,
+    ACTION_ARCHIVE,
+    ACTION_PAUSE,
+    ACTION_REBUILD_DRAFT,
+    ACTION_REJECT,
+    ACTION_RESUME,
+    ACTION_VALIDATE,
     ApprovalPolicy,
+    InvalidStateTransition,
     ValidationStatus,
     compute_allowed_actions,
+    transition,
 )
 
 logger = structlog.get_logger()
@@ -173,11 +184,48 @@ async def create_model_portfolio(
     actor: Actor = Depends(get_actor),
     org_id: str = Depends(get_org_id),
 ) -> ModelPortfolioRead:
-    """Create a new model portfolio. Requires IC role."""
+    """Create a new model portfolio (Phase 5 Task 5.1).
+
+    Requires IC role. The new row starts in ``state='draft'`` (column
+    default from migration 0098) and is hydrated with the matching
+    ``allowed_actions`` via ``_serialize_with_actions`` so the Builder
+    can render the canonical ``[construct, archive]`` button set
+    immediately on dialog success.
+
+    A paired ``portfolio_calibration`` row is also created using the
+    migration 0100 server defaults so the CalibrationPanel's Basic
+    tier never starts empty. When ``copy_from`` is provided, the
+    typed Basic + Advanced calibration columns and the
+    ``fund_selection_schema`` are cloned from the source portfolio
+    (the source must belong to the same org — RLS guarantees that).
+    """
     _require_ic_role(actor)
 
+    org_uuid = uuid.UUID(str(org_id))
+
+    # Optional clone source — fetch first so a 404 happens before any
+    # writes hit the DB.
+    source_portfolio: ModelPortfolio | None = None
+    source_calibration: PortfolioCalibration | None = None
+    if body.copy_from is not None:
+        src_result = await db.execute(
+            select(ModelPortfolio).where(ModelPortfolio.id == body.copy_from),
+        )
+        source_portfolio = src_result.scalar_one_or_none()
+        if source_portfolio is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"copy_from source portfolio {body.copy_from} not found",
+            )
+        src_cal = await db.execute(
+            select(PortfolioCalibration).where(
+                PortfolioCalibration.portfolio_id == body.copy_from,
+            ),
+        )
+        source_calibration = src_cal.scalar_one_or_none()
+
     portfolio = ModelPortfolio(
-        organization_id=org_id,
+        organization_id=org_uuid,
         profile=body.profile,
         display_name=body.display_name,
         description=body.description,
@@ -187,10 +235,57 @@ async def create_model_portfolio(
         status="draft",
         created_by=actor.actor_id,
     )
+    if source_portfolio is not None and source_portfolio.fund_selection_schema:
+        # Clone composition; the new portfolio still starts as a draft
+        # so the optimizer cascade will re-run before activation.
+        portfolio.fund_selection_schema = dict(source_portfolio.fund_selection_schema)
     db.add(portfolio)
     await db.flush()
     await db.refresh(portfolio)
-    return ModelPortfolioRead.model_validate(portfolio)
+
+    # Seed the paired calibration row. Default values come from
+    # migration 0100; clone the typed columns when ``copy_from`` is
+    # provided so the new draft inherits the calibration discipline
+    # of the source model. ``expert_overrides`` is also copied so any
+    # JSONB knobs survive the fork.
+    calibration = PortfolioCalibration(
+        organization_id=org_uuid,
+        portfolio_id=portfolio.id,
+        updated_by=actor.actor_id,
+    )
+    if source_calibration is not None:
+        for column in (
+            "mandate",
+            "cvar_limit",
+            "max_single_fund_weight",
+            "turnover_cap",
+            "stress_scenarios_active",
+            "regime_override",
+            "bl_enabled",
+            "bl_view_confidence_default",
+            "garch_enabled",
+            "turnover_lambda",
+            "stress_severity_multiplier",
+            "advisor_enabled",
+            "cvar_level",
+            "lambda_risk_aversion",
+            "shrinkage_intensity_override",
+        ):
+            value = getattr(source_calibration, column, None)
+            if value is not None:
+                setattr(calibration, column, value)
+        calibration.expert_overrides = dict(source_calibration.expert_overrides or {})
+    db.add(calibration)
+    await db.flush()
+
+    logger.info(
+        "model_portfolio_created",
+        portfolio_id=str(portfolio.id),
+        actor_id=actor.actor_id,
+        copy_from=str(body.copy_from) if body.copy_from else None,
+    )
+
+    return await _serialize_with_actions(db, portfolio)
 
 
 @router.get(
@@ -278,6 +373,130 @@ async def update_model_portfolio(
     await db.flush()
     await db.refresh(portfolio)
     return ModelPortfolioRead.model_validate(portfolio)
+
+
+# ── Phase 5 Task 5.2 — State machine transition dispatcher ────────────────
+
+
+_ACTION_TO_TARGET_STATE: Final[dict[str, str]] = {
+    ACTION_VALIDATE: "validated",
+    ACTION_APPROVE: "approved",
+    ACTION_ACTIVATE: "live",
+    ACTION_PAUSE: "paused",
+    ACTION_RESUME: "live",
+    ACTION_ARCHIVE: "archived",
+    ACTION_REJECT: "rejected",
+    ACTION_REBUILD_DRAFT: "draft",
+}
+
+
+@router.post(
+    "/{portfolio_id}/transitions",
+    response_model=ModelPortfolioRead,
+    summary="Apply a state-machine action to a portfolio (Phase 5 Task 5.2)",
+)
+async def apply_portfolio_transition(
+    portfolio_id: uuid.UUID,
+    body: PortfolioTransitionRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+    org_id: str = Depends(get_org_id),
+) -> ModelPortfolioRead:
+    """Single dispatcher for all state-machine actions (DL3).
+
+    The Builder action bar (Phase 5 Task 5.2) renders one button per
+    string in ``portfolio.allowed_actions``. Pressing a button POSTs
+    here with ``{action, reason?, metadata?}``. The dispatcher maps
+    the action string to the canonical target state and delegates
+    to ``state_machine.transition`` which row-locks the portfolio,
+    validates the edge, applies the column updates, and writes the
+    audit row in a single transaction.
+
+    Returns the freshly-serialized ``ModelPortfolioRead`` (with new
+    ``state``, ``state_changed_at``, ``state_changed_by``, and
+    ``allowed_actions``) so the frontend re-renders the action bar
+    without a second fetch.
+
+    ``construct`` is intentionally NOT in this dispatcher — it has
+    its own Job-or-Stream route at ``POST /{id}/construct`` (Phase 3).
+    """
+    _require_ic_role(actor)
+
+    target_state = _ACTION_TO_TARGET_STATE.get(body.action)
+    if target_state is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown transition action: {body.action}",
+        )
+
+    # Validate the action against the current state's allowed_actions
+    # before invoking the state machine — the state_machine will also
+    # raise InvalidStateTransition, but we want a richer 409 message
+    # that says "you tried action X from state Y" instead of the
+    # generic "X → Y is not in TRANSITIONS".
+    portfolio_row = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = portfolio_row.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    policy = await _resolve_approval_policy(db, org_id)
+    validation = await _latest_validation_status(db, portfolio_id)
+    allowed = compute_allowed_actions(
+        portfolio.state, validation=validation, policy=policy,
+    )
+    if body.action not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Action '{body.action}' is not allowed from state "
+                f"'{portfolio.state}'. Allowed actions: {sorted(allowed)}"
+            ),
+        )
+
+    metadata = dict(body.metadata or {})
+    # OD-6: stamp self_approved=true when an actor approves their own
+    # validated portfolio in a single-user org. The route layer detects
+    # this case and lets the state machine record it in the audit row.
+    if body.action == ACTION_APPROVE and policy.allow_self_approval:
+        metadata.setdefault("self_approved", True)
+
+    try:
+        await transition(
+            db,
+            portfolio_id=portfolio_id,
+            to_state=target_state,
+            actor_id=actor.actor_id,
+            reason=body.reason,
+            metadata=metadata,
+        )
+    except InvalidStateTransition as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Invalid state transition: {exc.from_state} → {exc.to_state}"
+            ),
+        )
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
+
+    # Re-fetch the portfolio post-transition so the response carries the
+    # fresh state column. The state_machine.transition call already
+    # flushed inside its own row-lock; this read sees the new value.
+    refreshed = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    return await _serialize_with_actions(
+        db, refreshed.scalar_one(), policy=policy,
+    )
 
 
 @router.post(
