@@ -14,8 +14,8 @@ export const load: PageServerLoad = async ({ parent }) => {
 
 	// Pre-fetch reports for the first portfolio (if any) to avoid waterfall
 	const initialReports: Record<string, ReportHistoryResponse> = {};
-	if (portfolios.length > 0) {
-		const first = portfolios[0];
+	const first = portfolios[0];
+	if (first) {
 		const reports = await api
 			.get<ReportHistoryResponse>(`/model-portfolios/${first.id}/reports`)
 			.catch(() => ({ portfolio_id: first.id, reports: [], total: 0 }) as ReportHistoryResponse);
