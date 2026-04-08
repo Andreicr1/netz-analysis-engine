@@ -409,10 +409,10 @@ def main() -> None:
     print(f"  PDFs processed: {done:,} ({errors} errors)")
     print(f"  Sections extracted: {len(all_sections):,} from {unique_section_crds:,} managers")
     print(f"  Team members extracted: {len(all_team):,} from {unique_team_crds:,} managers")
-    print(f"\nSection distribution:")
+    print("\nSection distribution:")
     for section, cnt in sorted(section_dist.items(), key=lambda x: -x[1]):
         print(f"  {section:25s} {cnt:>6,}")
-    print(f"\nOutput:")
+    print("\nOutput:")
     print(f"  {sections_path} ({os.path.getsize(sections_path)/1024/1024:.1f} MB)")
     print(f"  {team_path} ({os.path.getsize(team_path)/1024:.1f} KB)")
 

@@ -50,7 +50,6 @@ from app.domains.wealth.schemas.sec_funds import (
     TopHoldingItem,
 )
 from app.shared.enums import Role
-from vertical_engines.wealth.dd_report.sec_injection import label_nport_sector
 from app.shared.models import (
     SecFundStyleSnapshot,
     SecManager,
@@ -58,6 +57,7 @@ from app.shared.models import (
     SecManagerTeam,
     SecRegisteredFund,
 )
+from vertical_engines.wealth.dd_report.sec_injection import label_nport_sector
 
 logger = structlog.get_logger()
 

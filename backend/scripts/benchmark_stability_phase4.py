@@ -277,7 +277,7 @@ async def benchmark_b3(
 
     start = time.monotonic()
     tasks = []
-    for ticker, key in zip(tickers, keys):
+    for ticker, key in zip(tickers, keys, strict=False):
         for _ in range(5):
             tasks.append(post_import(client, ticker, key))
     results = await asyncio.gather(*tasks, return_exceptions=True)
