@@ -23,6 +23,10 @@ from app.domains.wealth.queries.analysis_holdings import (
     fetch_style_drift,
     fetch_top_holdings,
 )
+from app.domains.wealth.queries.analysis_peer import (
+    fetch_institutional_reveal,
+    fetch_peer_comparison,
+)
 from app.domains.wealth.queries.analysis_returns import Window, fetch_returns_risk
 from app.domains.wealth.queries.fund_resolver import resolve_fund
 
@@ -32,6 +36,7 @@ router = APIRouter(prefix="/wealth/discovery", tags=["wealth-discovery-analysis"
 
 RETURNS_TTL = 60 * 60  # 1 hour
 HOLDINGS_TTL = 60 * 60  # 1 hour
+PEER_TTL = 60 * 60  # 1 hour
 
 
 @router.get("/funds/{external_id}/analysis/returns-risk")
@@ -215,4 +220,104 @@ async def analysis_reverse_lookup(
 
     payload = await fetch_reverse_lookup(db, cusip, limit=limit)
     await _cache_set(redis, cache_key, payload, HOLDINGS_TTL)
+    return payload
+
+
+@router.get("/funds/{external_id}/analysis/peers")
+async def analysis_peers(
+    external_id: str,
+    limit: int = Query(40, ge=5, le=100),
+    actor: Actor = Depends(get_actor),  # noqa: ARG001 — auth gate
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> dict[str, Any]:
+    """Peer comparison — funds with the same ``strategy_label`` + risk metrics."""
+    cache_key = f"discovery:analysis:peers:{external_id}:{limit}"
+    redis, cached = await _cache_get(cache_key)
+    if cached is not None:
+        if redis is not None:
+            try:
+                await redis.aclose()
+            except Exception:  # noqa: BLE001
+                pass
+        return cached
+
+    # Resolve the subject's strategy_label from mv_unified_funds
+    from sqlalchemy import text as _text
+
+    strat_row = (
+        await db.execute(
+            _text(
+                "SELECT strategy_label FROM mv_unified_funds WHERE external_id = :id",
+            ),
+            {"id": external_id},
+        )
+    ).mappings().first()
+    strategy = strat_row["strategy_label"] if strat_row else None
+
+    data = await fetch_peer_comparison(
+        db,
+        subject_external_id=external_id,
+        strategy=strategy,
+        limit=limit,
+    )
+    payload: dict[str, Any] = {
+        **data,
+        "strategy_label": strategy,
+        "external_id": external_id,
+    }
+
+    await _cache_set(redis, cache_key, payload, PEER_TTL)
+    return payload
+
+
+@router.get("/funds/{external_id}/analysis/institutional-reveal")
+async def analysis_institutional_reveal(
+    external_id: str,
+    categories: str | None = Query(None),
+    actor: Actor = Depends(get_actor),  # noqa: ARG001 — auth gate
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> dict[str, Any]:
+    """Cross-reference fund holdings against curated institutions (endowments etc)."""
+    category_filter: list[str] | None = None
+    if categories:
+        category_filter = [c.strip() for c in categories.split(",") if c.strip()]
+        if not category_filter:
+            category_filter = None
+
+    cache_key = (
+        "discovery:analysis:inst-reveal:"
+        f"{external_id}:{','.join(sorted(category_filter)) if category_filter else 'all'}"
+    )
+    redis, cached = await _cache_get(cache_key)
+    if cached is not None:
+        if redis is not None:
+            try:
+                await redis.aclose()
+            except Exception:  # noqa: BLE001
+                pass
+        return cached
+
+    fund = await resolve_fund(db, external_id)
+    cik = fund.get("cik")
+    if not cik:
+        payload: dict[str, Any] = {
+            "institutions": [],
+            "overlap_matrix": {},
+            "holdings": [],
+            "disclosure": {"has_holdings": False},
+            "fund": fund,
+        }
+    else:
+        data = await fetch_institutional_reveal(
+            db,
+            str(cik),
+            category_filter=category_filter,
+        )
+        payload = {
+            **data,
+            "disclosure": {"has_holdings": len(data["holdings"]) > 0},
+            "fund": fund,
+        }
+
+    await _cache_set(redis, cache_key, payload, PEER_TTL)
     return payload
