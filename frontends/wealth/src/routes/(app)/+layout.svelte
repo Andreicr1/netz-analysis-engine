@@ -11,7 +11,7 @@
 	import AiAgentDrawer from "$lib/components/AiAgentDrawer.svelte";
 	import GlobalSearch from "$lib/components/GlobalSearch.svelte";
 	import {
-		LayoutDashboard, FileSearch, Table2, Globe,
+		LayoutDashboard, FileSearch, Table2, Library, Globe,
 		Settings, Menu, Bell, Cpu, Mic,
 	} from "lucide-svelte";
 
@@ -49,7 +49,8 @@
 	const navItems = [
 		{ label: "Dashboard", href: "/dashboard",         icon: LayoutDashboard },
 		{ label: "Screener",  href: "/screener",          icon: FileSearch },
-		{ label: "Portfolio", href: "/portfolio", icon: Table2 },
+		{ label: "Portfolio", href: "/portfolio",         icon: Table2 },
+		{ label: "Library",   href: "/library",           icon: Library },
 		{ label: "Market",    href: "/market",            icon: Globe },
 	];
 
