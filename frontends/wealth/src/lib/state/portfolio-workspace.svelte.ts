@@ -893,6 +893,154 @@ export class PortfolioWorkspaceState {
 		}
 	}
 
+	// ── Phase 6 Block B — Portfolio Analytics surface data ───────────
+
+	/**
+	 * Phase 6 Block B — separate data slice for the /portfolio/analytics
+	 * surface so it does not collide with the Builder's ``portfolio``
+	 * field. The shell renders charts against this slice; switching the
+	 * selected subject in the BottomTabDock triggers a fresh fetch via
+	 * ``loadAnalyticsSubject``.
+	 *
+	 * The slice carries:
+	 *   - portfolio: the selected ModelPortfolio detail (for state +
+	 *     fund_selection_schema + profile)
+	 *   - latestRun: the most recent persisted construction run with
+	 *     stress_results, factor_exposure, ex_ante_metrics
+	 *   - attribution / factor / correlationRegime / riskBudget:
+	 *     profile-keyed analytics responses (only populated when the
+	 *     portfolio is in "live" state — the existing routes require
+	 *     a live portfolio for that profile)
+	 *
+	 * Strict empty states per OD-26 — every field starts as null and
+	 * the chart components render an EmptyState when their slice is
+	 * missing. No fabricated values, no MOCK data.
+	 */
+	analyticsPortfolio = $state.raw<ModelPortfolio | null>(null);
+	analyticsLatestRun = $state.raw<ConstructionRunPayload | null>(null);
+	analyticsAttribution = $state.raw<AttributionResult | null>(null);
+	analyticsFactor = $state.raw<FactorAnalysisResponse | null>(null);
+	analyticsCorrelationRegime = $state.raw<CorrelationRegimeResult | null>(null);
+	analyticsRiskBudget = $state.raw<RiskBudgetResult | null>(null);
+	/** NAV series for the analytics-selected portfolio (separate from
+	 *  ``navSeries`` which tracks the Builder selection). */
+	analyticsNavSeries = $state.raw<NAVPoint[]>([]);
+	isLoadingAnalyticsSubject = $state(false);
+	analyticsSubjectError = $state<string | null>(null);
+
+	/** Generation counter to invalidate stale loadAnalyticsSubject responses. */
+	private _analyticsGen = 0;
+
+	/**
+	 * Load every analytics slice for a model portfolio. Called by the
+	 * /portfolio/analytics page when the user selects a subject in the
+	 * BottomTabDock or via the FilterRail subject list.
+	 *
+	 * Fetches in parallel:
+	 *   - GET /model-portfolios/{id}                      (detail)
+	 *   - GET /model-portfolios/{id}/runs/latest          (Phase 6 Block B)
+	 *   - GET /analytics/attribution/{profile}            (404 OK)
+	 *   - GET /analytics/factor-analysis/{profile}        (404 OK)
+	 *   - GET /analytics/correlation-regime/{profile}     (404 OK)
+	 *
+	 * Risk budget is on-demand only — the route is POST-based and
+	 * triggers heavy computation. The PM can request it from the
+	 * RiskAttributionBarChart card via a "Compute" CTA.
+	 *
+	 * 404 / 422 from the analytics routes are CAUGHT and surfaced as
+	 * null slices — the chart components render strict empty states
+	 * (OD-26). Only a 5xx on the portfolio detail call propagates as
+	 * an error message via ``analyticsSubjectError``.
+	 */
+	async loadAnalyticsSubject(portfolioId: string): Promise<void> {
+		if (!this._getToken) return;
+		const gen = ++this._analyticsGen;
+		this.isLoadingAnalyticsSubject = true;
+		this.analyticsSubjectError = null;
+
+		// Reset slices upfront so the shell shows loading skeletons
+		// instead of stale data from the previous subject.
+		this.analyticsPortfolio = null;
+		this.analyticsLatestRun = null;
+		this.analyticsAttribution = null;
+		this.analyticsFactor = null;
+		this.analyticsCorrelationRegime = null;
+		this.analyticsRiskBudget = null;
+		this.analyticsNavSeries = [];
+
+		try {
+			const api = this.api();
+			const portfolio = await api.get<ModelPortfolio>(
+				`/model-portfolios/${portfolioId}`,
+			);
+			if (gen !== this._analyticsGen) return;
+			this.analyticsPortfolio = portfolio;
+
+			// Latest run + NAV series are best-effort. NAV series feeds
+			// the Discovery NavHero / Drawdown chart adapters.
+			const [latestRun, trackRecord] = await Promise.all([
+				api
+					.get<ConstructionRunPayload | null>(
+						`/model-portfolios/${portfolioId}/runs/latest`,
+					)
+					.catch(() => null),
+				api
+					.get<TrackRecord>(`/model-portfolios/${portfolioId}/track-record`)
+					.catch(() => null),
+			]);
+			if (gen !== this._analyticsGen) return;
+			this.analyticsLatestRun = latestRun;
+			this.analyticsNavSeries = trackRecord?.nav_series ?? [];
+
+			// Profile-keyed analytics — only meaningful when the
+			// portfolio is in "live" state because the routes require
+			// a live model_portfolio for that profile.
+			const profile = portfolio.profile;
+			if (portfolio.state === "live" && profile) {
+				const [attribution, factor, correlationRegime] = await Promise.all([
+					api
+						.get<AttributionResult>(`/analytics/attribution/${profile}`)
+						.catch(() => null),
+					api
+						.get<FactorAnalysisResponse>(`/analytics/factor-analysis/${profile}`)
+						.catch(() => null),
+					api
+						.get<CorrelationRegimeResult>(
+							`/analytics/correlation-regime/${profile}?window_days=60`,
+						)
+						.catch(() => null),
+				]);
+				if (gen !== this._analyticsGen) return;
+				this.analyticsAttribution = attribution;
+				this.analyticsFactor = factor;
+				this.analyticsCorrelationRegime = correlationRegime;
+			}
+		} catch (err) {
+			if (gen !== this._analyticsGen) return;
+			this.analyticsSubjectError = err instanceof Error
+				? err.message
+				: "Failed to load analytics subject";
+		} finally {
+			if (gen === this._analyticsGen) {
+				this.isLoadingAnalyticsSubject = false;
+			}
+		}
+	}
+
+	/** Clear the analytics slice — called on route unmount. */
+	resetAnalyticsSubject() {
+		this._analyticsGen++;
+		this.analyticsPortfolio = null;
+		this.analyticsLatestRun = null;
+		this.analyticsAttribution = null;
+		this.analyticsFactor = null;
+		this.analyticsCorrelationRegime = null;
+		this.analyticsRiskBudget = null;
+		this.analyticsNavSeries = [];
+		this.analyticsSubjectError = null;
+		this.isLoadingAnalyticsSubject = false;
+	}
+
 	// ── Phase 5 Task 5.2 — State machine transitions ─────────────────
 
 	/**
