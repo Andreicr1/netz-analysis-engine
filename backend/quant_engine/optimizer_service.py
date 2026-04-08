@@ -15,6 +15,7 @@ import numpy as np
 import structlog
 
 from app.utils.hashing import compute_input_hash, derive_seed
+from quant_engine.mandate_risk_aversion import resolve_risk_aversion
 
 logger = structlog.get_logger()
 
@@ -43,51 +44,9 @@ class OptimizationResult:
     solver_info: str | None = None
 
 
-# ── Mean-Variance utility: risk-aversion (λ) by investor mandate ──────────────
-# The "max_sharpe" objective is a quadratic utility (E[r] − λ·σ²) whose level
-# set is tangent to the Sharpe-optimal portfolio for a particular λ. Using a
-# single λ=2 for every mandate is a fiduciary bug: a conservative client and
-# an aggressive client collapse onto the same frontier point. We map mandate
-# labels to institutionally accepted λ ranges (see Grinold & Kahn, "Active
-# Portfolio Management", and CFA L3 "Risk Aversion and Utility" readings).
-#   Conservative  → 4.5  (low tolerance, variance heavily penalised)
-#   Moderate      → 2.5  (balanced)
-#   Aggressive    → 1.5  (high tolerance, return-tilted)
-_MANDATE_RISK_AVERSION: dict[str, float] = {
-    "conservative": 4.5,
-    "defensive": 4.5,
-    "moderate_conservative": 3.5,
-    "moderate": 2.5,
-    "balanced": 2.5,
-    "moderate_aggressive": 2.0,
-    "aggressive": 1.5,
-    "growth": 1.5,
-}
-_DEFAULT_RISK_AVERSION = 2.5  # moderate — sane fallback when mandate unknown
-
-
-def resolve_risk_aversion(
-    risk_aversion: float | None,
-    mandate: str | None,
-) -> float:
-    """Resolve the mean-variance risk-aversion coefficient (λ).
-
-    Priority:
-      1. Explicit ``risk_aversion`` argument (caller knows best).
-      2. Lookup by ``mandate`` label in ``_MANDATE_RISK_AVERSION``.
-      3. ``_DEFAULT_RISK_AVERSION`` (moderate).
-
-    Never returns the historical hardcoded λ=2 — that value silently treated
-    all mandates identically and was the root cause of sprint-S2 finding C.
-    """
-    if risk_aversion is not None and risk_aversion > 0:
-        return float(risk_aversion)
-    if mandate:
-        key = mandate.strip().lower().replace("-", "_").replace(" ", "_")
-        if key in _MANDATE_RISK_AVERSION:
-            return _MANDATE_RISK_AVERSION[key]
-    return _DEFAULT_RISK_AVERSION
-
+# ``resolve_risk_aversion`` lives in ``quant_engine.mandate_risk_aversion`` so
+# the optimizer, Black-Litterman and any future quant consumer share a single
+# source of truth for Mean-Variance λ (see S3 consolidation, 2026-04-08).
 
 
 def parametric_cvar_cf(
