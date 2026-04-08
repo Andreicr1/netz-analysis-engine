@@ -98,10 +98,11 @@ from app.domains.wealth.routes.fact_sheets import router as wealth_fact_sheets_r
 # ── Wealth domain routers ────────────────────────────────────
 from app.domains.wealth.routes.funds import router as wealth_funds_router
 from app.domains.wealth.routes.instruments import router as wealth_instruments_router
+from app.domains.wealth.routes.library import router as wealth_library_router
 from app.domains.wealth.routes.long_form_reports import router as wealth_long_form_reports_router
 from app.domains.wealth.routes.macro import router as wealth_macro_router
-from app.domains.wealth.routes.market_data import router as wealth_market_data_router
 from app.domains.wealth.routes.manager_screener import router as wealth_manager_screener_router
+from app.domains.wealth.routes.market_data import router as wealth_market_data_router
 from app.domains.wealth.routes.model_portfolios import router as wealth_model_portfolios_router
 from app.domains.wealth.routes.monitoring import router as wealth_monitoring_router
 from app.domains.wealth.routes.monthly_report import router as wealth_monthly_report_router
@@ -272,8 +273,9 @@ async def _server_error_handler(request: Request, exc: Exception) -> JSONRespons
     Without this, Starlette's default handler returns text/plain without CORS
     headers, causing browsers to mask the real 500 as "blocked by CORS".
     """
-    import structlog
     import traceback as tb_mod
+
+    import structlog
     slog = structlog.get_logger()
     slog.error("unhandled_exception", path=str(request.url.path), error=str(exc), exc_type=type(exc).__name__)
 
@@ -458,6 +460,7 @@ api_v1.include_router(wealth_portfolios_router)
 api_v1.include_router(wealth_risk_router)
 api_v1.include_router(wealth_macro_router)
 api_v1.include_router(wealth_workers_router)
+api_v1.include_router(wealth_library_router)
 api_v1.include_router(wealth_dd_reports_router)
 api_v1.include_router(wealth_documents_router)
 api_v1.include_router(wealth_universe_router)
