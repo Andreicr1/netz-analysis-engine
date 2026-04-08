@@ -47,6 +47,13 @@ def gather_quant_metrics(
     try:
         from app.domains.wealth.models.risk import FundRiskMetrics
 
+        # P0-2 fix: order by calc_date FIRST so the freshest metric wins
+        # regardless of which worker wrote it. Tie-break preferring the
+        # tenant-scoped row (org_id IS NOT NULL) only when both rows share
+        # the same calc_date — that row has DTW drift, the global row does not.
+        # Since migration 0093 the global row and tenant rows coexist for the
+        # same (instrument_id, calc_date) — the previous ordering would have
+        # served a stale tenant row over a fresh global row.
         row = (
             db.query(FundRiskMetrics)
             .filter(
@@ -57,8 +64,8 @@ def gather_quant_metrics(
                 ),
             )
             .order_by(
-                FundRiskMetrics.organization_id.nulls_last(),
                 FundRiskMetrics.calc_date.desc(),
+                FundRiskMetrics.organization_id.nulls_last(),
             )
             .first()
         )
