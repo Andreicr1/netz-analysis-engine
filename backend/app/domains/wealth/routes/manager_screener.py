@@ -62,7 +62,6 @@ from app.domains.wealth.schemas.manager_screener import (
     NportHoldingsResponse,
 )
 from app.shared.enums import Role
-from vertical_engines.wealth.dd_report.sec_injection import label_nport_sector
 from app.shared.models import (
     Sec13fDiff,
     Sec13fHolding,
@@ -71,6 +70,7 @@ from app.shared.models import (
     SecNportHolding,
     SecRegisteredFund,
 )
+from vertical_engines.wealth.dd_report.sec_injection import label_nport_sector
 
 logger = structlog.get_logger()
 

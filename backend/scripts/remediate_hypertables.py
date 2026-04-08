@@ -24,8 +24,8 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-import psycopg
 
+import psycopg
 
 # ── Hypertable specifications ────────────────────────────────────────────
 # Each spec describes the FINAL desired state of the hypertable.
@@ -1161,7 +1161,7 @@ def main() -> None:
     if failed:
         print(f"  FAILED: {failed}")
     if dry_run and converted > 0:
-        print(f"\n  Run with --execute to apply changes")
+        print("\n  Run with --execute to apply changes")
     print(f"{'=' * 60}\n")
 
 

@@ -22,7 +22,6 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import orjson
-
 from fastapi import APIRouter, Depends, Path, Query, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy import case as sa_case
 from sqlalchemy import select, text

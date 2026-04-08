@@ -27,9 +27,7 @@
 	import Plus from "lucide-svelte/icons/plus";
 
 	import { workspace, type UniverseFund } from "$lib/state/portfolio-workspace.svelte";
-	import FlexibleColumnsLayout, {
-		type LayoutState,
-	} from "$lib/components/layout/FlexibleColumnsLayout.svelte";
+	import { FlexibleColumnLayout, type FCLState } from "@investintell/ui";
 	import UniverseColumn from "$lib/components/portfolio/UniverseColumn.svelte";
 	import BuilderColumn from "$lib/components/portfolio/BuilderColumn.svelte";
 	import AnalyticsColumn from "$lib/components/portfolio/AnalyticsColumn.svelte";
@@ -67,9 +65,17 @@
 	//   - "fund"      → row click in Universe table
 	//   - "portfolio" → "View Chart" button in Builder action bar
 	//   - null        → Estado B (2 columns)
-	const layoutState = $derived<LayoutState>(
-		workspace.analyticsMode !== null ? "three-col" : "two-col",
+	const layoutState = $derived<FCLState>(
+		workspace.analyticsMode !== null ? "expand-3" : "expand-2",
 	);
+
+	// Portfolio Builder-specific ratios — preserve exact proportions
+	// from the previous local FlexibleColumnsLayout implementation.
+	const PORTFOLIO_RATIOS: Record<FCLState, [number, number, number]> = {
+		"expand-1": [0, 1, 0],
+		"expand-2": [1.4, 1, 0],
+		"expand-3": [1.5, 1, 1.1],
+	};
 
 	// ── Left column tab switching ───────────────────────────────────
 	// The sub-pills (Models | Universe | Policy) survive the FCL
@@ -92,8 +98,18 @@
 </svelte:head>
 
 <div class="bld-shell">
-	<FlexibleColumnsLayout {layoutState}>
-		{#snippet leftColumn()}
+	<FlexibleColumnLayout
+		state={layoutState}
+		ratios={PORTFOLIO_RATIOS}
+		column1Label="Approved Universe"
+		column2Label="Portfolio Builder"
+		column3Label="Analytics"
+		column1={leftColumn}
+		column2={centerColumn}
+		column3={rightColumn}
+	/>
+
+	{#snippet leftColumn()}
 			<div class="bld-left">
 				<div class="bld-left-header">
 					<button type="button" class="bld-pill bld-pill--new">
@@ -132,10 +148,9 @@
 			<BuilderColumn />
 		{/snippet}
 
-		{#snippet rightColumn()}
-			<AnalyticsColumn />
-		{/snippet}
-	</FlexibleColumnsLayout>
+	{#snippet rightColumn()}
+		<AnalyticsColumn />
+	{/snippet}
 
 	<!-- Error toast — preserved from previous design -->
 	{#if workspace.lastError}
