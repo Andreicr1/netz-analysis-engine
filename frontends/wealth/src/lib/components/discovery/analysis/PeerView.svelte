@@ -42,7 +42,7 @@
 		subject: Peer | null;
 	}
 	interface Institution {
-		id: string;
+		institution_id: string;
 		name: string;
 		category: string;
 		total_overlap?: number;
@@ -119,7 +119,7 @@
 	<AnalysisGrid>
 		<ChartCard
 			title="Risk / Return vs Peers"
-			subtitle="Volatility (1y) vs Sharpe (1y) — subject highlighted"
+			subtitle="Volatility vs risk-adjusted return"
 			span={2}
 			minHeight="420px"
 		>
@@ -127,8 +127,8 @@
 		</ChartCard>
 
 		<ChartCard
-			title="Sharpe Ranking"
-			subtitle="Top 20 by Sharpe (1y)"
+			title="How this fund ranks vs peers"
+			subtitle="Top 20 by risk-adjusted return (1y)"
 			minHeight="420px"
 		>
 			<PeerRankingLadder peers={peerData.peers} />

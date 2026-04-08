@@ -12,7 +12,7 @@
 		issuer_name: string;
 		cusip: string | null;
 		sector: string | null;
-		pct_of_nav: number;
+		weight: number;
 		market_value: number | null;
 	}
 	interface Props {
@@ -31,7 +31,7 @@
 			if (!bySector.has(sec)) bySector.set(sec, []);
 			bySector.get(sec)!.push({
 				name: h.issuer_name,
-				value: h.pct_of_nav,
+				value: h.weight,
 			});
 		}
 		return Array.from(bySector.entries()).map(([sector, items]) => ({

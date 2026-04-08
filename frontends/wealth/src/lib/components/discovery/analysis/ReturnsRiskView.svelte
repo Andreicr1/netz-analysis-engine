@@ -8,7 +8,11 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { fetchReturnsRisk, type AnalysisWindow } from "$lib/discovery/analysis-api";
+	import {
+		fetchReturnsRisk,
+		type AnalysisWindow,
+		type RiskMetricsPayload,
+	} from "$lib/discovery/analysis-api";
 	import AnalysisGrid from "./AnalysisGrid.svelte";
 	import ChartCard from "./ChartCard.svelte";
 	import NavHeroChart from "$lib/components/charts/discovery/NavHeroChart.svelte";
@@ -39,7 +43,7 @@
 	interface Distribution {
 		bins: number[];
 		counts: number[];
-		mean: number;
+		mean: number | null;
 	}
 	interface ReturnsRiskPayload {
 		window: string;
@@ -47,7 +51,7 @@
 		monthly_returns: MonthlyPoint[];
 		rolling_metrics: RollingPoint[];
 		return_distribution: Distribution;
-		risk_metrics: Record<string, unknown> | null;
+		risk_metrics: RiskMetricsPayload | null;
 		disclosure: { has_nav: boolean };
 		fund: Record<string, unknown>;
 	}
@@ -105,13 +109,12 @@
 	<AnalysisGrid>
 		<ChartCard
 			title="Cumulative Return & Drawdown"
-			subtitle="Hero view — shared dataset"
 			span={3}
 			minHeight="420px"
 		>
 			<NavHeroChart series={data.nav_series} />
 		</ChartCard>
-		<ChartCard title="Rolling Sharpe & Volatility (12m)">
+		<ChartCard title="Rolling Risk (12 months)">
 			<RollingRiskChart rolling={data.rolling_metrics} />
 		</ChartCard>
 		<ChartCard title="Monthly Returns Heatmap">
@@ -123,7 +126,7 @@
 		<ChartCard title="Drawdown (Underwater)">
 			<DrawdownUnderwaterChart series={data.nav_series} />
 		</ChartCard>
-		<ChartCard title="Risk Metrics vs Peers" span={2}>
+		<ChartCard title="How this fund compares on risk" span={2}>
 			<RiskMetricsBulletChart metrics={data.risk_metrics} />
 		</ChartCard>
 	</AnalysisGrid>

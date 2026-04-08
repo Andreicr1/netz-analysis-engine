@@ -9,7 +9,7 @@
 	import { chartTokens } from "../chart-tokens";
 
 	interface Sector {
-		sector: string;
+		name: string;
 		weight: number;
 		holdings_count: number;
 	}
@@ -24,7 +24,7 @@
 
 	const data = $derived(
 		sectors.map((s) => ({
-			name: s.sector,
+			name: s.name,
 			value: s.weight,
 			holdings_count: s.holdings_count,
 		})),
@@ -59,9 +59,7 @@
 					show: true,
 					formatter: (p: { name?: string; value?: number }) => {
 						const pct =
-							typeof p.value === "number"
-								? `${(p.value * 100).toFixed(1)}%`
-								: "";
+							typeof p.value === "number" ? formatPercent(p.value, 1) : "";
 						return `${p.name ?? ""}\n${pct}`;
 					},
 					color: "#ffffff",

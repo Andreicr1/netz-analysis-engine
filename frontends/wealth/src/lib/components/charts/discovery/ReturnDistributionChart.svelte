@@ -4,12 +4,13 @@
 -->
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
+	import { formatPercent } from "@investintell/ui";
 	import { chartTokens } from "../chart-tokens";
 
 	interface Distribution {
 		bins: number[];
 		counts: number[];
-		mean: number;
+		mean: number | null;
 	}
 
 	interface Props {
@@ -21,8 +22,11 @@
 
 	const tokens = $derived.by(() => chartTokens());
 
+	const hasData = $derived(distribution.bins.length > 0);
+
 	const option = $derived.by(() => {
-		const binLabels = distribution.bins.map((b) => `${(b * 100).toFixed(1)}%`);
+		const binLabels = distribution.bins.map((b) => formatPercent(b, 1));
+		const meanValue = distribution.mean ?? 0;
 		return {
 			textStyle: { fontFamily: tokens.fontFamily, fontSize: 11 },
 			tooltip: {
@@ -56,15 +60,15 @@
 						lineStyle: { color: tokens.axisLabel, type: "dashed", width: 1 },
 						label: {
 							color: tokens.axisLabel,
-							formatter: `mean ${(distribution.mean * 100).toFixed(2)}%`,
+							formatter: `mean ${formatPercent(meanValue, 2)}`,
 						},
 						data: [
 							{
 								xAxis: binLabels.reduce((closestIdx, _, idx) => {
 									const current = distribution.bins[idx] ?? 0;
 									const closest = distribution.bins[closestIdx] ?? 0;
-									return Math.abs(current - distribution.mean) <
-										Math.abs(closest - distribution.mean)
+									return Math.abs(current - meanValue) <
+										Math.abs(closest - meanValue)
 										? idx
 										: closestIdx;
 								}, 0),
@@ -78,4 +82,18 @@
 	});
 </script>
 
-<ChartContainer {option} {height} ariaLabel="Return distribution histogram" />
+{#if !hasData}
+	<ChartContainer
+		option={{}}
+		{height}
+		empty
+		emptyMessage="No distribution data available."
+		ariaLabel="Return distribution histogram"
+	/>
+{:else}
+	<ChartContainer
+		{option}
+		{height}
+		ariaLabel="Return distribution histogram"
+	/>
+{/if}

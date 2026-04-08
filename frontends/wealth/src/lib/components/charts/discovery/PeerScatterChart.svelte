@@ -10,6 +10,7 @@
 -->
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
+	import { formatNumber, formatPercent } from "@investintell/ui";
 	import { chartTokens } from "../chart-tokens";
 
 	interface Peer {
@@ -32,7 +33,7 @@
 		peers
 			.filter((p) => p.volatility_1y != null && p.sharpe_1y != null)
 			.map((p) => ({
-				value: [(p.volatility_1y as number) * 100, p.sharpe_1y as number],
+				value: [p.volatility_1y as number, p.sharpe_1y as number],
 				name: p.name,
 				ticker: p.ticker ?? null,
 				itemStyle: { color: p.is_subject ? tokens.primary : tokens.benchmark },
@@ -61,25 +62,28 @@
 				const tk = p.data.ticker ? ` · ${p.data.ticker}` : "";
 				return `<div style="font-family:${tokens.fontFamily}">
 					<strong>${p.data.name}</strong>${tk}${tag}<br/>
-					<span style="color:${tokens.axisLabel}">Vol: ${p.data.value[0].toFixed(2)}%</span><br/>
-					<span style="color:${tokens.axisLabel}">Sharpe: ${p.data.value[1].toFixed(2)}</span>
+					<span style="color:${tokens.axisLabel}">Volatility: ${formatPercent(p.data.value[0], 2)}</span><br/>
+					<span style="color:${tokens.axisLabel}">Risk-adjusted return: ${formatNumber(p.data.value[1], 2)}</span>
 				</div>`;
 			},
 		},
 		grid: { left: 56, right: 24, top: 32, bottom: 48, containLabel: true },
 		xAxis: {
 			type: "value",
-			name: "Volatility (%)",
+			name: "Volatility (annualized)",
 			nameLocation: "middle",
 			nameGap: 32,
 			nameTextStyle: { color: tokens.axisLabel, fontSize: 10 },
-			axisLabel: { color: tokens.axisLabel },
+			axisLabel: {
+				color: tokens.axisLabel,
+				formatter: (v: number) => formatPercent(v, 0),
+			},
 			axisLine: { lineStyle: { color: tokens.grid } },
 			splitLine: { lineStyle: { color: tokens.grid, type: "dashed" } },
 		},
 		yAxis: {
 			type: "value",
-			name: "Sharpe",
+			name: "Risk-adjusted return",
 			nameLocation: "middle",
 			nameGap: 40,
 			nameTextStyle: { color: tokens.axisLabel, fontSize: 10 },
@@ -99,4 +103,8 @@
 	});
 </script>
 
-<ChartContainer {option} height={380} ariaLabel="Peer risk/return scatter" />
+<ChartContainer
+	{option}
+	height={380}
+	ariaLabel="Peer volatility versus risk-adjusted return"
+/>

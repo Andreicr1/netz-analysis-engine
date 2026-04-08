@@ -7,6 +7,7 @@
 -->
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
+	import { formatPercent } from "@investintell/ui";
 	import { chartTokens } from "../chart-tokens";
 
 	interface MonthlyPoint {
@@ -41,6 +42,8 @@
 		"Nov",
 		"Dec",
 	];
+
+	const hasData = $derived(monthly.length > 0);
 
 	const parsed = $derived.by(() => {
 		const years = new Set<number>();
@@ -77,7 +80,7 @@
 			formatter: (params: { data: [number, number, number] }) => {
 				const [m, yIdx, v] = params.data;
 				const year = parsed.yearList[yIdx];
-				const pct = `${(v * 100).toFixed(2)}%`;
+				const pct = formatPercent(v, 2);
 				return `<div style="font-family:${tokens.fontFamily};">
 					<div style="color:${tokens.axisLabel};font-size:10px;">${MONTH_LABELS[m]} ${year}</div>
 					<div style="color:${v >= 0 ? tokens.positive : tokens.negative};font-weight:600;">${pct}</div>
@@ -122,4 +125,14 @@
 	});
 </script>
 
-<ChartContainer {option} {height} ariaLabel="Monthly returns heatmap" />
+{#if !hasData}
+	<ChartContainer
+		option={{}}
+		{height}
+		empty
+		emptyMessage="No monthly return data available."
+		ariaLabel="Monthly returns heatmap"
+	/>
+{:else}
+	<ChartContainer {option} {height} ariaLabel="Monthly returns heatmap" />
+{/if}

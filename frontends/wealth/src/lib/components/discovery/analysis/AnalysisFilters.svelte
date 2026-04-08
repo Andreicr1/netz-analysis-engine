@@ -48,7 +48,7 @@
 	</div>
 	<div class="af-section">
 		<h4>Display</h4>
-		<label><input type="checkbox" checked /> Regime shading</label>
+		<label><input type="checkbox" checked /> Market phase shading</label>
 		<label><input type="checkbox" checked /> Drawdown overlay</label>
 	</div>
 {:else if group === "holdings"}

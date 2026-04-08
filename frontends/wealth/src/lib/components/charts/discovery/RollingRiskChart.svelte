@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
+	import { formatPercent } from "@investintell/ui";
 	import { chartTokens } from "../chart-tokens";
 
 	interface RollingPoint {
@@ -58,7 +59,7 @@
 			{
 				type: "value",
 				gridIndex: 0,
-				name: "Sharpe",
+				name: "Risk-adjusted return",
 				nameTextStyle: { color: tokens.axisLabel, fontSize: 10 },
 				axisLabel: { color: tokens.axisLabel },
 				splitLine: { lineStyle: { color: tokens.grid, type: "dashed" } },
@@ -66,11 +67,11 @@
 			{
 				type: "value",
 				gridIndex: 1,
-				name: "Vol",
+				name: "Volatility (annualized)",
 				nameTextStyle: { color: tokens.axisLabel, fontSize: 10 },
 				axisLabel: {
 					color: tokens.axisLabel,
-					formatter: (v: number) => `${Math.round(v * 100)}%`,
+					formatter: (v: number) => formatPercent(v, 0),
 				},
 				splitLine: { lineStyle: { color: tokens.grid, type: "dashed" } },
 			},
@@ -78,7 +79,7 @@
 		dataset: { source: dataset },
 		series: [
 			{
-				name: "Rolling Sharpe",
+				name: "Risk-adjusted return (rolling)",
 				type: "line",
 				xAxisIndex: 0,
 				yAxisIndex: 0,
@@ -88,7 +89,7 @@
 				sampling: "lttb",
 			},
 			{
-				name: "Rolling Vol",
+				name: "Volatility (rolling)",
 				type: "line",
 				xAxisIndex: 1,
 				yAxisIndex: 1,
@@ -102,4 +103,8 @@
 	});
 </script>
 
-<ChartContainer {option} {height} ariaLabel="Rolling Sharpe and volatility" />
+<ChartContainer
+	{option}
+	{height}
+	ariaLabel="Rolling risk-adjusted return and volatility"
+/>

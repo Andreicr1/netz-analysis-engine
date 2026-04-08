@@ -9,6 +9,7 @@
 -->
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
+	import { formatNumber } from "@investintell/ui";
 	import { chartTokens } from "../chart-tokens";
 
 	interface Peer {
@@ -58,13 +59,13 @@
 			textStyle: { color: tokens.axisLabel, fontSize: 11 },
 			formatter: (p: { data: { name: string; value: number; is_subject: boolean } }) => {
 				const tag = p.data.is_subject ? " (subject)" : "";
-				return `<strong>${p.data.name}</strong>${tag}<br/>Sharpe: ${p.data.value.toFixed(2)}`;
+				return `<strong>${p.data.name}</strong>${tag}<br/>Risk-adjusted return: ${formatNumber(p.data.value, 2)}`;
 			},
 		},
 		grid: { left: 8, right: 24, top: 16, bottom: 32, containLabel: true },
 		xAxis: {
 			type: "value",
-			name: "Sharpe (1y)",
+			name: "Risk-adjusted return (1y)",
 			nameLocation: "middle",
 			nameGap: 24,
 			nameTextStyle: { color: tokens.axisLabel, fontSize: 10 },
@@ -93,4 +94,8 @@
 	});
 </script>
 
-<ChartContainer {option} height={380} ariaLabel="Peer Sharpe ranking ladder" />
+<ChartContainer
+	{option}
+	height={380}
+	ariaLabel="Peer ranking ladder by risk-adjusted return"
+/>
