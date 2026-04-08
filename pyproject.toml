@@ -23,6 +23,7 @@ dependencies = [
     "jinja2>=3.1",
     "nh3>=0.2.0",
     "pgvector>=0.4",
+    "orjson>=3.10",
     "cachetools>=5.3",
     "python-dateutil>=2.9",
     "pandas>=2.2",
