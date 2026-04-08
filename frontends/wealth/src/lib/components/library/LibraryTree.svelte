@@ -24,9 +24,16 @@
 		loader: TreeLoader;
 		selectedPath: string | null;
 		onSelect: (node: LibraryNode) => void;
+		onContext?: (event: MouseEvent, node: LibraryNode) => void;
 	}
 
-	let { tree, loader, selectedPath, onSelect }: Props = $props();
+	let {
+		tree,
+		loader,
+		selectedPath,
+		onSelect,
+		onContext,
+	}: Props = $props();
 
 	interface FlatRow {
 		key: string;
@@ -192,6 +199,8 @@
 					class="tree-row-wrap"
 					style:transform="translateY({item.start}px)"
 					style:height="{ROW_HEIGHT}px"
+					oncontextmenu={(e) => onContext?.(e, row.node)}
+					role="presentation"
 				>
 					<LibraryTreeNode
 						node={row.node}

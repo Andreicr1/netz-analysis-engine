@@ -19,6 +19,7 @@
 	const routeData = $derived(data.tree);
 	const tree = $derived(routeData.data as LibraryTree);
 	const initialPath = $derived(data.initialPath);
+	const actorRole = $derived(data.actorRole);
 
 	function retryLoad(): void {
 		invalidate(pageState.url.pathname);
@@ -42,7 +43,7 @@
 			message="No documents are available in the Library yet."
 		/>
 	{:else}
-		<LibraryShell {tree} {initialPath} />
+		<LibraryShell {tree} {initialPath} {actorRole} />
 	{/if}
 
 	{#snippet failed(error)}

@@ -22,15 +22,17 @@ const TREE_TIMEOUT_MS = 8000;
 interface LibraryLoadResult {
 	tree: RouteData<LibraryTree>;
 	initialPath: string | null;
+	actorRole: string | null;
 }
 
 export const load: PageServerLoad = async ({
 	parent,
 	params,
 }): Promise<LibraryLoadResult> => {
-	const { token } = await parent();
+	const { token, actor } = await parent();
 	const api = createServerApiClient(token);
 	const initialPath = params.path && params.path.length > 0 ? params.path : null;
+	const actorRole = actor?.role ?? null;
 
 	try {
 		const tree = await api.get<LibraryTree>(
@@ -38,7 +40,7 @@ export const load: PageServerLoad = async ({
 			undefined,
 			{ signal: AbortSignal.timeout(TREE_TIMEOUT_MS) },
 		);
-		return { tree: okData(tree), initialPath };
+		return { tree: okData(tree), initialPath, actorRole };
 	} catch (err: unknown) {
 		if (err instanceof DOMException && err.name === "TimeoutError") {
 			return {
@@ -48,6 +50,7 @@ export const load: PageServerLoad = async ({
 					true,
 				),
 				initialPath,
+				actorRole,
 			};
 		}
 		if (err && typeof err === "object" && "status" in err) {
@@ -60,6 +63,7 @@ export const load: PageServerLoad = async ({
 						true,
 					),
 					initialPath,
+					actorRole,
 				};
 			}
 			return {
@@ -69,6 +73,7 @@ export const load: PageServerLoad = async ({
 					true,
 				),
 				initialPath,
+				actorRole,
 			};
 		}
 		console.error("library_tree_deeplink_load_unknown_error", err);
@@ -79,6 +84,7 @@ export const load: PageServerLoad = async ({
 				true,
 			),
 			initialPath,
+			actorRole,
 		};
 	}
 };

@@ -20,13 +20,15 @@ const TREE_TIMEOUT_MS = 8000;
 interface LibraryLoadResult {
 	tree: RouteData<LibraryTree>;
 	initialPath: string | null;
+	actorRole: string | null;
 }
 
 export const load: PageServerLoad = async ({
 	parent,
 }): Promise<LibraryLoadResult> => {
-	const { token } = await parent();
+	const { token, actor } = await parent();
 	const api = createServerApiClient(token);
+	const actorRole = actor?.role ?? null;
 
 	try {
 		const tree = await api.get<LibraryTree>(
@@ -34,7 +36,7 @@ export const load: PageServerLoad = async ({
 			undefined,
 			{ signal: AbortSignal.timeout(TREE_TIMEOUT_MS) },
 		);
-		return { tree: okData(tree), initialPath: null };
+		return { tree: okData(tree), initialPath: null, actorRole };
 	} catch (err: unknown) {
 		if (err instanceof DOMException && err.name === "TimeoutError") {
 			return {
@@ -44,6 +46,7 @@ export const load: PageServerLoad = async ({
 					true,
 				),
 				initialPath: null,
+				actorRole,
 			};
 		}
 		if (err && typeof err === "object" && "status" in err) {
@@ -56,6 +59,7 @@ export const load: PageServerLoad = async ({
 						true,
 					),
 					initialPath: null,
+					actorRole,
 				};
 			}
 			return {
@@ -65,6 +69,7 @@ export const load: PageServerLoad = async ({
 					true,
 				),
 				initialPath: null,
+				actorRole,
 			};
 		}
 		console.error("library_tree_load_unknown_error", err);
@@ -75,6 +80,7 @@ export const load: PageServerLoad = async ({
 				true,
 			),
 			initialPath: null,
+			actorRole,
 		};
 	}
 };

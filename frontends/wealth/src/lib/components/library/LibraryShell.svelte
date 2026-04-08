@@ -25,6 +25,14 @@
 	import { getContext, onDestroy, onMount, untrack } from "svelte";
 	import { goto } from "$app/navigation";
 	import {
+		createBundleBuilder,
+		type BundleBuilder,
+	} from "$lib/state/library/bundle-builder.svelte";
+	import {
+		createPinsClient,
+		type PinsClient,
+	} from "$lib/state/library/pins-client.svelte";
+	import {
 		createPreviewLoader,
 		type PreviewLoader,
 	} from "$lib/state/library/preview-loader.svelte";
@@ -37,8 +45,12 @@
 		type UrlAdapter,
 	} from "$lib/state/library/url-adapter.svelte";
 	import type { LibraryNode, LibraryTree } from "$lib/types/library";
+	import LibraryActionBar from "./LibraryActionBar.svelte";
 	import LibraryBreadcrumbs from "./LibraryBreadcrumbs.svelte";
+	import LibraryBundleWizard from "./LibraryBundleWizard.svelte";
+	import LibraryContextMenu from "./LibraryContextMenu.svelte";
 	import LibraryFilterBar from "./LibraryFilterBar.svelte";
+	import LibraryPinsSection from "./LibraryPinsSection.svelte";
 	import LibraryPreviewPane from "./LibraryPreviewPane.svelte";
 	import LibrarySearchInput from "./LibrarySearchInput.svelte";
 	import LibraryTreeView from "./LibraryTree.svelte";
@@ -47,9 +59,15 @@
 	interface Props {
 		tree: LibraryTree;
 		initialPath: string | null;
+		actorRole: string | null;
 	}
 
-	let { tree, initialPath }: Props = $props();
+	let { tree, initialPath, actorRole }: Props = $props();
+
+	const IC_ROLES = ["admin", "super_admin", "investment_team"];
+	const canCreateBundle = $derived(
+		actorRole !== null && IC_ROLES.includes(actorRole),
+	);
 
 	const getToken =
 		getContext<() => Promise<string>>("netz:getToken");
@@ -60,13 +78,27 @@
 
 	let loader: TreeLoader | null = $state(null);
 	let previewLoader: PreviewLoader | null = $state(null);
+	let pins: PinsClient | null = $state(null);
+	let bundle: BundleBuilder | null = $state(null);
 	let selectedPath = $state<string | null>(untrack(() => initialPath));
 	let selectedNode = $state<LibraryNode | null>(null);
+
+	// Context menu state — single instance shared by every tree row.
+	let menuOpen = $state(false);
+	let menuX = $state(0);
+	let menuY = $state(0);
+	let menuNode = $state<LibraryNode | null>(null);
+
+	// Bundle wizard dialog open state.
+	let wizardOpen = $state(false);
 
 	onMount(() => {
 		loader = createTreeLoader(getToken);
 		previewLoader = createPreviewLoader(getToken);
 		previewLoader.start();
+		pins = createPinsClient(getToken);
+		void pins.load();
+		bundle = createBundleBuilder(getToken);
 		// Bridge the URL adapter to the preview loader: any change to
 		// the selected document id (URL ↔ click ↔ back/forward) drives
 		// a fresh single-flight fetch. The loader's AbortController
@@ -108,8 +140,44 @@
 		loader = null;
 		previewLoader?.dispose();
 		previewLoader = null;
+		pins?.dispose();
+		pins = null;
+		bundle?.dispose();
+		bundle = null;
 		adapter.dispose();
 	});
+
+	function openContextMenu(event: MouseEvent, node: LibraryNode): void {
+		event.preventDefault();
+		menuNode = node;
+		menuX = event.clientX;
+		menuY = event.clientY;
+		menuOpen = true;
+	}
+
+	function closeContextMenu(): void {
+		menuOpen = false;
+	}
+
+	function handleContextOpen(node: LibraryNode): void {
+		handleSelect(node);
+	}
+
+	function handleContextPreview(node: LibraryNode): void {
+		if (node.node_type === "file" && node.id) {
+			adapter.setSelectedId(node.id);
+		}
+	}
+
+	function handleContextTogglePin(node: LibraryNode): void {
+		if (!pins || node.node_type !== "file" || !node.id) return;
+		void pins.togglePin(node.id, node.label, node.kind ?? null);
+	}
+
+	function handleContextToggleStar(node: LibraryNode): void {
+		if (!pins || node.node_type !== "file" || !node.id) return;
+		void pins.toggleStar(node.id, node.label, node.kind ?? null);
+	}
 
 	function handleSelect(node: LibraryNode): void {
 		selectedNode = node;
@@ -154,6 +222,14 @@
 
 		<LibraryFilterBar {adapter} />
 		<LibraryBreadcrumbs {selectedPath} onNavigate={handleNavigate} />
+
+		{#if bundle}
+			<LibraryActionBar
+				{bundle}
+				{canCreateBundle}
+				onOpenWizard={() => (wizardOpen = true)}
+			/>
+		{/if}
 	{/if}
 
 	<div
@@ -169,6 +245,7 @@
 							{loader}
 							{selectedPath}
 							onSelect={handleSelect}
+							onContext={openContextMenu}
 						/>
 					{/if}
 				{:else if adapter.state.view === "list"}
@@ -191,21 +268,25 @@
 			</aside>
 
 			<section class="pane pane--content" aria-label="Library content">
-				<div class="content-empty">
-					<p class="content-empty__title">
-						{#if selectedNode}
-							{selectedNode.label}
-						{:else if selectedPath}
-							{selectedPath}
-						{:else}
-							Welcome to your Library
-						{/if}
-					</p>
-					<p class="content-empty__sub">
-						Pick a folder on the left to browse documents. The
-						content list ships in the next sprint.
-					</p>
-				</div>
+				{#if !selectedPath && !selectedNode && pins}
+					<LibraryPinsSection {pins} {adapter} />
+				{:else}
+					<div class="content-empty">
+						<p class="content-empty__title">
+							{#if selectedNode}
+								{selectedNode.label}
+							{:else if selectedPath}
+								{selectedPath}
+							{:else}
+								Welcome to your Library
+							{/if}
+						</p>
+						<p class="content-empty__sub">
+							Pick a folder on the left to browse documents. The
+							content list ships in the next sprint.
+						</p>
+					</div>
+				{/if}
 			</section>
 		{/if}
 
@@ -216,6 +297,28 @@
 		</aside>
 	</div>
 </div>
+
+<LibraryContextMenu
+	node={menuNode}
+	x={menuX}
+	y={menuY}
+	open={menuOpen}
+	isPinned={menuNode?.id ? (pins?.isPinned(menuNode.id) ?? false) : false}
+	isStarred={menuNode?.id ? (pins?.isStarred(menuNode.id) ?? false) : false}
+	onClose={closeContextMenu}
+	onOpen={handleContextOpen}
+	onPreview={handleContextPreview}
+	onTogglePin={handleContextTogglePin}
+	onToggleStar={handleContextToggleStar}
+/>
+
+{#if bundle}
+	<LibraryBundleWizard
+		{bundle}
+		open={wizardOpen}
+		onClose={() => (wizardOpen = false)}
+	/>
+{/if}
 
 <style>
 	.library-shell {
