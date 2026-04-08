@@ -1296,6 +1296,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/wealth/discovery/funds/{external_id}/analysis/returns-risk",
+    "name": "analysis_returns_risk"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/wealth/discovery/funds/{external_id}/dd-report/snapshot",
     "name": "dd_report_snapshot"
   },
