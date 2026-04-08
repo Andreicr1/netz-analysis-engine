@@ -49,9 +49,9 @@ START_DATE = END_DATE - timedelta(days=30)
 
 # ── HTTP Client (zero dependencies — stdlib only) ────────────────────
 
-import urllib.request
 import urllib.error
 import urllib.parse
+import urllib.request
 
 
 @dataclass
@@ -259,7 +259,7 @@ def main() -> None:
         avg_lat = sum(r.latency_ms for r in ok_results) / len(ok_results)
         max_lat = max(r.latency_ms for r in ok_results)
         min_lat = min(r.latency_ms for r in ok_results)
-        print(f"\n  Latency (successful requests):")
+        print("\n  Latency (successful requests):")
         print(f"    Min: {min_lat:.0f}ms  Avg: {avg_lat:.0f}ms  Max: {max_lat:.0f}ms")
 
     # ── Verdict ────────────────────────────────────────────────────

@@ -391,7 +391,7 @@ if __name__ == "__main__":
         tickers = {"AAPL": "equity", "SPY": "etf", "OAKMX": "mutual_fund", "VFINX": "mutual_fund"}
 
         print(f"\n{'=' * 60}")
-        print(f"  Tiingo Provider -- Integration Test")
+        print("  Tiingo Provider -- Integration Test")
         print(f"  Range: {start} -> {end}")
         print(f"{'=' * 60}")
 
@@ -409,7 +409,7 @@ if __name__ == "__main__":
 
         # -- Test 2: WebSocket (5 seconds) --
         print(f"\n{'=' * 60}")
-        print(f"  WebSocket Test (5 seconds of AAPL + SPY)")
+        print("  WebSocket Test (5 seconds of AAPL + SPY)")
         print(f"{'=' * 60}\n")
 
         received: list[LiveQuote] = []

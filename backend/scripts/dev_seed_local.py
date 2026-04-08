@@ -33,6 +33,7 @@ _root = Path(__file__).resolve().parents[1]
 _backend = _root / "backend"
 
 from dotenv import load_dotenv  # noqa: E402
+
 load_dotenv(_backend / ".env.dev", override=False)
 load_dotenv(_root / ".env.dev", override=False)
 load_dotenv(_backend / ".env", override=False)
@@ -178,8 +179,8 @@ def build_table_specs(since: str, tickers: list[str], ciks: list[str]) -> list[d
         {
             "name": "sec_nport_holdings",
             "query": (
-                f"SELECT * FROM sec_nport_holdings "
-                f"WHERE period_of_report >= (CURRENT_DATE - INTERVAL '9 months') "
+                "SELECT * FROM sec_nport_holdings "
+                "WHERE period_of_report >= (CURRENT_DATE - INTERVAL '9 months') "
                 # Sem filtro de CIK — N-PORT é fund-level, pega os que existirem
                 # para os instrumentos de dev via join seria complexo;
                 # a janela de 9 meses já limita o volume adequadamente.
@@ -292,8 +293,8 @@ def main() -> None:
             sys.exit(1)
 
     print(f"\nDev seed — since={args.since}, tables={len(specs)}, dry_run={args.dry_run}")
-    print(f"Source: Timescale Cloud (prod)")
-    print(f"Target: localhost:5434/netz_engine\n")
+    print("Source: Timescale Cloud (prod)")
+    print("Target: localhost:5434/netz_engine\n")
 
     print("Connecting to prod ...", end="", flush=True)
     prod_conn = psycopg2.connect(PROD_DSN)
