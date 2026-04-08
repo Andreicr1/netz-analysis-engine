@@ -977,3 +977,123 @@ async def trigger_run_geography_enrichment(
     )
 
 
+# ── Wealth Library maintenance workers (Phase 1.2) ──────────────────
+
+
+@router.post(
+    "/run-library-pins-ttl",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger Library `recent` pins TTL pruning",
+    description=(
+        "Schedules the library_pins_ttl worker as a background task. "
+        "Prunes wealth_library_pins where pin_type='recent' beyond the "
+        "20-row-per-user limit. Pinned/starred rows are NEVER touched. "
+        "Uses advisory lock 900_081. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_library_pins_ttl(
+    background_tasks: BackgroundTasks,
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.library_pins_ttl import run_library_pins_ttl
+
+    return await _dispatch_worker(
+        background_tasks, "run-library-pins-ttl", "global",
+        run_library_pins_ttl,
+        timeout_seconds=_LIGHT_WORKER_TIMEOUT,
+    )
+
+
+@router.post(
+    "/run-library-index-rebuild",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger Library index nightly self-heal",
+    description=(
+        "Schedules the library_index_rebuild worker as a background task. "
+        "Detects drift between wealth_library_index and the source tables "
+        "(wealth_content, dd_reports, macro_reviews) via SQL EXCEPT. Logs a "
+        "structured warning when delta>0 and re-syncs missing rows via "
+        "ON CONFLICT DO UPDATE; deletes orphan index rows. Uses advisory "
+        "lock 900_080. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_library_index_rebuild(
+    background_tasks: BackgroundTasks,
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.library_index_rebuild import run_library_index_rebuild
+
+    return await _dispatch_worker(
+        background_tasks, "run-library-index-rebuild", "global",
+        run_library_index_rebuild,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
+
+
+class LibraryBundleBuildRequest(BaseModel):
+    """Payload for the on-demand library bundle builder.
+
+    ``library_index_ids`` is the canonical selection — every UUID must
+    already exist in ``wealth_library_index`` for the caller's
+    organization. ``bundle_id`` is optional so callers can pre-allocate
+    the path; ``job_id`` is the SSE channel id used for streaming
+    progress events.
+    """
+
+    library_index_ids: list[uuid.UUID]
+    bundle_id: uuid.UUID | None = None
+    job_id: str | None = None
+
+
+@router.post(
+    "/run-library-bundle-builder",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger Library Committee Pack ZIP build",
+    description=(
+        "Schedules the library_bundle_builder worker as a background task. "
+        "Bundles the requested wealth_library_index entries into a ZIP, "
+        "uploads it to R2 via StorageRouting helpers, and emits SSE "
+        "progress events (generating → uploading → completed) on the "
+        "supplied job channel. Uses per-bundle advisory lock 900_082. "
+        "Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_library_bundle_builder(
+    payload: LibraryBundleBuildRequest,
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.library_bundle_builder import run_library_bundle_builder
+
+    bundle_scope = str(payload.bundle_id) if payload.bundle_id else str(uuid.uuid4())
+    scope = f"{user.organization_id}:{bundle_scope}"
+
+    async def _runner() -> None:
+        await run_library_bundle_builder(
+            organization_id=user.organization_id,
+            library_index_ids=payload.library_index_ids,
+            user_id=actor.actor_id,
+            bundle_id=payload.bundle_id,
+            job_id=payload.job_id,
+        )
+
+    return await _dispatch_worker(
+        background_tasks, "run-library-bundle-builder", scope,
+        _runner,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+        org_id=user.organization_id,
+    )
+
