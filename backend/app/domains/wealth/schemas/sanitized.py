@@ -56,9 +56,11 @@ Adding a new consumer
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
+from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # ── Canonical mapping — Risk Methodology v3 ───────────────────────
 
@@ -250,3 +252,193 @@ class SanitizedScoreComponentsMixin(BaseModel):
         if isinstance(sc, dict):
             object.__setattr__(self, "score_components", sanitize_dict_keys(sc))
         return self
+
+
+# ── Wealth Library response models (Phase 2) ─────────────────────
+#
+# These schemas form the API boundary between the database
+# (`wealth_library_index` + `wealth_library_pins`) and the Svelte
+# Library shell. They follow the smart-backend / polished-frontend
+# rule from CLAUDE.md and the spec §4.8:
+#
+#   * Internal columns that the UI never needs are excluded — most
+#     notably ``storage_path`` (only the detail and bundle endpoints
+#     emit it) and the source-table FKs (``source_table`` /
+#     ``source_id``) are kept on the detail view but never on listings.
+#   * Free-form ``metadata`` is sanitised through ``sanitize_report_json``
+#     so any quant jargon embedded in source-specific fields gets
+#     translated before reaching the client.
+#   * Field names are intentionally human — ``confidence`` instead of
+#     ``confidence_score``, ``language`` instead of ``pdf_language``.
+#
+# All models are immutable in the API direction (frozen=True) so the
+# router cannot accidentally mutate them after construction.
+
+
+class _LibraryBaseModel(BaseModel):
+    """Common config for Library response models — frozen, ORM-compatible."""
+
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+
+
+LibraryNodeKind = Literal["folder", "file"]
+LibraryPinType = Literal["pinned", "starred", "recent"]
+
+
+class LibraryNode(_LibraryBaseModel):
+    """Discriminated union element of a Library tree.
+
+    A node is either a *folder* (an aggregation of children grouped by
+    a path segment) or a *file* (a single ``wealth_library_index`` row
+    rendered as an openable document).
+
+    Folder nodes carry a ``path`` (the materialised ``folder_path``
+    array joined into a URL-safe string) and a child count; file nodes
+    carry the index id, kind, status and the timestamps the UI needs
+    to sort and badge them.
+    """
+
+    node_type: LibraryNodeKind
+    path: str = Field(
+        ...,
+        description=(
+            "URL-safe joined folder path. For files, the path of the "
+            "containing folder; for folders, the folder itself."
+        ),
+    )
+    label: str
+
+    # Folder-only
+    child_count: int | None = None
+    last_updated_at: datetime | None = None
+
+    # File-only — populated when node_type == 'file'
+    id: UUID | None = None
+    kind: str | None = None
+    title: str | None = None
+    subtitle: str | None = None
+    status: str | None = None
+    language: str | None = None
+    version: int | None = None
+    is_current: bool | None = None
+    entity_kind: str | None = None
+    entity_label: str | None = None
+    entity_slug: str | None = None
+    confidence: float | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class LibraryTree(_LibraryBaseModel):
+    """Tree of L1 + L2 folders for the landing render.
+
+    Pages of children below L2 are fetched lazily via
+    ``GET /library/folders/{path}/children``.
+    """
+
+    roots: list[LibraryNode]
+    generated_at: datetime
+
+
+class LibraryNodePage(_LibraryBaseModel):
+    """Cursor-paginated page of nodes inside a folder."""
+
+    items: list[LibraryNode]
+    next_cursor: str | None = None
+    total_estimate: int | None = None
+
+
+class LibrarySearchResult(_LibraryBaseModel):
+    """Search hit list — same shape as the folder children for symmetry."""
+
+    items: list[LibraryNode]
+    next_cursor: str | None = None
+    total_estimate: int | None = None
+    query: str | None = None
+
+
+class LibraryPin(_LibraryBaseModel):
+    """A single pin row exposed to the client.
+
+    The library_index_id is the navigation target; ``library_path``
+    and ``label`` are denormalised so the UI can render the pin badge
+    without a second round-trip.
+    """
+
+    id: UUID
+    pin_type: LibraryPinType
+    library_index_id: UUID
+    library_path: str
+    label: str
+    kind: str | None = None
+    created_at: datetime
+    last_accessed_at: datetime
+    position: int | None = None
+
+
+class LibraryPinsResponse(_LibraryBaseModel):
+    """Three pin lists in a single payload — pinned / starred / recent."""
+
+    pinned: list[LibraryPin]
+    starred: list[LibraryPin]
+    recent: list[LibraryPin]
+
+
+class LibraryDocumentDetail(_LibraryBaseModel):
+    """Full detail view of a Library entry.
+
+    Returned by ``GET /library/documents/{id}``. ``storage_path`` is
+    intentionally exposed here (and only here) so the preview pane can
+    request a presigned download URL via the existing reader endpoints.
+    Free-form ``metadata`` is sanitised by ``sanitize_report_json``
+    before construction.
+    """
+
+    id: UUID
+    source_table: str
+    source_id: UUID
+    kind: str
+    title: str
+    subtitle: str | None = None
+    status: str
+    language: str | None = None
+    version: int | None = None
+    is_current: bool
+    entity_kind: str | None = None
+    entity_id: UUID | None = None
+    entity_slug: str | None = None
+    entity_label: str | None = None
+    folder_path: list[str]
+    author_id: str | None = None
+    approver_id: str | None = None
+    approved_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    confidence: float | None = None
+    decision_anchor: str | None = None
+    storage_path: str | None = None
+    metadata: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def _sanitize_metadata(self) -> "LibraryDocumentDetail":
+        meta = self.metadata
+        if isinstance(meta, dict):
+            object.__setattr__(self, "metadata", sanitize_report_json(meta))
+        return self
+
+
+class LibraryBundleAccepted(_LibraryBaseModel):
+    """202 response from ``POST /library/bundle``."""
+
+    bundle_id: UUID
+    job_id: str
+    sse_channel: str
+    item_count: int
+
+
+class LibraryPinCreate(BaseModel):
+    """Request body for ``POST /library/pins``."""
+
+    library_index_id: UUID
+    pin_type: LibraryPinType = "pinned"
+    position: int | None = None
