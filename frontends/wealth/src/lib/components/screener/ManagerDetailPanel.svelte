@@ -186,7 +186,8 @@
         instrument_external_id: ddConfirmFund.external_id,
       });
       ddConfirmFund = null;
-      goto(`/screener/dd-reports/${result.instrument_id}/${result.id}`);
+      // Send users straight into the Library — Phase 7 (spec §2.4).
+      goto(`/library?id=${result.id}`);
     } catch {
       ddGenerating = false;
     }

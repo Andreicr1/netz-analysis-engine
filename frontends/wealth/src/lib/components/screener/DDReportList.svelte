@@ -1,6 +1,6 @@
 <!--
-  DDReportList — Placeholder for the "DD Reviews" tab in the Screener Level 1.
-  Will consume GET /screener/dd-reports once wired.
+  DDReportList — empty-state placeholder, kept as a small CTA into
+  the Wealth Library where DD reports now live (Phase 7 / spec §2.4).
 -->
 <script lang="ts">
   import { goto } from "$app/navigation";
@@ -16,8 +16,8 @@
     Generated reports will appear here. Navigate to a fund and click
     <strong>"Run DD Report"</strong> to start an 8-chapter analysis.
   </p>
-  <button class="ddl-cta" onclick={() => goto("/screener/dd-reports")}>
-    View All Reports
+  <button class="ddl-cta" onclick={() => goto("/library")}>
+    Open the Library
   </button>
 </div>
 

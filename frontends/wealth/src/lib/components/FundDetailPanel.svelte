@@ -347,7 +347,7 @@
 								</span>
 							</div>
 							<a
-								href="/screener/dd-reports/{fundFundId ?? ''}"
+								href="/library?q={encodeURIComponent(fundFundId ?? '')}"
 								class="inline-flex items-center gap-1.5 rounded-md bg-(--ii-brand-primary) px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
 							>
 								Ver Relatório
