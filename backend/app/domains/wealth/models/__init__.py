@@ -17,6 +17,7 @@ from app.domains.wealth.models.rebalance import RebalanceEvent
 from app.domains.wealth.models.risk import FundRiskMetrics
 from app.domains.wealth.models.screening_metrics import InstrumentScreeningMetrics
 from app.domains.wealth.models.screening_result import ScreeningResult, ScreeningRun
+from app.domains.wealth.models.shadow_oms import PortfolioActualHoldings, TradeTicket
 from app.domains.wealth.models.strategy_drift_alert import StrategyDriftAlert
 from app.domains.wealth.models.universe_approval import UniverseApproval
 
@@ -34,6 +35,7 @@ __all__ = [
     "ModelPortfolio",
     "ModelPortfolioNav",
     "NavTimeseries",
+    "PortfolioActualHoldings",
     "PortfolioSnapshot",
     "PortfolioView",
     "RebalanceEvent",
@@ -42,6 +44,7 @@ __all__ = [
     "StrategicAllocation",
     "StrategyDriftAlert",
     "TacticalPosition",
+    "TradeTicket",
     "UniverseApproval",
     "WealthContent",
     "WealthDocument",

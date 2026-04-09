@@ -19,7 +19,7 @@ from typing import Any, Final
 import numpy as np
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.config_service import ConfigService
@@ -3357,3 +3357,198 @@ async def get_current_regime_endpoint(
             reasons={"source": "fallback", "error": str(exc)},
             source="caller_fallback",
         )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Shadow OMS — Phase 9 Block D
+# ──────────────────────────────────────────────────────────────────
+
+from app.domains.wealth.models.shadow_oms import (
+    PortfolioActualHoldings,
+    TradeTicket,
+)
+from app.domains.wealth.schemas.shadow_oms import (
+    ActualHoldingsResponse,
+    ExecuteTradesRequest,
+    ExecuteTradesResponse,
+    HoldingWeight,
+    TradeTicketResponse,
+)
+
+
+@router.get(
+    "/{portfolio_id}/actual-holdings",
+    response_model=ActualHoldingsResponse,
+    summary="Get actual holdings (or target fallback for zero-drift baseline)",
+)
+async def get_actual_holdings(
+    portfolio_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> ActualHoldingsResponse:
+    """Return the actual holdings for a live portfolio.
+
+    Phase 9 Block D. Fallback rule: if ``portfolio_actual_holdings``
+    has no row for this portfolio (first time going live), return the
+    target weights from ``fund_selection_schema.funds`` as a zero-drift
+    baseline. The frontend ``WeightVectorTable`` can then compare
+    actual vs target with drift = 0 until the first rebalance lands.
+    """
+    # 1. Load the portfolio to ensure it exists under RLS
+    stmt = select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
+    result = await db.execute(stmt)
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    # 2. Try to load actual holdings
+    stmt_actual = select(PortfolioActualHoldings).where(
+        PortfolioActualHoldings.portfolio_id == portfolio_id,
+    )
+    result_actual = await db.execute(stmt_actual)
+    actual_row = result_actual.scalar_one_or_none()
+
+    if actual_row is not None:
+        # Real holdings exist — return them
+        holdings = [
+            HoldingWeight.model_validate(h) for h in (actual_row.holdings or [])
+        ]
+        return ActualHoldingsResponse(
+            portfolio_id=str(portfolio_id),
+            source="actual",
+            holdings=holdings,
+            last_rebalanced_at=actual_row.last_rebalanced_at,
+        )
+
+    # 3. Fallback — return target weights as zero-drift baseline
+    fss = portfolio.fund_selection_schema or {}
+    target_funds = fss.get("funds", [])
+    holdings = [
+        HoldingWeight(
+            instrument_id=f.get("instrument_id", ""),
+            fund_name=f.get("fund_name", "Unknown"),
+            instrument_type=f.get("instrument_type"),
+            block_id=f.get("block_id", ""),
+            weight=f.get("weight", 0),
+            score=f.get("score", 0),
+        )
+        for f in target_funds
+    ]
+    return ActualHoldingsResponse(
+        portfolio_id=str(portfolio_id),
+        source="target_fallback",
+        holdings=holdings,
+        last_rebalanced_at=None,
+    )
+
+
+@router.post(
+    "/{portfolio_id}/execute-trades",
+    response_model=ExecuteTradesResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Execute trade tickets and update actual holdings (Shadow OMS)",
+)
+async def execute_trades(
+    portfolio_id: uuid.UUID,
+    payload: ExecuteTradesRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    org_id: uuid.UUID = Depends(get_org_id),
+    actor: Actor = Depends(get_actor),
+) -> ExecuteTradesResponse:
+    """Execute a batch of trade tickets against a live portfolio.
+
+    Phase 9 Block D. Transactional:
+    1. Validate portfolio is in state='live'.
+    2. INSERT one ``trade_tickets`` row per ticket.
+    3. Load or initialise ``portfolio_actual_holdings``.
+    4. Apply every BUY/SELL delta to the holdings JSONB.
+    5. UPDATE the holdings row atomically.
+
+    If any step fails, the entire transaction rolls back.
+    """
+    # 1. Load portfolio — must be live
+    stmt = select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
+    result = await db.execute(stmt)
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    if portfolio.state != "live":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Portfolio must be in state 'live' to execute trades (current: {portfolio.state})",
+        )
+
+    actor_id = actor.user_id if actor else None
+
+    # 2. Insert trade ticket rows
+    persisted_tickets: list[TradeTicketResponse] = []
+    for t in payload.tickets:
+        ticket = TradeTicket(
+            portfolio_id=portfolio_id,
+            organization_id=org_id,
+            instrument_id=t.instrument_id,
+            action=t.action,
+            delta_weight=t.delta_weight,
+            executed_by=actor_id,
+        )
+        db.add(ticket)
+        await db.flush()  # populate defaults (id, executed_at)
+        persisted_tickets.append(
+            TradeTicketResponse(
+                id=str(ticket.id),
+                instrument_id=ticket.instrument_id,
+                action=ticket.action,
+                delta_weight=float(ticket.delta_weight),
+                executed_at=ticket.executed_at,
+            ),
+        )
+
+    # 3. Load or bootstrap actual holdings
+    stmt_actual = select(PortfolioActualHoldings).where(
+        PortfolioActualHoldings.portfolio_id == portfolio_id,
+    )
+    result_actual = await db.execute(stmt_actual)
+    actual_row = result_actual.scalar_one_or_none()
+
+    if actual_row is None:
+        # Bootstrap from target weights
+        fss = portfolio.fund_selection_schema or {}
+        seed_holdings = list(fss.get("funds", []))
+        actual_row = PortfolioActualHoldings(
+            portfolio_id=portfolio_id,
+            organization_id=org_id,
+            holdings=seed_holdings,
+        )
+        db.add(actual_row)
+        await db.flush()
+
+    # 4. Apply deltas to the holdings JSONB
+    holdings_list: list[dict] = list(actual_row.holdings or [])
+    holdings_by_id = {h.get("instrument_id"): h for h in holdings_list}
+
+    for t in payload.tickets:
+        h = holdings_by_id.get(t.instrument_id)
+        if h is None:
+            continue  # instrument not in portfolio — skip gracefully
+        current_weight = float(h.get("weight", 0))
+        if t.action == "BUY":
+            h["weight"] = current_weight + t.delta_weight
+        elif t.action == "SELL":
+            h["weight"] = max(0.0, current_weight - t.delta_weight)
+
+    # 5. Persist updated holdings
+    actual_row.holdings = holdings_list
+    actual_row.last_rebalanced_at = func.now()
+    # Force JSONB dirty detection (SA sometimes misses in-place mutation)
+    from sqlalchemy.orm.attributes import flag_modified  # noqa: PLC0415
+
+    flag_modified(actual_row, "holdings")
+
+    await db.commit()
+
+    return ExecuteTradesResponse(
+        portfolio_id=str(portfolio_id),
+        trades_executed=len(persisted_tickets),
+        tickets=persisted_tickets,
+    )
