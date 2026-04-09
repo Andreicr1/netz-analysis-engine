@@ -25,14 +25,25 @@
 		formatPercent,
 		formatNumber,
 		formatShortDate,
+		SparklineSVG,
 	} from "@investintell/ui";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 
 	interface Props {
 		portfolio: ModelPortfolio;
+		/**
+		 * Optional slice of recent price ticks (values only) from a
+		 * LivePricePoller buffer. When provided and non-trivially
+		 * populated (>= 2 points) the Volatility card renders a
+		 * hyper-light SVG sparkline as a live pulse indicator.
+		 * Phase 9 Block C integration.
+		 */
+		priceBuffer?: readonly number[];
 	}
 
-	let { portfolio }: Props = $props();
+	let { portfolio, priceBuffer = [] }: Props = $props();
+
+	const hasSparkline = $derived(priceBuffer.length >= 2);
 
 	const funds = $derived(portfolio.fund_selection_schema?.funds ?? []);
 	const fundCount = $derived(funds.length);
@@ -82,12 +93,26 @@
 
 	<div class="lks-card">
 		<span class="lks-kicker">Volatility</span>
-		<span class="lks-value">
-			{optimization && optimization.portfolio_volatility !== null
-				? formatPercent(optimization.portfolio_volatility, 2)
-				: "—"}
+		<div class="lks-value-row">
+			<span class="lks-value">
+				{optimization && optimization.portfolio_volatility !== null
+					? formatPercent(optimization.portfolio_volatility, 2)
+					: "—"}
+			</span>
+			{#if hasSparkline}
+				<SparklineSVG
+					data={priceBuffer}
+					color="var(--ii-brand-accent, #2d7ef7)"
+					width={72}
+					height={22}
+					strokeWidth={1.25}
+					ariaLabel="Live price pulse"
+				/>
+			{/if}
+		</div>
+		<span class="lks-meta">
+			{hasSparkline ? "live pulse · annualized" : "annualized"}
 		</span>
-		<span class="lks-meta">annualized</span>
 	</div>
 
 	<div class="lks-card">
@@ -124,48 +149,59 @@
 </section>
 
 <style>
+	/* Phase 9 Block C terminal density — ledger stack. The strip
+	   now assumes it is mounted inside a shell panel (the outer
+	   .lws-panel--kpis in LiveWorkbenchShell provides the border
+	   and background). Each KPI is a ledger row with a hairline
+	   top divider, no per-card background, no per-card border. */
 	.lks-root {
-		display: grid;
-		grid-template-columns: repeat(6, minmax(0, 1fr));
-		gap: 12px;
+		display: flex;
+		flex-direction: column;
+		gap: 0;
 		font-family: "Urbanist", system-ui, sans-serif;
-	}
-	@container (max-width: 1100px) {
-		.lks-root {
-			grid-template-columns: repeat(3, minmax(0, 1fr));
-		}
-	}
-	@container (max-width: 640px) {
-		.lks-root {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-		}
+		min-width: 0;
 	}
 
 	.lks-card {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 14px 16px;
-		background: #141519;
-		border: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.4));
-		border-radius: 8px;
+		gap: 2px;
+		padding: 10px 12px;
+		background: transparent;
+		border: none;
+		border-top: 1px solid rgba(255, 255, 255, 0.06);
+		border-radius: 0;
 		min-width: 0;
+	}
+	.lks-card:first-child {
+		border-top: none;
 	}
 
 	.lks-kicker {
-		font-size: 10px;
+		font-size: 9px;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--ii-text-muted, #85a0bd);
 	}
 
+	.lks-value-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		min-width: 0;
+	}
+
 	.lks-value {
-		font-size: 20px;
+		font-size: 17px;
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
 		color: var(--ii-text-primary, #ffffff);
-		line-height: 1.1;
+		line-height: 1.15;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 	.lks-value[data-accent="ok"] {
 		color: var(--ii-text-primary, #ffffff);
@@ -178,8 +214,9 @@
 	}
 
 	.lks-meta {
-		font-size: 10px;
+		font-size: 9px;
 		color: var(--ii-text-muted, #85a0bd);
 		text-transform: capitalize;
+		letter-spacing: 0.02em;
 	}
 </style>
