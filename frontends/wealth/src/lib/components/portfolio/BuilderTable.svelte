@@ -41,7 +41,7 @@
 	import ChevronRight from "lucide-svelte/icons/chevron-right";
 	import X from "lucide-svelte/icons/x";
 	import Plus from "lucide-svelte/icons/plus";
-	import { formatPercent } from "@investintell/ui";
+	import { formatPercent, formatNumber } from "@investintell/ui";
 	import { BLOCK_GROUPS, blockDisplay, groupDisplay } from "$lib/constants/blocks";
 	import { workspace, type UniverseFund } from "$lib/state/portfolio-workspace.svelte";
 
@@ -230,7 +230,7 @@
 
 	function formatScore(value: number | null | undefined): string {
 		if (value == null || value === 0) return "—";
-		return value.toFixed(0);
+		return formatNumber(value, 0);
 	}
 
 	function formatWeight(value: number): string {
@@ -242,24 +242,37 @@
 	}
 </script>
 
-<!-- Same scroll/container pattern as UniverseTable -->
+<!-- Same scroll/container pattern as UniverseTable.
+     thead ALWAYS visible — the PM must see the matrix skeleton even
+     when the portfolio has zero funds (Phase 11 mandate). -->
 <div class="bt-wrap">
-	{#if tree.length === 0}
-		<div class="bt-empty">
-			<p>Drag funds from the Approved Universe to start building this portfolio.</p>
-		</div>
-	{:else}
-		<table class="bt-table" aria-label="Portfolio allocation — 3-level tree">
-			<thead>
-				<tr>
-					<th scope="col" class="bt-th-grip" aria-label="Drag handle"></th>
-					<th scope="col" class="bt-th-fund">Fund</th>
-					<th scope="col" class="bt-th-num">Score</th>
-					<th scope="col" class="bt-th-num">Weight</th>
-					<th scope="col" class="bt-th-action" aria-label="Remove"></th>
-				</tr>
-			</thead>
+	<table class="bt-table" aria-label="Portfolio allocation — 3-level tree">
+		<thead>
+			<tr>
+				<th scope="col" class="bt-th-grip" aria-label="Drag handle"></th>
+				<th scope="col" class="bt-th-fund">Fund</th>
+				<th scope="col" class="bt-th-num">Score</th>
+				<th scope="col" class="bt-th-num">Weight</th>
+				<th scope="col" class="bt-th-action" aria-label="Remove"></th>
+			</tr>
+		</thead>
 
+		{#if tree.length === 0}
+			<!-- Empty dropzone — inside tbody so the thead skeleton
+			     stays visible. Invites DnD from the Universe table. -->
+			<tbody>
+				<tr>
+					<td colspan="5" class="bt-dropzone">
+						<div class="bt-dropzone-inner">
+							<Plus size={24} />
+							<p class="bt-dropzone-text">
+								Drag funds from the Approved Universe to start building this portfolio.
+							</p>
+						</div>
+					</td>
+				</tr>
+			</tbody>
+		{:else}
 			{#each tree as group (group.name)}
 				{@const isGroupCollapsed = collapsedGroup[group.name] ?? false}
 
@@ -360,8 +373,8 @@
 					{/if}
 				</tbody>
 			{/each}
-		</table>
-	{/if}
+		{/if}
+	</table>
 </div>
 
 <style>
@@ -640,18 +653,36 @@
 		background: rgba(220, 38, 38, 0.1);
 	}
 
-	/* ── Empty state ──────────────────────────────────────── */
+	/* ── Empty dropzone (inside tbody, under visible thead) ── */
 
-	.bt-empty {
+	.bt-dropzone {
+		padding: 0;
+		border-bottom: none;
+	}
+	.bt-dropzone-inner {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		height: 100%;
-		padding: 48px 24px;
+		gap: 12px;
+		min-height: 280px;
+		margin: 12px 16px;
+		padding: 32px 24px;
+		border: 2px dashed rgba(64, 66, 73, 0.5);
+		border-radius: 8px;
 		color: #85a0bd;
+		font-family: "Urbanist", sans-serif;
+		transition: border-color 140ms ease, background 140ms ease;
+	}
+	.bt-dropzone-inner:hover {
+		border-color: rgba(1, 119, 251, 0.4);
+		background: rgba(1, 119, 251, 0.03);
+	}
+	.bt-dropzone-text {
+		margin: 0;
 		font-size: 0.8125rem;
 		text-align: center;
-		font-family: "Urbanist", sans-serif;
-		font-style: italic;
+		max-width: 320px;
+		line-height: 1.5;
 	}
 </style>

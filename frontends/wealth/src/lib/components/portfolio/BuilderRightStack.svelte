@@ -24,8 +24,8 @@
 
 <script lang="ts">
 	import * as Tabs from "@investintell/ui/components/ui/tabs";
+	import { EmptyState } from "@investintell/ui";
 	import { PanelErrorState } from "@investintell/ui/runtime";
-	import CalibrationPanel from "./CalibrationPanel.svelte";
 	import ConstructionNarrative from "./ConstructionNarrative.svelte";
 	import StressScenarioPanel from "./StressScenarioPanel.svelte";
 	import MainPortfolioChart from "./MainPortfolioChart.svelte";
@@ -54,7 +54,12 @@
 			</Tabs.List>
 
 			<Tabs.Content value="calibration" class="brs-content">
-				<CalibrationPanel />
+				<div class="brs-placeholder">
+					<EmptyState
+						title="Calibration Results"
+						message="Applied calibration summary and optimizer trace will appear here after a construction run. Edit calibration inputs in the Policy tab on the left sidebar."
+					/>
+				</div>
 			</Tabs.Content>
 
 			<Tabs.Content value="narrative" class="brs-content">
@@ -106,5 +111,12 @@
 		flex: 1;
 		min-height: 0;
 		overflow: hidden;
+	}
+	.brs-placeholder {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 100%;
+		padding: 24px;
 	}
 </style>

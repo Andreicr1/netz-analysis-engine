@@ -1,30 +1,30 @@
 <!--
-  Portfolio Builder — Flexible Columns Layout orchestrator.
+  Portfolio Builder — Master-Detail pattern (Phase 10).
 
-  Reference: docs/superpowers/specs/2026-04-08-portfolio-builder-flexible-columns.md
+  Two states driven by ``workspace.portfolio``:
 
-  This file is a pure orchestrator. It:
-    - Reads the portfolio workspace store (single source of truth).
-    - Derives `layoutState` from observable facts
-      (`selectedAnalyticsFund` + `portfolioId`) — never stored.
-    - Mounts the `FlexibleColumnsLayout` primitive with 3 snippets:
-      * leftColumn — switches between Models / Universe / Policy panels
-        based on `workspace.activeBuilderTab`. The sub-pills header is
-        preserved from the previous design — all three panels benefit
-        from the wider column granted by the FCL.
-      * centerColumn — `BuilderColumn` (action bar + main chart +
-        allocation blocks with DnD drop targets).
-      * rightColumn — `AnalyticsColumn` (Estado C drill-down). Placeholder
-        v1; Phase C adds Fund / Portfolio / Stress / Compare tabs.
-    - Wires `onSelectFund` from the Universe table to
-      `workspace.setSelectedAnalyticsFund` (triggers Estado B → C).
-    - Calls `workspace.resetBuilderEntry()` on mount to enforce the
-      "reset ao voltar" rule from spec §1.3 — re-entering /portfolio
-      always starts in Estado B, never in Estado C.
+  1. **Master (selector)** — when no portfolio is selected, the page
+     renders a centered ``PortfolioSelector`` grid with cards for
+     Active / Drafts / Archived and a "+ New Portfolio" CTA. The PM
+     picks a portfolio to enter the Builder.
+
+  2. **Detail (builder)** — when a portfolio is selected, the page
+     renders the FlexibleColumnsLayout with:
+     * leftColumn — fixed header (← Back + portfolio name) + sub-pills
+       (Universe | Policy only — Models tab removed per Phase 10 mandate).
+     * centerColumn — BuilderColumn (allocation blocks, action bar).
+     * rightColumn — AnalyticsColumn or BuilderRightStack (Calibration
+       Results, Narrative, Stress, Chart tabs).
+
+  The PM can return to Master view via the "← Back to Models" button
+  which clears ``workspace.portfolio``. Universe and Policy tabs are
+  never visible without a portfolio context.
+
+  Reference: docs/superpowers/plans/2026-04-08-portfolio-enterprise-workbench.md
 -->
 <script lang="ts">
 	import { getContext, onMount } from "svelte";
-	import Plus from "lucide-svelte/icons/plus";
+	import ArrowLeft from "lucide-svelte/icons/arrow-left";
 
 	import { workspace, type UniverseFund } from "$lib/state/portfolio-workspace.svelte";
 	import { FlexibleColumnLayout, type FCLState } from "@investintell/ui";
@@ -34,9 +34,10 @@
 	import BuilderRightStack, {
 		type BuilderRightTab,
 	} from "$lib/components/portfolio/BuilderRightStack.svelte";
-	import ModelListPanel from "$lib/components/portfolio/ModelListPanel.svelte";
 	import CalibrationPanel from "$lib/components/portfolio/CalibrationPanel.svelte";
+	import PortfolioSelector from "$lib/components/portfolio/PortfolioSelector.svelte";
 	import NewPortfolioDialog from "$lib/components/portfolio/NewPortfolioDialog.svelte";
+	import { portfolioDisplayName } from "$lib/constants/blocks";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 	import type { PageData } from "./$types";
 
@@ -51,17 +52,23 @@
 		workspace.resetBuilderEntry();
 	});
 
-	// ── BuilderRightStack tab state (Phase 4 Task 4.5) ─────────────
-	// Local to the page for now — Phase 5 will move it to an
-	// allowed-actions-driven host. The Builder center column flips
-	// this via the workspace.runPhase $effect below: on "done" the
-	// active tab auto-switches to Narrative so the PM's "build me
-	// something" intent is answered front-and-center.
+	// ── Master-Detail state ────────────────────────────────────
+	// Driven by workspace.portfolio. When null → Master (selector),
+	// when populated → Detail (builder).
+	const hasSelectedPortfolio = $derived(workspace.portfolio !== null);
+
+	function handleSelectPortfolio(mp: ModelPortfolio) {
+		workspace.selectPortfolio(mp);
+	}
+
+	function handleBackToModels() {
+		workspace.portfolio = null;
+	}
+
+	// ── BuilderRightStack tab state (Phase 4 Task 4.5) ─────────
 	let rightTab = $state<BuilderRightTab>("calibration");
 
-	// ── New Portfolio dialog state (Phase 5 Task 5.1) ──────────────
-	// Closes the dead "+Portfolio" button flagged by Phase 0 Task 0.1
-	// Step 2 (the legacy <button class="bld-pill--new"> had no onclick).
+	// ── New Portfolio dialog ───────────────────────────────────
 	let newPortfolioOpen = $state(false);
 
 	$effect(() => {
@@ -76,46 +83,37 @@
 		}
 	});
 
-	// Initial universe load — subsequent re-loads happen when the
-	// Builder composition changes (see below) so `current_holdings`
-	// stays fresh for correlation computation.
+	// Initial universe load
 	$effect(() => {
-		if (workspace.universe.length === 0 && !workspace.isLoadingUniverse) {
+		if (
+			hasSelectedPortfolio &&
+			workspace.universe.length === 0 &&
+			!workspace.isLoadingUniverse
+		) {
 			workspace.loadUniverse();
 		}
 	});
 
-	// ── Layout state — DERIVED, never stored ────────────────────────
-	// The layout state is a pure function of observable facts in the
-	// store. Storing it creates classes of bug like "three-col but
-	// analyticsMode is null". See spec §2.2.
-	//
-	// analyticsMode drives Estado C openness:
-	//   - "fund"      → row click in Universe table
-	//   - "portfolio" → "View Chart" button in Builder action bar
-	//   - null        → Estado B (2 columns)
+	// ── Layout state — DERIVED, never stored ────────────────────
 	const layoutState = $derived<FCLState>(
 		workspace.analyticsMode !== null ? "expand-3" : "expand-2",
 	);
 
-	// Portfolio Builder-specific ratios — preserve exact proportions
-	// from the previous local FlexibleColumnsLayout implementation.
 	const PORTFOLIO_RATIOS: Record<FCLState, [number, number, number]> = {
 		"expand-1": [0, 1, 0],
 		"expand-2": [1.4, 1, 0],
 		"expand-3": [1.5, 1, 1.1],
 	};
 
-	// ── Left column tab switching ───────────────────────────────────
-	// The sub-pills (Models | Universe | Policy) survive the FCL
-	// migration. All three panels now get the same wide column (45%
-	// of workspace in Estado B, 30% in Estado C) — Models and Policy
-	// simply benefit from the extra space.
-	const sidebarTabs = [
-		{ value: "models", label: "Models" },
+	// ── Left column tab switching (Models tab removed) ──────────
+	type BuilderSidebarTab = "universe" | "policy";
+	const sidebarTabs: { value: BuilderSidebarTab; label: string }[] = [
 		{ value: "universe", label: "Universe" },
 		{ value: "policy", label: "Policy" },
-	] as const;
+	];
+
+	// Reset to universe when coming back from models
+	let sidebarTab = $state<BuilderSidebarTab>("universe");
 
 	function handleSelectFund(fund: UniverseFund) {
 		workspace.openAnalyticsForFund(fund);
@@ -126,39 +124,61 @@
 	<title>Portfolio Builder — InvestIntell</title>
 </svelte:head>
 
-<div class="bld-shell">
-	<FlexibleColumnLayout
-		state={layoutState}
-		ratios={PORTFOLIO_RATIOS}
-		column1Label="Approved Universe"
-		column2Label="Portfolio Builder"
-		column3Label="Analytics"
-		column1={leftColumn}
-		column2={centerColumn}
-		column3={rightColumn}
-	/>
+{#if !hasSelectedPortfolio}
+	<!-- ── MASTER VIEW: Portfolio Selector ────────────────────── -->
+	<div class="bld-shell">
+		<PortfolioSelector
+			{portfolios}
+			onSelect={handleSelectPortfolio}
+			onNewPortfolio={() => (newPortfolioOpen = true)}
+		/>
+	</div>
+{:else}
+	<!-- ── DETAIL VIEW: Builder ───────────────────────────────── -->
+	<div class="bld-shell">
+		<FlexibleColumnLayout
+			state={layoutState}
+			ratios={PORTFOLIO_RATIOS}
+			column1Label="Builder Tools"
+			column2Label="Portfolio Builder"
+			column3Label="Analytics"
+			column1={leftColumn}
+			column2={centerColumn}
+			column3={rightColumn}
+		/>
 
-	{#snippet leftColumn()}
+		{#snippet leftColumn()}
 			<div class="bld-left">
-				<div class="bld-left-header">
+				<!-- Fixed header: Back button + portfolio name -->
+				<div class="bld-left-context">
 					<button
 						type="button"
-						class="bld-pill bld-pill--new"
-						onclick={() => (newPortfolioOpen = true)}
+						class="bld-back-btn"
+						onclick={handleBackToModels}
+						title="Back to portfolio list"
 					>
-						<Plus size={16} />
-						<span>New Portfolio</span>
+						<ArrowLeft size={14} />
+						<span>Models</span>
 					</button>
+					<div class="bld-active-portfolio">
+						<span class="bld-active-name">
+							{workspace.portfolio?.display_name ?? ""}
+						</span>
+						<span class="bld-active-state">
+							{workspace.portfolio?.state ?? ""}
+						</span>
+					</div>
 				</div>
 
+				<!-- Sub-pills: Universe | Policy (no Models) -->
 				<div class="bld-sub-pills">
 					{#each sidebarTabs as tab (tab.value)}
-						{@const active = workspace.activeBuilderTab === tab.value}
+						{@const active = sidebarTab === tab.value}
 						<button
 							type="button"
 							class="bld-sub-pill"
 							class:bld-sub-pill--active={active}
-							onclick={() => (workspace.activeBuilderTab = tab.value)}
+							onclick={() => (sidebarTab = tab.value)}
 						>
 							{tab.label}
 						</button>
@@ -166,9 +186,7 @@
 				</div>
 
 				<div class="bld-left-content">
-					{#if workspace.activeBuilderTab === "models"}
-						<ModelListPanel {portfolios} />
-					{:else if workspace.activeBuilderTab === "universe"}
+					{#if sidebarTab === "universe"}
 						<UniverseColumn onSelectFund={handleSelectFund} />
 					{:else}
 						<CalibrationPanel />
@@ -181,48 +199,44 @@
 			<BuilderColumn />
 		{/snippet}
 
-	{#snippet rightColumn()}
-		{#if workspace.analyticsMode === "fund"}
-			<AnalyticsColumn />
-		{:else}
-			<BuilderRightStack
-				active={rightTab}
-				onActiveChange={(t) => (rightTab = t)}
-			/>
-		{/if}
-	{/snippet}
+		{#snippet rightColumn()}
+			{#if workspace.analyticsMode === "fund"}
+				<AnalyticsColumn />
+			{:else}
+				<BuilderRightStack
+					active={rightTab}
+					onActiveChange={(t) => (rightTab = t)}
+				/>
+			{/if}
+		{/snippet}
+	</div>
+{/if}
 
-	<!-- Phase 5 Task 5.1 — New Portfolio dialog -->
-	<NewPortfolioDialog
-		open={newPortfolioOpen}
-		onOpenChange={(v) => (newPortfolioOpen = v)}
-		{portfolios}
-	/>
+<!-- New Portfolio dialog — available from both Master and Detail -->
+<NewPortfolioDialog
+	open={newPortfolioOpen}
+	onOpenChange={(v) => (newPortfolioOpen = v)}
+	{portfolios}
+/>
 
-	<!-- Error toast — preserved from previous design -->
-	{#if workspace.lastError}
-		<div class="bld-error-toast">
-			<span>
-				<strong>{workspace.lastError.action} failed:</strong>
-				{workspace.lastError.message}
-			</span>
-			<button
-				class="bld-error-close"
-				onclick={() => { workspace.lastError = null; }}
-				aria-label="Dismiss error"
-			>
-				&times;
-			</button>
-		</div>
-	{/if}
-</div>
+<!-- Error toast -->
+{#if workspace.lastError}
+	<div class="bld-error-toast">
+		<span>
+			<strong>{workspace.lastError.action} failed:</strong>
+			{workspace.lastError.message}
+		</span>
+		<button
+			class="bld-error-close"
+			onclick={() => { workspace.lastError = null; }}
+			aria-label="Dismiss error"
+		>
+			&times;
+		</button>
+	</div>
+{/if}
 
 <style>
-	/* ── Hardcoded dark palette — matches legacy UniversePanel ─────
-	 * No var() fallbacks — the component is force-rendered dark
-	 * regardless of theme context so visual validation on dev
-	 * server without a theme provider matches production. */
-
 	.bld-shell {
 		height: 100%;
 		width: 100%;
@@ -232,7 +246,7 @@
 		background: #0e0f13;
 	}
 
-	/* ── Left column chrome ──────────────────────────────────────── */
+	/* ── Left column chrome ──────────────────────────────────── */
 	.bld-left {
 		display: flex;
 		flex-direction: column;
@@ -241,42 +255,69 @@
 		background: #141519;
 	}
 
-	.bld-left-header {
+	/* Context header: Back + active portfolio name */
+	.bld-left-context {
 		display: flex;
-		align-items: center;
-		padding: 16px;
+		flex-direction: column;
+		gap: 8px;
+		padding: 14px 16px 12px;
+		border-bottom: 1px solid rgba(64, 66, 73, 0.4);
 		flex-shrink: 0;
 	}
-
-	/* New Portfolio pill — matches Screener .scr-pill pattern */
-	.bld-pill {
+	.bld-back-btn {
 		display: inline-flex;
 		align-items: center;
-		gap: 8px;
-		padding: 10px 18px;
-		border: 1px solid #ffffff;
-		border-radius: 36px;
-		background: #000000;
-		color: #ffffff;
+		gap: 6px;
+		padding: 4px 0;
+		background: transparent;
+		border: none;
+		color: var(--ii-text-muted, #85a0bd);
 		font-family: "Urbanist", sans-serif;
-		font-size: 13px;
-		font-weight: 400;
+		font-size: 11px;
+		font-weight: 600;
 		cursor: pointer;
-		transition: background 120ms ease;
-		white-space: nowrap;
+		transition: color 120ms ease;
 	}
-
-	.bld-pill:hover {
-		background: #1a1b20;
+	.bld-back-btn:hover {
+		color: #ffffff;
+	}
+	.bld-back-btn:focus-visible {
+		outline: 2px solid #2d7ef7;
+		outline-offset: 2px;
+	}
+	.bld-active-portfolio {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+	}
+	.bld-active-name {
+		font-size: 14px;
+		font-weight: 700;
+		color: var(--ii-text-primary, #ffffff);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		min-width: 0;
+	}
+	.bld-active-state {
+		font-size: 9px;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--ii-text-muted, #85a0bd);
+		flex-shrink: 0;
+		padding: 2px 6px;
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		border-radius: 3px;
 	}
 
 	.bld-sub-pills {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		padding: 0 16px 16px;
+		padding: 12px 16px;
 		flex-shrink: 0;
-		border-bottom: 1px solid rgba(64, 66, 73, 0.4);
 	}
 
 	.bld-sub-pill {
@@ -293,18 +334,15 @@
 		cursor: pointer;
 		transition: all 120ms ease;
 	}
-
 	.bld-sub-pill:hover {
 		color: #ffffff;
 		background: rgba(255, 255, 255, 0.03);
 	}
-
 	.bld-sub-pill--active {
 		background: #0177fb;
 		color: #ffffff;
 		font-weight: 600;
 	}
-
 	.bld-sub-pill--active:hover {
 		background: #0177fb;
 	}
@@ -315,7 +353,7 @@
 		overflow: hidden;
 	}
 
-	/* ── Error toast (preserved) ─────────────────────────────────── */
+	/* ── Error toast ──────────────────────────────────────────── */
 	.bld-error-toast {
 		position: absolute;
 		bottom: 20px;
@@ -332,7 +370,6 @@
 		font-size: 0.8125rem;
 		z-index: 100;
 	}
-
 	.bld-error-close {
 		background: transparent;
 		border: none;
