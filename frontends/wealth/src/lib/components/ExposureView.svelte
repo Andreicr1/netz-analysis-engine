@@ -121,7 +121,7 @@
 						Configure um Model Portfolio antes de visualizar a exposição.
 					</p>
 					<a
-						href="/portfolio/models"
+						href="/portfolio"
 						class="mt-4 inline-flex items-center rounded-lg bg-(--ii-accent) px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
 					>
 						Ir para Model Portfolios

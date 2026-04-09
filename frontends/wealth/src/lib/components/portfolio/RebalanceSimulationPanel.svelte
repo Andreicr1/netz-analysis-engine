@@ -8,7 +8,7 @@
 <script lang="ts">
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { Input } from "@investintell/ui/components/ui/input";
-	import { EmptyState, formatCurrency, formatPercent } from "@investintell/ui";
+	import { EmptyState, formatCurrency, formatPercent, formatNumber } from "@investintell/ui";
 	import { blockLabel } from "$lib/constants/blocks";
 	import Loader2 from "lucide-svelte/icons/loader-2";
 	import Trash2 from "lucide-svelte/icons/trash-2";
@@ -256,13 +256,13 @@
 								</span>
 								<span class="text-[#85a0bd]">{isCash ? "—" : blockLabel(trade.block_id)}</span>
 								<span class="tabular-nums {trade.delta_weight > 0 ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
-									{trade.delta_weight > 0 ? "+" : ""}{(trade.delta_weight * 100).toFixed(1)}
+									{trade.delta_weight > 0 ? "+" : ""}{formatPercent(trade.delta_weight, 1)}
 								</span>
 								<span class="text-white tabular-nums">
 									{trade.action === "SELL" ? "−" : "+"}{formatCurrency(Math.abs(trade.trade_value))}
 								</span>
 								<span class="text-[#cbccd1] tabular-nums">
-									{isCash ? "—" : trade.estimated_quantity.toFixed(2)}
+									{isCash ? "—" : formatNumber(trade.estimated_quantity, 2)}
 								</span>
 							</div>
 						{/each}
@@ -287,7 +287,7 @@
 									<span class="text-[#cbccd1] tabular-nums">{formatPercent(wc.current_weight)}</span>
 									<span class="text-[#cbccd1] tabular-nums">{formatPercent(wc.target_weight)}</span>
 									<span class="tabular-nums {wc.delta_pp > 0 ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
-										{wc.delta_pp > 0 ? "+" : ""}{wc.delta_pp.toFixed(1)}
+										{wc.delta_pp > 0 ? "+" : ""}{formatNumber(wc.delta_pp, 1)}
 									</span>
 									<span class="relative h-2 bg-white/5 rounded overflow-hidden">
 										<span

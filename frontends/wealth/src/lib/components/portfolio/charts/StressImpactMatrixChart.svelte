@@ -71,7 +71,7 @@
 				borderColor: tokens.tooltipBorder,
 				borderWidth: 1,
 				padding: 10,
-				valueFormatter: (v: number) => `${v.toFixed(1)}%`,
+				valueFormatter: (v: number) => formatPercent(v / 100, 1),
 			},
 			legend: {
 				data: ["NAV impact", "Tail loss impact"],

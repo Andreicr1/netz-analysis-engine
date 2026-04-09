@@ -4,10 +4,9 @@
   Risk | Advanced) with the canonical DL1 3-phase ribbon (Builder |
   Analytics | Live).
 
-  The legacy /portfolio/model and /portfolio/advanced routes still
-  exist as files; Phase 10 Task 10.3 will add hooks.server.ts redirects
-  and delete the route directories. Removing them from the visible
-  navigation is the Phase 5 contribution to the legacy cleanup.
+  The legacy /portfolio/model and /portfolio/advanced routes were
+  deleted in Phase 10 Task 10.3. The canonical Builder lives at
+  /portfolio (Master-Detail pattern, Phase 10).
 
   Per DL1 — sub-nav is sticky under TopNav and visible on every
   /portfolio/* route. Phase 6 will fill ``subjectsUnderAnalysis`` from
