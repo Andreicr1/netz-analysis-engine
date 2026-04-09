@@ -1,269 +1,250 @@
 <!--
-  TerminalPriceChart — TradingView Advanced Charting Library integration.
+  TerminalPriceChart — lightweight-charts v5 with NAV overlay.
 
-  Replaces lightweight-charts with the full TradingView widget for:
-    - Professional candlestick/line/area charting
-    - 50+ built-in technical indicators (RSI, MACD, Bollinger, etc.)
-    - Native "Compare" / "Add Symbol" for NAV overlay
-    - Percentage mode for cross-asset comparison
-    - Drawing tools, crosshair, multi-pane layout
+  Two series on one chart in Percentage mode:
+    1. Baseline (blue) — selected instrument price
+    2. Line (gold) — composite portfolio NAV
 
-  Datafeed: Custom adapter in tv-datafeed.ts bridges our REST+WS APIs.
-  Styling: Brutalismo financeiro — #05080f bg, muted grid, no neon.
+  PriceScaleMode.Percentage normalises both to the same Y-axis
+  so instruments with different base prices are visually comparable.
 
-  Anti-SSR: Widget instantiation is deferred to onMount (browser-only).
-
-  IMPORTANT: The TradingView Charting Library static files must be placed
-  at /static/charting_library/ (standard distribution). The library is
-  proprietary and not available via npm — obtain from TradingView B2B.
+  Anti-SSR: dynamic import() inside onMount.
+  Dual-effect: historical setData vs live update() (no fitContent).
+  Toggle: "vs Portfolio NAV" button shows/hides the gold line.
 -->
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { createNetzDatafeed, type NetzDatafeed } from "$lib/services/tv-datafeed";
 
+	// ── Types ─────────────────────────────────────────────────
+	export interface BarData {
+		time: number; // UTC seconds
+		value: number;
+	}
+
+	export interface LiveTick {
+		time: number; // UTC seconds
+		value: number;
+	}
+
+	type Timeframe = "1D" | "1W" | "1M" | "3M";
 	export type DataStatus = "live" | "delayed" | "offline";
 
 	interface Props {
-		/** Ticker symbol to display (e.g. "SPY", "BND"). */
 		ticker: string;
-		/** Portfolio ID for NAV comparison (used as compare symbol). */
-		portfolioNavTicker?: string;
-		/** Data status badge. */
+		historicalBars: BarData[];
+		lastTick: LiveTick | null;
+		portfolioNavBars: BarData[];
+		timeframe: Timeframe;
+		onTimeframeChange: (tf: Timeframe) => void;
 		dataStatus?: DataStatus;
 	}
 
 	let {
 		ticker,
-		portfolioNavTicker,
+		historicalBars,
+		lastTick,
+		portfolioNavBars,
+		timeframe,
+		onTimeframeChange,
 		dataStatus = "live",
 	}: Props = $props();
 
+	const TIMEFRAMES: { id: Timeframe; label: string }[] = [
+		{ id: "1D", label: "1D" },
+		{ id: "1W", label: "1W" },
+		{ id: "1M", label: "1M" },
+		{ id: "3M", label: "3M" },
+	];
+
+	// ── Chart state ($state for reactivity tracking) ──────────
 	let containerEl: HTMLDivElement | undefined = $state();
-	let widget: any = $state(null);
-	let datafeed: NetzDatafeed | null = $state(null);
-	let tvReady = $state(false);
-	let tvError = $state<string | null>(null);
+	let chart = $state<any>(null);
+	let series = $state<any>(null);
+	let navSeries = $state<any>(null);
+	let showNav = $state(true);
 
-	// ── Build the WS URL from current location ────────────────
-	function buildWsUrl(): string {
-		const proto = location.protocol === "https:" ? "wss:" : "ws:";
-		// TODO: inject JWT token for production auth
-		return `${proto}//${location.host}/api/v1/market-data/live/ws?token=dev`;
-	}
-
-	// ── Widget Initialization (SSR-safe) ──────────────────────
+	// ── Async chart initialization (SSR-safe) ─────────────────
 	onMount(() => {
 		let disposed = false;
 
-		async function initWidget() {
-			if (!containerEl) return;
+		(async () => {
+			const lc = await import("lightweight-charts");
+			if (disposed || !containerEl) return;
 
-			// Check if TradingView library is loaded
-			const TV = (window as any).TradingView;
-			if (!TV?.widget) {
-				console.warn(
-					"[TerminalPriceChart] TradingView Charting Library not found.",
-					"Place the library files at /static/charting_library/",
-					"Falling back to placeholder.",
-				);
-				tvError = "TradingView Charting Library not loaded. Place library files at /static/charting_library/.";
-				return;
-			}
-
-			if (disposed) return;
-
-			// Create our custom datafeed
-			const feed = createNetzDatafeed({
-				apiBaseUrl: "/api/v1/market-data",
-				wsUrl: buildWsUrl(),
-			});
-			datafeed = feed;
-
-			console.log("[TerminalPriceChart] Creating widget for", ticker);
-
-			const w = new TV.widget({
-				// ── Core ─────────────────────────────────────────
-				symbol: ticker || "SPY",
-				interval: "D",
-				container: containerEl,
-				datafeed: feed,
-				library_path: "/charting_library/",
-				locale: "en",
-				fullscreen: false,
-				autosize: true,
-
-				// ── Features ─────────────────────────────────────
-				disabled_features: [
-					"header_symbol_search",
-					"symbol_search_hot_key",
-					"header_saveload",
-					"use_localstorage_for_settings",
-					"popup_hints",
-					"display_market_status",
-					"header_quick_search",
-					"go_to_date",
-				],
-				enabled_features: [
-					"study_templates",
-					"side_toolbar_in_fullscreen_mode",
-					"header_indicators",
-					"header_compare",
-					"compare_symbol",
-					"header_chart_type",
-					"header_settings",
-					"header_fullscreen_button",
-					"header_screenshot",
-					"hide_left_toolbar_by_default",
-				],
-
-				// ── Timeframes ───────────────────────────────────
-				time_frames: [
-					{ text: "1D", resolution: "5", description: "1 Day" },
-					{ text: "1W", resolution: "15", description: "1 Week" },
-					{ text: "1M", resolution: "60", description: "1 Month" },
-					{ text: "3M", resolution: "D", description: "3 Months" },
-					{ text: "6M", resolution: "D", description: "6 Months" },
-					{ text: "1Y", resolution: "D", description: "1 Year" },
-				],
-
-				// ── Brutalismo Financeiro Theme ──────────────────
-				theme: "dark",
-				loading_screen: {
-					backgroundColor: "#05080f",
-					foregroundColor: "#2d7ef7",
+			const c = lc.createChart(containerEl, {
+				autoSize: true,
+				layout: {
+					background: { color: "transparent" },
+					textColor: "#5a6577",
+					fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
+					fontSize: 10,
 				},
-				custom_css_url: "",  // Can point to a custom CSS file if needed
-
-				overrides: {
-					// ── Background & Canvas ──────────────────────
-					"paneProperties.background": "#05080f",
-					"paneProperties.backgroundType": "solid",
-					"paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.03)",
-					"paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.03)",
-
-					// ── Candles — muted institutional, not neon ──
-					"mainSeriesProperties.candleStyle.upColor": "#2d7ef7",
-					"mainSeriesProperties.candleStyle.downColor": "#5a3f7a",
-					"mainSeriesProperties.candleStyle.borderUpColor": "#2d7ef7",
-					"mainSeriesProperties.candleStyle.borderDownColor": "#5a3f7a",
-					"mainSeriesProperties.candleStyle.wickUpColor": "#2d7ef7",
-					"mainSeriesProperties.candleStyle.wickDownColor": "#5a3f7a",
-
-					// ── Area / Line (when not candle) ────────────
-					"mainSeriesProperties.areaStyle.color1": "rgba(45, 126, 247, 0.12)",
-					"mainSeriesProperties.areaStyle.color2": "rgba(45, 126, 247, 0.01)",
-					"mainSeriesProperties.areaStyle.linecolor": "#2d7ef7",
-					"mainSeriesProperties.lineStyle.color": "#2d7ef7",
-
-					// ── Scales ───────────────────────────────────
-					"scalesProperties.textColor": "#5a6577",
-					"scalesProperties.lineColor": "rgba(255, 255, 255, 0.06)",
-					"scalesProperties.backgroundColor": "#05080f",
-
-					// ── Crosshair ────────────────────────────────
-					"paneProperties.crossHairProperties.color": "rgba(45, 126, 247, 0.4)",
-
-					// ── Price line ───────────────────────────────
-					"mainSeriesProperties.priceLineColor": "rgba(45, 126, 247, 0.5)",
-					"mainSeriesProperties.priceLineWidth": 1,
+				grid: {
+					vertLines: { color: "rgba(255, 255, 255, 0.04)" },
+					horzLines: { color: "rgba(255, 255, 255, 0.04)" },
 				},
-
-				studies_overrides: {
-					// Volume — subdued fill
-					"volume.volume.color.0": "rgba(90, 63, 122, 0.3)",
-					"volume.volume.color.1": "rgba(45, 126, 247, 0.3)",
-					"volume.volume.transparency": 70,
+				crosshair: {
+					vertLine: {
+						color: "rgba(45, 126, 247, 0.3)",
+						labelBackgroundColor: "#2d7ef7",
+					},
+					horzLine: {
+						color: "rgba(45, 126, 247, 0.3)",
+						labelBackgroundColor: "#2d7ef7",
+					},
 				},
+				rightPriceScale: {
+					mode: lc.PriceScaleMode.Percentage,
+					borderVisible: false,
+					scaleMargins: { top: 0.08, bottom: 0.08 },
+				},
+				timeScale: {
+					borderColor: "rgba(255, 255, 255, 0.08)",
+					timeVisible: true,
+					secondsVisible: false,
+					rightOffset: 5,
+				},
+				handleScroll: true,
+				handleScale: true,
 			});
 
-			widget = w;
-
-			w.onChartReady(() => {
-				if (disposed) return;
-				console.log("[TerminalPriceChart] Chart ready");
-				tvReady = true;
-
-				// Enable percentage mode by default for fund comparison
-				try {
-					w.activeChart().getPanes()[0]?.setRightPriceScaleMode?.(2); // 2 = Percentage
-				} catch {
-					// Not critical
-				}
+			// Series 1: Instrument (baseline — blue/red)
+			const s = c.addSeries(lc.BaselineSeries, {
+				baseValue: { type: "price", price: 0 },
+				topLineColor: "#2d7ef7",
+				topFillColor1: "rgba(45, 126, 247, 0.10)",
+				topFillColor2: "rgba(45, 126, 247, 0.01)",
+				bottomLineColor: "#e74c3c",
+				bottomFillColor1: "rgba(231, 76, 60, 0.01)",
+				bottomFillColor2: "rgba(231, 76, 60, 0.06)",
+				lineWidth: 2,
+				priceLineVisible: true,
+				priceLineColor: "rgba(45, 126, 247, 0.4)",
+				lastValueVisible: true,
+				title: "",
 			});
-		}
 
-		// Slight delay to let the DOM settle
-		requestAnimationFrame(() => {
-			if (!disposed) initWidget();
-		});
+			// Series 2: Portfolio NAV (gold line)
+			const nav = c.addSeries(lc.LineSeries, {
+				color: "#fbbf24",
+				lineWidth: 2,
+				title: "NAV",
+				crosshairMarkerVisible: true,
+				crosshairMarkerRadius: 3,
+				priceLineVisible: false,
+				lastValueVisible: true,
+			});
+
+			chart = c;
+			series = s;
+			navSeries = nav;
+		})();
 
 		return () => {
 			disposed = true;
-			if (widget) {
-				try {
-					widget.remove();
-				} catch {
-					// Widget may already be destroyed
-				}
-				widget = null;
-			}
-			if (datafeed) {
-				datafeed.destroy();
-				datafeed = null;
+			if (chart) {
+				chart.remove();
+				chart = null;
+				series = null;
+				navSeries = null;
 			}
 		};
 	});
 
-	// ── React to ticker changes ─────────────────────────────
+	// ── Effect 1: Historical instrument bars ─────────────────
 	$effect(() => {
-		const t = ticker;
-		const w = widget;
-		const ready = tvReady;
-		if (!w || !ready || !t) return;
+		const s = series;
+		const c = chart;
+		const bars = historicalBars;
+		if (!s || !c || !bars.length) return;
 
-		try {
-			w.activeChart().setSymbol(t);
-			console.log("[TerminalPriceChart] Symbol changed to", t);
-		} catch (err) {
-			console.warn("[TerminalPriceChart] setSymbol failed:", err);
+		s.applyOptions({
+			baseValue: { type: "price", price: bars[0]!.value },
+		});
+		s.setData(bars);
+		c.timeScale().fitContent();
+	});
+
+	// ── Effect 2: Portfolio NAV bars ─────────────────────────
+	$effect(() => {
+		const ns = navSeries;
+		const bars = portfolioNavBars;
+		if (!ns) return;
+
+		if (bars.length > 0) {
+			ns.setData(bars);
 		}
 	});
+
+	// ── Effect 3: NAV visibility toggle ──────────────────────
+	$effect(() => {
+		const ns = navSeries;
+		const visible = showNav;
+		if (!ns) return;
+		ns.applyOptions({ visible });
+	});
+
+	// ── Effect 4: Live tick (incremental update) ─────────────
+	$effect(() => {
+		const s = series;
+		const tick = lastTick;
+		if (!s || !tick) return;
+		s.update({ time: tick.time, value: tick.value });
+	});
+
+	function toggleNav() {
+		showNav = !showNav;
+	}
 </script>
 
 <div class="tpc-root">
-	{#if tvError}
-		<!-- Fallback when library not loaded -->
-		<div class="tpc-fallback">
-			<div class="tpc-fallback-ticker">{ticker || "---"}</div>
-			<div class="tpc-fallback-msg">{tvError}</div>
-			<div class="tpc-fallback-hint">
-				The TradingView Advanced Charting Library is a B2B product.
-				Contact TradingView to obtain the library files, then place
-				them at <code>/static/charting_library/</code>.
-			</div>
-		</div>
-	{:else}
-		<!-- Status badge overlay -->
-		{#if dataStatus !== "live"}
-			<div class="tpc-status-overlay">
+	<!-- Controls bar -->
+	<div class="tpc-controls">
+		<div class="tpc-ticker-row">
+			<span class="tpc-ticker">{ticker || "---"}</span>
+			{#if dataStatus !== "live"}
 				<span
 					class="tpc-status-badge"
 					class:tpc-status-delayed={dataStatus === "delayed"}
 					class:tpc-status-offline={dataStatus === "offline"}
+					aria-label="Data status: {dataStatus}"
 				>{dataStatus.toUpperCase()}</span>
-			</div>
-		{/if}
+			{/if}
+		</div>
 
-		<!-- TradingView widget container -->
-		<div class="tpc-chart" bind:this={containerEl}></div>
+		<div class="tpc-right-controls">
+			<!-- NAV overlay toggle -->
+			<button
+				type="button"
+				class="tpc-nav-toggle"
+				class:tpc-nav-toggle--active={showNav}
+				onclick={toggleNav}
+				aria-pressed={showNav}
+				title="Toggle portfolio NAV overlay"
+			>
+				<span class="tpc-nav-check" aria-hidden="true">{showNav ? "\u2713" : ""}</span>
+				vs NAV
+			</button>
 
-		<!-- Loading overlay (shown until chart is ready) -->
-		{#if !tvReady && !tvError}
-			<div class="tpc-loading">
-				<div class="tpc-loading-text">Loading chart...</div>
+			<!-- Timeframe pills -->
+			<div class="tpc-timeframes" role="group" aria-label="Timeframe">
+				{#each TIMEFRAMES as tf}
+					<button
+						type="button"
+						class="tpc-tf-btn"
+						class:tpc-tf-active={timeframe === tf.id}
+						onclick={() => onTimeframeChange(tf.id)}
+						aria-pressed={timeframe === tf.id}
+					>
+						{tf.label}
+					</button>
+				{/each}
 			</div>
-		{/if}
-	{/if}
+		</div>
+	</div>
+
+	<!-- Chart canvas -->
+	<div class="tpc-chart" bind:this={containerEl}></div>
 </div>
 
 <style>
@@ -275,50 +256,35 @@
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
-		position: relative;
-		background: #05080f;
 	}
 
-	/* ── TradingView chart container ─────────────────────────── */
-	.tpc-chart {
-		position: relative;
-		z-index: 0;
-		flex: 1;
-		min-height: 0;
-		min-width: 0;
-		width: 100%;
-		overflow: hidden;
-	}
-
-	/* Force the TV iframe to match our background */
-	.tpc-chart :global(iframe) {
-		border: none !important;
-	}
-
-	/* ── Loading overlay ─────────────────────────────────────── */
-	.tpc-loading {
-		position: absolute;
-		inset: 0;
+	/* ── Controls bar ────────────────────────────────────────── */
+	.tpc-controls {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		background: #05080f;
-		z-index: 5;
-	}
-	.tpc-loading-text {
-		font-family: "JetBrains Mono", "SF Mono", monospace;
-		font-size: 11px;
-		color: #3d4654;
-		letter-spacing: 0.06em;
-	}
-
-	/* ── Status badge ────────────────────────────────────────── */
-	.tpc-status-overlay {
-		position: absolute;
-		top: 8px;
-		left: 10px;
+		justify-content: space-between;
+		flex-shrink: 0;
+		height: 32px;
+		padding: 0 10px;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		position: relative;
 		z-index: 10;
 	}
+
+	.tpc-ticker-row {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.tpc-ticker {
+		font-family: "JetBrains Mono", "SF Mono", monospace;
+		font-size: 11px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		color: #c8d0dc;
+	}
+
 	.tpc-status-badge {
 		font-family: "JetBrains Mono", "SF Mono", monospace;
 		font-size: 8px;
@@ -337,40 +303,95 @@
 		border: 1px solid rgba(239, 68, 68, 0.25);
 	}
 
-	/* ── Fallback (no library) ───────────────────────────────── */
-	.tpc-fallback {
+	/* ── Right controls (toggle + timeframes) ────────────────── */
+	.tpc-right-controls {
 		display: flex;
-		flex-direction: column;
 		align-items: center;
-		justify-content: center;
-		gap: 12px;
-		height: 100%;
-		padding: 24px;
+		gap: 8px;
+	}
+
+	/* ── NAV toggle button ───────────────────────────────────── */
+	.tpc-nav-toggle {
+		appearance: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 3px 8px;
+		font-family: "JetBrains Mono", "SF Mono", monospace;
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		color: #5a6577;
+		background: transparent;
+		border: 1px solid rgba(255, 255, 255, 0.06);
+		cursor: pointer;
+		transition: color 80ms, background 80ms, border-color 80ms;
+	}
+	.tpc-nav-toggle:hover {
+		color: #fbbf24;
+		border-color: rgba(251, 191, 36, 0.2);
+	}
+	.tpc-nav-toggle--active {
+		color: #fbbf24;
+		background: rgba(251, 191, 36, 0.08);
+		border-color: rgba(251, 191, 36, 0.25);
+	}
+	.tpc-nav-toggle:focus-visible {
+		outline: 2px solid #fbbf24;
+		outline-offset: 1px;
+	}
+	.tpc-nav-check {
+		font-size: 9px;
+		width: 9px;
 		text-align: center;
 	}
-	.tpc-fallback-ticker {
+
+	/* ── Separator between toggle and timeframes ─────────────── */
+	.tpc-right-controls .tpc-timeframes {
+		padding-left: 8px;
+		border-left: 1px solid rgba(255, 255, 255, 0.06);
+	}
+
+	.tpc-timeframes {
+		display: flex;
+		gap: 2px;
+	}
+
+	.tpc-tf-btn {
+		appearance: none;
+		padding: 3px 8px;
 		font-family: "JetBrains Mono", "SF Mono", monospace;
-		font-size: 18px;
-		font-weight: 700;
-		color: #2d7ef7;
-		letter-spacing: 0.08em;
-	}
-	.tpc-fallback-msg {
-		font-size: 12px;
-		color: #5a6577;
-		max-width: 400px;
-		line-height: 1.5;
-	}
-	.tpc-fallback-hint {
 		font-size: 10px;
-		color: #3d4654;
-		max-width: 380px;
-		line-height: 1.4;
-	}
-	.tpc-fallback-hint code {
-		font-family: "JetBrains Mono", "SF Mono", monospace;
+		font-weight: 600;
+		letter-spacing: 0.04em;
 		color: #5a6577;
-		padding: 1px 4px;
+		background: transparent;
+		border: 1px solid transparent;
+		cursor: pointer;
+		transition: color 80ms, background 80ms, border-color 80ms;
+	}
+	.tpc-tf-btn:hover {
+		color: #c8d0dc;
 		background: rgba(255, 255, 255, 0.04);
+	}
+	.tpc-tf-active {
+		color: #2d7ef7;
+		border-color: rgba(45, 126, 247, 0.3);
+		background: rgba(45, 126, 247, 0.08);
+	}
+	.tpc-tf-btn:focus-visible {
+		outline: 2px solid #2d7ef7;
+		outline-offset: 1px;
+	}
+
+	/* ── Chart container ─────────────────────────────────────── */
+	.tpc-chart {
+		position: relative;
+		z-index: 0;
+		flex: 1;
+		min-height: 0;
+		min-width: 0;
+		width: 100%;
+		overflow: hidden;
 	}
 </style>
