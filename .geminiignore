@@ -65,7 +65,6 @@ backend/scripts/db_inventory_output.txt
 
 # Project Artifacts
 .claude/
-CLAUDE.md
 **/.turbo/
 **/.codex-*.txt
 .playwright-mcp/
@@ -87,6 +86,7 @@ tmp_*.json
 tmp_*.txt
 backend/tmp_*.json
 backend/tmp_*.txt
+todos/
 
 # Specific to Gemini (Uncomment if you want to hide GEMINI.md from the agent's file list, though not recommended)
 # GEMINI.md

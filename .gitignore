@@ -99,5 +99,6 @@ infra/_deprecated/
 *.workspace.svelte.ts
 design dashboard figma.txt
 Inventário Completo*
+todos/
 
 CLAUDE.md

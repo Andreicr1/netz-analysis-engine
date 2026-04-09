@@ -26,17 +26,19 @@
 	--ii-text-inverse:   #14151a;   /* Figma color/blue/9 */
 	--ii-text-accent:    #0177fb;
 
-	/* ── Surface — Figma: black, blue/9, blue/11 ── */
-	--ii-bg:                #000000;
-	--ii-surface:           #000000;
-	--ii-surface-alt:       #14151a;   /* Figma color/blue/9 */
-	--ii-surface-elevated:  #14151a;   /* Figma color/blue/9 */
-	--ii-surface-inset:     #000000;
-	--ii-surface-overlay:   rgba(13, 13, 13, 0.60);
-	--ii-surface-raised:    #1a1b20;   /* Figma color/blue/11 */
-	--ii-surface-panel:     #000000;
-	--ii-surface-highlight: rgba(255, 255, 255, 0.06);
-	--ii-surface-accent:    color-mix(in srgb, #0177fb 8%, #000000);
+	/* ── Surface — Deep petroleum matte (institutional, contrast-safe) ──
+	 * Replaces pure black (#000) which was crushing contrast against cards.
+	 * Hierarchy: bg (page)  →  panel (cards)  →  elevated (nested/hover). */
+	--ii-bg:                #0a0e17;   /* page — deep petroleum */
+	--ii-surface:           #0f131a;   /* default card surface */
+	--ii-surface-alt:       #121722;   /* elevated panel */
+	--ii-surface-elevated:  #121722;   /* elevated panel */
+	--ii-surface-inset:     #0a0e17;   /* insets match page */
+	--ii-surface-overlay:   rgba(10, 14, 23, 0.72);
+	--ii-surface-raised:    #161c29;   /* raised modals / dropdowns */
+	--ii-surface-panel:     #0f131a;
+	--ii-surface-highlight: rgba(255, 255, 255, 0.05);
+	--ii-surface-accent:    color-mix(in srgb, #0177fb 10%, #0a0e17);
 
 	/* ── Border — Figma: grey/27, grey/34 ── */
 	--ii-border-subtle:  #404149;               /* Figma color/grey/27 */
@@ -53,10 +55,10 @@
 	--ii-info:    #0177fb;   /* accent blue */
 
 	/* ── Semantic subtle ── */
-	--ii-success-subtle: color-mix(in srgb, #11ec79 12%, #000000);
-	--ii-warning-subtle: color-mix(in srgb, #e3b341 14%, #000000);
-	--ii-danger-subtle:  color-mix(in srgb, #fc1a1a 12%, #000000);
-	--ii-info-subtle:    color-mix(in srgb, #0177fb 12%, #000000);
+	--ii-success-subtle: color-mix(in srgb, #11ec79 14%, #0a0e17);
+	--ii-warning-subtle: color-mix(in srgb, #e3b341 16%, #0a0e17);
+	--ii-danger-subtle:  color-mix(in srgb, #fc1a1a 14%, #0a0e17);
+	--ii-info-subtle:    color-mix(in srgb, #0177fb 14%, #0a0e17);
 
 	/* ── Regime ── */
 	--ii-regime-risk-on:   #11ec79;
@@ -86,16 +88,16 @@
 	--ii-control-lg: 44px;
 
 	/* ── Extended utility tokens ── */
-	--ii-accent-soft:      color-mix(in srgb, #0177fb 8%, #000000);
-	--ii-accent-muted:     color-mix(in srgb, #0177fb 12%, #000000);
+	--ii-accent-soft:      color-mix(in srgb, #0177fb 10%, #0a0e17);
+	--ii-accent-muted:     color-mix(in srgb, #0177fb 14%, #0a0e17);
 	--ii-focus-ring:       color-mix(in srgb, #0177fb 30%, transparent);
-	--ii-bg-hover:         color-mix(in srgb, #ffffff 5%, #14151a);
-	--ii-bg-secondary:     #14151a;
-	--ii-selection-bg:     color-mix(in srgb, #0177fb 20%, #000000);
+	--ii-bg-hover:         color-mix(in srgb, #ffffff 5%, #121722);
+	--ii-bg-secondary:     #121722;
+	--ii-selection-bg:     color-mix(in srgb, #0177fb 20%, #0a0e17);
 	--ii-selection-color:  var(--ii-text-primary);
 
 	/* ── Glass / Blur effect tokens ── */
-	--ii-glass-bg:         rgba(13, 13, 13, 0.60);
+	--ii-glass-bg:         rgba(15, 19, 26, 0.62);
 	--ii-glass-blur:       22px;
 	--ii-glass-border:     rgba(255, 255, 255, 0.10);
 	--ii-overlay-10:       rgba(255, 255, 255, 0.10);

@@ -1,51 +1,30 @@
 <!--
-  BuilderColumn — Center column of the Portfolio Builder Flexible
-  Columns Layout. Owns the action bar and the strategic allocation
-  blocks with drop targets.
+  BuilderColumn — Column 3 of the 3-column Builder grid (Phase 11).
 
-  Reference: docs/superpowers/specs/2026-04-08-portfolio-builder-flexible-columns.md §1.2
+  Two tabs at the top:
+    [Allocations]  — BuilderTable (3-level tree, drop target)
+    [Policy Rules] — CalibrationPanel (63-input calibration model)
 
-  Phase B polish (2026-04-08 visual validation feedback):
-    - MainPortfolioChart moved to AnalyticsColumn (3rd column), opened
-      by the `View Chart` button which flips `workspace.analyticsMode`
-      to "portfolio". The Builder column is now chart-free and uses
-      all vertical space for allocation blocks.
-    - Rounded corners removed to match the flat density aesthetic
-      of the Universe column (user feedback: "bordas arredondadas
-      quebram a harmonização visual, além de não serem o componente
-      ideal para o tipo de transição que queremos"). Global CSS
-      overrides flatten the inner PortfolioOverview card borders too.
-    - Dark-mode hex values hardcoded — no var() fallbacks.
+  Footer: PortfolioStateChip + BuilderActionBar (including Run Construct).
+  The footer is always visible regardless of which tab is active.
 
-  <svelte:boundary> with PanelErrorState failed snippet is mandatory
-  per §3.2 of the design spec.
+  <svelte:boundary> with PanelErrorState for crash isolation.
 -->
 <script lang="ts">
 	import { PanelErrorState } from "@investintell/ui/runtime";
 	import { formatPercent } from "@investintell/ui";
-	import LineChart from "lucide-svelte/icons/line-chart";
 	import BuilderTable from "$lib/components/portfolio/BuilderTable.svelte";
 	import BuilderActionBar from "$lib/components/portfolio/BuilderActionBar.svelte";
+	import CalibrationPanel from "$lib/components/portfolio/CalibrationPanel.svelte";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import { portfolioDisplayName } from "$lib/constants/blocks";
 
+	type BuilderTab = "allocations" | "policy";
+	let builderTab = $state<BuilderTab>("allocations");
+
 	function handleConstruct() {
-		// Phase 4 Task 4.5 — Run Construct is now a Job-or-Stream flow
-		// (DL18 P2). Opening the 3rd column in "portfolio" mode makes
-		// the BuilderRightStack visible so the PM sees the Narrative
-		// tab advance through the runPhase SSE events and auto-switch
-		// to the Narrative tab on "done".
 		workspace.openAnalyticsForPortfolio();
 		void workspace.runConstructJob();
-	}
-
-	function handleViewChart() {
-		// Opens Estado C (3rd column) which hosts the BuilderRightStack
-		// (Calibration | Narrative | Stress | Chart). The page handles
-		// the tab selection — pressing "View Chart" is the spiritual
-		// successor of the legacy behaviour so the Chart tab is the
-		// reasonable landing spot.
-		workspace.openAnalyticsForPortfolio();
 	}
 
 	const chartTitle = $derived(
@@ -63,14 +42,7 @@
 
 <svelte:boundary>
 	<div class="bc-root">
-		<!--
-		  Header — mirrors UniverseColumn.uc-header geometry exactly:
-		    Row 1: title block + count badge (status pill on the right)
-		    Row 2: action pill group (parity with Universe search row)
-		  Total height matches UniverseColumn so the table headers
-		  below both start at the same Y pixel. This is the "Y-axis
-		  lock" requested in the visual validation feedback.
-		-->
+		<!-- Header: title + count + tabs -->
 		<header class="bc-header">
 			<div class="bc-title-row">
 				<div class="bc-title-block">
@@ -82,37 +54,42 @@
 				</span>
 			</div>
 
-			<div class="bc-actions">
-				<!--
-				  View Chart is a layout shortcut, not a state-machine
-				  action — it just opens Estado C with the chart tab. It
-				  stays as a static pill so the muscle memory survives.
-				-->
+			<!-- Tab pills -->
+			<div class="bc-tabs">
 				<button
 					type="button"
-					class="bc-pill"
-					disabled={!workspace.portfolioId}
-					onclick={handleViewChart}
+					class="bc-tab"
+					class:bc-tab--active={builderTab === "allocations"}
+					onclick={() => (builderTab = "allocations")}
 				>
-					<LineChart size={16} />
-					<span>View Chart</span>
+					Allocations
 				</button>
-
-				<!--
-				  Phase 5 Task 5.2 — every state-machine button comes
-				  from ``portfolio.allowed_actions`` (DL3). Construct is
-				  the only action that does not POST to the transition
-				  dispatcher; it has its own Job-or-Stream route which
-				  the action bar fires via the ``onConstruct`` callback.
-				-->
-				<BuilderActionBar onConstruct={handleConstruct} />
+				<button
+					type="button"
+					class="bc-tab"
+					class:bc-tab--active={builderTab === "policy"}
+					onclick={() => (builderTab = "policy")}
+				>
+					Policy Rules
+				</button>
 			</div>
 		</header>
 
-		<!-- Continuous tree table — mirror of UniverseTable structure -->
+		<!-- Tab content -->
 		<div class="bc-body">
-			<BuilderTable />
+			{#if builderTab === "allocations"}
+				<BuilderTable />
+			{:else}
+				<div class="bc-policy-wrap">
+					<CalibrationPanel />
+				</div>
+			{/if}
 		</div>
+
+		<!-- Footer: action bar (always visible) -->
+		<footer class="bc-footer">
+			<BuilderActionBar onConstruct={handleConstruct} />
+		</footer>
 	</div>
 
 	{#snippet failed(error: unknown, reset: () => void)}
@@ -125,18 +102,6 @@
 </svelte:boundary>
 
 <style>
-	/* ── Hardcoded dark palette ──────────────────────────────────
-	 * Matches the legacy UniversePanel colours the user approved:
-	 *   #141519  — column surface
-	 *   #0e0f13  — workspace canvas
-	 *   #404249  — border subtle
-	 *   #85a0bd  — text muted (institutional blue-grey)
-	 *   #cbccd1  — text secondary
-	 *   #0177fb  — brand primary
-	 * Zero var() fallbacks — forces dark rendering regardless of
-	 * theme context.
-	 */
-
 	.bc-root {
 		display: flex;
 		flex-direction: column;
@@ -146,18 +111,14 @@
 		overflow: hidden;
 	}
 
-	/* ── Header — mirrors UniverseColumn.uc-header geometry ───────
-	 * Two stacked rows (title row + action row) with 16px gap.
-	 * Total header height matches the Universe column so the tables
-	 * below both start at the same Y pixel. */
+	/* ── Header ──────────────────────────────────────────────── */
 	.bc-header {
 		flex-shrink: 0;
-		padding: 16px;
-		border-bottom: 1px solid rgba(64, 66, 73, 0.4);
+		padding: 16px 16px 0;
 		background: #141519;
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: 12px;
 	}
 
 	.bc-title-row {
@@ -204,52 +165,62 @@
 		white-space: nowrap;
 	}
 
-	.bc-actions {
+	/* ── Tab pills ───────────────────────────────────────────── */
+	.bc-tabs {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		flex-wrap: wrap;
+		gap: 4px;
+		padding-bottom: 12px;
+		border-bottom: 1px solid rgba(64, 66, 73, 0.4);
 	}
 
-	/* ── Pills — Screener .scr-pill pattern (dark, white border, 36px) ── */
-	.bc-pill {
+	.bc-tab {
 		display: inline-flex;
 		align-items: center;
-		gap: 8px;
-		padding: 10px 18px;
-		border: 1px solid #ffffff;
-		border-radius: 36px;
-		background: #000000;
-		color: #ffffff;
-		font-size: 13px;
-		font-weight: 400;
+		padding: 6px 16px;
+		border: 1px solid transparent;
+		border-radius: 999px;
+		background: transparent;
+		color: #85a0bd;
 		font-family: "Urbanist", sans-serif;
+		font-size: 0.8125rem;
+		font-weight: 500;
 		cursor: pointer;
-		white-space: nowrap;
-		transition: background 120ms ease;
+		transition: all 120ms ease;
+	}
+	.bc-tab:hover {
+		color: #ffffff;
+		background: rgba(255, 255, 255, 0.03);
+	}
+	.bc-tab--active {
+		background: #0177fb;
+		color: #ffffff;
+		font-weight: 600;
+	}
+	.bc-tab--active:hover {
+		background: #0177fb;
 	}
 
-	.bc-pill:hover:not(:disabled) {
-		background: #1a1b20;
-	}
-
-	.bc-pill:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
-	.bc-pill :global(.bc-pill-spinner) {
-		animation: bc-spin 1s linear infinite;
-	}
-
-	@keyframes bc-spin {
-		to { transform: rotate(360deg); }
-	}
-
-	/* ── Body — BuilderTable fills the remaining vertical ───── */
+	/* ── Body — tab content fills remaining vertical space ──── */
 	.bc-body {
 		flex: 1;
 		min-height: 0;
 		overflow: hidden;
+	}
+
+	.bc-policy-wrap {
+		height: 100%;
+		overflow-y: auto;
+	}
+
+	/* ── Footer — action bar, always visible ─────────────────── */
+	.bc-footer {
+		flex-shrink: 0;
+		padding: 12px 16px;
+		border-top: 1px solid rgba(64, 66, 73, 0.4);
+		background: #141519;
+		display: flex;
+		align-items: center;
+		gap: 8px;
 	}
 </style>

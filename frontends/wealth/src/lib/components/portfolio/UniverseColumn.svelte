@@ -1,22 +1,16 @@
 <!--
-  UniverseColumn — Wrapper for the Approved Universe column in the
-  Portfolio Builder Flexible Columns Layout.
-
-  Reference: docs/superpowers/specs/2026-04-08-portfolio-builder-flexible-columns.md §1.2
+  UniverseColumn — Column 2 wrapper for the Approved Universe in the
+  3-column Builder grid (Phase 11).
 
   Owns:
-    - Header with search, count, and (future) asset class / region /
-      liquidity filter pills.
-    - <svelte:boundary> around the UniverseTable with `failed` snippet
-      showing PanelErrorState — if the table crashes mid-render, the
-      Builder column keeps working.
-    - Debounced text search with in-memory state (no localStorage).
+    - <svelte:boundary> around the UniverseTable with `failed` snippet.
+    - Reverse drag-drop target (drag fund OUT of Builder → drop here
+      to remove from allocation).
 
   Delegates to:
-    - UniverseTable for the 12-column densa rendering.
-    - `workspace.loadUniverse()` for data loading (triggered by the
-      orchestrator's `$effect`).
-    - `onSelectFund` callback to open the Analytics column.
+    - UniverseTable for the 4-column lean rendering.
+    - `workspace.loadUniverse()` for data loading.
+    - `onSelectFund` callback to open the FundDetailsDrawer.
 -->
 <script lang="ts">
 	import Loader2 from "lucide-svelte/icons/loader-2";

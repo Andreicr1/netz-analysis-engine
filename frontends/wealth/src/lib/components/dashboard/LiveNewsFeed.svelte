@@ -103,7 +103,7 @@
 	});
 </script>
 
-<section class="news-feed" style:max-height="{maxHeight}px">
+<section class="news-feed" style:height="{maxHeight}px">
 	<header class="news-header">
 		<div class="news-title">
 			<span class="dot" class:dot--live={!loading && !error}></span>
@@ -117,16 +117,23 @@
 		</button>
 	</header>
 
+	<!-- Body region fills the remaining height exactly (header is
+	     fixed), so the card never collapses when the feed returns a
+	     single headline or an error. The internal list owns its own
+	     scroll; the skeleton and empty states just pad the flex slot. -->
+	<div class="news-body">
 	{#if error}
 		<div class="news-error">{error}</div>
 	{:else if loading && items.length === 0}
-		{#each Array(5) as _}
-			<div class="news-skeleton">
-				<div class="sk-meta"></div>
-				<div class="sk-line"></div>
-				<div class="sk-line sk-short"></div>
-			</div>
-		{/each}
+		<div class="news-skeletons">
+			{#each Array(5) as _}
+				<div class="news-skeleton">
+					<div class="sk-meta"></div>
+					<div class="sk-line"></div>
+					<div class="sk-line sk-short"></div>
+				</div>
+			{/each}
+		</div>
 	{:else if items.length === 0}
 		<div class="news-empty">No news available.</div>
 	{:else}
@@ -158,16 +165,20 @@
 			{/each}
 		</ul>
 	{/if}
+	</div>
 </section>
 
 <style>
 	.news-feed {
 		display: flex;
 		flex-direction: column;
-		background: var(--ii-surface, #0d0d0d);
-		border: 1px solid var(--ii-border, rgba(255, 255, 255, 0.06));
+		/* Forced dark petroleum — never falls through to the light-mode
+		 * token that was bleeding white into dark-mode dashboards. */
+		background: var(--ii-surface-panel, #0f131a);
+		border: 1px solid var(--ii-border-subtle);
 		border-radius: var(--ii-radius-lg, 16px);
 		overflow: hidden;
+		color-scheme: dark;
 	}
 
 	.news-header {
@@ -175,7 +186,7 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 14px 16px;
-		border-bottom: 1px solid var(--ii-border, rgba(255, 255, 255, 0.06));
+		border-bottom: 1px solid var(--ii-border-subtle);
 		flex-shrink: 0;
 	}
 
@@ -220,7 +231,7 @@
 
 	.refresh-btn {
 		background: transparent;
-		border: 1px solid var(--ii-border, rgba(255, 255, 255, 0.1));
+		border: 1px solid var(--ii-border);
 		color: var(--ii-text-secondary, #c2c2c2);
 		font-size: 11px;
 		font-weight: 600;
@@ -233,7 +244,7 @@
 	}
 
 	.refresh-btn:hover:not(:disabled) {
-		background: var(--ii-surface-elevated, rgba(255, 255, 255, 0.05));
+		background: var(--ii-surface-highlight);
 		color: var(--ii-text-primary, #ffffff);
 	}
 
@@ -242,24 +253,49 @@
 		cursor: wait;
 	}
 
+	.news-body {
+		flex: 1 1 auto;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.news-skeletons {
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow: hidden;
+	}
+
 	.news-list {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		overflow-y: auto;
-		flex: 1;
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	.news-list::-webkit-scrollbar { width: 8px; }
+	.news-list::-webkit-scrollbar-track { background: transparent; }
+	.news-list::-webkit-scrollbar-thumb {
+		background: rgba(255, 255, 255, 0.08);
+		border-radius: 4px;
+	}
+	.news-list::-webkit-scrollbar-thumb:hover {
+		background: rgba(255, 255, 255, 0.16);
 	}
 
 	.news-item {
 		padding: 12px 16px;
-		border-bottom: 1px solid var(--ii-border, rgba(255, 255, 255, 0.04));
+		border-bottom: 1px solid var(--ii-border-subtle);
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
 	}
 
 	.news-item:hover {
-		background: var(--ii-surface-elevated, rgba(255, 255, 255, 0.02));
+		background: var(--ii-surface-highlight);
 	}
 
 	.news-meta {
@@ -295,7 +331,7 @@
 	.ticker-badge.ticker-more {
 		background: transparent;
 		color: var(--ii-text-muted, #85a0bd);
-		border-color: var(--ii-border, rgba(255, 255, 255, 0.1));
+		border-color: var(--ii-border);
 	}
 
 	.news-headline {
@@ -320,6 +356,11 @@
 
 	.news-empty,
 	.news-error {
+		flex: 1 1 auto;
+		min-height: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		padding: 24px 16px;
 		text-align: center;
 		font-size: 13px;
@@ -332,7 +373,7 @@
 
 	.news-skeleton {
 		padding: 12px 16px;
-		border-bottom: 1px solid var(--ii-border, rgba(255, 255, 255, 0.04));
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.sk-meta,

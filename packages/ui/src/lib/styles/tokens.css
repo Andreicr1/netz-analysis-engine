@@ -137,17 +137,19 @@
 	/* Easing */
 	--netz-ease-out: cubic-bezier(0, 0, 0.2, 1);
 
-	/* Surface — Figma: color/black/solid, color/blue/9, color/blue/11 */
-	--netz-surface: #000000;
-	--netz-surface-alt: #14151a;
-	--netz-surface-elevated: #14151a;
-	--netz-surface-inset: #000000;
-	--netz-surface-overlay: rgba(13, 13, 13, 0.60);
-	--netz-surface-raised: #1a1b20;
-	--netz-surface-panel: #000000;
-	--netz-surface-highlight: rgba(255, 255, 255, 0.06);
-	--netz-surface-accent: color-mix(in srgb, var(--netz-brand-primary) 8%, #000000);
-	--netz-bg: #000000;
+	/* Surface — Deep petroleum (institutional, matte, contrast-preserving).
+	 * Replaces pure black (#000) that was crushing contrast against cards.
+	 * Hierarchy: bg (page) → panel (cards) → elevated (nested / hover). */
+	--netz-surface: #0a0e17;
+	--netz-surface-alt: #0f131a;
+	--netz-surface-elevated: #121722;
+	--netz-surface-inset: #0a0e17;
+	--netz-surface-overlay: rgba(10, 14, 23, 0.72);
+	--netz-surface-raised: #161c29;
+	--netz-surface-panel: #0f131a;
+	--netz-surface-highlight: rgba(255, 255, 255, 0.05);
+	--netz-surface-accent: color-mix(in srgb, var(--netz-brand-primary) 10%, #0a0e17);
+	--netz-bg: #0a0e17;
 
 	/* Border — Figma: color/grey/27 (#404149), color/grey/34 (#52525b) */
 	--netz-border-subtle: #404149;
@@ -186,8 +188,8 @@
 	--netz-accent-soft: color-mix(in srgb, var(--netz-brand-primary) 8%, #000000);
 	--netz-accent-muted: color-mix(in srgb, var(--netz-brand-primary) 12%, #000000);
 	--netz-focus-ring: color-mix(in srgb, var(--netz-border-focus) 30%, transparent);
-	--netz-bg-hover: color-mix(in srgb, #ffffff 5%, #14151a);
-	--netz-bg-secondary: #14151a;
+	--netz-bg-hover: color-mix(in srgb, #ffffff 5%, #121722);
+	--netz-bg-secondary: #121722;
 	--netz-status-error: var(--netz-danger);
 	--netz-danger-subtle: color-mix(in srgb, var(--netz-danger) 12%, #000000);
 	--netz-success-subtle: color-mix(in srgb, var(--netz-success) 12%, #000000);

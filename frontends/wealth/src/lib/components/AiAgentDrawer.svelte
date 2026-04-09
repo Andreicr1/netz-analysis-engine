@@ -235,21 +235,33 @@
 </script>
 
 <Sheet.Root {open} onOpenChange={(v) => { if (!v) onclose(); }}>
-	<Sheet.Content side="right" class="w-[420px] max-w-full sm:max-w-[420px] flex flex-col p-0 gap-0" showCloseButton={false}>
+	<Sheet.Content
+		side="right"
+		class="w-[480px] max-w-full sm:max-w-[480px] flex flex-col p-0 gap-0 !bg-[var(--ii-surface-panel)] !border-l !border-white/10 shadow-[-20px_0_60px_-20px_rgba(0,0,0,0.65)]"
+		showCloseButton={false}
+	>
 		<!-- Header -->
 		<header class="agent-header">
 			<div class="agent-header-title">
-				<Bot size={18} />
-				<span>AI Assistant</span>
+				<div class="agent-logo">
+					<Bot size={16} />
+				</div>
+				<div class="agent-header-copy">
+					<span class="agent-title">InvestIntell Copilot</span>
+					<span class="agent-subtitle">
+						<span class="agent-live-dot"></span>
+						Online · Wealth Desk
+					</span>
+				</div>
 			</div>
 			<div class="agent-header-actions">
-				<button class="agent-icon-btn" type="button" title="New chat" onclick={resetChat}>
+				<button class="agent-icon-btn" type="button" title="New chat" onclick={resetChat} aria-label="New chat">
 					<FileText size={15} />
 				</button>
 				<Sheet.Close>
 					{#snippet child({ props })}
-						<button class="agent-icon-btn" type="button" title="Close" {...props}>
-							<X size={18} />
+						<button class="agent-icon-btn" type="button" title="Close" aria-label="Close" {...props}>
+							<X size={16} />
 						</button>
 					{/snippet}
 				</Sheet.Close>
@@ -260,11 +272,27 @@
 		<div class="agent-messages" bind:this={chatContainer}>
 			{#if messages.length === 0}
 				<div class="agent-empty">
-					<Bot size={32} class="agent-empty-icon" />
-					<p class="agent-empty-title">Wealth AI Assistant</p>
+					<div class="agent-empty-halo">
+						<Bot size={26} />
+					</div>
+					<p class="agent-empty-title">How can I help you today?</p>
 					<p class="agent-empty-desc">
 						Ask about funds, managers, DD reports, portfolios, or macro analysis.
 					</p>
+					<div class="agent-suggestions">
+						{#each [
+							"Top 5 US large-cap funds YTD",
+							"What's driving the regime shift?",
+							"Summarize latest DD for VWELX",
+							"Show peer group for BlackRock managers",
+						] as s}
+							<button
+								type="button"
+								class="agent-suggestion"
+								onclick={() => { inputText = s; }}
+							>{s}</button>
+						{/each}
+					</div>
 				</div>
 			{/if}
 
@@ -346,75 +374,205 @@
 </Sheet.Root>
 
 <style>
+	/* Force bits-ui dialog overlay behind the drawer to be a real
+	 * opaque scrim — the shadcn default bg-black/10 left the dashboard
+	 * fully legible behind the agent, making the drawer look
+	 * "transparent" when it was actually just flanked by live cards. */
+	:global([data-dialog-overlay]),
+	:global([data-sheet-overlay]) {
+		background: rgba(5, 8, 15, 0.68) !important;
+		backdrop-filter: blur(6px);
+	}
+
 	/* Header */
 	.agent-header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 14px 16px;
+		padding: 16px 18px;
 		border-bottom: 1px solid var(--ii-border-subtle);
 		flex-shrink: 0;
+		background:
+			linear-gradient(180deg, rgba(1, 119, 251, 0.08) 0%, transparent 100%),
+			var(--ii-surface-panel);
 	}
 
 	.agent-header-title {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 12px;
+	}
+
+	.agent-logo {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 34px;
+		height: 34px;
+		border-radius: 10px;
+		background: linear-gradient(135deg, #0177fb 0%, #6366f1 100%);
+		color: #fff;
+		box-shadow:
+			0 0 0 1px var(--ii-border-subtle),
+			0 4px 14px rgba(1, 119, 251, 0.35);
+	}
+
+	.agent-header-copy {
+		display: flex;
+		flex-direction: column;
+		line-height: 1.2;
+	}
+
+	.agent-title {
 		font-size: 14px;
 		font-weight: 600;
 		color: var(--ii-text-primary);
+		letter-spacing: 0.01em;
+	}
+
+	.agent-subtitle {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		font-size: 10px;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--ii-text-muted);
+		margin-top: 2px;
+	}
+
+	.agent-live-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: #11ec79;
+		box-shadow: 0 0 6px rgba(17, 236, 121, 0.75);
+		animation: agent-pulse 2s ease-in-out infinite;
+	}
+
+	@keyframes agent-pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.45; }
 	}
 
 	.agent-header-actions {
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: 6px;
 	}
 
 	.agent-icon-btn {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 28px;
-		height: 28px;
-		border: none;
-		border-radius: 6px;
-		background: transparent;
+		width: 30px;
+		height: 30px;
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: 8px;
+		background: var(--ii-surface-elevated);
 		color: var(--ii-text-muted);
 		cursor: pointer;
-		transition: background 120ms ease, color 120ms ease;
+		transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
 	}
 
 	.agent-icon-btn:hover {
-		background: var(--ii-surface-alt);
+		background: var(--ii-surface-raised);
 		color: var(--ii-text-primary);
+		border-color: var(--ii-border);
 	}
 
 	/* Messages area */
 	.agent-messages {
 		flex: 1;
 		overflow-y: auto;
-		padding: 16px;
+		padding: 20px 18px;
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: 14px;
+		background: var(--ii-surface-panel);
 	}
 
+	.agent-messages::-webkit-scrollbar {
+		width: 8px;
+	}
+	.agent-messages::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	.agent-messages::-webkit-scrollbar-thumb {
+		background: var(--ii-border-subtle);
+		border-radius: 4px;
+	}
+	.agent-messages::-webkit-scrollbar-thumb:hover {
+		background: var(--ii-border);
+	}
+
+	/* Empty state */
 	.agent-empty {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 8px;
-		color: var(--ii-text-muted);
+		gap: 12px;
 		text-align: center;
-		padding: 48px 24px;
+		padding: 40px 24px;
 	}
 
-	.agent-empty :global(.agent-empty-icon) { opacity: 0.3; }
-	.agent-empty-title { font-size: 15px; font-weight: 600; color: var(--ii-text-secondary); margin: 0; }
-	.agent-empty-desc { font-size: 13px; margin: 0; line-height: 1.5; }
+	.agent-empty-halo {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 56px;
+		height: 56px;
+		border-radius: 50%;
+		background: radial-gradient(circle at center, rgba(1, 119, 251, 0.28) 0%, transparent 70%);
+		color: #0177fb;
+		border: 1px solid rgba(1, 119, 251, 0.3);
+		box-shadow: 0 0 24px rgba(1, 119, 251, 0.22);
+	}
+
+	.agent-empty-title {
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--ii-text-primary);
+		margin: 6px 0 0 0;
+	}
+
+	.agent-empty-desc {
+		font-size: 12px;
+		margin: 0;
+		line-height: 1.55;
+		color: var(--ii-text-muted);
+		max-width: 280px;
+	}
+
+	.agent-suggestions {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin-top: 14px;
+		width: 100%;
+		max-width: 320px;
+	}
+
+	.agent-suggestion {
+		text-align: left;
+		font-size: 12px;
+		color: var(--ii-text-secondary);
+		padding: 9px 12px;
+		background: var(--ii-surface-elevated);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: 10px;
+		cursor: pointer;
+		transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+	}
+
+	.agent-suggestion:hover {
+		background: var(--ii-surface-raised);
+		border-color: rgba(1, 119, 251, 0.4);
+		transform: translateX(2px);
+	}
 
 	/* Messages */
 	.agent-msg { max-width: 100%; }
@@ -425,21 +583,23 @@
 	}
 
 	.agent-msg--user .agent-msg-text {
-		background: var(--ii-brand-primary, #1447e6);
-		color: #fff;
-		border-radius: 12px 12px 4px 12px;
+		background: linear-gradient(135deg, #0177fb 0%, #2563eb 100%);
+		color: var(--ii-text-primary);
+		border-radius: 14px 14px 4px 14px;
 		padding: 10px 14px;
 		font-size: 13px;
 		line-height: 1.5;
 		white-space: pre-wrap;
 		word-break: break-word;
+		box-shadow: 0 4px 14px rgba(1, 119, 251, 0.22);
 	}
 
 	.agent-msg--assistant .agent-msg-text {
-		background: var(--ii-surface-alt, #f5f8fd);
+		background: var(--ii-surface-elevated);
 		color: var(--ii-text-primary);
-		border-radius: 12px 12px 12px 4px;
-		padding: 10px 14px;
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: 14px 14px 14px 4px;
+		padding: 11px 14px;
 		font-size: 13px;
 		line-height: 1.6;
 		white-space: pre-wrap;
@@ -468,20 +628,20 @@
 		gap: 6px;
 		font-size: 11px;
 		color: var(--ii-text-muted);
-		padding: 4px 8px;
-		border-radius: 6px;
-		background: color-mix(in srgb, var(--ii-brand-highlight, #3b82f6) 6%, transparent);
+		padding: 5px 10px;
+		border-radius: 8px;
+		background: rgba(1, 119, 251, 0.1);
+		border: 1px solid rgba(1, 119, 251, 0.24);
 	}
 
-	.agent-tool.running { color: var(--ii-brand-highlight, #3b82f6); }
-
+	.agent-tool.running { color: #6fa8ff; }
 
 	/* Citations */
 	.agent-citations {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 4px;
-		margin-top: 8px;
+		margin-top: 10px;
 		align-items: center;
 	}
 
@@ -489,7 +649,7 @@
 		font-size: 10px;
 		font-weight: 600;
 		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		letter-spacing: 0.08em;
 		color: var(--ii-text-muted);
 		margin-right: 4px;
 	}
@@ -498,19 +658,20 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		padding: 2px 8px;
-		border-radius: 4px;
-		background: var(--ii-surface-alt);
-		border: 1px solid var(--ii-border-subtle);
+		padding: 3px 9px;
+		border-radius: 6px;
+		background: rgba(1, 119, 251, 0.12);
+		border: 1px solid rgba(1, 119, 251, 0.28);
 		font-size: 10px;
-		color: var(--ii-text-secondary);
+		color: var(--ii-text-muted);
 		cursor: default;
 	}
 
 	/* Input area */
 	.agent-input-area {
-		padding: 12px 16px;
+		padding: 14px 18px 16px;
 		border-top: 1px solid var(--ii-border-subtle);
+		background: var(--ii-surface-panel);
 		flex-shrink: 0;
 	}
 
@@ -518,15 +679,16 @@
 		display: flex;
 		align-items: flex-end;
 		gap: 8px;
-		background: var(--ii-bg, #f5f8fd);
-		border: 1px solid var(--ii-border);
-		border-radius: 10px;
-		padding: 8px 12px;
-		transition: border-color 120ms ease;
+		background: var(--ii-surface-elevated);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: 12px;
+		padding: 10px 12px;
+		transition: border-color 140ms ease, box-shadow 140ms ease;
 	}
 
 	.agent-input-row:focus-within {
-		border-color: var(--ii-brand-highlight, #3b82f6);
+		border-color: rgba(1, 119, 251, 0.5);
+		box-shadow: 0 0 0 3px rgba(1, 119, 251, 0.12);
 	}
 
 	.agent-input {
@@ -550,41 +712,45 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 32px;
-		height: 32px;
+		width: 34px;
+		height: 34px;
 		border: none;
-		border-radius: 8px;
-		background: var(--ii-brand-primary, #1447e6);
-		color: #fff;
+		border-radius: 10px;
+		background: linear-gradient(135deg, #0177fb 0%, #2563eb 100%);
+		color: var(--ii-text-primary);
 		cursor: pointer;
 		flex-shrink: 0;
-		transition: opacity 120ms ease;
+		transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+		box-shadow: 0 4px 14px rgba(1, 119, 251, 0.28);
 	}
 
 	.agent-send-btn:disabled {
-		opacity: 0.4;
+		opacity: 0.35;
 		cursor: not-allowed;
+		box-shadow: none;
 	}
 
 	.agent-send-btn:not(:disabled):hover {
-		opacity: 0.9;
+		transform: translateY(-1px);
+		box-shadow: 0 6px 18px rgba(1, 119, 251, 0.38);
 	}
 
 	.agent-cancel-btn {
 		display: block;
 		width: 100%;
-		padding: 6px;
-		margin-bottom: 8px;
-		border: 1px solid var(--ii-border);
-		border-radius: 6px;
-		background: transparent;
-		color: var(--ii-text-secondary);
+		padding: 8px;
+		margin-bottom: 10px;
+		border: 1px solid rgba(252, 26, 26, 0.28);
+		border-radius: 8px;
+		background: rgba(252, 26, 26, 0.08);
+		color: #fc1a1a;
 		font-size: 12px;
+		font-weight: 600;
 		cursor: pointer;
-		transition: background 120ms ease;
+		transition: background 140ms ease;
 	}
 
 	.agent-cancel-btn:hover {
-		background: var(--ii-surface-alt);
+		background: rgba(252, 26, 26, 0.16);
 	}
 </style>
