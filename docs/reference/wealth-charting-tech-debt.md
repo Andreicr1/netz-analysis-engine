@@ -264,7 +264,7 @@ Tier A's `AdvancedMarketChart` inlines a `readChartTokens()` helper that reads `
 
 These aren't debt — they're **rules** future contributors must follow. Listed here to avoid relitigation:
 
-1. **`svelte-echarts` only.** No `Chart.js`, no `lightweight-charts`, no Highcharts. Tier A PR removed the last violation.
+1. **`svelte-echarts` for analytical charts.** No `Chart.js`, no Highcharts. Exception: `lightweight-charts` (TradingView) is permitted in the `(terminal)` route group for real-time execution surfaces where candlestick/baseline rendering, magnetic crosshair, and WebGL performance are required. The two libraries coexist: ECharts for multi-series analytics (Builder, Screener, Dashboard), lightweight-charts for terminal real-time monitoring. More advanced charting engines are also permitted in `(terminal)` when the use case demands it.
 2. **Tokens, not hex.** Inside ECharts options where CSS vars can't be used directly, resolve once via `getComputedStyle` + re-resolve via `MutationObserver` on `data-theme` attribute changes. Never inline hex literals in templates or scripts.
 3. **No `localStorage`.** Persistence is server-side, every time. Tier B/C/D items that need persistence (drawings, templates, notes, favorites, alerts) all require backend endpoints — none of them are frontend-only.
 4. **Smart-backend / dumb-frontend.** Indicator math, percentile bands, recession data, peer aggregates — all should land server-side. Tier A computes indicators client-side as a stop-gap; §4a is the proper fix.

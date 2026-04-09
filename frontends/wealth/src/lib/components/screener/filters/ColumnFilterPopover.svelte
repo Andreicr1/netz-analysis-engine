@@ -49,7 +49,7 @@
 	let draft = $state<ColumnFilterValue>(
 		untrack(() =>
 			value && matchesColumnType(value, column.type)
-				? structuredClone(value)
+				? JSON.parse(JSON.stringify(value))
 				: defaultValueFor(column.type),
 		),
 	);

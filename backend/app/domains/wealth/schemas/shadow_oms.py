@@ -25,6 +25,11 @@ class ExecuteTradesRequest(BaseModel):
     """Batch payload for POST /model-portfolios/{id}/execute-trades."""
 
     tickets: list[TradeTicketRequest] = Field(..., min_length=1, max_length=200)
+    expected_version: int = Field(
+        ...,
+        description="Current holdings_version for optimistic locking. "
+        "The request is rejected with 409 if it doesn't match.",
+    )
 
 
 class TradeTicketResponse(BaseModel):
@@ -35,6 +40,8 @@ class TradeTicketResponse(BaseModel):
     action: str
     delta_weight: float
     executed_at: datetime
+    execution_venue: str | None = None
+    fill_status: str = "simulated"
 
 
 class ExecuteTradesResponse(BaseModel):
@@ -73,3 +80,16 @@ class ActualHoldingsResponse(BaseModel):
     )
     holdings: list[HoldingWeight]
     last_rebalanced_at: datetime | None = None
+
+
+# ── Trade Tickets Listing ────────────────────────────────────────
+
+
+class TradeTicketPage(BaseModel):
+    """Paginated response for GET /model-portfolios/{id}/trade-tickets."""
+
+    items: list[TradeTicketResponse]
+    total: int
+    page: int
+    page_size: int
+    has_next: bool
