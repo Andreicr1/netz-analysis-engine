@@ -69,6 +69,8 @@ export { default as ChartCard } from "./layouts/ChartCard.svelte";
 export { default as AnalysisGrid } from "./layouts/AnalysisGrid.svelte";
 export { default as BottomTabDock } from "./layouts/BottomTabDock.svelte";
 export type { BottomTabItem } from "./layouts/BottomTabDock.svelte";
+export { default as WorkbenchLayout } from "./layouts/WorkbenchLayout.svelte";
+export type { WorkbenchLayoutSidebarWidth } from "./layouts/WorkbenchLayout.svelte";
 export { default as AppLayout } from "./components/layouts/AppLayout.svelte";
 export { default as AppShell } from "./components/layouts/AppShell.svelte";
 export { default as Sidebar } from "./components/layouts/Sidebar.svelte";
@@ -94,6 +96,7 @@ export {
 	ScatterChart,
 } from "./charts/index.js";
 export type { BaseChartProps } from "./charts/index.js";
+export { default as SparklineSVG } from "./components/ui/charts/SparklineSVG.svelte";
 
 // ── Utilities ────────────────────────────────────────────────
 export { cn } from "./utils/cn.js";
