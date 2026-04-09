@@ -31,10 +31,6 @@
 	import TerminalAllocator from "./TerminalAllocator.svelte";
 	import InitialFundingModal from "./InitialFundingModal.svelte";
 	import TerminalPriceChart from "./charts/TerminalPriceChart.svelte";
-	import type {
-		BarData,
-		LiveTick,
-	} from "./charts/TerminalPriceChart.svelte";
 	import type { ModelPortfolio, InstrumentWeight } from "$lib/types/model-portfolio";
 
 	/** Draft holding for EDIT mode — instrument + target allocation. */
@@ -113,37 +109,6 @@
 		selectedInstrumentId = null;
 	});
 
-	// ── Chart state ───────────────────────────────────────────
-	type Timeframe = "1D" | "1W" | "1M" | "3M";
-	let chartTimeframe = $state<Timeframe>("1M");
-	let mockLastTick = $state<LiveTick | null>(null);
-
-	function generateMockBars(seed: string, tf: Timeframe): BarData[] {
-		let hash = 0;
-		for (let i = 0; i < seed.length; i++) {
-			hash = (hash * 31 + seed.charCodeAt(i)) | 0;
-		}
-		const basePrice = 80 + Math.abs(hash % 60);
-		const barCount =
-			tf === "1D" ? 78 : tf === "1W" ? 5 * 78 : tf === "1M" ? 22 * 78 : 66 * 78;
-		const count = Math.min(barCount, 500);
-		const intervalSec =
-			tf === "1D" ? 300 : tf === "1W" ? 300 : tf === "1M" ? 3600 : 3600 * 4;
-		const now = Math.floor(Date.now() / 1000);
-		const startTime = now - count * intervalSec;
-		const bars: BarData[] = [];
-		let price = basePrice;
-		for (let i = 0; i < count; i++) {
-			price += (Math.random() - 0.48) * 0.5;
-			price = Math.max(price * 0.95, Math.min(price * 1.05, price));
-			bars.push({
-				time: startTime + i * intervalSec,
-				value: Math.round(price * 100) / 100,
-			});
-		}
-		return bars;
-	}
-
 	// ── Target funds + mock actual holdings ──────────────────
 	const targetFunds = $derived<InstrumentWeight[]>(
 		selected?.fund_selection_schema?.funds ?? [],
@@ -179,47 +144,6 @@
 		return defaultTicker;
 	});
 
-	const chartSeedKey = $derived(
-		(selectedInstrumentId ?? selected?.id ?? "") + chartTimeframe,
-	);
-
-	const historicalBars = $derived.by(() => {
-		if (!selected) return [];
-		return generateMockBars(chartSeedKey, chartTimeframe);
-	});
-
-	// Mock portfolio composite NAV — different seed so the curve
-	// diverges from the instrument line, showing the overlay effect.
-	const portfolioNavBars = $derived.by(() => {
-		if (!selected) return [];
-		return generateMockBars("nav:" + selected.id + chartTimeframe, chartTimeframe);
-	});
-
-	// Simulate live ticks — restarts on instrument/timeframe change
-	$effect(() => {
-		if (!selected || historicalBars.length === 0) {
-			mockLastTick = null;
-			return;
-		}
-		const _ticker = effectiveChartTicker;
-		void _ticker;
-		const lastBar = historicalBars[historicalBars.length - 1]!;
-		let price = lastBar.value;
-		mockLastTick = null;
-		const interval = setInterval(() => {
-			price += (Math.random() - 0.48) * 0.3;
-			mockLastTick = {
-				time: Math.floor(Date.now() / 1000),
-				value: Math.round(price * 100) / 100,
-			};
-		}, 2000);
-		return () => clearInterval(interval);
-	});
-
-	function handleTimeframeChange(tf: Timeframe) {
-		chartTimeframe = tf;
-	}
-
 	// Mock trade log
 	const tradeLog = $derived<Array<{
 		id: string;
@@ -231,17 +155,14 @@
 		fillStatus: string;
 	}>>([]);
 
-	// ── Header price data — follows effective ticker ─────────
+	// ── Header price data — ticker label only (prices come from WS/chart) ──
 	const headerPriceData = $derived.by(() => {
-		const lastPrice = mockLastTick?.value ?? historicalBars[historicalBars.length - 1]?.value ?? 0;
-		const firstPrice = historicalBars[0]?.value ?? lastPrice;
-		const changePct = firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
 		return {
 			ticker: effectiveChartTicker,
-			price: lastPrice,
-			changePct: Math.round(changePct * 100) / 100,
-			bid: lastPrice > 0 ? Math.round((lastPrice - 0.02) * 100) / 100 : null,
-			ask: lastPrice > 0 ? Math.round((lastPrice + 0.02) * 100) / 100 : null,
+			price: 0,
+			changePct: 0,
+			bid: null as number | null,
+			ask: null as number | null,
 		};
 	});
 
@@ -325,15 +246,10 @@
 				{/if}
 			</div>
 
-			<!-- CHART (center top) -->
+			<!-- CHART (center top) — TradingView Advanced -->
 			<section class="tg-zone tg-chart" aria-label="Chart zone">
 				<TerminalPriceChart
 					ticker={effectiveChartTicker}
-					{historicalBars}
-					{portfolioNavBars}
-					lastTick={mockLastTick}
-					timeframe={chartTimeframe}
-					onTimeframeChange={handleTimeframeChange}
 				/>
 			</section>
 
