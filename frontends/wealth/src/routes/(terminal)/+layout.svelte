@@ -32,6 +32,7 @@
 		type MarketDataStore,
 	} from "$lib/stores/market-data.svelte";
 	import { TERMINAL_MARKET_DATA_KEY } from "$lib/components/portfolio/live/workbench-state";
+	import TerminalGlobalNav from "$lib/components/layout/TerminalGlobalNav.svelte";
 
 	let { children }: { children: Snippet } = $props();
 
@@ -46,7 +47,10 @@
 </script>
 
 <div class="terminal-root">
-	{@render children()}
+	<TerminalGlobalNav />
+	<div class="terminal-content">
+		{@render children()}
+	</div>
 </div>
 
 <style>
@@ -67,6 +71,15 @@
 		   do not leak into the root stacking context. */
 		isolation: isolate;
 		z-index: 1;
+		/* Flex column: GlobalNav (32px fixed) + content (fills rest) */
+		display: flex;
+		flex-direction: column;
+	}
+
+	.terminal-content {
+		flex: 1;
+		min-height: 0;
+		overflow: hidden;
 	}
 
 	/* Kill body scroll so nothing pushes past the terminal box. */
