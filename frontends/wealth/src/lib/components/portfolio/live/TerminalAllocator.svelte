@@ -6,6 +6,7 @@
   Each row has a remove [x] button.
 -->
 <script lang="ts">
+	import { goto } from "$app/navigation";
 	import type { DraftHolding } from "./LiveWorkbenchShell.svelte";
 
 	interface Props {
@@ -35,11 +36,15 @@
 		const val = parseFloat(target.value);
 		onUpdateWeight(instrumentId, isNaN(val) ? 0 : val);
 	}
+
+	function goToOptimizer() {
+		void goto("/portfolio");
+	}
 </script>
 
 <div class="al-root">
 	<div class="al-header">
-		<span class="al-title">ALLOCATOR</span>
+		<span class="al-title">ALLOCATOR (MANUAL)</span>
 		<span class="al-count">{draftHoldings.length}</span>
 	</div>
 
@@ -95,6 +100,10 @@
 					: `${(totalWeight - 100).toFixed(1)}% over`}
 			</div>
 		{/if}
+		
+		<button class="al-opt-btn" onclick={goToOptimizer}>
+			USE CLARABEL OPTIMIZER &rarr;
+		</button>
 	</div>
 </div>
 
@@ -251,6 +260,9 @@
 		flex-shrink: 0;
 		padding: 8px 10px;
 		border-top: 1px solid rgba(255, 255, 255, 0.06);
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
 	}
 
 	.al-total-row {
@@ -275,10 +287,32 @@
 	.al-total--invalid { color: #f59e0b; }
 
 	.al-total-hint {
-		margin-top: 2px;
 		font-size: 9px;
 		font-weight: 500;
 		color: #5a6577;
 		text-align: right;
+	}
+
+	.al-opt-btn {
+		width: 100%;
+		padding: 8px;
+		background: rgba(45, 126, 247, 0.1);
+		border: 1px solid rgba(45, 126, 247, 0.3);
+		color: #2d7ef7;
+		font-family: monospace;
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		cursor: pointer;
+		transition: all 150ms ease;
+		text-align: center;
+		outline: none;
+		margin-top: 4px;
+	}
+
+	.al-opt-btn:hover {
+		background: rgba(45, 126, 247, 0.2);
+		border-color: #2d7ef7;
+		color: #ffffff;
 	}
 </style>

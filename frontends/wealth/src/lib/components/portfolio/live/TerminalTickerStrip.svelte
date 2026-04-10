@@ -10,7 +10,7 @@
 <script lang="ts">
 	import PortfolioDropdown from "./PortfolioDropdown.svelte";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
-	import type { DraftHolding } from "./LiveWorkbenchShell.svelte";
+	import type { DraftHolding, OverlapResultRead } from "./LiveWorkbenchShell.svelte";
 
 	interface PriceData {
 		ticker: string;
@@ -38,6 +38,7 @@
 		onCancelEdit: () => void;
 		onPublish: () => void;
 		onExit: () => void;
+		overlapResult?: OverlapResultRead | null;
 	}
 
 	let {
@@ -52,6 +53,7 @@
 		onCancelEdit,
 		onPublish,
 		onExit,
+		overlapResult = null,
 	}: Props = $props();
 
 	const draftTotal = $derived(
@@ -62,6 +64,7 @@
 	);
 
 	const isUp = $derived(priceData.changePct >= 0);
+	const hasBreach = $derived((overlapResult?.breaches.length ?? 0) > 0);
 
 	function fmt(n: number | null, decimals = 2): string {
 		if (n === null || n === undefined) return "---";
@@ -140,6 +143,7 @@
 			<button
 				type="button"
 				class="ts-mode-btn ts-mode-btn--publish"
+				class:ts-mode-btn--warning={hasBreach}
 				disabled={!canPublish}
 				onclick={onPublish}
 			>Publish &amp; Fund</button>
@@ -379,5 +383,12 @@
 	.ts-mode-btn--publish:disabled {
 		opacity: 0.35;
 		cursor: not-allowed;
+	}
+	.ts-mode-btn--warning {
+		background: #ca8a04;
+		border: 1px solid rgba(202, 138, 4, 0.4);
+	}
+	.ts-mode-btn--warning:hover:not(:disabled) {
+		background: #eab308;
 	}
 </style>

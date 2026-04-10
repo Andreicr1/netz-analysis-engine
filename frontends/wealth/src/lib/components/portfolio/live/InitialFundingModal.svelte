@@ -7,16 +7,17 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import TradeConfirmationDialog from "./TradeConfirmationDialog.svelte";
-	import type { DraftHolding } from "./LiveWorkbenchShell.svelte";
+	import type { DraftHolding, OverlapResultRead } from "./LiveWorkbenchShell.svelte";
 
 	interface Props {
 		draftHoldings: DraftHolding[];
 		portfolioName: string;
 		onComplete: () => void;
 		onCancel: () => void;
+		overlapResult?: OverlapResultRead | null;
 	}
 
-	let { draftHoldings, portfolioName, onComplete, onCancel }: Props = $props();
+	let { draftHoldings, portfolioName, onComplete, onCancel, overlapResult = null }: Props = $props();
 
 	let dialogEl: HTMLDialogElement | undefined = $state();
 	let aumInput = $state("");
@@ -198,6 +199,7 @@
 		{execResult}
 		onConfirm={handleTradeConfirm}
 		onClose={handleTradeClose}
+		{overlapResult}
 	/>
 {/if}
 

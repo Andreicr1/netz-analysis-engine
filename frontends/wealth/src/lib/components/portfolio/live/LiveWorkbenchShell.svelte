@@ -19,6 +19,7 @@
   each zone is a dark panel (#0b0f1a) — "cards colados".
 -->
 <script lang="ts">
+	import { getContext } from "svelte";
 	import { Button, EmptyState } from "@investintell/ui";
 	import { PanelErrorState } from "@investintell/ui/runtime";
 	import { goto } from "$app/navigation";
@@ -36,6 +37,26 @@
 		LiveTick,
 	} from "./charts/TerminalPriceChart.svelte";
 	import type { ModelPortfolio, InstrumentWeight } from "$lib/types/model-portfolio";
+	import { createClientApiClient } from "$lib/api/client";
+
+	export interface CusipExposure {
+		cusip: string;
+		issuer_name: string | null;
+		total_exposure_pct: number;
+		funds_holding: string[];
+		is_breach: boolean;
+	}
+
+	export interface OverlapResultRead {
+		portfolio_id: string;
+		computed_at: string;
+		limit_pct: number;
+		total_holdings: number;
+		funds_analyzed: number;
+		top_cusip_exposures: CusipExposure[];
+		sector_exposures: any[];
+		breaches: CusipExposure[];
+	}
 
 	/** Draft holding for EDIT mode — instrument + target allocation. */
 	export interface DraftHolding {
@@ -53,6 +74,26 @@
 	}
 
 	let { portfolios, selectedId, initialMode = "LIVE", onSelect }: Props = $props();
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const api = createClientApiClient(getToken);
+	let overlapResult = $state<OverlapResultRead | null>(null);
+
+	$effect(() => {
+		if (!selected?.id) {
+			overlapResult = null;
+			return;
+		}
+		let cancelled = false;
+		api.get<OverlapResultRead>(`/model-portfolios/${selected.id}/overlap?limit_pct=0.05`)
+			.then((res) => {
+				if (!cancelled) overlapResult = res;
+			})
+			.catch((err) => console.error("Overlap fetch error:", err));
+		return () => {
+			cancelled = true;
+		};
+	});
 
 	// ── Mode State Machine ────────────────────────────────────
 	let mode = $state<"LIVE" | "EDIT">(initialMode);
@@ -310,6 +351,7 @@
 					onPublish={requestPublish}
 					{draftHoldings}
 					onExit={exitTerminal}
+					{overlapResult}
 				/>
 			</div>
 
@@ -365,6 +407,7 @@
 					{draftHoldings}
 					{selectedInstrumentId}
 					onInstrumentSelect={handleInstrumentSelect}
+					{overlapResult}
 				/>
 			</div>
 
@@ -380,6 +423,7 @@
 					portfolioName={selected?.display_name ?? "New Portfolio"}
 					onComplete={handleFundingComplete}
 					onCancel={handleFundingCancel}
+					{overlapResult}
 				/>
 			{/if}
 		</div>

@@ -12,7 +12,7 @@
 <script lang="ts">
 	import type { InstrumentWeight } from "$lib/types/model-portfolio";
 	import type { ActualHolding } from "./TerminalOmsPanel.svelte";
-	import type { DraftHolding } from "./LiveWorkbenchShell.svelte";
+	import type { DraftHolding, OverlapResultRead, CusipExposure } from "./LiveWorkbenchShell.svelte";
 
 	interface Props {
 		mode: "LIVE" | "EDIT";
@@ -21,6 +21,7 @@
 		draftHoldings: DraftHolding[];
 		selectedInstrumentId: string | null;
 		onInstrumentSelect: (instrumentId: string) => void;
+		overlapResult?: OverlapResultRead | null;
 	}
 
 	let {
@@ -30,6 +31,7 @@
 		draftHoldings,
 		selectedInstrumentId,
 		onInstrumentSelect,
+		overlapResult = null,
 	}: Props = $props();
 
 	interface PositionRow {
@@ -98,6 +100,21 @@
 		const sign = n >= 0 ? "+" : "";
 		return sign + n.toFixed(0);
 	}
+
+	function getBreachForInstrument(instrumentId: string): CusipExposure | null {
+		if (mode !== "EDIT" || !overlapResult) return null;
+		return overlapResult.breaches.find(b => b.funds_holding.includes(instrumentId)) || null;
+	}
+
+	function getBreachTooltip(breach: CusipExposure): string {
+		const names = breach.funds_holding.map(id => {
+			const h = draftHoldings.find(d => d.instrument_id === id);
+			return h ? h.fund_name : id;
+		});
+		const pct = (breach.total_exposure_pct * 100).toFixed(1);
+		const issuer = breach.issuer_name ?? "Unknown";
+		return `WARNING: ${pct}% Consolidated Exposure to ${issuer} (${breach.cusip}) across: ${names.join(", ")}.`;
+	}
 </script>
 
 <div class="bl-root">
@@ -129,6 +146,12 @@
 					>
 						<th class="bl-td bl-td--name" scope="row" title={pos.fundName}>
 							{pos.fundName}
+							{#if mode === "EDIT" && overlapResult}
+								{@const breach = getBreachForInstrument(pos.instrumentId)}
+								{#if breach}
+									<span class="bl-overlap-tag" title={getBreachTooltip(breach)}>[ ! OVERLAP ]</span>
+								{/if}
+							{/if}
 						</th>
 						<td class="bl-td bl-td--num">{fmtPct(pos.target)}</td>
 						<td class="bl-td bl-td--num">{fmtPct(pos.actual)}</td>
@@ -280,4 +303,15 @@
 	/* ── P&L colours ─────────────────────────────────────── */
 	.bl-pnl-up { color: #22c55e; }
 	.bl-pnl-down { color: #ef4444; }
+
+	/* ── Overlap Tag ─────────────────────────────────────── */
+	.bl-overlap-tag {
+		display: inline-block;
+		margin-left: 6px;
+		font-family: "JetBrains Mono", "SF Mono", monospace;
+		font-size: 9px;
+		font-weight: 700;
+		color: #ca8a04;
+		vertical-align: middle;
+	}
 </style>

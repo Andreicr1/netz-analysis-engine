@@ -7,6 +7,7 @@
 -->
 <script lang="ts">
 	import { onMount } from "svelte";
+	import type { OverlapResultRead } from "./LiveWorkbenchShell.svelte";
 
 	interface Props {
 		portfolioName: string;
@@ -19,6 +20,7 @@
 		execResult: { ok: boolean; message: string } | null;
 		onConfirm: () => void;
 		onClose: () => void;
+		overlapResult?: OverlapResultRead | null;
 	}
 
 	let {
@@ -32,6 +34,7 @@
 		execResult,
 		onConfirm,
 		onClose,
+		overlapResult = null,
 	}: Props = $props();
 
 	let dialogEl: HTMLDialogElement | undefined = $state();
@@ -105,6 +108,17 @@
 				<span class="tcd-label">Holdings Version</span>
 				<span class="tcd-value tcd-mono">v{holdingsVersion}</span>
 			</div>
+
+			{#if overlapResult && overlapResult.breaches.length > 0}
+				<div class="tcd-warning-box">
+					<span class="tcd-warning-title">[ ! PORTFOLIO OVERLAP DETECTED ]</span>
+					{#each overlapResult.breaches as breach}
+						<span class="tcd-warning-text">
+							&gt; {(breach.total_exposure_pct * 100).toFixed(1)}% {breach.issuer_name ?? 'Unknown'} ({breach.cusip})
+						</span>
+					{/each}
+				</div>
+			{/if}
 
 			{#if execResult}
 				<div
@@ -240,6 +254,30 @@
 		color: #ef4444;
 		padding: 1px 5px;
 		background: rgba(239, 68, 68, 0.10);
+	}
+
+	/* ── Warning Box ─────────────────────────────────────── */
+	.tcd-warning-box {
+		margin-top: 8px;
+		padding: 8px;
+		background: rgba(202, 138, 4, 0.06);
+		border: 1px solid rgba(202, 138, 4, 0.25);
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.tcd-warning-title {
+		font-family: "JetBrains Mono", "SF Mono", monospace;
+		font-size: 10px;
+		font-weight: 700;
+		color: #ca8a04;
+		letter-spacing: 0.05em;
+	}
+	.tcd-warning-text {
+		font-family: "JetBrains Mono", "SF Mono", monospace;
+		font-size: 10px;
+		color: #eab308;
+		font-weight: 600;
 	}
 
 	/* ── Result banner ───────────────────────────────────── */
