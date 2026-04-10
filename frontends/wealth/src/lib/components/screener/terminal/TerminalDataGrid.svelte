@@ -1,72 +1,70 @@
 <!--
-  TerminalDataGrid — high-density scrollable data table.
-  Sticky header, strings left, numbers right (tabular-nums).
-  Zebra-striping at near-invisible opacity for scanability.
+  TerminalDataGrid — high-density scrollable catalog grid.
+  Real instrument data from `/screener/catalog`. Sticky header, strings
+  left, numbers right (tabular-nums). Zebra-striping at near-invisible
+  opacity for scanability.
 -->
+<script module lang="ts">
+	export interface ScreenerAsset {
+		id: string;                 // external_id from /screener/catalog
+		ticker: string | null;
+		name: string;
+		fundType: string;           // raw fund_type key
+		universeLabel: string;      // pretty label for fund_type
+		strategy: string | null;    // strategy_label
+		geography: string | null;   // investment_geography
+		domicile: string | null;
+		currency: string | null;
+		managerName: string | null;
+		managerId: string | null;
+		aum: number | null;
+		expenseRatioPct: number | null;
+		ret1y: number | null;
+		ret10y: number | null;
+		inceptionDate: string | null;
+		isin: string | null;
+		navStatus: string | null;   // available | pending_import | unavailable | null
+	}
+</script>
+
 <script lang="ts">
 	import { sandboxBasket } from "$lib/stores/sandbox.svelte";
 
-	export interface MockAsset {
-		id: string;
-		ticker: string;
-		name: string;
-		assetClass: string;
-		sector: string;
-		ret1y: number;
-		ret3y: number;
-		volatility: number;
-		sharpe: number;
-		maxDrawdown: number;
-		beta: number;
-		alpha: number;
-		aum: number;
-		expenseRatio: number;
-		managerScore?: number;
-		dtwDriftScore?: number | null;
-	}
-
 	interface Props {
-		assets: MockAsset[];
+		assets: ScreenerAsset[];
+		total: number;
+		loading: boolean;
+		errorMessage: string | null;
 		selectedId: string | null;
-		onSelect: (asset: MockAsset) => void;
+		onSelect: (asset: ScreenerAsset) => void;
 	}
 
-	let { assets, selectedId, onSelect }: Props = $props();
+	let { assets, total, loading, errorMessage, selectedId, onSelect }: Props = $props();
 
-	function fmt(v: number, decimals: number = 2): string {
+	function fmtPct(v: number | null, decimals: number = 2): string {
+		if (v == null) return "—";
+		return v.toFixed(decimals) + "%";
+	}
+
+	function fmtNum(v: number | null, decimals: number = 2): string {
+		if (v == null) return "—";
 		return v.toFixed(decimals);
 	}
 
-	function fmtAum(v: number): string {
+	function fmtAum(v: number | null): string {
+		if (v == null || v <= 0) return "—";
+		if (v >= 1e12) return (v / 1e12).toFixed(2) + "T";
 		if (v >= 1e9) return (v / 1e9).toFixed(1) + "B";
 		if (v >= 1e6) return (v / 1e6).toFixed(0) + "M";
 		return v.toFixed(0);
 	}
 
-	function retClass(v: number): string {
+	function retClass(v: number | null): string {
+		if (v == null) return "";
 		if (v > 0) return "pos";
 		if (v < 0) return "neg";
 		return "";
 	}
-
-	type DriftTag = { label: string; cssClass: string };
-
-	const driftTag = $derived.by((): Map<string, DriftTag> => {
-		const map = new Map<string, DriftTag>();
-		for (const a of assets) {
-			const score = a.dtwDriftScore;
-			if (score == null) {
-				map.set(a.id, { label: "-", cssClass: "drift-none" });
-			} else if (score > 0.90) {
-				map.set(a.id, { label: "[ CRITICAL DRIFT ]", cssClass: "drift-critical" });
-			} else if (score > 0.40) {
-				map.set(a.id, { label: "[ WARN: DRIFT ]", cssClass: "drift-warn" });
-			} else {
-				map.set(a.id, { label: fmt(score), cssClass: "drift-ok" });
-			}
-		}
-		return map;
-	});
 </script>
 
 <div class="dg-root">
@@ -76,13 +74,14 @@
 				<tr>
 					<th class="dg-th dg-left">Ticker</th>
 					<th class="dg-th dg-left dg-name-col">Name</th>
-					<th class="dg-th dg-left">Class</th>
-					<th class="dg-th dg-center">Score</th>
-					<th class="dg-th dg-center">Style Drift</th>
+					<th class="dg-th dg-left">Universe</th>
+					<th class="dg-th dg-left dg-strategy-col">Strategy</th>
+					<th class="dg-th dg-left">Geo</th>
+					<th class="dg-th dg-right">AUM</th>
 					<th class="dg-th dg-right">1Y Ret</th>
-					<th class="dg-th dg-right">3Y Ret</th>
-					<th class="dg-th dg-right">Vol</th>
-					<th class="dg-th dg-right">Sharpe</th>
+					<th class="dg-th dg-right">10Y Ret</th>
+					<th class="dg-th dg-right">ER%</th>
+					<th class="dg-th dg-center"></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -93,38 +92,26 @@
 						class:zebra={i % 2 === 1}
 						onclick={() => onSelect(asset)}
 					>
-						<td class="dg-td dg-left dg-ticker">{asset.ticker}</td>
-						<td class="dg-td dg-left dg-name-col dg-name">{asset.name}</td>
-						<td class="dg-td dg-left dg-class">{asset.assetClass}</td>
-						<td class="dg-td dg-center">
-							{#if asset.managerScore !== undefined}
-								{#if asset.managerScore >= 75}
-									<span class="dg-badge elite">[ ELITE ]</span>
-								{:else if asset.managerScore < 40}
-									<span class="dg-badge eviction">[ EVICTION ]</span>
-								{:else}
-									<span class="dg-num score-num">{fmt(asset.managerScore, 1)}</span>
-								{/if}
-							{:else}
-								<span class="dg-num">-</span>
-							{/if}
+						<td class="dg-td dg-left dg-ticker" title={asset.ticker ?? asset.isin ?? ""}>
+							{asset.ticker ?? asset.isin ?? "—"}
 						</td>
-						<td class="dg-td dg-center">
-							{#if driftTag.get(asset.id)}
-								<span class="dg-badge {driftTag.get(asset.id)?.cssClass}">{driftTag.get(asset.id)?.label}</span>
-							{/if}
+						<td class="dg-td dg-left dg-name-col dg-name" title={asset.name}>{asset.name}</td>
+						<td class="dg-td dg-left dg-class">{asset.universeLabel}</td>
+						<td class="dg-td dg-left dg-strategy-col dg-strategy" title={asset.strategy ?? ""}>
+							{asset.strategy ?? "—"}
 						</td>
-						<td class="dg-td dg-right dg-num {retClass(asset.ret1y)}">{fmt(asset.ret1y)}%</td>
-						<td class="dg-td dg-right dg-num {retClass(asset.ret3y)}">{fmt(asset.ret3y)}%</td>
-						<td class="dg-td dg-right dg-num">{fmt(asset.volatility)}%</td>
-						<td class="dg-td dg-right dg-num">{fmt(asset.sharpe)}</td>
+						<td class="dg-td dg-left dg-geo">{asset.geography ?? "—"}</td>
+						<td class="dg-td dg-right dg-num">{fmtAum(asset.aum)}</td>
+						<td class="dg-td dg-right dg-num {retClass(asset.ret1y)}">{fmtPct(asset.ret1y)}</td>
+						<td class="dg-td dg-right dg-num {retClass(asset.ret10y)}">{fmtPct(asset.ret10y)}</td>
+						<td class="dg-td dg-right dg-num">{fmtNum(asset.expenseRatioPct)}</td>
 						<td class="dg-td dg-center">
 							<button
 								class="sandbox-add-btn"
 								onclick={(e) => {
 									e.stopPropagation();
-									if (!sandboxBasket.some(a => a.instrument_id === asset.id)) {
-										sandboxBasket.push({ instrument_id: asset.id, ticker: asset.ticker });
+									if (!sandboxBasket.some((a) => a.instrument_id === asset.id)) {
+										sandboxBasket.push({ instrument_id: asset.id, ticker: asset.ticker ?? asset.id });
 									}
 								}}
 							>
@@ -133,11 +120,26 @@
 						</td>
 					</tr>
 				{/each}
+
+				{#if assets.length === 0 && !loading && !errorMessage}
+					<tr>
+						<td class="dg-empty" colspan="10">No instruments match the current filters.</td>
+					</tr>
+				{/if}
 			</tbody>
 		</table>
 	</div>
+
 	<div class="dg-footer">
-		<span>{assets.length} instruments</span>
+		{#if errorMessage}
+			<span class="dg-footer-err">{errorMessage}</span>
+		{:else if loading}
+			<span>Loading&hellip;</span>
+		{:else}
+			<span>
+				Showing {assets.length} of {total.toLocaleString()} instruments
+			</span>
+		{/if}
 	</div>
 </div>
 
@@ -222,12 +224,12 @@
 	.dg-ticker {
 		font-weight: 700;
 		color: #e2e8f0;
-		width: 70px;
+		width: 80px;
 	}
 
 	.dg-name-col {
-		width: 200px;
-		min-width: 120px;
+		width: auto;
+		min-width: 160px;
 	}
 
 	.dg-name {
@@ -237,60 +239,60 @@
 	.dg-class {
 		color: #5a6577;
 		font-size: 10px;
+		width: 90px;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	.dg-strategy-col {
+		width: 150px;
+	}
+
+	.dg-strategy {
+		color: #8a94a6;
+		font-size: 10px;
+	}
+
+	.dg-geo {
+		color: #5a6577;
+		font-size: 10px;
 		width: 80px;
 	}
 
 	.dg-num {
 		font-variant-numeric: tabular-nums;
 		font-weight: 500;
-	}
-
-	.score-num {
-		color: #e2e8f0;
-	}
-
-	.dg-badge {
-		font-family: monospace;
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 0.05em;
-	}
-
-	.elite {
-		color: #2d7ef7;
-	}
-
-	.eviction {
-		color: #ca8a04;
-	}
-
-	.drift-critical {
-		color: #ef4444;
-		font-family: monospace;
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 0.05em;
-	}
-
-	.drift-warn {
-		color: #ca8a04;
-		font-family: monospace;
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 0.05em;
-	}
-
-	.drift-ok {
-		color: #5a6577;
-		font-variant-numeric: tabular-nums;
-	}
-
-	.drift-none {
-		color: #3a4255;
+		width: 72px;
 	}
 
 	.pos { color: #22c55e; }
 	.neg { color: #ef4444; }
+
+	.dg-empty {
+		padding: 32px;
+		text-align: center;
+		color: #5a6577;
+		font-size: 11px;
+		font-style: italic;
+	}
+
+	/* ── Sandbox add button ───────────────────────────── */
+	.sandbox-add-btn {
+		background: transparent;
+		border: 1px solid rgba(45, 126, 247, 0.25);
+		color: #2d7ef7;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		padding: 2px 6px;
+		cursor: pointer;
+		transition: all 80ms ease;
+	}
+	.sandbox-add-btn:hover {
+		background: rgba(45, 126, 247, 0.08);
+		color: #93bbfc;
+	}
 
 	/* ── Footer ───────────────────────────────────────── */
 	.dg-footer {
@@ -300,5 +302,8 @@
 		color: #5a6577;
 		border-top: 1px solid rgba(255, 255, 255, 0.06);
 		background: #0d1220;
+	}
+	.dg-footer-err {
+		color: #ef4444;
 	}
 </style>

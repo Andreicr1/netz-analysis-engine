@@ -1,19 +1,33 @@
 <!--
-  TerminalScreenerFilters — left panel with collapsible filter sections.
-  Accordion-style, all open by default. Compact 11px terminal aesthetic.
+  TerminalScreenerFilters — left panel, collapsible sections.
+
+  Drives the `/screener/catalog` backend query directly. Every option
+  here maps 1:1 to a backend query parameter — the filtering happens
+  server-side on the TimescaleDB-backed materialized view.
 -->
-<script lang="ts">
-	interface FilterState {
-		sectors: Set<string>;
-		assetClasses: Set<string>;
-		returnMin: number;
-		returnMax: number;
-		volMin: number;
-		volMax: number;
-		drawdownMin: number;
-		drawdownMax: number;
+<script module lang="ts">
+	export interface FilterState {
+		fundUniverse: Set<string>;   // fund_universe: mutual_fund,etf,closed_end,bdc,money_market,hedge_fund,private_fund,ucits
+		strategies: Set<string>;     // strategy_label
+		geographies: Set<string>;    // investment_geography
+		aumMin: number;              // USD absolute, 0 = no filter
+		returnMin: number;           // % annualised 1Y, null/-999 = no filter
+		expenseMax: number;          // % annual fee, 10 = no filter
+		onlyWithNav: boolean;        // in_universe flag
 	}
 
+	export const DEFAULT_FILTERS: FilterState = {
+		fundUniverse: new Set<string>(),
+		strategies: new Set<string>(),
+		geographies: new Set<string>(),
+		aumMin: 0,
+		returnMin: -999,
+		expenseMax: 10,
+		onlyWithNav: true,
+	};
+</script>
+
+<script lang="ts">
 	interface Props {
 		filters: FilterState;
 		onFiltersChange: (filters: FilterState) => void;
@@ -21,49 +35,107 @@
 
 	let { filters, onFiltersChange }: Props = $props();
 
-	const SECTORS = [
-		"Technology", "Healthcare", "Financials", "Energy",
-		"Consumer Discretionary", "Industrials", "Real Estate",
-		"Materials", "Utilities", "Communication",
+	// Universe labels mirror the CatalogFilters backend contract.
+	const FUND_UNIVERSE: { key: string; label: string }[] = [
+		{ key: "mutual_fund",  label: "Mutual Fund" },
+		{ key: "etf",          label: "ETF" },
+		{ key: "closed_end",   label: "Closed-End" },
+		{ key: "interval_fund",label: "Interval" },
+		{ key: "bdc",          label: "BDC" },
+		{ key: "money_market", label: "Money Market" },
+		{ key: "hedge_fund",   label: "Hedge Fund" },
+		{ key: "private_fund", label: "Private Fund" },
+		{ key: "ucits",        label: "UCITS (EU)" },
 	];
 
-	const ASSET_CLASSES = [
-		"Equity", "Fixed Income", "Multi-Asset",
-		"Alternative", "Money Market", "Commodity",
+	// Subset of the most common strategy_label values — the full list is
+	// ~37 categories, we surface the ones that matter most to asset
+	// allocators first.
+	const STRATEGIES = [
+		"Equity",
+		"Fixed Income",
+		"Multi-Asset",
+		"Money Market",
+		"Alternatives",
+		"Real Estate",
+		"Commodities",
+		"Private Credit",
+		"Infrastructure",
+		"Long/Short Equity",
+		"Buyout",
+		"Venture Capital",
 	];
 
-	let sectionOpen = $state({ categories: true, metrics: true });
+	const GEOGRAPHIES = [
+		"US",
+		"Europe",
+		"Emerging Markets",
+		"Asia Pacific",
+		"Global",
+		"Latin America",
+	];
 
-	function toggleSector(sector: string) {
-		const next = new Set(filters.sectors);
-		if (next.has(sector)) next.delete(sector);
-		else next.add(sector);
-		onFiltersChange({ ...filters, sectors: next });
+	let sectionOpen = $state({ universe: true, strategy: true, geography: true, metrics: true });
+
+	function toggleUniverse(key: string) {
+		const next = new Set(filters.fundUniverse);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		onFiltersChange({ ...filters, fundUniverse: next });
 	}
 
-	function toggleAssetClass(ac: string) {
-		const next = new Set(filters.assetClasses);
-		if (next.has(ac)) next.delete(ac);
-		else next.add(ac);
-		onFiltersChange({ ...filters, assetClasses: next });
+	function toggleStrategy(key: string) {
+		const next = new Set(filters.strategies);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		onFiltersChange({ ...filters, strategies: next });
 	}
 
-	function handleRange(field: "returnMin" | "returnMax" | "volMin" | "volMax" | "drawdownMin" | "drawdownMax", value: number) {
+	function toggleGeography(key: string) {
+		const next = new Set(filters.geographies);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		onFiltersChange({ ...filters, geographies: next });
+	}
+
+	function setRange<K extends "aumMin" | "returnMin" | "expenseMax">(field: K, value: number) {
 		onFiltersChange({ ...filters, [field]: value });
+	}
+
+	function toggleOnlyWithNav() {
+		onFiltersChange({ ...filters, onlyWithNav: !filters.onlyWithNav });
 	}
 
 	function clearAll() {
 		onFiltersChange({
-			sectors: new Set(),
-			assetClasses: new Set(),
-			returnMin: -50,
-			returnMax: 100,
-			volMin: 0,
-			volMax: 60,
-			drawdownMin: -80,
-			drawdownMax: 0,
+			fundUniverse: new Set(),
+			strategies: new Set(),
+			geographies: new Set(),
+			aumMin: 0,
+			returnMin: -999,
+			expenseMax: 10,
+			onlyWithNav: true,
 		});
 	}
+
+	// AUM slider uses log10 ticks: 0 → $0, 6 → $1M, 9 → $1B, 12 → $1T.
+	function aumToLog(n: number): number {
+		if (n <= 0) return 0;
+		return Math.log10(Math.max(1, n));
+	}
+	function logToAum(l: number): number {
+		if (l <= 0) return 0;
+		return Math.pow(10, l);
+	}
+	function fmtAum(n: number): string {
+		if (n <= 0) return "any";
+		if (n >= 1e12) return "$" + (n / 1e12).toFixed(1) + "T";
+		if (n >= 1e9) return "$" + (n / 1e9).toFixed(1) + "B";
+		if (n >= 1e6) return "$" + (n / 1e6).toFixed(0) + "M";
+		return "$" + n.toFixed(0);
+	}
+
+	const aumLogValue = $derived(aumToLog(filters.aumMin));
 </script>
 
 <div class="sf-root">
@@ -73,42 +145,88 @@
 	</div>
 
 	<div class="sf-scroll">
-		<!-- Categories -->
+		<!-- Universe -->
 		<div class="sf-section">
 			<button
 				class="sf-section-toggle"
-				onclick={() => (sectionOpen.categories = !sectionOpen.categories)}
+				onclick={() => (sectionOpen.universe = !sectionOpen.universe)}
 			>
-				<span class="sf-section-arrow" class:open={sectionOpen.categories}>&#9656;</span>
-				CATEGORIES
+				<span class="sf-section-arrow" class:open={sectionOpen.universe}>&#9656;</span>
+				UNIVERSE
 			</button>
-
-			{#if sectionOpen.categories}
+			{#if sectionOpen.universe}
 				<div class="sf-section-body">
-					<label class="sf-group-label">Sector</label>
+					<label class="sf-check sf-check--strong">
+						<input
+							type="checkbox"
+							checked={filters.onlyWithNav}
+							onchange={toggleOnlyWithNav}
+						/>
+						<span class="sf-check-label">Only funds with NAV</span>
+					</label>
 					<div class="sf-check-grid">
-						{#each SECTORS as sector}
+						{#each FUND_UNIVERSE as u}
 							<label class="sf-check">
 								<input
 									type="checkbox"
-									checked={filters.sectors.has(sector)}
-									onchange={() => toggleSector(sector)}
+									checked={filters.fundUniverse.has(u.key)}
+									onchange={() => toggleUniverse(u.key)}
 								/>
-								<span class="sf-check-label">{sector}</span>
+								<span class="sf-check-label">{u.label}</span>
 							</label>
 						{/each}
 					</div>
+				</div>
+			{/if}
+		</div>
 
-					<label class="sf-group-label" style="margin-top:10px">Asset Class</label>
+		<!-- Strategy -->
+		<div class="sf-section">
+			<button
+				class="sf-section-toggle"
+				onclick={() => (sectionOpen.strategy = !sectionOpen.strategy)}
+			>
+				<span class="sf-section-arrow" class:open={sectionOpen.strategy}>&#9656;</span>
+				STRATEGY
+			</button>
+			{#if sectionOpen.strategy}
+				<div class="sf-section-body">
 					<div class="sf-check-grid">
-						{#each ASSET_CLASSES as ac}
+						{#each STRATEGIES as s}
 							<label class="sf-check">
 								<input
 									type="checkbox"
-									checked={filters.assetClasses.has(ac)}
-									onchange={() => toggleAssetClass(ac)}
+									checked={filters.strategies.has(s)}
+									onchange={() => toggleStrategy(s)}
 								/>
-								<span class="sf-check-label">{ac}</span>
+								<span class="sf-check-label">{s}</span>
+							</label>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Geography -->
+		<div class="sf-section">
+			<button
+				class="sf-section-toggle"
+				onclick={() => (sectionOpen.geography = !sectionOpen.geography)}
+			>
+				<span class="sf-section-arrow" class:open={sectionOpen.geography}>&#9656;</span>
+				GEOGRAPHY
+			</button>
+			{#if sectionOpen.geography}
+				<div class="sf-section-body">
+					<div class="sf-check-grid">
+						{#each GEOGRAPHIES as g}
+							<label class="sf-check">
+								<input
+									type="checkbox"
+									checked={filters.geographies.has(g)}
+									onchange={() => toggleGeography(g)}
+								/>
+								<span class="sf-check-label">{g}</span>
 							</label>
 						{/each}
 					</div>
@@ -125,88 +243,56 @@
 				<span class="sf-section-arrow" class:open={sectionOpen.metrics}>&#9656;</span>
 				METRICS
 			</button>
-
 			{#if sectionOpen.metrics}
 				<div class="sf-section-body">
 					<div class="sf-range-group">
 						<div class="sf-range-header">
-							<span>1Y Return (%)</span>
-							<span class="sf-range-value">{filters.returnMin} to {filters.returnMax}</span>
+							<span>Min AUM</span>
+							<span class="sf-range-value">{fmtAum(filters.aumMin)}</span>
 						</div>
-						<div class="sf-range-row">
-							<input
-								type="range"
-								min={-50}
-								max={100}
-								step={1}
-								value={filters.returnMin}
-								oninput={(e) => handleRange("returnMin", +e.currentTarget.value)}
-								class="sf-slider"
-							/>
-							<input
-								type="range"
-								min={-50}
-								max={100}
-								step={1}
-								value={filters.returnMax}
-								oninput={(e) => handleRange("returnMax", +e.currentTarget.value)}
-								class="sf-slider"
-							/>
-						</div>
+						<input
+							type="range"
+							min={0}
+							max={12}
+							step={0.1}
+							value={aumLogValue}
+							oninput={(e) => setRange("aumMin", logToAum(+e.currentTarget.value))}
+							class="sf-slider"
+						/>
 					</div>
 
 					<div class="sf-range-group">
 						<div class="sf-range-header">
-							<span>Volatility (%)</span>
-							<span class="sf-range-value">{filters.volMin} to {filters.volMax}</span>
+							<span>Min 1Y Return (%)</span>
+							<span class="sf-range-value">
+								{filters.returnMin <= -999 ? "any" : filters.returnMin.toFixed(0) + "%"}
+							</span>
 						</div>
-						<div class="sf-range-row">
-							<input
-								type="range"
-								min={0}
-								max={60}
-								step={1}
-								value={filters.volMin}
-								oninput={(e) => handleRange("volMin", +e.currentTarget.value)}
-								class="sf-slider"
-							/>
-							<input
-								type="range"
-								min={0}
-								max={60}
-								step={1}
-								value={filters.volMax}
-								oninput={(e) => handleRange("volMax", +e.currentTarget.value)}
-								class="sf-slider"
-							/>
-						</div>
+						<input
+							type="range"
+							min={-50}
+							max={100}
+							step={1}
+							value={filters.returnMin <= -999 ? -50 : filters.returnMin}
+							oninput={(e) => setRange("returnMin", +e.currentTarget.value)}
+							class="sf-slider"
+						/>
 					</div>
 
 					<div class="sf-range-group">
 						<div class="sf-range-header">
-							<span>Max Drawdown (%)</span>
-							<span class="sf-range-value">{filters.drawdownMin} to {filters.drawdownMax}</span>
+							<span>Max Expense Ratio (%)</span>
+							<span class="sf-range-value">{filters.expenseMax.toFixed(2)}%</span>
 						</div>
-						<div class="sf-range-row">
-							<input
-								type="range"
-								min={-80}
-								max={0}
-								step={1}
-								value={filters.drawdownMin}
-								oninput={(e) => handleRange("drawdownMin", +e.currentTarget.value)}
-								class="sf-slider"
-							/>
-							<input
-								type="range"
-								min={-80}
-								max={0}
-								step={1}
-								value={filters.drawdownMax}
-								oninput={(e) => handleRange("drawdownMax", +e.currentTarget.value)}
-								class="sf-slider"
-							/>
-						</div>
+						<input
+							type="range"
+							min={0}
+							max={10}
+							step={0.05}
+							value={filters.expenseMax}
+							oninput={(e) => setRange("expenseMax", +e.currentTarget.value)}
+							class="sf-slider"
+						/>
 					</div>
 				</div>
 			{/if}
@@ -301,16 +387,6 @@
 		padding: 0 12px 10px;
 	}
 
-	.sf-group-label {
-		display: block;
-		font-size: 10px;
-		font-weight: 600;
-		color: #5a6577;
-		margin-bottom: 4px;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-	}
-
 	.sf-check-grid {
 		display: flex;
 		flex-direction: column;
@@ -323,6 +399,11 @@
 		gap: 6px;
 		padding: 2px 0;
 		cursor: pointer;
+	}
+	.sf-check--strong {
+		padding-bottom: 6px;
+		border-bottom: 1px dashed rgba(255, 255, 255, 0.04);
+		margin-bottom: 6px;
 	}
 
 	.sf-check input[type="checkbox"] {
@@ -360,13 +441,8 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	.sf-range-row {
-		display: flex;
-		gap: 6px;
-	}
-
 	.sf-slider {
-		flex: 1;
+		width: 100%;
 		-webkit-appearance: none;
 		appearance: none;
 		height: 3px;

@@ -1,30 +1,43 @@
 <!--
   TerminalScreenerQuickStats — right panel showing selected asset detail.
-  Ultra-dense KPI matrix when an asset is selected, placeholder otherwise.
+  Ultra-dense KPI matrix driven by `/screener/catalog` rows.
 -->
 <script lang="ts">
-	import type { MockAsset } from "./TerminalDataGrid.svelte";
+	import type { ScreenerAsset } from "./TerminalDataGrid.svelte";
 
 	interface Props {
-		asset: MockAsset | null;
+		asset: ScreenerAsset | null;
 	}
 
 	let { asset }: Props = $props();
 
-	function fmt(v: number, d: number = 2): string {
+	function fmtPct(v: number | null, d: number = 2): string {
+		if (v == null) return "—";
+		return v.toFixed(d) + "%";
+	}
+
+	function fmtNum(v: number | null, d: number = 2): string {
+		if (v == null) return "—";
 		return v.toFixed(d);
 	}
 
-	function fmtAum(v: number): string {
+	function fmtAum(v: number | null): string {
+		if (v == null || v <= 0) return "—";
+		if (v >= 1e12) return "$" + (v / 1e12).toFixed(2) + "T";
 		if (v >= 1e9) return "$" + (v / 1e9).toFixed(2) + "B";
 		if (v >= 1e6) return "$" + (v / 1e6).toFixed(0) + "M";
 		return "$" + v.toFixed(0);
 	}
 
-	function retClass(v: number): string {
+	function retClass(v: number | null): string {
+		if (v == null) return "";
 		if (v > 0) return "pos";
 		if (v < 0) return "neg";
 		return "";
+	}
+
+	function orDash(v: string | null | undefined): string {
+		return v && v.length > 0 ? v : "—";
 	}
 
 	interface KpiRow {
@@ -36,16 +49,16 @@
 	const kpis = $derived<KpiRow[]>(
 		asset
 			? [
-					{ label: "1Y Return", value: fmt(asset.ret1y) + "%", colorClass: retClass(asset.ret1y) },
-					{ label: "3Y Return", value: fmt(asset.ret3y) + "%", colorClass: retClass(asset.ret3y) },
-					{ label: "Volatility", value: fmt(asset.volatility) + "%" },
-					{ label: "Sharpe Ratio", value: fmt(asset.sharpe) },
-					{ label: "Max Drawdown", value: fmt(asset.maxDrawdown) + "%", colorClass: "neg" },
-					{ label: "Beta", value: fmt(asset.beta) },
-					{ label: "Alpha", value: fmt(asset.alpha) + "%", colorClass: retClass(asset.alpha) },
+					{ label: "1Y Return", value: fmtPct(asset.ret1y), colorClass: retClass(asset.ret1y) },
+					{ label: "10Y Return", value: fmtPct(asset.ret10y), colorClass: retClass(asset.ret10y) },
 					{ label: "AUM", value: fmtAum(asset.aum) },
-					{ label: "Expense Ratio", value: fmt(asset.expenseRatio) + "%" },
-					{ label: "Sector", value: asset.sector },
+					{ label: "Expense Ratio", value: fmtNum(asset.expenseRatioPct) + "%" },
+					{ label: "Strategy", value: orDash(asset.strategy) },
+					{ label: "Geography", value: orDash(asset.geography) },
+					{ label: "Domicile", value: orDash(asset.domicile) },
+					{ label: "Currency", value: orDash(asset.currency) },
+					{ label: "Inception", value: orDash(asset.inceptionDate) },
+					{ label: "ISIN", value: orDash(asset.isin) },
 				]
 			: [],
 	);
@@ -54,11 +67,14 @@
 <div class="qs-root">
 	{#if asset}
 		<div class="qs-header">
-			<span class="qs-ticker">{asset.ticker}</span>
+			<span class="qs-ticker">{asset.ticker ?? asset.isin ?? "—"}</span>
 			<span class="qs-name">{asset.name}</span>
+			{#if asset.managerName}
+				<span class="qs-manager">{asset.managerName}</span>
+			{/if}
 		</div>
 
-		<div class="qs-badge">{asset.assetClass}</div>
+		<div class="qs-badge">{asset.universeLabel}</div>
 
 		<div class="qs-grid">
 			{#each kpis as kpi}
@@ -107,7 +123,17 @@
 
 	.qs-name {
 		font-size: 11px;
+		color: #9aa3b3;
+		white-space: normal;
+		word-wrap: break-word;
+		line-height: 1.35;
+	}
+
+	.qs-manager {
+		margin-top: 2px;
+		font-size: 10px;
 		color: #5a6577;
+		font-style: italic;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
