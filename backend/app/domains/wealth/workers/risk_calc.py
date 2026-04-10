@@ -1361,4 +1361,12 @@ def _pctl(value: float, arr: np.ndarray) -> float:
 
 
 if __name__ == "__main__":
-    asyncio.run(run_risk_calc())
+    import argparse
+    parser = argparse.ArgumentParser(description="Risk calculation worker")
+    parser.add_argument("--org-id", type=uuid.UUID, help="Compute org-scoped metrics with DTW drift for a specific tenant.")
+    args = parser.parse_args()
+
+    if args.org_id:
+        asyncio.run(run_risk_calc(args.org_id))
+    else:
+        asyncio.run(run_global_risk_metrics())
