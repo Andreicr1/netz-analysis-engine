@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Any
 
 import sqlalchemy as sa
-from sqlalchemy import Date, ForeignKey, Numeric, Uuid
+from sqlalchemy import Date, ForeignKey, Numeric, String, Uuid, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -79,12 +79,16 @@ class FundRiskMetrics(Base):
 
     # GARCH(1,1) conditional volatility (annualized, 1-step-ahead forecast)
     volatility_garch: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    vol_model: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # CVaR conditional on stress regime (BL-9)
     cvar_95_conditional: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
 
     # DTW drift signal (derivative DTW vs block benchmark, length-normalized)
     dtw_drift_score: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+
+    # Audit & data quality flags
+    data_quality_flags: Mapped[dict | None] = mapped_column(JSONB, server_default=text("'{}'::jsonb"), nullable=True)
 
     # Peer group percentile rankings (pre-computed by risk_calc worker)
     peer_strategy_label: Mapped[str | None] = mapped_column(sa.Text, nullable=True)

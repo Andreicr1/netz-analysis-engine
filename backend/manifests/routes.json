@@ -1171,6 +1171,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/risk/timeseries/{ticker}",
+    "name": "get_risk_timeseries"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/risk/{profile}/cvar",
     "name": "get_cvar"
   },
