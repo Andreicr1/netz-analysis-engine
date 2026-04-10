@@ -2004,6 +2004,12 @@ async def _run_construction_async(
             max_single_fund=active_constraints.max_single_fund_weight,
         )
 
+        from app.core.config.config_service import ConfigService
+        config_svc = ConfigService(db)
+        optimizer_result = await config_svc.get("wealth", "optimizer", str(org_id))
+        optimizer_config = optimizer_result.value if optimizer_result else {}
+        cf_factor = float(optimizer_config.get("cf_relaxation_factor", 1.3))
+
         fund_result: FundOptimizationResult = await optimize_fund_portfolio(
             fund_ids=opt_fund_ids,
             fund_blocks=sub_blocks,
@@ -2012,6 +2018,7 @@ async def _run_construction_async(
             constraints=active_constraints,
             skewness=sub_skewness,
             excess_kurtosis=sub_excess_kurtosis,
+            cf_relaxation_factor=cf_factor,
         )
 
         if fund_result.status.startswith("optimal") and fund_result.weights:
