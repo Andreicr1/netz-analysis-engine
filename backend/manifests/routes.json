@@ -1756,11 +1756,6 @@
   },
   {
     "method": "POST",
-    "path": "/api/v1/content/{content_id}/approve",
-    "name": "approve_content"
-  },
-  {
-    "method": "POST",
     "path": "/api/v1/dd-reports/funds/{fund_id}",
     "name": "trigger_dd_report"
   },

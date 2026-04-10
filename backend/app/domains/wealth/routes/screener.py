@@ -957,8 +957,6 @@ async def import_fund(
         that window receives the same ``job_id`` and reattaches to
         the existing SSE stream.
     """
-    _require_investment_role(actor)
-
     normalized = (identifier or "").strip().upper()
     if not normalized:
         raise HTTPException(

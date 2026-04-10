@@ -1,9 +1,8 @@
 """Content Production API routes — outlooks, flash reports, spotlights.
 
 Feature-gated by ``FEATURE_WEALTH_CONTENT``.
-Content governance: all content has status workflow (draft → review → approved → published).
-Self-approval blocked: approved_by != created_by.
-Download endpoint checks status >= approved before serving.
+Content governance: all content has status workflow (draft → published).
+Download endpoint checks status >= published before serving.
 """
 
 from __future__ import annotations
@@ -285,77 +284,19 @@ async def get_content(
     return ContentRead.model_validate(content)
 
 
-# ── Approval ───────────────────────────────────────────────────────
-
-
-@router.post(
-    "/{content_id}/approve",
-    response_model=ContentSummary,
-    summary="Approve content (IC role, self-approval blocked)",
-)
-async def approve_content(
-    content_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db_with_rls),
-    user: CurrentUser = Depends(get_current_user),
-    actor: Actor = Depends(get_actor),
-) -> ContentSummary:
-    """Approve content for distribution.
-
-    Self-approval blocked: approver must be different from creator.
-    """
-    _require_feature()
-    _require_ic_role(actor)
-
-    result = await db.execute(
-        select(WealthContent).where(WealthContent.id == content_id).with_for_update(),
-    )
-    content = result.scalar_one_or_none()
-    if content is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Content {content_id} not found",
-        )
-
-    if content.status not in ("draft", "review"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Content cannot be approved from status '{content.status}'",
-        )
-
-    if not content.content_md:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Content has not been generated yet (still processing or failed)",
-        )
-
-    # Self-approval prevention
-    if content.created_by == user.actor_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Self-approval is not allowed. A different IC member must approve.",
-        )
-
-    content.status = "approved"
-    content.approved_by = user.name
-    content.approved_at = datetime.now(UTC)
-    await db.commit()
-
-    return ContentSummary.model_validate(content)
-
-
 # ── Download ───────────────────────────────────────────────────────
 
 
 @router.get(
     "/{content_id}/download",
-    summary="Download content PDF (requires approved status)",
+    summary="Download content PDF (requires published status)",
 )
 async def download_content(
     content_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> Response:
-    """Download content as PDF. Requires status >= approved."""
+    """Download content as PDF. Requires status >= published."""
     _require_feature()
 
     result = await db.execute(
@@ -368,10 +309,10 @@ async def download_content(
             detail=f"Content {content_id} not found",
         )
 
-    if content.status not in ("approved", "published"):
+    if content.status not in ("published", "ready"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Content must be approved before download (current status: {content.status})",
+            detail=f"Content must be published before download (current status: {content.status})",
         )
 
     if not content.content_md:
@@ -468,7 +409,7 @@ async def _run_content_generation(
                 if content:
                     content.content_md = result.get("content_md")
                     if result.get("content_md"):
-                        content.status = "review"
+                        content.status = "published"
                     elif result.get("status") == "failed":
                         content.status = "failed"
                     content.content_data = result.get("content_data", content.content_data)
@@ -482,7 +423,7 @@ async def _run_content_generation(
             )
 
             if job_id:
-                final_status = "review" if result.get("content_md") else "failed"
+                final_status = "published" if result.get("content_md") else "failed"
                 await publish_terminal_event(job_id, "done", {"status": final_status, "content_id": content_id})
 
         except Exception:
