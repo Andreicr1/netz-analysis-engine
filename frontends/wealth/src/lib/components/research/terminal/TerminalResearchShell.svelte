@@ -5,10 +5,16 @@
     ┌──────────┬──────────────────────┬─────────────┐
     │          │                      │             │
     │  ASSET   │   CHART WORKSPACE    │  RISK KPIs  │
-    │  TREE    │     (TradingView)    │             │
-    │ (280px)  │       (1fr)          │   (320px)   │
-    │          │                      │             │
+    │ BROWSER  │   (lightweight-      │             │
+    │ (280px)  │     charts)          │   (320px)   │
+    │          │       (1fr)          │             │
     └──────────┴──────────────────────┴─────────────┘
+
+  The asset browser hits `/screener/catalog?in_universe=true` for
+  real fund data (~9k funds with NAV history). Selection produces a
+  `TreeNode` whose `instrumentId` is the global instruments_universe
+  UUID — the Research chart uses it to fetch the risk timeseries
+  (drawdown, GARCH vol, macro regime) straight from TimescaleDB.
 -->
 <script lang="ts">
 	import TerminalAssetTree, { type TreeNode } from "./TerminalAssetTree.svelte";
@@ -16,103 +22,24 @@
 	import TerminalHoldingsGrid from "./TerminalHoldingsGrid.svelte";
 	import TerminalRiskKpis from "./TerminalRiskKpis.svelte";
 
-	// ── Mock portfolio tree ───────────────────────────
-	const TREE: TreeNode[] = [
-		{
-			id: "root",
-			label: "Portfolio Root",
-			type: "root",
-			children: [
-				{
-					id: "equities",
-					label: "Equities",
-					type: "class",
-					children: [
-						{ id: "f-vfiax", label: "Vanguard 500 Index", ticker: "VFIAX", type: "fund" },
-						{ id: "f-fcntx", label: "Fidelity Contrafund", ticker: "FCNTX", type: "fund" },
-						{ id: "f-trbcx", label: "T. Rowe Blue Chip Growth", ticker: "TRBCX", type: "fund" },
-						{ id: "f-gqetx", label: "GMO Quality Fund", ticker: "GQETX", type: "fund" },
-						{ id: "f-vpccx", label: "Vanguard PRIMECAP Core", ticker: "VPCCX", type: "fund" },
-						{ id: "f-dodfx", label: "Dodge & Cox Intl Stock", ticker: "DODFX", type: "fund" },
-						{ id: "f-vemmx", label: "Vanguard Emerging Markets", ticker: "VEMMX", type: "fund" },
-					],
-				},
-				{
-					id: "fixed-income",
-					label: "Fixed Income",
-					type: "class",
-					children: [
-						{ id: "f-pimix", label: "PIMCO Income Fund", ticker: "PIMIX", type: "fund" },
-						{ id: "f-vbtlx", label: "Vanguard Total Bond Mkt", ticker: "VBTLX", type: "fund" },
-						{ id: "f-pttrx", label: "PIMCO Total Return", ticker: "PTTRX", type: "fund" },
-						{ id: "f-mwtrx", label: "MetWest Total Return Bd", ticker: "MWTRX", type: "fund" },
-						{ id: "f-vipsx", label: "Vanguard Inflation-Prot", ticker: "VIPSX", type: "fund" },
-					],
-				},
-				{
-					id: "alternatives",
-					label: "Alternatives",
-					type: "class",
-					children: [
-						{ id: "f-vgslx", label: "Vanguard Real Estate Idx", ticker: "VGSLX", type: "fund" },
-						{ id: "f-bcoix", label: "BlackRock Commodity", ticker: "BCOIX", type: "fund" },
-					],
-				},
-				{
-					id: "multi-asset",
-					label: "Multi-Asset",
-					type: "class",
-					children: [
-						{ id: "f-vwelx", label: "Vanguard Wellington", ticker: "VWELX", type: "fund" },
-						{ id: "f-prwcx", label: "T. Rowe Capital Apprec", ticker: "PRWCX", type: "fund" },
-						{ id: "f-fbalx", label: "Fidelity Balanced Fund", ticker: "FBALX", type: "fund" },
-					],
-				},
-			],
-		},
-	];
-
 	// ── Selection state ───────────────────────────────
-	let selectedId = $state<string | null>(null);
+	let selectedNode = $state<TreeNode | null>(null);
 	let activeTab = $state<"CHART" | "HOLDINGS">("CHART");
 
-	function findNode(nodes: TreeNode[], id: string): TreeNode | null {
-		for (const n of nodes) {
-			if (n.id === id) return n;
-			if (n.children) {
-				const found = findNode(n.children, id);
-				if (found) return found;
-			}
-		}
-		return null;
-	}
+	const selectedId = $derived(selectedNode?.id ?? null);
 
-	const selectedNode = $derived<TreeNode | null>(
-		selectedId ? findNode(TREE, selectedId) : null,
-	);
-
-	// Resolve the chart ticker — fund nodes have a ticker, class/root show "PORTFOLIO"
-	const chartTicker = $derived(
-		selectedNode?.ticker ?? "PORTFOLIO",
-	);
-
-	const chartLabel = $derived(
-		selectedNode?.label ?? "Select an asset from the tree",
-	);
-
-	// Real instruments_universe UUID for backend risk fetches. The demo
-	// TREE above has no real UUIDs, so this is always null today — the
-	// chart degrades gracefully and skips the risk overlay network call.
+	const chartTicker = $derived(selectedNode?.ticker ?? "—");
+	const chartLabel = $derived(selectedNode?.label ?? "Select a fund from the browser");
 	const chartInstrumentId = $derived(selectedNode?.instrumentId ?? null);
 
 	function handleSelect(node: TreeNode) {
-		selectedId = node.id;
+		selectedNode = node;
 	}
 </script>
 
 <div class="tr-root">
-	<div class="tr-zone tr-tree" aria-label="Asset tree">
-		<TerminalAssetTree tree={TREE} {selectedId} onSelect={handleSelect} />
+	<div class="tr-zone tr-tree" aria-label="Asset browser">
+		<TerminalAssetTree {selectedId} onSelect={handleSelect} />
 	</div>
 	<div class="tr-zone tr-chart" aria-label="Chart workspace">
 		<div class="tr-panel-header">

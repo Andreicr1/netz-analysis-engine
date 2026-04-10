@@ -48,6 +48,7 @@
 	// ── Backend catalog item shape (subset we consume) ──
 	interface UnifiedFundItem {
 		external_id: string;
+		instrument_id: string | null;
 		universe: string;
 		name: string;
 		ticker: string | null;
@@ -78,6 +79,7 @@
 	function toAsset(raw: UnifiedFundItem): ScreenerAsset {
 		return {
 			id: raw.external_id,
+			instrumentId: raw.instrument_id,
 			ticker: raw.ticker,
 			name: raw.name,
 			fundType: raw.fund_type,

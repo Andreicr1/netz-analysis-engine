@@ -7,6 +7,12 @@
 <script module lang="ts">
 	export interface ScreenerAsset {
 		id: string;                 // external_id from /screener/catalog
+		/**
+		 * Global instruments_universe UUID. Populated by the backend via
+		 * ticker/ISIN lookup when the fund has NAV history; null for
+		 * rows not yet imported into instruments_universe.
+		 */
+		instrumentId: string | null;
 		ticker: string | null;
 		name: string;
 		fundType: string;           // raw fund_type key

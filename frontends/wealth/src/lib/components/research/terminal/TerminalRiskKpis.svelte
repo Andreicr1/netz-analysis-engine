@@ -178,7 +178,7 @@
 				<span class="rk-node-label">
 					{selectedNode.ticker ?? selectedNode.label}
 				</span>
-				<span class="rk-node-type">{selectedNode.type}</span>
+				<span class="rk-node-type">{selectedNode.fundType}</span>
 			</div>
 			<div class="rk-header-right">
 				<div 
