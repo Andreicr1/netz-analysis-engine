@@ -21,8 +21,8 @@ class RegimePoint(BaseModel):
 
 
 class RiskTimeseriesOut(BaseModel):
-    ticker: str
     instrument_id: str
+    ticker: str | None  # resolved from instruments_universe for display only
     from_date: date
     to_date: date
     drawdown: list[dict[str, Any]]  # [{time, value}]

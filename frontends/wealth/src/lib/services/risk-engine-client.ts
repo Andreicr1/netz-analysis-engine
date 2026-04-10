@@ -1,12 +1,18 @@
 /**
  * Risk Engine Client — fetches pre-computed risk timeseries from backend.
  *
- * Consumes GET /api/v1/risk/timeseries/{ticker} and formats data
+ * Consumes GET /api/v1/risk/timeseries/{instrument_id} and formats data
  * into TradingView-compatible { time, value } arrays.
  *
  * All computation (drawdown, GARCH, regime) is done server-side
  * in TimescaleDB — zero math in the frontend.
+ *
+ * Primary key is instrument_id (UUID), consistent with the rest of the
+ * wealth domain. Ticker is only used for display labels, never for
+ * routing or lookups.
  */
+
+import { createClientApiClient } from "$lib/api/client";
 
 export interface TVPoint {
 	time: number; // UNIX seconds
@@ -18,8 +24,8 @@ export interface RegimeTVPoint extends TVPoint {
 }
 
 export interface RiskTimeseries {
-	ticker: string;
 	instrumentId: string;
+	ticker: string | null;
 	drawdown: TVPoint[];
 	volatilityGarch: TVPoint[];
 	regimeProb: RegimeTVPoint[];
@@ -35,8 +41,8 @@ interface RawRegimePoint extends RawPoint {
 }
 
 interface RawResponse {
-	ticker: string;
 	instrument_id: string;
+	ticker: string | null;
 	from_date: string;
 	to_date: string;
 	drawdown: RawPoint[];
@@ -62,44 +68,37 @@ function mapRegimePoints(raw: RawRegimePoint[]): RegimeTVPoint[] {
 }
 
 /**
- * Fetch risk timeseries for a ticker from the backend.
+ * Fetch risk timeseries for an instrument from the backend.
  *
- * @param ticker - Fund ticker (e.g. "VFIAX")
- * @param opts - Optional date range and auth token
+ * Uses the shared authenticated client so the request hits the real
+ * API base URL (VITE_API_BASE_URL) with the Clerk token attached.
+ *
+ * @param instrumentId - UUID of the instrument in instruments_universe
+ * @param getToken     - Clerk token provider from the page context
+ * @param opts         - Optional ISO date range
  * @returns Formatted series ready for TradingView injection
  */
 export async function fetchRiskTimeseries(
-	ticker: string,
+	instrumentId: string,
+	getToken: () => Promise<string>,
 	opts?: {
 		from?: string; // ISO date
 		to?: string;
-		token?: string;
 	},
 ): Promise<RiskTimeseries> {
+	const api = createClientApiClient(getToken);
+
 	const params = new URLSearchParams();
 	if (opts?.from) params.set("from", opts.from);
 	if (opts?.to) params.set("to", opts.to);
-
 	const qs = params.toString();
-	const url = `/api/v1/risk/timeseries/${encodeURIComponent(ticker)}${qs ? `?${qs}` : ""}`;
 
-	const headers: Record<string, string> = {
-		Accept: "application/json",
-	};
-	if (opts?.token) {
-		headers.Authorization = `Bearer ${opts.token}`;
-	}
-
-	const resp = await fetch(url, { headers });
-	if (!resp.ok) {
-		throw new Error(`Risk timeseries fetch failed: ${resp.status} ${resp.statusText}`);
-	}
-
-	const data: RawResponse = await resp.json();
+	const path = `/risk/timeseries/${encodeURIComponent(instrumentId)}${qs ? `?${qs}` : ""}`;
+	const data = await api.get<RawResponse>(path);
 
 	return {
-		ticker: data.ticker,
 		instrumentId: data.instrument_id,
+		ticker: data.ticker,
 		drawdown: mapPoints(data.drawdown),
 		volatilityGarch: mapPoints(data.volatility_garch),
 		regimeProb: mapRegimePoints(data.regime_prob),

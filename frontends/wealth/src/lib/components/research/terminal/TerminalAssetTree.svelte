@@ -8,6 +8,12 @@
 		id: string;
 		label: string;
 		ticker?: string;
+		/**
+		 * Real instruments_universe UUID. `null` marks mock/demo nodes
+		 * that are not wired to real backend data — chart overlays are
+		 * skipped for these.
+		 */
+		instrumentId?: string | null;
 		type: "root" | "class" | "fund";
 		children?: TreeNode[];
 	}

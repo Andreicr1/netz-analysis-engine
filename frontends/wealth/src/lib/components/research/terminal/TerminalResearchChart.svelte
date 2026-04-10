@@ -6,11 +6,13 @@
   When not available: elegant fallback with risk data rendered as
   simple SVG sparklines to prove the data pipeline works.
 
-  Risk data source: GET /api/v1/risk/timeseries/{ticker}
+  Risk data source: GET /api/v1/risk/timeseries/{instrument_id}
+  Primary key is instrument_id (UUID) — ticker is display-only.
+  Risk fetch is skipped when instrumentId is null (mock/demo data).
   All computation is server-side (TimescaleDB hypertables).
 -->
 <script lang="ts">
-	import { onMount } from "svelte";
+	import { getContext, onMount } from "svelte";
 	import { createNetzDatafeed, type NetzDatafeed } from "$lib/services/tv-datafeed";
 	import {
 		fetchRiskTimeseries,
@@ -22,9 +24,12 @@
 	interface Props {
 		ticker: string;
 		tickerLabel: string;
+		instrumentId?: string | null;
 	}
 
-	let { ticker, tickerLabel }: Props = $props();
+	let { ticker, tickerLabel, instrumentId = null }: Props = $props();
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let containerEl: HTMLDivElement | undefined = $state();
 	let widgetInstance: unknown = null;
@@ -70,7 +75,7 @@
 		if (libraryAvailable && containerEl) {
 			initWidget();
 		} else if (libraryChecked && !libraryAvailable) {
-			loadFallbackRisk(ticker);
+			loadFallbackRisk();
 		}
 	});
 
@@ -133,11 +138,11 @@
 				},
 			});
 
-			// Once widget is ready, inject risk panes
+			// Once widget is ready, inject risk panes (only when we have a real UUID).
 			const w = widgetInstance as { onChartReady?: (cb: () => void) => void };
-			if (w.onChartReady) {
+			if (w.onChartReady && instrumentId) {
 				w.onChartReady(() => {
-					injectRiskPanes(ticker);
+					injectRiskPanes();
 				});
 			}
 		} catch (err) {
@@ -147,8 +152,8 @@
 
 	// ── Risk Pane Injection (TVCL Chart API) ────────────────────
 
-	async function injectRiskPanes(tkr: string) {
-		if (!widgetInstance) return;
+	async function injectRiskPanes() {
+		if (!widgetInstance || !instrumentId) return;
 
 		const w = widgetInstance as {
 			activeChart?: () => {
@@ -167,7 +172,7 @@
 
 		let riskData: RiskTimeseries;
 		try {
-			riskData = await fetchRiskTimeseries(tkr);
+			riskData = await fetchRiskTimeseries(instrumentId, getToken);
 		} catch (err) {
 			console.warn("[TerminalResearchChart] Failed to fetch risk timeseries:", err);
 			return;
@@ -302,15 +307,17 @@
 
 	// ── Fallback Risk Data (when TVCL not available) ────────────
 
-	async function loadFallbackRisk(tkr: string) {
-		if (tkr === "PORTFOLIO") {
+	async function loadFallbackRisk() {
+		if (!instrumentId) {
+			// Mock/demo node without a real UUID — nothing to fetch.
 			fallbackRisk = null;
+			fallbackError = null;
 			return;
 		}
 		fallbackLoading = true;
 		fallbackError = null;
 		try {
-			fallbackRisk = await fetchRiskTimeseries(tkr);
+			fallbackRisk = await fetchRiskTimeseries(instrumentId, getToken);
 		} catch {
 			// Expected in dev without backend — show placeholder
 			fallbackRisk = null;

@@ -5,10 +5,15 @@ TradingView chart overlay injection. All computation happens in
 the backend (DB-first); the frontend receives clean [{time, value}]
 arrays ready for charting.
 
-Global tables (no RLS): nav_timeseries, fund_risk_metrics, macro_regime_history.
-Instrument resolution: ticker → instruments_universe.
+Primary key is ``instrument_id`` (UUID), consistent with the rest of
+the wealth domain. Ticker is returned on the payload for display only,
+resolved via ``instruments_universe``.
+
+Global tables (no RLS): nav_timeseries, fund_risk_metrics,
+macro_regime_history.
 """
 
+import uuid
 from datetime import date, timedelta
 
 import structlog
@@ -27,18 +32,19 @@ router = APIRouter(prefix="/risk", tags=["risk"])
 
 
 @router.get(
-    "/timeseries/{ticker}",
+    "/timeseries/{instrument_id}",
     response_model=RiskTimeseriesOut,
     summary="Risk timeseries for TradingView overlay",
     description=(
         "Returns drawdown, GARCH volatility, and macro regime probability "
-        "series for a given ticker, indexed by date. All series are pre-computed "
-        "from TimescaleDB hypertables — zero in-request computation."
+        "series for a given instrument_id, indexed by date. All series are "
+        "pre-computed from TimescaleDB hypertables — zero in-request "
+        "computation."
     ),
 )
 @route_cache(ttl=300, key_prefix="risk:timeseries")
 async def get_risk_timeseries(
-    ticker: str,
+    instrument_id: uuid.UUID,
     from_date: date | None = Query(None, alias="from"),
     to_date: date | None = Query(None, alias="to"),
     db: AsyncSession = Depends(get_db_with_rls),
@@ -50,22 +56,15 @@ async def get_risk_timeseries(
     if to_date is None:
         to_date = today
 
-    # ── 1. Resolve ticker → instrument_id ──────────────────────
-    resolve_stmt = text("""
-        SELECT instrument_id
+    # ── 1. Resolve ticker for display (optional) ──────────────
+    ticker_stmt = text("""
+        SELECT ticker
         FROM instruments_universe
-        WHERE UPPER(ticker) = UPPER(:ticker)
-          AND is_active = true
+        WHERE instrument_id = :iid
         LIMIT 1
     """)
-    result = await db.execute(resolve_stmt, {"ticker": ticker.strip()})
-    row = result.one_or_none()
-    if not row:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Instrument not found for ticker: {ticker}",
-        )
-    instrument_id = row.instrument_id
+    ticker_row = (await db.execute(ticker_stmt, {"iid": instrument_id})).one_or_none()
+    ticker_label = ticker_row.ticker if ticker_row else None
 
     # ── 2. Drawdown series from nav_timeseries ─────────────────
     # Running max NAV → drawdown = (nav / running_max) - 1
@@ -85,9 +84,18 @@ async def get_risk_timeseries(
         drawdown_stmt,
         {"iid": instrument_id, "from_date": from_date, "to_date": to_date},
     )
+    drawdown_rows = dd_result.all()
+
+    if not drawdown_rows and ticker_row is None:
+        # Neither metadata nor NAV — the instrument simply does not exist.
+        raise HTTPException(
+            status_code=404,
+            detail=f"Instrument not found: {instrument_id}",
+        )
+
     drawdown_series = [
         {"time": r.dt.isoformat(), "value": round(float(r.drawdown) * 100, 4)}
-        for r in dd_result.all()
+        for r in drawdown_rows
     ]
 
     # ── 3. GARCH volatility from fund_risk_metrics ─────────────
@@ -132,8 +140,8 @@ async def get_risk_timeseries(
     ]
 
     return RiskTimeseriesOut(
-        ticker=ticker.upper(),
         instrument_id=str(instrument_id),
+        ticker=ticker_label,
         from_date=from_date,
         to_date=to_date,
         drawdown=drawdown_series,

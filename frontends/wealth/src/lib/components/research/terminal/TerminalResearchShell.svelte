@@ -100,6 +100,11 @@
 		selectedNode?.label ?? "Select an asset from the tree",
 	);
 
+	// Real instruments_universe UUID for backend risk fetches. The demo
+	// TREE above has no real UUIDs, so this is always null today — the
+	// chart degrades gracefully and skips the risk overlay network call.
+	const chartInstrumentId = $derived(selectedNode?.instrumentId ?? null);
+
 	function handleSelect(node: TreeNode) {
 		selectedId = node.id;
 	}
@@ -126,7 +131,11 @@
 		</div>
 		<div class="tr-panel-content">
 			{#if activeTab === 'CHART'}
-				<TerminalResearchChart ticker={chartTicker} tickerLabel={chartLabel} />
+				<TerminalResearchChart
+					ticker={chartTicker}
+					tickerLabel={chartLabel}
+					instrumentId={chartInstrumentId}
+				/>
 			{:else}
 				<TerminalHoldingsGrid ticker={chartTicker} />
 			{/if}

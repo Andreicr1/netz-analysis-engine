@@ -1171,7 +1171,7 @@
   },
   {
     "method": "GET",
-    "path": "/api/v1/risk/timeseries/{ticker}",
+    "path": "/api/v1/risk/timeseries/{instrument_id}",
     "name": "get_risk_timeseries"
   },
   {
