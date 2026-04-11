@@ -3,6 +3,7 @@
   Ultra-dense KPI matrix driven by `/screener/catalog` rows.
 -->
 <script lang="ts">
+	import { formatNumber } from "@investintell/ui";
 	import type { ScreenerAsset } from "./TerminalDataGrid.svelte";
 
 	interface Props {
@@ -13,20 +14,20 @@
 
 	function fmtPct(v: number | null, d: number = 2): string {
 		if (v == null) return "—";
-		return v.toFixed(d) + "%";
+		return formatNumber(v, d) + "%";
 	}
 
 	function fmtNum(v: number | null, d: number = 2): string {
 		if (v == null) return "—";
-		return v.toFixed(d);
+		return formatNumber(v, d);
 	}
 
 	function fmtAum(v: number | null): string {
 		if (v == null || v <= 0) return "—";
-		if (v >= 1e12) return "$" + (v / 1e12).toFixed(2) + "T";
-		if (v >= 1e9) return "$" + (v / 1e9).toFixed(2) + "B";
-		if (v >= 1e6) return "$" + (v / 1e6).toFixed(0) + "M";
-		return "$" + v.toFixed(0);
+		if (v >= 1e12) return "$" + formatNumber(v / 1e12, 2) + "T";
+		if (v >= 1e9) return "$" + formatNumber(v / 1e9, 2) + "B";
+		if (v >= 1e6) return "$" + formatNumber(v / 1e6, 0) + "M";
+		return "$" + formatNumber(v, 0);
 	}
 
 	function retClass(v: number | null): string {
