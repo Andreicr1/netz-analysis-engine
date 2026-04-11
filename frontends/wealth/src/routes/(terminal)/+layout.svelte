@@ -1,28 +1,23 @@
 <!--
-  (terminal) — full-screen Bloomberg-style layout group.
+  (terminal) — Bloomberg-style layout group.
 
-  Phase 2 Terminal Grid Shell. The Live Workbench and any future
-  execution surfaces that must escape the SaaS chrome live under
-  this route group. No topbar, no sidebar, no drawer.
+  The chrome of every terminal surface is owned by TerminalShell
+  (see lib/components/terminal/shell/TerminalShell.svelte). This
+  layout file is now a minimal wrapper: it sets up the terminal-
+  scoped MarketDataStore context consumed by live portfolio pages,
+  then renders the shell with the route children as its snippet.
 
   Inheritance chain:
-    src/routes/+layout.server.ts   — hydrates ``actor`` + ``token``
-    src/routes/+layout.svelte      — root layout (Clerk, fonts, theme,
-                                     sets ``netz:getToken`` context)
+    src/routes/+layout.server.ts  — hydrates actor + token
+    src/routes/+layout.svelte     — root layout (Clerk, fonts, theme,
+                                    sets netz:getToken context)
     src/routes/(terminal)/+layout.svelte — THIS FILE
-    src/routes/(terminal)/portfolio/live/+page.* — the terminal
-
-  The root +layout.svelte is kept in the chain so Clerk context,
-  fonts, theme tokens, and the base CSS reset still apply. Only the
-  (app)/+layout.svelte with its sidebar/topbar/drawer stack is
-  skipped.
+    src/routes/(terminal)/**/+page.svelte — terminal pages
 
   MarketDataStore isolation:
-    The (app) layout creates its own MarketDataStore under the key
-    "netz:marketDataStore". The terminal creates a SEPARATE instance
-    under "netz:terminal:marketDataStore" so the two do not cross-
-    contaminate subscriptions or WebSocket connections. Terminal pages
-    use getContext(TERMINAL_MARKET_DATA_KEY) to access theirs.
+    The terminal creates a separate MarketDataStore instance under
+    TERMINAL_MARKET_DATA_KEY so terminal pages do not cross-
+    contaminate the (app) dashboard's store.
 -->
 <script lang="ts">
 	import type { Snippet } from "svelte";
@@ -32,58 +27,19 @@
 		type MarketDataStore,
 	} from "$lib/stores/market-data.svelte";
 	import { TERMINAL_MARKET_DATA_KEY } from "$lib/components/portfolio/live/workbench-state";
-	import TerminalGlobalNav from "$lib/components/layout/TerminalGlobalNav.svelte";
+	import TerminalShell from "$lib/components/terminal/shell/TerminalShell.svelte";
 
 	let { children }: { children: Snippet } = $props();
 
 	// Consume the Clerk token provider set by the root layout.
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
-	// Instantiate a terminal-scoped MarketDataStore. This is a
-	// separate WS connection from the (app) dashboard's store —
-	// the terminal manages its own subscriptions and lifecycle.
+	// Terminal-scoped MarketDataStore — separate WS connection from
+	// the (app) dashboard's store.
 	const marketStore = createMarketDataStore({ getToken });
 	setContext<MarketDataStore>(TERMINAL_MARKET_DATA_KEY, marketStore);
 </script>
 
-<div class="terminal-root">
-	<TerminalGlobalNav />
-	<div class="terminal-content">
-		{@render children()}
-	</div>
-</div>
-
-<style>
-	.terminal-root {
-		/* Full-viewport lock — zero chrome inheritance.
-		   100dvh accounts for mobile/OS chrome bars that
-		   eat into 100vh on some platforms (Windows taskbar
-		   at 125% zoom, iOS Safari bottom bar). */
-		position: fixed;
-		inset: 0;
-		width: 100vw;
-		height: 100dvh;
-		overflow: hidden;
-		background: #05080f;
-		color: #ffffff;
-		font-family: "Urbanist", system-ui, sans-serif;
-		/* Isolate paint so transforms/filters inside the terminal
-		   do not leak into the root stacking context. */
-		isolation: isolate;
-		z-index: 1;
-		/* Flex column: GlobalNav (32px fixed) + content (fills rest) */
-		display: flex;
-		flex-direction: column;
-	}
-
-	.terminal-content {
-		flex: 1;
-		min-height: 0;
-		overflow: hidden;
-	}
-
-	/* Kill body scroll so nothing pushes past the terminal box. */
-	:global(body:has(.terminal-root)) {
-		overflow: hidden;
-	}
-</style>
+<TerminalShell>
+	{@render children()}
+</TerminalShell>
