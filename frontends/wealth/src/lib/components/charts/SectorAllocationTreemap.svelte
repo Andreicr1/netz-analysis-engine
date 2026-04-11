@@ -5,6 +5,7 @@
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
+	import { formatNumber } from "@investintell/ui";
 
 	interface Props {
 		sectorWeights: Record<string, number>;
@@ -57,7 +58,7 @@
 			toolbox: { show: false },
 			tooltip: {
 				formatter(info: any) {
-					const pct = info.value?.toFixed(2) ?? "0";
+					const pct = info.value != null ? formatNumber(info.value, 2) : "0";
 					return `<span style="font-weight:600">${info.name}</span><br/>${pct}%`;
 				},
 				backgroundColor: "var(--ii-bg-elevated, #1e1e22)",
@@ -76,7 +77,7 @@
 					label: {
 						show: true,
 						formatter(params: any) {
-							return `${params.name}\n${params.value.toFixed(1)}%`;
+							return `${params.name}\n${formatNumber(params.value, 1)}%`;
 						},
 						fontSize: 13,
 						fontWeight: 500,

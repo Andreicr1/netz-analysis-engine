@@ -5,6 +5,7 @@
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
+	import { formatNumber, formatDate } from "@investintell/ui";
 
 	interface HistoryEntry {
 		report_date: string;
@@ -70,7 +71,7 @@
 				showSymbol: false,
 				emphasis: { focus: "series" as const },
 				itemStyle: { color },
-				data: history.map((h) => +((h.sector_weights[sector] ?? 0) * 100).toFixed(2)),
+				data: history.map((h) => Math.round((h.sector_weights[sector] ?? 0) * 10000) / 100),
 			};
 		});
 
@@ -94,7 +95,7 @@
 					);
 					for (const p of sorted) {
 						if (p.value > 0) {
-							res += `${p.marker} ${p.seriesName}: <b>${p.value.toFixed(1)}%</b><br/>`;
+							res += `${p.marker} ${p.seriesName}: <b>${formatNumber(p.value, 1)}%</b><br/>`;
 						}
 					}
 					return res;
@@ -127,7 +128,8 @@
 					formatter(val: string) {
 						const d = new Date(val);
 						if (isNaN(d.getTime())) return val;
-						return `${d.toLocaleString("en", { month: "short" })} ${d.getFullYear()}`;
+						const [month, , year] = formatDate(d, "medium", "en").split(" ");
+						return `${month} ${year}`;
 					},
 					rotate: 0,
 				},
