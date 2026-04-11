@@ -98,6 +98,32 @@ export {
 export type { BaseChartProps } from "./charts/index.js";
 export { default as SparklineSVG } from "./components/ui/charts/SparklineSVG.svelte";
 
+// ── Terminal primitives ──────────────────────────────────────
+// Motion grammar + chart factory. Importing these from any file
+// outside (terminal)/ is discouraged — see eslint restriction.
+export {
+	choreo,
+	terminalDuration,
+	terminalEasing,
+	terminalBezier,
+	animationDelayForSlot,
+	delayFor,
+	durationFor,
+	prefersReducedMotion,
+	svelteTransitionFor,
+	createTerminalChartOptions,
+	readTerminalTokens,
+} from "./charts/index.js";
+export type {
+	ChoreoSlot,
+	TerminalDurationName,
+	MotionSlot,
+	MotionDuration,
+	SvelteTransitionOptions,
+	TerminalChartOptionsInput,
+	TerminalChartTokens,
+} from "./charts/index.js";
+
 // ── Utilities ────────────────────────────────────────────────
 export { cn } from "./utils/cn.js";
 export type { NavItem, BrandingConfig, ContextNav } from "./utils/types.js";

@@ -28,6 +28,8 @@
 </script>
 
 <script lang="ts">
+	import { formatNumber } from "@investintell/ui";
+
 	interface Props {
 		filters: FilterState;
 		onFiltersChange: (filters: FilterState) => void;
@@ -129,10 +131,10 @@
 	}
 	function fmtAum(n: number): string {
 		if (n <= 0) return "any";
-		if (n >= 1e12) return "$" + (n / 1e12).toFixed(1) + "T";
-		if (n >= 1e9) return "$" + (n / 1e9).toFixed(1) + "B";
-		if (n >= 1e6) return "$" + (n / 1e6).toFixed(0) + "M";
-		return "$" + n.toFixed(0);
+		if (n >= 1e12) return "$" + formatNumber(n / 1e12, 1) + "T";
+		if (n >= 1e9) return "$" + formatNumber(n / 1e9, 1) + "B";
+		if (n >= 1e6) return "$" + formatNumber(n / 1e6, 0) + "M";
+		return "$" + formatNumber(n, 0);
 	}
 
 	const aumLogValue = $derived(aumToLog(filters.aumMin));
@@ -265,7 +267,7 @@
 						<div class="sf-range-header">
 							<span>Min 1Y Return (%)</span>
 							<span class="sf-range-value">
-								{filters.returnMin <= -999 ? "any" : filters.returnMin.toFixed(0) + "%"}
+								{filters.returnMin <= -999 ? "any" : formatNumber(filters.returnMin, 0) + "%"}
 							</span>
 						</div>
 						<input
@@ -282,7 +284,7 @@
 					<div class="sf-range-group">
 						<div class="sf-range-header">
 							<span>Max Expense Ratio (%)</span>
-							<span class="sf-range-value">{filters.expenseMax.toFixed(2)}%</span>
+							<span class="sf-range-value">{formatNumber(filters.expenseMax, 2)}%</span>
 						</div>
 						<input
 							type="range"

@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
   import { ChartContainer } from "@investintell/ui/charts";
+  import { formatNumber } from "@investintell/ui";
 
   // ── Design System hex (Canvas) ──
   const C = {
@@ -99,9 +100,9 @@
   ];
 
   function formatB(val: number): string {
-    if (val >= 1e12) return `$${(val / 1e12).toFixed(1)}T`;
-    if (val >= 1e9) return `$${(val / 1e9).toFixed(1)}B`;
-    return `$${(val / 1e6).toFixed(0)}M`;
+    if (val >= 1e12) return `$${formatNumber(val / 1e12, 1, "en-US", { useGrouping: false })}T`;
+    if (val >= 1e9) return `$${formatNumber(val / 1e9, 1, "en-US", { useGrouping: false })}B`;
+    return `$${formatNumber(val / 1e6, 0, "en-US", { useGrouping: false })}M`;
   }
 
   const CATEGORY_COLORS = [C.brand, C.green, "#a78bfa"];

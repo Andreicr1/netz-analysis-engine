@@ -11,7 +11,7 @@
   the URL-sync effect stays in one place.
 -->
 <script lang="ts">
-  import { formatAUM } from "@investintell/ui";
+  import { formatAUM, formatNumber } from "@investintell/ui";
   import type { ManagerCatalogItem } from "$lib/types/catalog";
   import { FUND_TYPE_BADGE_MAP } from "$lib/types/catalog";
   import {
@@ -438,7 +438,7 @@
   {#if total > pageSize}
     <div class="ct2-pagination">
       <span class="ct2-pagination-info">
-        {((page - 1) * pageSize + 1).toLocaleString()}&ndash;{Math.min(page * pageSize, total).toLocaleString()} of {total.toLocaleString()}
+        {formatNumber((page - 1) * pageSize + 1, 0)}&ndash;{formatNumber(Math.min(page * pageSize, total), 0)} of {formatNumber(total, 0)}
       </span>
       <div class="ct2-pagination-buttons">
         <button class="ct2-page-btn" disabled={page <= 1} onclick={() => goPage(page - 1)}>

@@ -6,6 +6,7 @@
   Displays execution result (success/error) inline after fire.
 -->
 <script lang="ts">
+	import { formatNumber } from "@investintell/ui";
 	import { onMount } from "svelte";
 	import type { OverlapResultRead } from "./LiveWorkbenchShell.svelte";
 
@@ -60,7 +61,7 @@
 	}
 
 	function fmtPct(n: number): string {
-		return (n * 100).toFixed(2) + "%";
+		return formatNumber(n * 100, 2) + "%";
 	}
 </script>
 
@@ -114,7 +115,7 @@
 					<span class="tcd-warning-title">[ ! PORTFOLIO OVERLAP DETECTED ]</span>
 					{#each overlapResult.breaches as breach}
 						<span class="tcd-warning-text">
-							&gt; {(breach.total_exposure_pct * 100).toFixed(1)}% {breach.issuer_name ?? 'Unknown'} ({breach.cusip})
+							&gt; {formatNumber(breach.total_exposure_pct * 100, 1)}% {breach.issuer_name ?? 'Unknown'} ({breach.cusip})
 						</span>
 					{/each}
 				</div>

@@ -6,6 +6,7 @@
 	import { onMount } from "svelte";
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { echarts } from "@investintell/ui/charts/echarts-setup";
+	import { formatNumber } from "@investintell/ui";
 	import type { InstrumentCorrelation } from "$lib/types/analytics";
 
 	interface Props {
@@ -52,7 +53,7 @@
 		for (let yi = 0; yi < n; yi++) {
 			for (let xi = 0; xi < n; xi++) {
 				const v = matrix[yi]?.[xi] ?? 0;
-				data.push([xi, yi, Number(v.toFixed(3))]);
+				data.push([xi, yi, Math.round(v * 1000) / 1000]);
 			}
 		}
 		return data;
@@ -70,7 +71,7 @@
 					const labelA = labels[x] ?? String(x);
 					const labelB = labels[y] ?? String(y);
 					const isContagion = contagionSet.has(`${labelA}|${labelB}`);
-					return `${labelA} / ${labelB}: <strong>${v.toFixed(3)}</strong>${isContagion ? ' <span style="color:#ef4444">contagion</span>' : ""}`;
+					return `${labelA} / ${labelB}: <strong>${formatNumber(v, 3)}</strong>${isContagion ? ' <span style="color:#ef4444">contagion</span>' : ""}`;
 				},
 			},
 			grid: {

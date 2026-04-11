@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { formatNumber } from "@investintell/ui";
     interface ScoreComponent {
         name: string;
         weight: number;
@@ -34,8 +35,8 @@
             {#each scoreData.components as comp}
                 <tr>
                     <td class="text-left comp-name">{comp.name}</td>
-                    <td class="text-right comp-weight">{(comp.weight * 100).toFixed(0)}%</td>
-                    <td class="text-right comp-score">{comp.score.toFixed(1)}</td>
+                    <td class="text-right comp-weight">{formatNumber(comp.weight * 100, 0)}%</td>
+                    <td class="text-right comp-score">{formatNumber(comp.score, 1)}</td>
                 </tr>
             {/each}
         </tbody>

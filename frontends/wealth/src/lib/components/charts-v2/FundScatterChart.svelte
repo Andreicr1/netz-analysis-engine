@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
   import { ChartContainer } from "@investintell/ui/charts";
+  import { formatNumber, formatPercent } from "@investintell/ui";
 
   // ── Design System hex (Canvas doesn't read CSS vars) ──
   const C = {
@@ -68,9 +69,9 @@
   }
 
   function formatB(val: number): string {
-    if (val >= 1e12) return `$${(val / 1e12).toFixed(1)}T`;
-    if (val >= 1e9) return `$${(val / 1e9).toFixed(1)}B`;
-    return `$${(val / 1e6).toFixed(0)}M`;
+    if (val >= 1e12) return `$${formatNumber(val / 1e12, 1, "en-US", { useGrouping: false })}T`;
+    if (val >= 1e9) return `$${formatNumber(val / 1e9, 1, "en-US", { useGrouping: false })}B`;
+    return `$${formatNumber(val / 1e6, 0, "en-US", { useGrouping: false })}M`;
   }
 
   // ── Build series per strategy (for legend) ──
@@ -118,10 +119,10 @@
         return [
           `<b style="color:#fff">${p.name}</b>`,
           `<span style="color:${STRATEGY_COLORS[p.seriesName] ?? C.muted}">\u25CF</span> ${p.seriesName}`,
-          `Volatility: <b>${(vol * 100).toFixed(1)}%</b>`,
-          `Return: <b style="color:${ret >= 0 ? C.green : C.red}">${(ret * 100).toFixed(1)}%</b>`,
+          `Volatility: <b>${formatPercent(vol, 1)}</b>`,
+          `Return: <b style="color:${ret >= 0 ? C.green : C.red}">${formatPercent(ret, 1)}</b>`,
           `AUM: <b>${formatB(aum)}</b>`,
-          `Sharpe: <b>${sharpe.toFixed(2)}</b>`,
+          `Sharpe: <b>${formatNumber(sharpe, 2)}</b>`,
         ].join("<br/>");
       },
     },
@@ -136,7 +137,7 @@
         color: C.muted,
         fontFamily: "Urbanist",
         fontSize: 10,
-        formatter: (v: number) => `${(v * 100).toFixed(0)}%`,
+        formatter: (v: number) => formatPercent(v, 0),
       },
       axisLine: { lineStyle: { color: C.grid } },
       splitLine: { lineStyle: { color: C.grid, type: "dashed" as const, opacity: 0.4 } },
@@ -151,7 +152,7 @@
         color: C.muted,
         fontFamily: "Urbanist",
         fontSize: 10,
-        formatter: (v: number) => `${(v * 100).toFixed(0)}%`,
+        formatter: (v: number) => formatPercent(v, 0),
       },
       axisLine: { lineStyle: { color: C.grid } },
       splitLine: { lineStyle: { color: C.grid, type: "dashed" as const, opacity: 0.4 } },

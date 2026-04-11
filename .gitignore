@@ -67,7 +67,10 @@ pgdata/
 .data/
 backend/.data/
 Deals/
-scripts/
+# Ignore scripts/ contents but keep the directory traversable so
+# explicit whitelists below can re-include individual files.
+scripts/*
+!scripts/check-terminal-tokens-sync.mjs
 !backend/scripts/
 dev.ps1
 backend/.sec_seed_checkpoint.json

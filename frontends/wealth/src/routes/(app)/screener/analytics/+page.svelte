@@ -5,7 +5,7 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { page as pageState } from "$app/state";
-	import { EmptyState } from "@investintell/ui";
+	import { EmptyState, formatNumber } from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
 	import Loader2 from "lucide-svelte/icons/loader-2";
 	import { Search } from "lucide-svelte";
@@ -234,7 +234,7 @@
 			</div>
 		</div>
 
-		<span class="ea-count">{totalFunds.toLocaleString()} funds</span>
+		<span class="ea-count">{formatNumber(totalFunds, 0)} funds</span>
 	</div>
 
 	<!-- ── Toolbar row 2: Strategy pills ── -->

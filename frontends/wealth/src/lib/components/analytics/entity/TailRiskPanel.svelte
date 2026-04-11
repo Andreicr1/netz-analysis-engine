@@ -48,7 +48,7 @@
 				type: "value",
 				axisLabel: {
 					fontSize: 10,
-					formatter: (v: number) => (v * 100).toFixed(2) + "%",
+					formatter: (v: number) => formatNumber(v * 100, 2) + "%",
 				},
 			},
 			yAxis: {
@@ -62,7 +62,7 @@
 				formatter: (params: { name: string; data: number; color: string }[]) => {
 					if (!params.length) return "";
 					const p = params[0]!;
-					return `<div style="font-size:12px"><b>${p.name}</b><br/>${(p.data * 100).toFixed(4)}%</div>`;
+					return `<div style="font-size:12px"><b>${p.name}</b><br/>${formatNumber(p.data * 100, 4)}%</div>`;
 				},
 			},
 			series: [

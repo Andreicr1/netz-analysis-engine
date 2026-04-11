@@ -20,6 +20,7 @@
 	import Loader2 from "lucide-svelte/icons/loader-2";
 	import Package from "lucide-svelte/icons/package";
 	import X from "lucide-svelte/icons/x";
+	import { formatNumber } from "@investintell/ui";
 	import {
 		bundleDownloadUrl,
 		type BundleBuilder,
@@ -101,7 +102,7 @@
 					{#if bundle.state.sizeBytes}
 						<p class="dialog__sub">
 							Bundle size:
-							{(bundle.state.sizeBytes / 1024 / 1024).toFixed(2)} MB
+							{formatNumber(bundle.state.sizeBytes / 1024 / 1024, 2)} MB
 						</p>
 					{/if}
 				{:else if status === "completed"}

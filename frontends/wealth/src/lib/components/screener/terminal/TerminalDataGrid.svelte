@@ -34,6 +34,7 @@
 </script>
 
 <script lang="ts">
+	import { formatNumber } from "@investintell/ui";
 	import { sandboxBasket } from "$lib/stores/sandbox.svelte";
 
 	interface Props {
@@ -58,20 +59,20 @@
 
 	function fmtPct(v: number | null, decimals: number = 2): string {
 		if (v == null) return "—";
-		return v.toFixed(decimals) + "%";
+		return formatNumber(v, decimals) + "%";
 	}
 
 	function fmtNum(v: number | null, decimals: number = 2): string {
 		if (v == null) return "—";
-		return v.toFixed(decimals);
+		return formatNumber(v, decimals);
 	}
 
 	function fmtAum(v: number | null): string {
 		if (v == null || v <= 0) return "—";
-		if (v >= 1e12) return (v / 1e12).toFixed(2) + "T";
-		if (v >= 1e9) return (v / 1e9).toFixed(1) + "B";
-		if (v >= 1e6) return (v / 1e6).toFixed(0) + "M";
-		return v.toFixed(0);
+		if (v >= 1e12) return formatNumber(v / 1e12, 2) + "T";
+		if (v >= 1e9) return formatNumber(v / 1e9, 1) + "B";
+		if (v >= 1e6) return formatNumber(v / 1e6, 0) + "M";
+		return formatNumber(v, 0);
 	}
 
 	function retClass(v: number | null): string {
@@ -155,7 +156,7 @@
 			<span>Loading&hellip;</span>
 		{:else}
 			<span>
-				Showing {assets.length} of {total.toLocaleString()} instruments
+				Showing {assets.length} of {formatNumber(total, 0)} instruments
 			</span>
 		{/if}
 	</div>

@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
     import GenericEChart from './GenericEChart.svelte';
+    import { formatNumber } from "@investintell/ui";
 
     let { percentiles = null, strategy = "Peer Group", height = 300 } = $props();
 
@@ -71,7 +72,7 @@
                         position: 'top',
                         formatter: (p: any) => {
                             const v = Number(p.value?.[1]);
-                            return Number.isFinite(v) ? `${v.toFixed(0)}th` : "";
+                            return Number.isFinite(v) ? `${formatNumber(v, 0)}th` : "";
                         },
                         fontSize: 12,
                         fontWeight: 'bold',

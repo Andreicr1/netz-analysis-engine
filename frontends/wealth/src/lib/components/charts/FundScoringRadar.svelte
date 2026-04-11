@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
     import GenericEChart from './GenericEChart.svelte';
+    import { formatNumber } from "@investintell/ui";
 
     let { scoringMetrics = null, height = 350 } = $props();
 
@@ -21,7 +22,7 @@
 
         const values = entries.map(([, v]) => Number(v));
         const score = scoringMetrics.manager_score;
-        const overall = score != null ? Number(score).toFixed(1) : '—';
+        const overall = score != null ? formatNumber(Number(score), 1) : '—';
 
         return {
             title: {

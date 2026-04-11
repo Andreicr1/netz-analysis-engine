@@ -248,7 +248,7 @@
 				name: benchmarkName.trim(),
 				components: components.map((c) => ({
 					block_id: c.block_id,
-					weight: Number(c.weight.toFixed(4)),
+					weight: Math.round(c.weight * 10000) / 10000,
 				})),
 			});
 			currentBenchmark = result;
@@ -314,7 +314,7 @@
 											min="0.01"
 											max="1"
 											step="0.01"
-											value={components[i]!.weight.toFixed(4)}
+											value={formatNumber(components[i]!.weight, 4)}
 											oninput={(e) => {
 												const val = parseFloat((e.target as HTMLInputElement).value);
 												if (!isNaN(val) && val > 0 && val <= 1) {

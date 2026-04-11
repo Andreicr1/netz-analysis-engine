@@ -5,7 +5,7 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
 	import { getContext, onDestroy } from "svelte";
-	import { PageHeader, Button } from "@investintell/ui";
+	import { PageHeader, Button, formatNumber } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { UploadUrlResponse, UploadCompleteResponse, ProcessPendingResponse } from "$lib/types/document";
 	import { PIPELINE_STAGES, stageLabel } from "$lib/types/document";
@@ -131,7 +131,7 @@
 			{#if file}
 				<div class="dropzone-file">
 					<span class="dropzone-filename">{file.name}</span>
-					<span class="dropzone-size">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
+					<span class="dropzone-size">{formatNumber(file.size / 1024 / 1024, 1)} MB</span>
 					<button class="dropzone-clear" onclick={() => file = null}>Remove</button>
 				</div>
 			{:else}

@@ -59,7 +59,7 @@
 					const fold = folds[dataIndex];
 					if (!fold) return "";
 					let html = `<strong>Fold ${fold.fold}</strong>`;
-					html += `<br/>Sharpe: ${fold.sharpe !== null ? fold.sharpe.toFixed(3) : "—"}`;
+					html += `<br/>Sharpe: ${fold.sharpe !== null ? formatNumber(fold.sharpe, 3) : "—"}`;
 					html += `<br/>CVaR 95%: ${fold.cvar_95 !== null ? formatPercent(fold.cvar_95) : "—"}`;
 					html += `<br/>Max DD: ${fold.max_drawdown !== null ? formatPercent(fold.max_drawdown) : "—"}`;
 					html += `<br/>Observations: ${formatNumber(fold.n_obs)}`;
@@ -96,7 +96,7 @@
 						show: true,
 						position: "right" as const,
 						fontSize: 10,
-						formatter: (p: { value: number }) => p.value.toFixed(2),
+						formatter: (p: { value: number }) => formatNumber(p.value, 2),
 					},
 					markLine: {
 						silent: true,
@@ -127,7 +127,7 @@
 		</div>
 		<div class="bt-kpi">
 			<span class="bt-kpi-label">Median Sharpe</span>
-			<span class="bt-kpi-value">{kpis.median !== null ? kpis.median.toFixed(3) : "—"}</span>
+			<span class="bt-kpi-value">{kpis.median !== null ? formatNumber(kpis.median, 3) : "—"}</span>
 		</div>
 		<div class="bt-kpi">
 			<span class="bt-kpi-label">Worst CVaR</span>

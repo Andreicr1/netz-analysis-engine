@@ -189,7 +189,7 @@
 			<div class="grid grid-cols-2 md:grid-cols-6 gap-[1px] bg-[#222] border-b border-[#222]">
 				<div class="bg-black p-3">
 					<p class="text-[9px] text-[#71717a] font-black uppercase mb-1">NAV</p>
-					<p class="text-lg font-black">{latestNav != null ? `$${latestNav.toFixed(2)}` : "—"}</p>
+					<p class="text-lg font-black">{latestNav != null ? `$${formatNumber(latestNav, 2, "en-US", { useGrouping: false })}` : "—"}</p>
 				</div>
 				<div class="bg-black p-3">
 					<p class="text-[9px] text-[#71717a] font-black uppercase mb-1">1D CHANGE</p>
@@ -259,15 +259,15 @@
 							</div>
 							<div class="bg-black p-2">
 								<p class="text-[9px] text-[#71717a] uppercase mb-1">STARR RATIO</p>
-								<p class="text-xs font-black">{analytics?.tail_risk?.starr_ratio != null ? analytics.tail_risk.starr_ratio.toFixed(2) : "—"}</p>
+								<p class="text-xs font-black">{analytics?.tail_risk?.starr_ratio != null ? formatNumber(analytics.tail_risk.starr_ratio, 2) : "—"}</p>
 							</div>
 							<div class="bg-black p-2">
 								<p class="text-[9px] text-[#71717a] uppercase mb-1">RACHEV RATIO</p>
-								<p class="text-xs font-black">{analytics?.tail_risk?.rachev_ratio != null ? analytics.tail_risk.rachev_ratio.toFixed(2) : "—"}</p>
+								<p class="text-xs font-black">{analytics?.tail_risk?.rachev_ratio != null ? formatNumber(analytics.tail_risk.rachev_ratio, 2) : "—"}</p>
 							</div>
 							<div class="bg-black p-2">
 								<p class="text-[9px] text-[#71717a] uppercase mb-1">JARQUE-BERA P</p>
-								<p class="text-xs font-black">{analytics?.tail_risk?.jarque_bera_pvalue != null ? analytics.tail_risk.jarque_bera_pvalue.toFixed(4) : "—"}</p>
+								<p class="text-xs font-black">{analytics?.tail_risk?.jarque_bera_pvalue != null ? formatNumber(analytics.tail_risk.jarque_bera_pvalue, 4) : "—"}</p>
 							</div>
 							<div class="bg-black p-2">
 								<p class="text-[9px] text-[#71717a] uppercase mb-1">NORMALITY</p>
@@ -296,7 +296,7 @@
 							</div>
 							<div class="bg-black p-2">
 								<p class="text-[9px] text-[#71717a] uppercase mb-1">GAIN/LOSS RATIO</p>
-								<p class="text-xs font-black">{analytics?.return_statistics?.gain_loss_ratio != null ? analytics.return_statistics.gain_loss_ratio.toFixed(2) : "—"}</p>
+								<p class="text-xs font-black">{analytics?.return_statistics?.gain_loss_ratio != null ? formatNumber(analytics.return_statistics.gain_loss_ratio, 2) : "—"}</p>
 							</div>
 						</div>
 					</section>

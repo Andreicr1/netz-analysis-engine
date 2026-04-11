@@ -2,6 +2,7 @@
   Up/Down Capture Ratios — 4 capture metrics + benchmark label + bar chart.
 -->
 <script lang="ts">
+	import { formatNumber } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
 	import type { CaptureRatios } from "$lib/types/entity-analytics";
@@ -42,7 +43,7 @@
 				formatter: (params: { data: { value: number; name: string } }[]) => {
 					if (!params[0]) return "";
 					const d = params[0].data;
-					return `<div style="font-size:12px"><b>${d.name}</b>: ${d.value.toFixed(1)}%</div>`;
+					return `<div style="font-size:12px"><b>${d.name}</b>: ${formatNumber(d.value, 1)}%</div>`;
 				},
 			},
 			series: [
@@ -60,7 +61,7 @@
 						position: "top",
 						fontSize: 11,
 						fontWeight: 600,
-						formatter: (p: { value: number }) => `${p.value.toFixed(1)}%`,
+						formatter: (p: { value: number }) => `${formatNumber(p.value, 1)}%`,
 					},
 					markLine: {
 						silent: true,
@@ -83,13 +84,13 @@
 		<div class="ea-capture-kpi">
 			<span class="ea-stat-label">Up Capture</span>
 			<span class="ea-stat-value" style:color={captureColor(capture.up_capture)}>
-				{capture.up_capture != null ? `${capture.up_capture.toFixed(1)}%` : "\u2014"}
+				{capture.up_capture != null ? `${formatNumber(capture.up_capture, 1)}%` : "\u2014"}
 			</span>
 		</div>
 		<div class="ea-capture-kpi">
 			<span class="ea-stat-label">Down Capture</span>
 			<span class="ea-stat-value" style:color={captureColor(capture.down_capture, true)}>
-				{capture.down_capture != null ? `${capture.down_capture.toFixed(1)}%` : "\u2014"}
+				{capture.down_capture != null ? `${formatNumber(capture.down_capture, 1)}%` : "\u2014"}
 			</span>
 		</div>
 		<div class="ea-capture-kpi">

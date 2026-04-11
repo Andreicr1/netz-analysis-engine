@@ -6,6 +6,7 @@
   Each row has a remove [x] button.
 -->
 <script lang="ts">
+	import { formatNumber } from "@investintell/ui";
 	import { goto } from "$app/navigation";
 	import type { DraftHolding } from "./LiveWorkbenchShell.svelte";
 
@@ -90,14 +91,14 @@
 		<div class="al-total-row">
 			<span class="al-total-label">TOTAL</span>
 			<span class="al-total-value {totalClass}">
-				{totalWeight.toFixed(1)}%
+				{formatNumber(totalWeight, 1)}%
 			</span>
 		</div>
 		{#if draftHoldings.length > 0 && Math.abs(totalWeight - 100) >= 0.01}
 			<div class="al-total-hint">
 				{totalWeight < 100
-					? `${(100 - totalWeight).toFixed(1)}% remaining`
-					: `${(totalWeight - 100).toFixed(1)}% over`}
+					? `${formatNumber(100 - totalWeight, 1)}% remaining`
+					: `${formatNumber(totalWeight - 100, 1)}% over`}
 			</div>
 		{/if}
 		

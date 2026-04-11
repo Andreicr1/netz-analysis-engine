@@ -3,7 +3,7 @@
   Lazy-fetches GET /instruments/{id}/risk-metrics on first click.
 -->
 <script lang="ts">
-	import { formatNumber } from "@investintell/ui";
+	import { formatNumber, formatPercent } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
 
@@ -69,7 +69,7 @@
 <svelte:window onclick={handleClickOutside} />
 
 <span class="sb-trigger" role="button" tabindex="0" onclick={handleClick} onkeydown={(e) => e.key === 'Enter' && handleClick(e as unknown as MouseEvent)} title="Click to see score breakdown">
-	{score.toFixed(1)}
+	{formatNumber(score, 1)}
 </span>
 
 {#if open}
@@ -78,7 +78,7 @@
 	<div class="sb-popover" onclick={(e) => e.stopPropagation()}>
 		<div class="sb-header">
 			<span class="sb-title">Score Breakdown</span>
-			<span class="sb-total">{score.toFixed(1)}</span>
+			<span class="sb-total">{formatNumber(score, 1)}</span>
 		</div>
 
 		{#if loading}
@@ -92,7 +92,7 @@
 					{@const weighted = val * cfg.weight}
 					<div class="sb-row">
 						<span class="sb-component-name">{cfg.label}</span>
-						<span class="sb-component-weight">{(cfg.weight * 100).toFixed(0)}%</span>
+						<span class="sb-component-weight">{formatPercent(cfg.weight, 0)}</span>
 						<div class="sb-bar-track">
 							<div
 								class="sb-bar-fill"

@@ -14,6 +14,7 @@
   Chart library: lightweight-charts ^5 (already in use by TerminalPriceChart).
 -->
 <script lang="ts">
+	import { formatNumber } from "@investintell/ui";
 	import { getContext, onMount } from "svelte";
 	import type { UTCTimestamp } from "lightweight-charts";
 	import {
@@ -264,11 +265,11 @@
 			{:else if summary}
 				<span class="rc-summary">
 					MAX DD
-					<strong class="neg">{summary.maxDd != null ? summary.maxDd.toFixed(2) + "%" : "—"}</strong>
+					<strong class="neg">{summary.maxDd != null ? formatNumber(summary.maxDd, 2) + "%" : "—"}</strong>
 				</span>
 				<span class="rc-summary">
 					GARCH VOL
-					<strong class="purple">{summary.lastVol != null ? summary.lastVol.toFixed(2) + "%" : "—"}</strong>
+					<strong class="purple">{summary.lastVol != null ? formatNumber(summary.lastVol, 2) + "%" : "—"}</strong>
 				</span>
 				<span class="rc-summary">
 					REGIME

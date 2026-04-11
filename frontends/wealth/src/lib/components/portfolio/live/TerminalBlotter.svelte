@@ -10,6 +10,7 @@
     - Numeric columns: text-align right, JetBrains Mono tabular-nums 10px
 -->
 <script lang="ts">
+	import { formatNumber } from "@investintell/ui";
 	import type { InstrumentWeight } from "$lib/types/model-portfolio";
 	import type { ActualHolding } from "./TerminalOmsPanel.svelte";
 	import type { DraftHolding, OverlapResultRead, CusipExposure } from "./LiveWorkbenchShell.svelte";
@@ -87,18 +88,18 @@
 	}
 
 	function fmtPct(n: number): string {
-		return (n * 100).toFixed(2) + "%";
+		return formatNumber(n * 100, 2) + "%";
 	}
 
 	function fmtDrift(n: number): string {
 		const pp = n * 100;
 		const sign = pp >= 0 ? "+" : "";
-		return sign + pp.toFixed(2) + "pp";
+		return sign + formatNumber(pp, 2) + "pp";
 	}
 
 	function fmtPnl(n: number): string {
 		const sign = n >= 0 ? "+" : "";
-		return sign + n.toFixed(0);
+		return sign + formatNumber(n, 0);
 	}
 
 	function getBreachForInstrument(instrumentId: string): CusipExposure | null {
@@ -111,7 +112,7 @@
 			const h = draftHoldings.find(d => d.instrument_id === id);
 			return h ? h.fund_name : id;
 		});
-		const pct = (breach.total_exposure_pct * 100).toFixed(1);
+		const pct = formatNumber(breach.total_exposure_pct * 100, 1);
 		const issuer = breach.issuer_name ?? "Unknown";
 		return `WARNING: ${pct}% Consolidated Exposure to ${issuer} (${breach.cusip}) across: ${names.join(", ")}.`;
 	}

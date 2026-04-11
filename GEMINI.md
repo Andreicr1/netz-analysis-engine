@@ -1,4 +1,6 @@
-# GEMINI.md
+# GEMINI.md — Netz Analysis Engine
+
+Project context file for the Gemini CLI agent. Kept in sync with `CLAUDE.md`. If a rule changes in one file, update the other in the same commit.
 
 Unified multi-tenant analysis engine for institutional investment verticals.
 
@@ -95,7 +97,7 @@ frontends/
   wealth/           ← SvelteKit "netz-wealth-os"
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0079_macro_performance_layer`.
+**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0105_portfolio_calibration_fk_on_construction_runs`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header. **Tenant and user management is 100% via Clerk Dashboard** — no custom admin UI. Organizations, user invites, and role assignment (`ADMIN`, `INVESTMENT_TEAM`, `investor`) are all managed in Clerk. `ConfigService` defaults mean new tenants work immediately without provisioning.
 
@@ -129,6 +131,21 @@ The engine contains only analytical domains. Operational modules were intentiona
 **Critical distinction — cashflow vs cash_management:**
 - `cash_management/` (OUT OF SCOPE): gestora's bank accounts, transaction reconciliation, fund transfers — operational
 - `modules/deals/cashflow_service.py` (IN SCOPE): deal cashflow analytics — disbursements, repayments, MOIC, IRR, cash-to-cash — analytical credit module. These are NOT the same thing.
+
+## Stability Guardrails
+
+> Em gestão institucional de patrimônio, imprevisibilidade é risco operacional inaceitável.
+
+Six non-negotiable principles enforced across the stack: **P1 Bounded**, **P2 Batched**, **P3 Isolated**, **P4 Lifecycle**, **P5 Idempotent**, **P6 Fault-Tolerant**. Primitives live in `backend/app/core/runtime/` and `packages/investintell-ui/src/lib/runtime/`. Full charter: **`docs/reference/stability-guardrails.md`**. PR checklist: `.github/PULL_REQUEST_TEMPLATE.md`.
+
+**Mandatory patterns (charter §3):**
+- WebSocket fan-out → `RateLimitedBroadcaster` + `ConnectionId` UUID (never `id(ws)`)
+- Routes with expected p95 > 500ms → **Job-or-Stream** (202 + `/jobs/{id}/stream` SSE)
+- External HTTP → `ExternalProviderGate` (interactive 30s / bulk 5min variants for SEC)
+- Detail pages → `RouteData<T>` load contract (never `throw error()`) + `<svelte:boundary>` + `PanelErrorState`
+- High-frequency client events (> 10/s) → `createTickBuffer<T>` (never `$state` spreads)
+- Mutating routes → `@idempotent` decorator + triple-layer dedup (Redis + SingleFlightLock + `pg_advisory_xact_lock`)
+- Advisory lock keys → **`zlib.crc32`**, never Python built-in `hash()` (non-deterministic across processes)
 
 ## Critical Rules
 
@@ -219,6 +236,12 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `sec_bulk_ingestion` | 900_050 | global | sec_etfs, sec_bdcs, sec_money_market_funds, sec_mmf_metrics, sec_registered_funds, strategy_label | SEC DERA bulk ZIPs (N-CEN, N-MFP, N-PORT, BDC) | Quarterly |
 | `form345_ingestion` | 900_051 | global | `sec_insider_transactions`, `sec_insider_sentiment` (MV) | SEC EDGAR Form 345 bulk TSV (insider buys/sells) | Quarterly |
 | `universe_sync` | 900_070 | global | `instruments_universe` | SEC/ESMA catalog (auto-fetches company_tickers_mf.json) | Weekly |
+| `library_index_rebuild` | 900_080 | org | `wealth_library_index` | Self-heal cross-check via EXCEPT/MINUS vs source tables | Nightly |
+| `library_pins_ttl` | 900_081 | org | `wealth_library_pins` | Prune `recent` pins > 20 per user | 6h |
+| `library_bundle_builder` | 900_082 | org | `wealth_library_index`, R2 storage | On-demand Committee Pack ZIP + manifest + SSE emit | On-demand |
+| `live_price_poll` | 900_100 | org | Redis `live:px:v1` hash (TTL 180s) | Yahoo Finance batch quote (≤250 symbols/call) for instruments held by `live`/`paused` portfolios; emits `price_staleness` alerts | 60s |
+| `construction_run_executor` | 900_101 | org | `portfolio_construction_runs`, `portfolio_stress_results` | Computed (optimizer cascade + stress + advisor + validation + Jinja2 narrative); bound at 120s | On-demand |
+| `alert_sweeper` | 900_102 | org | `portfolio_alerts` | Auto-dismiss stale open alerts past `auto_dismiss_at`; keeps the partial index small | Hourly |
 
 **Materialized views** (migration 0078-0079): `mv_unified_funds` (6-universe fund catalog with prospectus stats), `mv_unified_assets` (global instrument search), `mv_macro_latest` (latest macro indicator values), `mv_macro_regional_summary` (regional macro aggregation). Refreshed by `view_refresh.py` (screener views, after universe_sync) and `macro_view_refresh.py` (macro views, after macro/treasury ingestion). Workers call refresh after data ingestion.
 
@@ -313,6 +336,13 @@ Separate vector table `wealth_vector_chunks` for fund-centric RAG (distinct from
 
 No official Clerk SvelteKit SDK exists. Use community packages: `clerk-sveltekit` (server hooks) + `svelte-clerk` (UI components). These may lag behind Clerk API changes. Fallback: manual JWT verification on server (`clerk_auth.py`) + `svelte-clerk` for UI only.
 
+## Skills
+
+Custom skills live in `.claude/skills/`. Each subfolder contains a `SKILL.md` with frontmatter (`name`, `description`) that describes when to use it. The skill corpus is shared between Claude Code and the Gemini CLI agent — **do not maintain a hardcoded list here**. To discover available skills, glob `.claude/skills/**/SKILL.md` and read the frontmatter to find the best match for the current task.
+
+**Gemini invocation:** use the `activate_skill` tool with the skill name (e.g., `activate_skill("brainstorming")`). Gemini loads skill metadata at session start from `GEMINI.md` and activates the full SKILL.md content on demand. The `superpowers:using-superpowers` skill is the entry point for the skill-driven workflow discipline (brainstorming → writing-plans → executing-plans → verification-before-completion).
+
+**Tool name mapping (Gemini vs Claude Code):** skills are written using Claude Code tool names. For Gemini equivalents see `.claude/skills/superpowers/using-superpowers/references/codex-tools.md` (the Codex mapping is the closest match to Gemini). Key mappings: `Read` → `read_file`, `Edit` → `replace` / `write_file`, `Glob` → `glob`, `Grep` → `search_file_content`, `Bash` → `run_shell_command`, `Task` → `activate_skill` + sub-agent dispatch.
 
 ## Infrastructure (Milestone 2 — up to 50 tenants)
 
@@ -347,7 +377,13 @@ When working on any SvelteKit frontend (`frontends/credit/` or `frontends/wealth
 
 Remote: `https://mcp.svelte.dev/mcp`. Local: `npx @sveltejs/mcp {list-sections|get-documentation|svelte-autofixer}`. Rules: run `list-sections` first, run `svelte-autofixer` before finalizing components, use `fetch()+ReadableStream` for SSE (never EventSource), Svelte 5 runes (`$state`, `$derived`, `$effect`) — escape `$` as `\$` in terminal.
 
+## UX Sprint 7 — Scope Decisions (2026-03-19)
 
+### C.3 — Portfolio deal-level fields: NOT IMPLEMENTED
+Portfolio is asset-centric post-conversion. Tenor/basis/covenant are deal-level (`deal_context.json`), NOT asset attributes. Do not add them to portfolio view — use "Source Deal" link instead.
+
+### C.4 — Kanban: IMPLEMENTED
+`PipelineKanban.svelte` with `svelte-dnd-action@^0.9.0`. 8 stages, drag-drop + ConsequenceDialog, PATCH `/pipeline/deals/{deal_id}/stage`.
 
 ## Audit Trail
 

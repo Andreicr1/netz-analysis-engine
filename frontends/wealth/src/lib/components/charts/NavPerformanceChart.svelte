@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
     import GenericEChart from './GenericEChart.svelte';
+    import { formatNumber } from "@investintell/ui";
 
     let { navData = [], height = 300 } = $props();
 
@@ -18,7 +19,7 @@
                 trigger: 'axis',
                 formatter: (params: any) => {
                     const p = params[0];
-                    return `${p.name}<br/>NAV: <b>$${p.value.toFixed(2)}</b>`;
+                    return `${p.name}<br/>NAV: <b>$${formatNumber(p.value, 2)}</b>`;
                 }
             },
             grid: {
@@ -39,7 +40,7 @@
                 type: 'value',
                 scale: true, // Don't start at zero to show volatility better
                 axisLabel: {
-                    formatter: (value: number) => `$${value.toFixed(0)}`
+                    formatter: (value: number) => `$${formatNumber(value, 0, "en-US", { useGrouping: false })}`
                 }
             },
             series: [

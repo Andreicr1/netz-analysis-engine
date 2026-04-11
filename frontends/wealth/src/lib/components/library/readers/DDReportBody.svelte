@@ -440,6 +440,9 @@
 				</header>
 
 				<div class="chapter-body">
+					<!-- renderMarkdown applies DOMPurify with strict ALLOWED_TAGS/ATTR allowlist.
+					     Backend also sanitizes via nh3 at the persist boundary. Two-layer defense. -->
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 					{@html renderMarkdown(activeChapter.content_md)}
 				</div>
 

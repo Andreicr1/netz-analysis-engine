@@ -2,7 +2,7 @@
   Drawdown Analysis — underwater-style ECharts area chart + worst periods table.
 -->
 <script lang="ts">
-	import { formatPercent } from "@investintell/ui";
+	import { formatPercent, formatNumber } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions, statusColors } from "@investintell/ui/charts/echarts-setup";
 	import type { DrawdownAnalysis } from "$lib/types/entity-analytics";
@@ -31,7 +31,7 @@
 			},
 			yAxis: {
 				type: "value",
-				axisLabel: { fontSize: 10, formatter: (v: number) => `${(v * 100).toFixed(1)}%` },
+				axisLabel: { fontSize: 10, formatter: (v: number) => `${formatNumber(v * 100, 1)}%` },
 				max: 0,
 			},
 			tooltip: {
@@ -40,7 +40,7 @@
 				formatter: (params: { data: number; axisValue: string }[]) => {
 					const p = params[0];
 					if (!p) return "";
-					return `<div style="font-size:12px"><b>${p.axisValue}</b><br/>Drawdown: <b style="color:${statusColors.breach}">${(p.data * 100).toFixed(2)}%</b></div>`;
+					return `<div style="font-size:12px"><b>${p.axisValue}</b><br/>Drawdown: <b style="color:${statusColors.breach}">${formatNumber(p.data * 100, 2)}%</b></div>`;
 				},
 			},
 			dataZoom: [
@@ -92,7 +92,7 @@
 		</div>
 		<div class="ea-dd-kpi">
 			<span class="ea-stat-label">Avg Recovery</span>
-			<span class="ea-stat-value">{drawdown.avg_recovery_days != null ? `${drawdown.avg_recovery_days.toFixed(0)} days` : "\u2014"}</span>
+			<span class="ea-stat-value">{drawdown.avg_recovery_days != null ? `${formatNumber(drawdown.avg_recovery_days, 0)} days` : "\u2014"}</span>
 		</div>
 	</div>
 	<ChartContainer

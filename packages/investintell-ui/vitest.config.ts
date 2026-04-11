@@ -8,7 +8,10 @@ export default defineConfig({
 	},
 	test: {
 		environment: "happy-dom",
-		include: ["src/lib/**/*.{test,spec}.{js,ts}"],
+		include: [
+			"src/lib/**/*.{test,spec}.{js,ts}",
+			"tests/**/*.{test,spec}.{js,ts}",
+		],
 		globals: false,
 	},
 });

@@ -76,7 +76,7 @@
 									{r.overall_status}
 								</span>
 							</td>
-							<td class="rd-cell-num">{r.score != null ? r.score.toFixed(1) : "\u2014"}</td>
+							<td class="rd-cell-num">{r.score != null ? formatNumber(r.score, 1) : "\u2014"}</td>
 							<td>{r.failed_at_layer != null ? layerLabel(r.failed_at_layer) : "\u2014"}</td>
 						</tr>
 						{#if expandedIds.has(r.id) && r.layer_results?.length}

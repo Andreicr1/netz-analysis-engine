@@ -119,13 +119,13 @@
 					const p = params[0];
 					if (!p) return "";
 					const sign = p.value >= 0 ? "+" : "";
-					return `${p.name}: ${sign}${p.value.toFixed(2)}pp`;
+					return `${p.name}: ${sign}${formatNumber(p.value, 2)}pp`;
 				},
 			},
 			grid: { containLabel: true, left: 20, right: 20, top: 10, bottom: 10 },
 			xAxis: {
 				type: "value" as const,
-				axisLabel: { formatter: (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}pp` },
+				axisLabel: { formatter: (v: number) => `${v >= 0 ? "+" : ""}${formatNumber(v, 1)}pp` },
 			},
 			yAxis: {
 				type: "category" as const,
@@ -150,7 +150,7 @@
 						position: "right" as const,
 						formatter: (p: { value: number }) => {
 							const sign = p.value >= 0 ? "+" : "";
-							return `${sign}${p.value.toFixed(2)}pp`;
+							return `${sign}${formatNumber(p.value, 2)}pp`;
 						},
 						fontSize: 10,
 					},

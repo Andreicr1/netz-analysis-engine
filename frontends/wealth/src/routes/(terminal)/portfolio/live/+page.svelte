@@ -12,6 +12,7 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
+	import { resolve } from "$app/paths";
 	import LiveWorkbenchShell from "$lib/components/portfolio/live/LiveWorkbenchShell.svelte";
 	import type { PageData } from "./$types";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
@@ -32,9 +33,10 @@
 	);
 
 	async function handleSelect(portfolio: ModelPortfolio) {
-		const url = new URL(page.url);
-		url.searchParams.set("portfolio", portfolio.id);
-		await goto(url, {
+		const params = new URLSearchParams(page.url.searchParams);
+		params.set("portfolio", portfolio.id);
+		const target = resolve(`/portfolio/live?${params.toString()}`);
+		await goto(target, {
 			replaceState: true,
 			noScroll: true,
 			keepFocus: true,

@@ -13,7 +13,7 @@
   operator labels and enum counts without importing column definitions.
 -->
 <script lang="ts">
-	import { formatAUM } from "@investintell/ui";
+	import { formatAUM, formatNumber } from "@investintell/ui";
 	import { Filter, X } from "lucide-svelte";
 	import type { ColumnFiltersState } from "@investintell/ui/components/ui/data-table";
 	import {
@@ -76,7 +76,7 @@
 			const fmt = (n: number | null | undefined): string => {
 				if (n == null) return "—";
 				if (meta.unit === "currency") return formatAUM(n);
-				return n.toLocaleString("en-US");
+				return formatNumber(n, 0);
 			};
 			if (value.op === "between") {
 				return `between ${fmt(value.value)} and ${fmt(value.valueMax ?? null)}`;
