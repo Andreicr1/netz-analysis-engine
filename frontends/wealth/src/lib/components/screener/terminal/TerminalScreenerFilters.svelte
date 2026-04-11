@@ -284,7 +284,7 @@
 					<div class="sf-range-group">
 						<div class="sf-range-header">
 							<span>Max Expense Ratio (%)</span>
-							<span class="sf-range-value">{filters.expenseMax.toFixed(2)}%</span>
+							<span class="sf-range-value">{formatNumber(filters.expenseMax, 2)}%</span>
 						</div>
 						<input
 							type="range"
