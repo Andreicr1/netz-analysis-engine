@@ -22,6 +22,7 @@
 
 <script lang="ts">
 	import { getContext } from "svelte";
+	import { formatNumber } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 
 	interface Props {
@@ -106,17 +107,17 @@
 
 	function fmtAum(n: number | null): string {
 		if (n == null || n <= 0) return "";
-		if (n >= 1e12) return (n / 1e12).toFixed(1) + "T";
-		if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
-		if (n >= 1e6) return (n / 1e6).toFixed(0) + "M";
-		return n.toFixed(0);
+		if (n >= 1e12) return formatNumber(n / 1e12, 1) + "T";
+		if (n >= 1e9) return formatNumber(n / 1e9, 1) + "B";
+		if (n >= 1e6) return formatNumber(n / 1e6, 0) + "M";
+		return formatNumber(n, 0);
 	}
 </script>
 
 <div class="at-root">
 	<div class="at-header">
 		<span class="at-title">ASSET BROWSER</span>
-		<span class="at-count">{nodes.length} / {total.toLocaleString()}</span>
+		<span class="at-count">{nodes.length} / {formatNumber(total, 0)}</span>
 	</div>
 
 	<div class="at-search">

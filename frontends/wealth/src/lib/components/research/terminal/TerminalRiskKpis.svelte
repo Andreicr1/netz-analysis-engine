@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
 	import { getContext, onDestroy } from "svelte";
+	import { formatNumber } from "@investintell/ui";
 	import type { TreeNode } from "./TerminalAssetTree.svelte";
 	import ScoreBreakdownPopover from "./ScoreBreakdownPopover.svelte";
 
@@ -59,7 +60,7 @@
 	const risk = $derived(selectedNode ? mockRisk(selectedNode) : null);
 
 	function fmt(v: number, d: number = 2): string {
-		return v.toFixed(d);
+		return formatNumber(v, d);
 	}
 
 	function pctClass(v: number): string {
