@@ -35,6 +35,9 @@
  * code passed to ECharts uses the numeric exports below.
  */
 
+import { quintOut } from "svelte/easing";
+import type { EasingFunction } from "svelte/transition";
+
 /** Named delay slots — monotonically increasing, grouped by role. */
 export const choreo = Object.freeze({
 	/** Shell chrome, topbar reveal, panel borders. Fires first. */
@@ -127,4 +130,58 @@ export function prefersReducedMotion(): boolean {
 		return false;
 	}
 	return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+// ─── Svelte transition sugar ─────────────────────────────────
+// Every (terminal)/ consumer that triggers a Svelte `in:` /
+// `out:` / `transition:` directive needs three keys (`duration`,
+// `delay`, `easing`) pulled from the foundations. Spreading that
+// at every site encourages drift — one consumer forgets `easing`,
+// another inlines `duration: 900`, neither is caught by ESLint.
+// `svelteTransitionFor` collapses the three keys into a single
+// call so motion sites stay one-liners and future audits can
+// grep `svelteTransitionFor\(` to find every motion-bound
+// surface.
+
+export type MotionSlot = ChoreoSlot;
+export type MotionDuration = TerminalDurationName;
+
+export interface SvelteTransitionOptions {
+	duration: number;
+	delay: number;
+	easing: EasingFunction;
+}
+
+/**
+ * Sugar helper that returns a ready-to-spread Svelte transition
+ * options object bound to a choreo slot. Collapses the verbose
+ * three-key pattern into one call.
+ *
+ * ```svelte
+ * <div in:fly={{ y: 20, ...svelteTransitionFor('primary') }}>
+ * <div in:fade={svelteTransitionFor('chrome')}>
+ * ```
+ *
+ * Routes through `delayFor` and `durationFor`, so the
+ * `prefers-reduced-motion` contract is preserved automatically:
+ * when the user has reduced motion enabled, both `duration` and
+ * `delay` collapse to `0` and the transition becomes instant.
+ *
+ * Defaults: `duration = "opening"` (900ms), `easing = quintOut`
+ * from `svelte/easing` (matches `terminalBezier.quintOut`).
+ */
+export function svelteTransitionFor(
+	slot: MotionSlot,
+	options: {
+		duration?: MotionDuration;
+		easing?: EasingFunction;
+	} = {},
+): SvelteTransitionOptions {
+	const durationKey = options.duration ?? "opening";
+	const reduced = prefersReducedMotion();
+	return {
+		duration: durationFor(durationKey, reduced),
+		delay: delayFor(slot, reduced),
+		easing: options.easing ?? quintOut,
+	};
 }

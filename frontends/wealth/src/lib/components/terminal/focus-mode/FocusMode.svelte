@@ -27,7 +27,7 @@
 	import type { Snippet } from "svelte";
 	import { fade, fly } from "svelte/transition";
 	import { quintOut } from "svelte/easing";
-	import { choreo, terminalDuration } from "@investintell/ui";
+	import { svelteTransitionFor, terminalDuration } from "@investintell/ui";
 
 	export type FocusModeEntityKind =
 		| "fund"
@@ -170,11 +170,7 @@
 	>
 		<header
 			class="fm-topbar"
-			in:fade={{
-				duration: terminalDuration.opening,
-				delay: choreo.chrome,
-				easing: quintOut,
-			}}
+			in:fade={svelteTransitionFor("chrome")}
 		>
 			<div class="fm-topbar-left">
 				<span class="fm-brand">[ FOCUS · {kindLabel(entityKind)} ]</span>
@@ -207,12 +203,7 @@
 		<div class="fm-grid">
 			<section
 				class="fm-reactor"
-				in:fly={{
-					y: 20,
-					duration: terminalDuration.opening,
-					delay: choreo.primary,
-					easing: quintOut,
-				}}
+				in:fly={{ y: 20, ...svelteTransitionFor("primary") }}
 			>
 				{@render reactor()}
 			</section>
@@ -220,12 +211,7 @@
 			{#if rail}
 				<aside
 					class="fm-rail"
-					in:fly={{
-						y: 20,
-						duration: terminalDuration.opening,
-						delay: choreo.secondary,
-						easing: quintOut,
-					}}
+					in:fly={{ y: 20, ...svelteTransitionFor("secondary") }}
 				>
 					{@render rail()}
 				</aside>

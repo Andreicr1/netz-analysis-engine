@@ -25,8 +25,15 @@ export {
 	delayFor,
 	durationFor,
 	prefersReducedMotion,
+	svelteTransitionFor,
 } from "./choreo.js";
-export type { ChoreoSlot, TerminalDurationName } from "./choreo.js";
+export type {
+	ChoreoSlot,
+	TerminalDurationName,
+	MotionSlot,
+	MotionDuration,
+	SvelteTransitionOptions,
+} from "./choreo.js";
 
 // Terminal chart factory: single source of aesthetic truth for
 // every chart rendered inside frontends/wealth/src/routes/(terminal).

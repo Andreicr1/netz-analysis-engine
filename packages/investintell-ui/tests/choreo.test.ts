@@ -22,6 +22,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { quintOut } from "svelte/easing";
 import {
 	choreo,
 	terminalDuration,
@@ -31,6 +32,7 @@ import {
 	durationFor,
 	animationDelayForSlot,
 	prefersReducedMotion,
+	svelteTransitionFor,
 	type ChoreoSlot,
 } from "../src/lib/charts/choreo.js";
 
@@ -184,5 +186,121 @@ describe("prefersReducedMotion", () => {
 				}) as unknown as MediaQueryList,
 		);
 		expect(prefersReducedMotion()).toBe(false);
+	});
+});
+
+describe("svelteTransitionFor", () => {
+	const originalMatchMedia = (
+		globalThis as { matchMedia?: (query: string) => MediaQueryList }
+	).matchMedia;
+
+	afterEach(() => {
+		if (originalMatchMedia === undefined) {
+			delete (globalThis as { matchMedia?: unknown }).matchMedia;
+		} else {
+			(globalThis as { matchMedia?: typeof originalMatchMedia }).matchMedia = originalMatchMedia;
+		}
+	});
+
+	function mockReducedMotion(enabled: boolean) {
+		(globalThis as { matchMedia?: (q: string) => MediaQueryList }).matchMedia = vi.fn(
+			(query: string) =>
+				({
+					matches: enabled && query.includes("reduce"),
+					media: query,
+					onchange: null,
+					addListener: () => {},
+					removeListener: () => {},
+					addEventListener: () => {},
+					removeEventListener: () => {},
+					dispatchEvent: () => false,
+				}) as unknown as MediaQueryList,
+		);
+	}
+
+	it("maps the chrome slot to delay 0 and opening duration", () => {
+		mockReducedMotion(false);
+		expect(svelteTransitionFor("chrome")).toEqual({
+			duration: 900,
+			delay: 0,
+			easing: quintOut,
+		});
+	});
+
+	it("maps the primary slot to delay 120 and opening duration", () => {
+		mockReducedMotion(false);
+		expect(svelteTransitionFor("primary")).toEqual({
+			duration: 900,
+			delay: 120,
+			easing: quintOut,
+		});
+	});
+
+	it("maps the secondary slot to delay 220 and opening duration", () => {
+		mockReducedMotion(false);
+		expect(svelteTransitionFor("secondary")).toEqual({
+			duration: 900,
+			delay: 220,
+			easing: quintOut,
+		});
+	});
+
+	it("maps the tail slot to delay 320 and opening duration", () => {
+		mockReducedMotion(false);
+		expect(svelteTransitionFor("tail")).toEqual({
+			duration: 900,
+			delay: 320,
+			easing: quintOut,
+		});
+	});
+
+	it("maps the ambient slot to delay 420 and opening duration", () => {
+		mockReducedMotion(false);
+		expect(svelteTransitionFor("ambient")).toEqual({
+			duration: 900,
+			delay: 420,
+			easing: quintOut,
+		});
+	});
+
+	it("applies the update duration override while preserving slot delay", () => {
+		mockReducedMotion(false);
+		const result = svelteTransitionFor("primary", { duration: "update" });
+		expect(result.duration).toBe(320);
+		expect(result.delay).toBe(120);
+		expect(result.easing).toBe(quintOut);
+	});
+
+	it("applies the tick duration override while preserving slot delay", () => {
+		mockReducedMotion(false);
+		const result = svelteTransitionFor("primary", { duration: "tick" });
+		expect(result.duration).toBe(160);
+		expect(result.delay).toBe(120);
+		expect(result.easing).toBe(quintOut);
+	});
+
+	it("passes a custom easing function through untouched", () => {
+		mockReducedMotion(false);
+		const customFn = (t: number) => t * t;
+		const result = svelteTransitionFor("primary", { easing: customFn });
+		expect(result.easing).toBe(customFn);
+		expect(result.duration).toBe(900);
+		expect(result.delay).toBe(120);
+	});
+
+	it("collapses both duration AND delay to 0 when reduced motion is enabled", () => {
+		mockReducedMotion(true);
+		const result = svelteTransitionFor("primary");
+		expect(result.duration).toBe(0);
+		expect(result.delay).toBe(0);
+		expect(result.easing).toBe(quintOut);
+	});
+
+	it("locks quintOut from svelte/easing as the default easing (identity check)", () => {
+		mockReducedMotion(false);
+		const result = svelteTransitionFor("chrome");
+		// Identity, not structural — catches any future change to a
+		// different easing function or inline re-implementation.
+		expect(result.easing).toBe(quintOut);
 	});
 });

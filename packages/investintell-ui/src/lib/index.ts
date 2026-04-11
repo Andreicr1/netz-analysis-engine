@@ -110,12 +110,16 @@ export {
 	delayFor,
 	durationFor,
 	prefersReducedMotion,
+	svelteTransitionFor,
 	createTerminalChartOptions,
 	readTerminalTokens,
 } from "./charts/index.js";
 export type {
 	ChoreoSlot,
 	TerminalDurationName,
+	MotionSlot,
+	MotionDuration,
+	SvelteTransitionOptions,
 	TerminalChartOptionsInput,
 	TerminalChartTokens,
 } from "./charts/index.js";
