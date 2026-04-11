@@ -3,7 +3,7 @@
 **Created:** 2026-04-11
 **Status:** Plan locked, PR-A partially implemented (WIP branch), PR-B / PR-C / post-merge pending
 **Owner:** Andrei
-**Driver:** `blended_momentum_score` and `peer_sharpe_pctl` dropped to 0% in `fund_risk_metrics` on 2026-04-10 after the global worker was interrupted mid-run. Root cause investigation showed the NAV ingestion path has been silently degrading for months because the Yahoo-backed `nav_timeseries.aum_usd` column has **never** been populated (0 / 265k rows since January). Rather than patch Yahoo again, we are retiring it entirely in favor of the already-available Tiingo Premium REST API (no rate limit).
+**Driver:** `blended_momentum_score` and `peer_sharpe_pctl` dropped to 0% in `fund_risk_metrics` on 2026-04-10 while base metrics (sharpe, vol, GARCH, cvar, manager_score) populated correctly for 4,334 rows. The failure is per-pass, not mid-run interrupt: Pass 1 / Pass 1.6 / Pass 1.7 of `global_risk_metrics` wrote data, but Pass 1.5 (momentum) and Pass 2 (peer percentiles) wrote zero. Parallel diagnosis showed the NAV ingestion path has been silently degrading for weeks — `nav_timeseries` stopped updating on 2026-03-29 and the Yahoo-backed `aum_usd` column has **never** been populated (0 / 265k rows since January). Rather than patch Yahoo again, we are retiring it entirely in favor of the already-available Tiingo Premium REST API (no rate limit, 15+ year history).
 
 ---
 
@@ -850,6 +850,87 @@ FROM stats;
 - `nav_pct` ≥ 85%
 - `rsi_pct` ≥ 85%
 
+### 7.3.1 Per-pass divergence diagnostic (critical follow-up)
+
+**Context.** On 2026-04-10 the worker wrote 4,334 rows with Pass 1 (base), Pass 1.6 (cvar_conditional) and Pass 1.7 (manager_score) populated, but Pass 1.5 (momentum) and Pass 2 (peer percentiles) both wrote zero. This is a per-pass divergence, not a mid-run interruption — the passes between them ran normally, which rules out a process crash.
+
+**Two scenarios after re-ingest:**
+
+| Outcome of 7.3 | Diagnosis |
+|---|---|
+| Momentum + peer return to ≥85% coverage | The 2026-04-10 failure was a side-effect of `nav_timeseries` being 12 days stale plus some transient interaction with the staleness boundary. Fix self-heals with fresh Tiingo data. **Close out.** |
+| Base metrics populate but momentum still 0% | Real bug in `_batch_fetch_nav_prices` or `_compute_momentum_from_nav`. Run the diagnostic script below. |
+| Base metrics populate but peer_sharpe_pctl still 0% | Real bug in `_compute_global_peer_percentiles` — most likely `mv_unified_funds` join returns no rows with ≥5 peers per strategy. Investigate `mv_unified_funds` refresh state and `strategy_label` distribution. |
+
+**Diagnostic script to run immediately after 7.3 if coverage is still 0%:**
+
+```python
+# backend/scripts/diag_risk_metrics_passes.py
+import asyncio
+from datetime import date
+from sqlalchemy import select, text
+from app.core.db.engine import async_session_factory
+from app.domains.wealth.models.instrument import Instrument
+from app.domains.wealth.workers.risk_calc import (
+    _batch_fetch_nav_prices,
+    _compute_momentum_from_nav,
+    _compute_global_peer_percentiles,
+)
+
+
+async def main() -> None:
+    async with async_session_factory() as db:
+        # 1. Sample 10 funds with known NAV history
+        result = await db.execute(
+            select(Instrument)
+            .where(Instrument.is_active == True)  # noqa: E712
+            .where(Instrument.ticker.in_(["SPY", "AGG", "VTI", "QQQ", "IWM"]))
+        )
+        sample = result.scalars().all()
+        fund_ids = [f.instrument_id for f in sample]
+
+        # 2. Check Pass 1.5 fan-out
+        nav_map = await _batch_fetch_nav_prices(db, fund_ids, date.today())
+        print(f"nav_price_map keys: {len(nav_map)}")
+        for fid, (close, aum) in nav_map.items():
+            print(f"  {fid} close_len={len(close)} aum_any={bool(aum.any())}")
+            m = _compute_momentum_from_nav(close, aum)
+            print(f"    momentum: {m}")
+
+        # 3. Check Pass 2 peer groups
+        query = text("""
+            SELECT COALESCE(f.strategy_label, f.fund_type, 'Unknown') AS strategy,
+                   COUNT(*) AS peers
+            FROM fund_risk_metrics frm
+            JOIN instruments_universe iu ON iu.instrument_id = frm.instrument_id
+            LEFT JOIN mv_unified_funds f ON f.ticker = iu.ticker
+                 AND iu.ticker IS NOT NULL
+                 AND f.ticker IS NOT NULL
+            WHERE frm.calc_date = CURRENT_DATE
+              AND frm.sharpe_1y IS NOT NULL
+            GROUP BY strategy
+            ORDER BY peers DESC
+        """)
+        rows = await db.execute(query)
+        print("Peer group sizes:")
+        for row in rows.mappings().all():
+            marker = "OK" if row["peers"] >= 5 else "TOO_SMALL"
+            print(f"  {row['strategy']}: {row['peers']} [{marker}]")
+
+
+asyncio.run(main())
+```
+
+**What to look for:**
+
+- `nav_price_map keys: 0` → `_batch_fetch_nav_prices` query returned empty. Check `nav_timeseries.nav_date` range vs `eval_date - 80 days`.
+- `close_len < 30` → momentum short-circuits at the length guard. Check for NAV gaps.
+- All `momentum: {... None ...}` with `close_len >= 30` → `compute_momentum_signals_talib` is failing. Check `_BACKEND` (talib / pandas_ta / none) and pin the backend explicitly.
+- Peer group sizes all `TOO_SMALL` → `mv_unified_funds` join is broken or `strategy_label` is sparse. Check `view_refresh.py` logs and materialized view freshness.
+- Peer group sizes skewed to one huge "Unknown" bucket → `strategy_label` backfill stale after `universe_sync` ran.
+
+Close this section only after coverage hits the §7.3 thresholds for two consecutive worker runs.
+
 ### 7.4 Known remaining gap — `flow_momentum_score`
 
 `flow_momentum_score` will remain structurally None because Tiingo does not provide daily AUM / shares outstanding. The code path is in `risk_calc.py:446` — `compute_flow_momentum()` is called only when `aum.any()` is truthy, and the `nav_timeseries.aum_usd` column will stay at 0% coverage.
@@ -905,3 +986,225 @@ git commit -m "feat(providers): Tiingo instrument provider layer for NAV ingesti
 git push -u origin feat/tiingo-migration-pr-a
 gh pr create --base main --title "feat(providers): Tiingo instrument provider layer" --body "See docs/plans/2026-04-11-tiingo-migration-plan.md section 4"
 ```
+
+---
+
+## 12. Post-migration enhancement backlog
+
+The current workers and risk calculations were calibrated around Yahoo Finance's limitations: flaky session resets, throttling that capped effective history to ~3 years, `.info` payloads that inconsistently returned AUM/expense fields, and no guarantee of intra-day consistency. Tiingo Premium removes all of these constraints — **15+ years of adjusted daily OHLCV back to fund inception, no rate limit, stable adjusted close series**. Several constants, windows and algorithmic choices in the engine were defensive compromises that no longer need to exist.
+
+This section catalogs enhancements that become feasible **after PR-A/B/C land and the Tiingo re-ingest (§7.1) delivers ≥10 years of history for the active instrument universe**. Each item is independent, so they can ship in any order across future sprints.
+
+### 12.1 Extend lookback windows (zero-cost wins, no new columns)
+
+| Location | Current | Target | Why |
+|---|---|---|---|
+| `risk_calc.py::_batch_fetch_nav_prices` | `lookback_days=80` | `lookback_days=400` | RSI(14) and BBANDS(20) only need ~30 obs, but 12-1 momentum (see §12.3) needs 252 trading days. Bumping to 400 enables new momentum signals without a second fetch. |
+| `risk_calc.py::run_risk_calc` + `run_global_risk_metrics` | `start_date = eval_date - 3*365 - 30` | `start_date = eval_date - 10*365 - 30` | GARCH convergence, CVaR tail stability, factor PCA eigenstructure all improve with 10y windows. Current 3y means GFC 2008 and Taper Tantrum 2013 are invisible to the risk engine for base metrics. |
+| `instrument_ingestion.py::DEFAULT_LOOKBACK_DAYS` | `5475` (~15y, capped by yfinance `"max"`) | `fetch_instrument_inception(ticker)` | Use Tiingo's `/tiingo/daily/{ticker}` meta `startDate` to set per-ticker start. Funds with 25+ year history (e.g. VFINX since 1976) get full inception-to-date series. |
+| `benchmark_ingest.py` | `period="3y"` default | `period="10y"` default | Benchmarks need long history for cross-vehicle attribution (Brinson-Fachler) and stress test alignment. |
+| `regime_fit.PREFERRED_VIX_LOOKBACK` | Already raised to 3650 days in commit `2199ec20` | Keep at 3650 | Precedent set — other workers should match. |
+
+**Code footprint:** ~6 constants across 3 files. Zero new columns. No migration. Pure re-run of workers.
+
+### 12.2 Multi-horizon risk metrics (new columns)
+
+With 10+ years of NAV, we can compute risk metrics at multiple horizons and expose them as additional columns on `fund_risk_metrics`. The existing `sharpe_1y` / `volatility_1y` / `max_drawdown_1y` / `cvar_95_12m` stay; the new columns add depth.
+
+**Proposed migration 0112 (separate from Tiingo cutover):**
+
+```sql
+ALTER TABLE fund_risk_metrics
+  ADD COLUMN sharpe_3y NUMERIC(10, 4),
+  ADD COLUMN sharpe_5y NUMERIC(10, 4),
+  ADD COLUMN sharpe_10y NUMERIC(10, 4),
+  ADD COLUMN sharpe_inception NUMERIC(10, 4),
+  ADD COLUMN sortino_3y NUMERIC(10, 4),
+  ADD COLUMN sortino_5y NUMERIC(10, 4),
+  ADD COLUMN sortino_10y NUMERIC(10, 4),
+  ADD COLUMN volatility_3y NUMERIC(10, 6),
+  ADD COLUMN volatility_10y NUMERIC(10, 6),
+  ADD COLUMN max_drawdown_3y NUMERIC(10, 6),
+  ADD COLUMN max_drawdown_10y NUMERIC(10, 6),
+  ADD COLUMN max_drawdown_inception NUMERIC(10, 6),
+  ADD COLUMN max_drawdown_duration_days INTEGER,
+  ADD COLUMN time_to_recovery_days INTEGER,
+  ADD COLUMN ulcer_index NUMERIC(10, 6),
+  ADD COLUMN calmar_ratio NUMERIC(10, 4),
+  ADD COLUMN cvar_95_3y NUMERIC(10, 6),
+  ADD COLUMN cvar_95_10y NUMERIC(10, 6);
+```
+
+**Implementation sketch** in `risk_calc._compute_metrics_from_returns`:
+
+```python
+# Multi-window slices — all cheap once the 10y returns array is in memory
+for days, suffix in [(252, "1y"), (756, "3y"), (1260, "5y"), (2520, "10y")]:
+    window = returns[-days:] if len(returns) >= days else None
+    if window is None or len(window) < 60:
+        continue
+    metrics[f"sharpe_{suffix}"] = compute_sharpe(window, risk_free_rate)
+    metrics[f"sortino_{suffix}"] = compute_sortino(window, risk_free_rate)
+    if suffix != "1y":  # 1y volatility/drawdown already exist
+        metrics[f"volatility_{suffix}"] = compute_volatility(window)
+        metrics[f"max_drawdown_{suffix}"] = compute_max_drawdown(window)
+
+# Inception metrics use full series
+metrics["sharpe_inception"] = compute_sharpe(returns, risk_free_rate)
+metrics["max_drawdown_inception"] = compute_max_drawdown(returns)
+
+# Drawdown duration analytics (new helper — requires cumulative NAV, not just returns)
+dd_stats = compute_drawdown_stats(nav_prices)
+metrics["max_drawdown_duration_days"] = dd_stats.longest_days
+metrics["time_to_recovery_days"] = dd_stats.recovery_days
+metrics["ulcer_index"] = dd_stats.ulcer
+metrics["calmar_ratio"] = dd_stats.calmar
+```
+
+**Why it matters for the product:**
+- **10-year Sharpe** separates funds that survived regime changes (GFC, COVID) from funds that only look good in the post-2010 bull run.
+- **Drawdown duration + time to recovery** answer the question investors actually ask: "how long was this underwater?" — more actionable than peak-to-trough percentage.
+- **Ulcer Index** and **Calmar Ratio** are institutional standard measures the DD report and fact sheet currently do not surface.
+
+### 12.3 Momentum signals (new columns + extended service)
+
+Current momentum is a single blended score from RSI(14) + BBANDS(20), which is short-horizon noise. Institutional momentum factors use longer horizons:
+
+| Signal | Definition | Horizon | Column |
+|---|---|---|---|
+| 12-1 momentum (Jegadeesh-Titman) | 12-month return minus most recent month | 252 trading days | `momentum_12_1` |
+| 6-month momentum | Simple 6-month return | 126 days | `momentum_6m` |
+| 3-month momentum | Simple 3-month return | 63 days | `momentum_3m` |
+| ADX(14) | Trend strength indicator | ~30 days | `adx_14` |
+| Price vs 200 SMA | Current price / 200-day simple MA | 200 days | `price_vs_200sma_pct` |
+| Volatility-scaled 12-1 | `momentum_12_1 / volatility_3y` | 252 + 756 days | `momentum_12_1_vol_scaled` |
+
+**Implementation:** extend `quant_engine/talib_momentum_service.py` (currently only RSI + BBANDS). The TA-Lib backend already has `ADX`, `SMA`; pandas_ta fallback covers them too. No new dependencies.
+
+**Scoring integration:** the current `fund_scoring_service.py` has a `flows_momentum` component weighted 0.10 that reads `blended_momentum_score`. Replace with a composite `price_momentum` component that blends `momentum_12_1_vol_scaled` (70%) + `adx_14` (30%). More discriminating, less noisy.
+
+### 12.4 Upside/downside capture vs benchmark
+
+Institutional DD reports include upside/downside capture ratios (participation in up months vs down months relative to a benchmark). Requires 10+ years to be statistically meaningful.
+
+**New columns** (migration 0112):
+```sql
+ALTER TABLE fund_risk_metrics
+  ADD COLUMN upside_capture_3y NUMERIC(10, 4),
+  ADD COLUMN downside_capture_3y NUMERIC(10, 4),
+  ADD COLUMN upside_capture_10y NUMERIC(10, 4),
+  ADD COLUMN downside_capture_10y NUMERIC(10, 4),
+  ADD COLUMN capture_ratio_spread_10y NUMERIC(10, 4);
+```
+
+**Implementation:** new helper `compute_capture_ratios(fund_returns, benchmark_returns, window_days)` in `quant_engine/risk_service.py`. Requires benchmark returns fetched once per fund from `benchmark_nav` (matched via `instrument.benchmark_ticker` attribute or via allocation_block default).
+
+**DD report integration:** the Fund Analyzer vitrine already has a `CaptureRatiosPanel.svelte` component — wire it to these new columns and the panel stops being empty.
+
+### 12.5 Rolling consistency metrics
+
+The current `return_consistency` scoring component is coarse. With 10y history we can compute rolling windows and measure stability.
+
+**New columns:**
+```sql
+ALTER TABLE fund_risk_metrics
+  ADD COLUMN rolling_sharpe_1y_mean NUMERIC(10, 4),
+  ADD COLUMN rolling_sharpe_1y_std NUMERIC(10, 4),
+  ADD COLUMN rolling_sharpe_1y_min NUMERIC(10, 4),
+  ADD COLUMN positive_rolling_1y_pct NUMERIC(5, 2);
+```
+
+`rolling_sharpe_1y_std` over a 10y lookback is a direct proxy for "how predictable is this manager's Sharpe" — a much stronger consistency signal than the current raw `return_1y` std.
+
+### 12.6 Regime-conditional metric depth
+
+`cvar_95_conditional` currently needs `MIN_STRESS_OBS = 15` daily observations of RISK_OFF/CRISIS regime to compute. With 3y lookback and HMM precision, many funds fall below the threshold. With 10y lookback:
+
+- Average funds get **4-6x more stress observations** → `MIN_STRESS_OBS` can be raised to 30-60 for statistical significance without losing coverage
+- New columns: `cvar_95_gfc` (2008-2009 only), `cvar_95_covid` (Feb-Mar 2020 only), `cvar_95_taper` (May-Aug 2013) — surgical per-event stress metrics instead of a blended "any stress regime" bucket
+
+### 12.7 Factor model and Black-Litterman stability
+
+`quant_engine/factor_model_service.py` runs PCA on the fund return panel. Current 3y window produces 756 observations per fund — barely enough for the top 5 principal components to be stable across re-runs. 10y gives 2520 observations per fund: eigenvectors stop flipping sign between runs, factor loadings become usable as persistent features for ML pipelines.
+
+`black_litterman_service.py` prior covariance is derived from the same return window. Shrinkage intensity (`delta` in Ledoit-Wolf) can drop from aggressive to moderate, reducing bias in the posterior expected returns.
+
+**No schema change** — just constant updates in the services.
+
+### 12.8 `flow_momentum_score` replacement strategies
+
+The current `flow_momentum_score` uses `nav_timeseries.aum_usd` which was never populated (§7.4). Tiingo does not provide AUM either. Options ranked by effort vs value:
+
+| Option | Effort | Value | Coverage |
+|---|---|---|---|
+| **A. Delete the column entirely** | 1 PR, trivial | Removes dead code | N/A (not a signal anymore) |
+| **B. Volume-based OBV for ETFs** | 1 sprint | Moderate — works for ETFs only, not mutual funds | ~1,000 US ETFs in catalog |
+| **C. Quarterly N-PORT / N-CEN AUM interpolation** | 2-3 sprints | High — covers all registered funds with 3-month lag | ~4,500 registered funds |
+| **D. Hybrid: B for ETFs + C for mutual funds + None for UCITS** | 3 sprints | Highest | ~5,500 |
+
+**Recommendation:** ship option A in PR-C of this migration to close the loop cleanly, then add option D as a dedicated sprint once Andrei has the screener working end-to-end on the post-Tiingo data. The column can come back with a clean implementation later. Leaving the column nullable and unpopulated is strictly worse than removing it (confuses consumers, pollutes the `_score_metrics` default-50 fallback).
+
+### 12.9 Peer percentile multi-horizon
+
+`_compute_global_peer_percentiles` currently computes percentiles on `sharpe_1y`, `sortino_1y`, `return_1y`, `max_drawdown_1y`. All 1-year metrics. This makes the peer ranking a short-term popularity contest.
+
+**Proposed:** compute peer percentiles at 1y, 3y, 5y, 10y windows and surface them separately:
+
+```sql
+ALTER TABLE fund_risk_metrics
+  ADD COLUMN peer_sharpe_3y_pctl INTEGER,
+  ADD COLUMN peer_sharpe_5y_pctl INTEGER,
+  ADD COLUMN peer_sharpe_10y_pctl INTEGER,
+  ADD COLUMN peer_drawdown_10y_pctl INTEGER;
+```
+
+A fund in 75th percentile on 1y Sharpe but 30th on 10y Sharpe is telling you something important ("recently hot, historically mediocre"). That diagnostic is invisible today.
+
+### 12.10 Contemporaneous risk-free rate
+
+`get_risk_free_rate(db)` currently reads the latest FRED DFF value and applies it uniformly across the full 3y window of the Sharpe computation. This is mathematically wrong — Sharpe should use the contemporaneous risk-free rate for each observation. It was acceptable with 3y windows where DFF is relatively stable, but over 10y the DFF ranges from 0.05% (2015) to 5.25% (2024) and using a single rate biases long-window Sharpe ratios.
+
+**Fix:** `_compute_metrics_from_returns` should pull a daily DFF series from `macro_data` (already ingested by `macro_ingestion` worker, lock 43) and subtract contemporaneously before computing excess returns. Small change, correct math.
+
+### 12.11 Worker retry/timeout calibration
+
+Current workers have `MAX_RETRIES = 3` with exponential backoff starting at 1s, 4s, 16s. This was defensive padding for Yahoo's flakiness (session resets, rate-limit throttles, transient 503s). Tiingo Premium is stable — we can tighten:
+
+| Worker | Current | Target | Rationale |
+|---|---|---|---|
+| `instrument_ingestion` | 3 retries / 1s-4s-16s backoff | 2 retries / 1s-3s backoff | Tiingo 5xx is rare; 2 retries covers transient network blips |
+| `benchmark_ingest` | Same | Same | |
+| `_io_executor.max_workers` | `2` | `4` | Tiingo Premium has no concurrency penalty; bump to saturate the batch helper |
+| `_BATCH_CHUNK_SIZE` (yfinance-specific in legacy code) | `50` | Delete | Tiingo has no chunking requirement |
+| `_BATCH_CHUNK_SLEEP` | `10.0` | Delete | |
+
+### 12.12 Observability and SLO tracking
+
+Add structured log fields to every pass in `global_risk_metrics` so the per-pass divergence from 2026-04-10 becomes detectable automatically:
+
+```python
+logger.info(
+    "global_risk_metrics.pass_summary",
+    pass_name="momentum",
+    inputs_seen=len(computed),
+    outputs_written=sum(1 for _, m in computed if m.get("blended_momentum_score") is not None),
+    outputs_nulled=sum(1 for _, m in computed if m.get("blended_momentum_score") is None),
+    duration_ms=int((time.monotonic() - pass_start) * 1000),
+)
+```
+
+A simple Grafana or structlog query can alert when `outputs_written / inputs_seen < 0.5` for any pass — the 2026-04-10 failure would have paged immediately instead of being discovered 18 hours later.
+
+**Alerting trigger:** Railway logs → filter `global_risk_metrics.pass_summary` where `outputs_written * 2 < inputs_seen` → Slack.
+
+### 12.13 Summary priority matrix
+
+| Priority | Item | Depends on | Effort |
+|---|---|---|---|
+| **P0 (same sprint as §7)** | §12.1 lookback windows, §12.11 retry calibration, §12.12 observability | None | 1 day |
+| **P1 (next sprint)** | §12.2 multi-horizon metrics, §12.3 momentum signals, §12.10 contemporaneous RFR | Migration 0112 | 1 sprint |
+| **P2** | §12.4 capture ratios, §12.5 rolling consistency, §12.9 multi-horizon peer | Migration 0113 | 1 sprint |
+| **P3** | §12.6 regime-conditional depth, §12.7 factor model stability | Re-run quant backtest suite | 1 sprint |
+| **P4 (follow-up)** | §12.8 flow_momentum replacement (option D) | Data source decision | 2-3 sprints |
+
+The P0 items are **cheap** — a handful of constant changes — and should ride alongside the post-merge ops in §7. They are the real "we built for Yahoo, now unbuild it" cleanup.
