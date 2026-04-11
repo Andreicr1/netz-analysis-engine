@@ -52,7 +52,7 @@
 			grid: { left: 50, right: 30, top: 30, bottom: 50 },
 			xAxis: {
 				type: "category",
-				data: centers.map(c => (c * 100).toFixed(2)),
+				data: centers.map(c => formatNumber(c * 100, 2)),
 				axisLabel: {
 					fontSize: 9,
 					rotate: 45,
@@ -71,11 +71,11 @@
 				formatter: (params: { seriesName: string; data: number | [number, number]; color: string; dataIndex: number }[]) => {
 					if (!params.length) return "";
 					const idx = params[0]!.dataIndex;
-					const lo = (dist.bin_edges[idx]! * 100).toFixed(3);
-					const hi = (dist.bin_edges[idx + 1]! * 100).toFixed(3);
+					const lo = formatNumber(dist.bin_edges[idx]! * 100, 3);
+					const hi = formatNumber(dist.bin_edges[idx + 1]! * 100, 3);
 					let html = `<div style="font-size:12px"><b>${lo}% to ${hi}%</b>`;
 					for (const p of params) {
-						const val = typeof p.data === "number" ? p.data : (p.data as [number, number])[1]?.toFixed(1);
+						const val = typeof p.data === "number" ? p.data : formatNumber((p.data as [number, number])[1], 1);
 						html += `<br/><span style="color:${p.color}">\u25CF</span> ${p.seriesName}: <b>${val}</b>`;
 					}
 					return html + "</div>";

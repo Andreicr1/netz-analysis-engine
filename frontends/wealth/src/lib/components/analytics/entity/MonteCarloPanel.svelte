@@ -59,8 +59,8 @@
 				axisLabel: {
 					fontSize: 10,
 					formatter: isPercent
-						? (v: number) => (v * 100).toFixed(1) + "%"
-						: (v: number) => v.toFixed(2),
+						? (v: number) => formatNumber(v * 100, 1) + "%"
+						: (v: number) => formatNumber(v, 2),
 				},
 			},
 			tooltip: {
@@ -102,7 +102,7 @@
 
 <section class="ea-panel">
 	<h2 class="ea-panel-title">Monte Carlo Simulation</h2>
-	<p class="ea-panel-sub">{mc.n_simulations?.toLocaleString() ?? "—"} simulations &middot; Block bootstrap (21-day) &middot; {statLabel}</p>
+	<p class="ea-panel-sub">{mc.n_simulations != null ? formatNumber(mc.n_simulations, 0) : "—"} simulations &middot; Block bootstrap (21-day) &middot; {statLabel}</p>
 
 	<div class="mc-summary">
 		<div class="ea-stat">

@@ -2,6 +2,7 @@
   Rolling Returns — multi-series line chart (1M/3M/6M/1Y overlaid).
 -->
 <script lang="ts">
+	import { formatNumber } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
 	import type { RollingReturns } from "$lib/types/entity-analytics";
@@ -39,7 +40,7 @@
 			},
 			yAxis: {
 				type: "value",
-				axisLabel: { fontSize: 10, formatter: (v: number) => `${(v * 100).toFixed(0)}%` },
+				axisLabel: { fontSize: 10, formatter: (v: number) => `${formatNumber(v * 100, 0)}%` },
 			},
 			tooltip: {
 				trigger: "axis",
@@ -48,7 +49,7 @@
 					if (!params.length) return "";
 					let html = `<div style="font-size:12px"><b>${params[0]!.data[0]}</b>`;
 					for (const p of params) {
-						const val = (p.data[1] * 100).toFixed(2);
+						const val = formatNumber(p.data[1] * 100, 2);
 						html += `<br/><span style="color:${p.color}">\u25CF</span> ${p.seriesName}: <b>${val}%</b>`;
 					}
 					return html + "</div>";

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte";
+	import { formatNumber } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
 
 	interface Props {
@@ -37,14 +38,14 @@
 	// Formatting helper
 	function f(val: number | null | undefined, fmt: 'percent' | 'decimal' | 'bps' = 'decimal', decimals = 2) {
 		if (val == null) return "-";
-		if (fmt === 'percent') return (val * 100).toFixed(decimals) + "%";
-		if (fmt === 'bps') return (val * 10000).toFixed(0);
-		return val.toFixed(decimals);
+		if (fmt === 'percent') return formatNumber(val * 100, decimals) + "%";
+		if (fmt === 'bps') return formatNumber(val * 10000, 0);
+		return formatNumber(val, decimals);
 	}
 
 	function f_mil(val: number | null | undefined): string {
 		if (val == null) return "-";
-		return (val / 1000000).toFixed(2);
+		return formatNumber(val / 1000000, 2);
 	}
 
 	// Base ECharts Configuration — cinematic reactor animation
