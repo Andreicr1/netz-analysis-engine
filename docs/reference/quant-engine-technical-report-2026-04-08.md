@@ -202,21 +202,27 @@ Sharpe and Sortino computations apply a minimum annualised volatility floor of 0
 
 A final regime-conditioning pass (Pass 1.6) reads the filtered regime probabilities produced by `regime_fit` from `macro_regime_history`, selects the dates classified as RISK_OFF or CRISIS, and recomputes the 95 % CVaR on each fund's returns restricted to that subset. The pass requires a minimum of thirty stress observations per fund and falls back to the unconditional measure with the audit flag cleared otherwise.
 
-## 11. Current State (2026-04-08)
+## 11. Current State (Baseline vs Current)
 
-The table below reports the cross-sectional state of `fund_risk_metrics` on 2026-04-08 in the local docker environment, after application of the two data-quality fixes. These numbers are the reference state for the 2026-04-08 institutional presentation; production Timescale Cloud (`nvhhm6dwvh`) remains on the pre-fix build at Alembic revision `0082` and is expected to reproduce them once the two fix branches are merged.
+The table below reports the cross-sectional state of `fund_risk_metrics`. The **Baseline (2026-04-08)** column reflects the engine state prior to the post-publication remediation of the five known limitations. The **Current State** column establishes the new sampling reference after the stabilisation sprint (which introduced the 10-year HMM lookback, full auditability via `vol_model` and `data_quality_flags`, and the remediation of survivorship bias in peer percentiles). 
 
-| Metric | Coverage | p05 | Median | p95 | Mean |
-|---|---|---|---|---|---|
-| `sharpe_1y` | 95.9 % | −0.39 | 0.54 | 1.39 | 0.51 |
-| `volatility_1y` | 96.6 % | 0.024 | 0.160 | 0.313 | 0.150 |
-| `volatility_garch` | 100.0 % | 0.019 | 0.153 | 0.323 | 0.160 |
-| `cvar_95_12m` | 96.6 % | −0.039 | −0.023 | −0.003 | −0.021 |
-| `cvar_95_conditional` | 95.2 % | −0.054 | −0.033 | −0.004 | −0.030 |
-| `max_drawdown_1y` | 96.6 % | −0.196 | −0.116 | −0.017 | −0.108 |
-| `manager_score` | 100.0 % | 37.7 | 51.7 | 64.0 | 51.3 |
-| `blended_momentum_score` | 90.4 % | 14.2 | 21.7 | 43.2 | 24.4 |
-| `peer_sharpe_pctl` | 95.9 % | 5.0 | 49.9 | 94.9 | 50.0 |
+Production Timescale Cloud (`nvhhm6dwvh`) is expected to reflect these current numbers upon merging of the remediation branches.
+
+### Comparison Table
+
+| Metric | Baseline Coverage | Current Coverage | Baseline Mean | Current Mean | Baseline Median | Current Median |
+|---|---|---|---|---|---|---|
+| `sharpe_1y` | 95.9 % | *[ TBD ]* | 0.51 | *[ TBD ]* | 0.54 | *[ TBD ]* |
+| `volatility_1y` | 96.6 % | *[ TBD ]* | 0.150 | *[ TBD ]* | 0.160 | *[ TBD ]* |
+| `volatility_garch` | 100.0 % | *[ TBD ]* | 0.160 | *[ TBD ]* | 0.153 | *[ TBD ]* |
+| `cvar_95_12m` | 96.6 % | *[ TBD ]* | −0.021 | *[ TBD ]* | −0.023 | *[ TBD ]* |
+| `cvar_95_conditional` | 95.2 % | *[ TBD ]* | −0.030 | *[ TBD ]* | −0.033 | *[ TBD ]* |
+| `max_drawdown_1y` | 96.6 % | *[ TBD ]* | −0.108 | *[ TBD ]* | −0.116 | *[ TBD ]* |
+| `manager_score` | 100.0 % | *[ TBD ]* | 51.3 | *[ TBD ]* | 51.7 | *[ TBD ]* |
+| `blended_momentum_score` | 90.4 % | *[ TBD ]* | 24.4 | *[ TBD ]* | 21.7 | *[ TBD ]* |
+| `peer_sharpe_pctl` | 95.9 % | *[ TBD ]* | 50.0 | *[ TBD ]* | 49.9 | *[ TBD ]* |
+
+*(Note: Expectations for the "Current State" are that `cvar_95_conditional` coverage expands significantly due to the 10-year regime lookback containing sustained crisis periods (2020, 2022), and `peer_sharpe_pctl` coverage approaches unity following the survivorship-bias remediation.)*
 
 Three substantive changes relative to the pre-remediation production build (2026-03-30) are worth highlighting. First, the cross-sectional mean of `sharpe_1y` recovered from −30.01 to 0.51. The anomalous prior mean was driven by sixteen rows carrying the legacy `−9999.999999` zero-volatility sentinel; the S4 sprint eliminated the sentinel by returning `None` under the 1 % annualised volatility floor. A reconciliation confirms that $(0.5376 \times 5443 + (-9999) \times 16) / 5459 \approx -28.77$, within four percent of the reported prior mean. Second, `cvar_95_conditional` is populated for the first time, covering 5,111 of 5,367 funds (95.2 %). The column was added in migration `0058_add_garch_and_conditional_cvar` but required `macro_regime_history` to be populated, which in turn required the statsmodels 0.14 compatibility fix documented in Section 3.2. Third, the four `peer_*_pctl` columns are populated for the first time, covering 5,147 of 5,367 funds (95.9 %).
 
