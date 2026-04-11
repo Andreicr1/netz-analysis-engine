@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { sandboxBasket } from "$lib/stores/sandbox.svelte";
 	import GenericEChart from "$lib/components/charts/GenericEChart.svelte";
+	import { formatNumber } from "@investintell/ui";
 	
 	// State
 	let solver = $state("CLARABEL");
@@ -31,7 +32,7 @@
 
 	function fmtAttr(v: number): string {
 		const sign = v >= 0 ? "+" : "";
-		return sign + (v * 100).toFixed(2) + "%";
+		return sign + formatNumber(v * 100, 2, "en-US", { useGrouping: false }) + "%";
 	}
 
 	function attrClass(v: number): string {

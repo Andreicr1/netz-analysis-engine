@@ -19,6 +19,7 @@
   import ManagerDetailPanel from "$lib/components/screener/ManagerDetailPanel.svelte";
   import FundFactSheetContent from "$lib/components/screener/FundFactSheetContent.svelte";
   import * as Sheet from "@investintell/ui/components/ui/sheet";
+  import { formatNumber } from "@investintell/ui";
   import type { ManagerCatalogItem, UnifiedFundItem } from "$lib/types/catalog";
   import { FUND_TYPE_LABELS } from "$lib/types/catalog";
   import type { PageData } from "./$types";
@@ -494,7 +495,7 @@
 
       <div class="scr-toolbar-right">
         <span class="scr-count">
-          {data.catalog.total.toLocaleString()} managers
+          {formatNumber(data.catalog.total, 0)} managers
         </span>
         <button class="scr-export" title="Export">
           <span>Export</span>
