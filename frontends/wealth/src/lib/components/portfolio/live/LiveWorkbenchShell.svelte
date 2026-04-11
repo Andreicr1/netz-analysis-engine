@@ -32,6 +32,8 @@
 	import TerminalAllocator from "./TerminalAllocator.svelte";
 	import InitialFundingModal from "./InitialFundingModal.svelte";
 	import TerminalPriceChart from "./charts/TerminalPriceChart.svelte";
+	import OperationalRiskCard from "../../layout/OperationalRiskCard.svelte";
+	import TradeBlotter from "../../execution/TradeBlotter.svelte";
 	import type {
 		BarData,
 		LiveTick,
@@ -382,13 +384,15 @@
 			<!-- OMS / ALLOCATOR (right top) -->
 			<aside class="tg-zone tg-oms" aria-label={mode === "LIVE" ? "Order management" : "Weight allocator"}>
 				{#if mode === "LIVE"}
-					<TerminalOmsPanel
-						portfolioId={selected?.id ?? ""}
-						portfolioName={selected?.display_name ?? ""}
-						{targetFunds}
-						{actualHoldings}
-						{holdingsVersion}
-					/>
+					<div class="flex flex-col w-full h-full gap-[2px] bg-black">
+						<OperationalRiskCard />
+						<div class="flex-1 min-h-0 relative">
+							<TradeBlotter
+								currentWeights={actualHoldings}
+								optimalWeights={targetFunds}
+							/>
+						</div>
+					</div>
 				{:else}
 					<TerminalAllocator
 						{draftHoldings}

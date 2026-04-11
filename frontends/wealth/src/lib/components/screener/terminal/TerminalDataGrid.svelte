@@ -43,9 +43,18 @@
 		errorMessage: string | null;
 		selectedId: string | null;
 		onSelect: (asset: ScreenerAsset) => void;
+		onOpenWarRoom?: (fundId: string) => void;
 	}
 
-	let { assets, total, loading, errorMessage, selectedId, onSelect }: Props = $props();
+	let {
+		assets,
+		total,
+		loading,
+		errorMessage,
+		selectedId,
+		onSelect,
+		onOpenWarRoom,
+	}: Props = $props();
 
 	function fmtPct(v: number | null, decimals: number = 2): string {
 		if (v == null) return "—";
@@ -96,7 +105,10 @@
 						class="dg-row"
 						class:selected={selectedId === asset.id}
 						class:zebra={i % 2 === 1}
-						onclick={() => onSelect(asset)}
+						onclick={() => {
+							onSelect(asset);
+							onOpenWarRoom?.(asset.id);
+						}}
 					>
 						<td class="dg-td dg-left dg-ticker" title={asset.ticker ?? asset.isin ?? ""}>
 							{asset.ticker ?? asset.isin ?? "—"}

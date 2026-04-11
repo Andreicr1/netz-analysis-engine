@@ -131,6 +131,18 @@ class TailRiskMetrics(BaseModel):
     is_normal: bool | None = None
 
 
+# ── 8. Insider Sentiment (Alternative Data) ──────────────────────────────
+
+class InsiderSummary(BaseModel):
+    buy_value: float = 0.0
+    sell_value: float = 0.0
+
+
+class InsiderData(BaseModel):
+    insider_sentiment_score: float | None = None
+    insider_summary: InsiderSummary
+
+
 # ── Unified Response ────────────────────────────────────────────────────
 
 class EntityAnalyticsResponse(BaseModel):
@@ -146,3 +158,4 @@ class EntityAnalyticsResponse(BaseModel):
     distribution: ReturnDistribution
     return_statistics: ReturnStatistics | None = None  # Group 6
     tail_risk: TailRiskMetrics | None = None  # Group 7
+    insider_data: InsiderData | None = None  # Group 8 (Alternative Data)
