@@ -1,0 +1,158 @@
+/* ============================================================
+ * Netz Wealth OS — Terminal Semantic Tokens
+ * Source of truth: docs/plans/2026-04-11-terminal-unification-master-plan.md
+ *   §Appendix C — Design Token Inventory
+ *
+ * HEX IS PERMITTED ONLY INSIDE THIS FILE. All consumers (Svelte
+ * components, ECharts factories, utility classes) MUST reference
+ * the `--terminal-*` custom properties. ESLint/Stylelint rules
+ * scoped to `(terminal)/**` reject hex literals in components.
+ *
+ * Naming contract: --terminal-<group>-<slot>-<variant?>
+ *   bg, fg, accent, status, dataviz, space, radius, border,
+ *   font, text, motion, z
+ *
+ * Every token below has a semantic name. Never reach for the hex
+ * directly from a component; never introduce a new category of
+ * token without updating Appendix C in the master plan first.
+ * ============================================================ */
+
+:root {
+	/* ── Backgrounds ───────────────────────────────────────── */
+	/* void: terminal canvas behind every panel.                */
+	/* panel: default surface of every TerminalPanel.           */
+	/* panel-raised: elevated (drawer, focus mode content).     */
+	/* panel-sunken: inset (input, readout).                    */
+	/* overlay: for floating command palette / dropdown.        */
+	/* scrim: FocusMode background dimmer.                      */
+	--terminal-bg-void: #000000;
+	--terminal-bg-panel: #050505;
+	--terminal-bg-panel-raised: #0a0a0a;
+	--terminal-bg-panel-sunken: #020202;
+	--terminal-bg-overlay: #0c0c0c;
+	--terminal-bg-scrim: rgba(0, 0, 0, 0.72);
+
+	/* ── Foregrounds (tiers) ───────────────────────────────── */
+	--terminal-fg-primary: #f5f5f0;
+	--terminal-fg-secondary: #b8b8b0;
+	--terminal-fg-tertiary: #6b6b63;
+	--terminal-fg-muted: #3d3d38;
+	--terminal-fg-disabled: #2a2a27;
+	--terminal-fg-inverted: #000000;
+
+	/* ── Accents ───────────────────────────────────────────── */
+	/* amber: primary attention — ELITE, focus, hero metric.   */
+	/* cyan: live/streaming data.                               */
+	/* violet: AI-touched surfaces (DD critic, Copilot).       */
+	--terminal-accent-amber: #ffb020;
+	--terminal-accent-amber-dim: #8a5f12;
+	--terminal-accent-cyan: #00e5ff;
+	--terminal-accent-cyan-dim: #0a7a8a;
+	--terminal-accent-violet: #a080ff;
+	--terminal-accent-violet-dim: #4a3a80;
+
+	/* ── Status ────────────────────────────────────────────── */
+	--terminal-status-success: #3ed67b;
+	--terminal-status-warn: #ffb020;
+	--terminal-status-error: #ff3b4b;
+	--terminal-status-neutral: #6b6b63;
+
+	/* ── Dataviz ordinal palette (1..8) ───────────────────── */
+	/* Colorblind-safe, derived from accents and status. Used  */
+	/* in order for series colors, heatmaps, scatter plots.    */
+	--terminal-dataviz-1: #ffb020; /* amber */
+	--terminal-dataviz-2: #00e5ff; /* cyan */
+	--terminal-dataviz-3: #a080ff; /* violet */
+	--terminal-dataviz-4: #3ed67b; /* success green */
+	--terminal-dataviz-5: #ff7a4a; /* terracotta */
+	--terminal-dataviz-6: #f0f0e6; /* bone white */
+	--terminal-dataviz-7: #6b8cff; /* cobalt */
+	--terminal-dataviz-8: #b8b8b0; /* ash grey */
+
+	/* ── Spacing (4px grid) ────────────────────────────────── */
+	--terminal-space-1: 4px;
+	--terminal-space-2: 8px;
+	--terminal-space-3: 12px;
+	--terminal-space-4: 16px;
+	--terminal-space-6: 24px;
+	--terminal-space-8: 32px;
+	--terminal-space-12: 48px;
+
+	/* ── Radii (brutalism = zero) ──────────────────────────── */
+	--terminal-radius-none: 0;
+
+	/* ── Borders ──────────────────────────────────────────── */
+	--terminal-border-hairline: 1px solid var(--terminal-fg-muted);
+	--terminal-border-strong: 1px solid var(--terminal-fg-secondary);
+	--terminal-border-focus: 2px solid var(--terminal-accent-amber);
+	--terminal-border-live: 1px solid var(--terminal-accent-cyan);
+	--terminal-border-alert: 1px solid var(--terminal-status-error);
+
+	/* ── Typography ───────────────────────────────────────── */
+	/* Mono: primary register for every numeric, header, label */
+	/* Sans: narrative long-form copy only (DD chapter body).  */
+	--terminal-font-mono: "JetBrains Mono", "IBM Plex Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--terminal-font-sans: "Inter", "Urbanist", system-ui, -apple-system, sans-serif;
+
+	--terminal-text-10: 10px;
+	--terminal-text-11: 11px;
+	--terminal-text-12: 12px;
+	--terminal-text-14: 14px;
+	--terminal-text-16: 16px;
+	--terminal-text-20: 20px;
+	--terminal-text-24: 24px;
+
+	--terminal-leading-tight: 1.1;
+	--terminal-leading-snug: 1.25;
+	--terminal-leading-normal: 1.4;
+	--terminal-tracking-tight: -0.01em;
+	--terminal-tracking-normal: 0;
+	--terminal-tracking-caps: 0.06em;
+
+	/* ── Motion — choreo slots (mirror choreo.ts) ─────────── */
+	--terminal-motion-choreo-chrome: 0ms;
+	--terminal-motion-choreo-primary: 120ms;
+	--terminal-motion-choreo-secondary: 220ms;
+	--terminal-motion-choreo-tail: 320ms;
+	--terminal-motion-choreo-ambient: 420ms;
+	--terminal-motion-opening: 900ms;
+	--terminal-motion-update: 320ms;
+	--terminal-motion-tick: 160ms;
+	--terminal-motion-easing-out: cubic-bezier(0.33, 1, 0.68, 1); /* cubicOut */
+	--terminal-motion-easing-quint: cubic-bezier(0.23, 1, 0.32, 1); /* quintOut */
+
+	/* ── Z-index stack (Appendix C) ───────────────────────── */
+	--terminal-z-base: 0;
+	--terminal-z-panel: 10;
+	--terminal-z-rail: 20;
+	--terminal-z-statusbar: 30;
+	--terminal-z-dropdown: 40;
+	--terminal-z-modal: 50;
+	--terminal-z-focusmode: 60;
+	--terminal-z-palette: 70;
+	--terminal-z-toast: 80;
+
+	/* ── Shell cage invariants ────────────────────────────── */
+	/* Sacred calc() from feedback_layout_cage_pattern.md.     */
+	/* DO NOT migrate to flex/grid min-h-0 — proven broken.    */
+	--terminal-shell-topbar-height: 64px;
+	--terminal-shell-statusbar-height: 24px;
+	--terminal-shell-cage-height: calc(100vh - 88px);
+	--terminal-shell-cage-padding: 24px;
+}
+
+/* prefers-reduced-motion: collapse all choreo slots to 0ms.   */
+/* Components can still honor --terminal-motion-opening etc.  */
+/* but any entrance animation becomes instant.                 */
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--terminal-motion-choreo-chrome: 0ms;
+		--terminal-motion-choreo-primary: 0ms;
+		--terminal-motion-choreo-secondary: 0ms;
+		--terminal-motion-choreo-tail: 0ms;
+		--terminal-motion-choreo-ambient: 0ms;
+		--terminal-motion-opening: 0ms;
+		--terminal-motion-update: 0ms;
+		--terminal-motion-tick: 0ms;
+	}
+}

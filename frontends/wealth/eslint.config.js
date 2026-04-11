@@ -1,4 +1,4 @@
 import tseslint from "typescript-eslint";
-import { netzFormatterRules } from "../eslint.config.js";
+import { netzFormatterRules, netzTerminalRules } from "../eslint.config.js";
 
-export default [tseslint.configs.base, ...netzFormatterRules];
+export default [tseslint.configs.base, ...netzFormatterRules, ...netzTerminalRules];
