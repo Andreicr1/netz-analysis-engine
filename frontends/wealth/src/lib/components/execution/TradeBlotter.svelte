@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatNumber } from "@investintell/ui";
 	import type { InstrumentWeight } from "$lib/types/model-portfolio";
 
 	export interface HoldingWeight {
@@ -50,12 +51,12 @@
 	}
 
 	function formatValue(val: number) {
-		return Math.abs(val).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		return formatNumber(Math.abs(val), 2);
 	}
 
 	function formatDelta(val: number) {
 		const sign = val > 0 ? "+" : "";
-		return sign + (val * 100).toFixed(2) + "%";
+		return sign + formatNumber(val * 100, 2) + "%";
 	}
 </script>
 
