@@ -17,8 +17,8 @@
 	FocusMode does NOT own the inner cascade of a reactor's modules —
 	the consumer's snippet is responsible for its own stagger. This
 	primitive animates only four elements: scrim, top bar, reactor
-	wrapper, rail wrapper. Motion slots come from @investintell/ui's
-	choreo helpers; durations come from terminalDuration.
+	wrapper, rail wrapper. All four motion sites route through
+	svelteTransitionFor from @investintell/ui.
 
 	URL state is NOT owned by this primitive. The caller owns URL
 	deep-link contracts (see Part C / TerminalShell).
@@ -26,8 +26,7 @@
 <script lang="ts">
 	import type { Snippet } from "svelte";
 	import { fade, fly } from "svelte/transition";
-	import { quintOut } from "svelte/easing";
-	import { svelteTransitionFor, terminalDuration } from "@investintell/ui";
+	import { svelteTransitionFor } from "@investintell/ui";
 
 	export type FocusModeEntityKind =
 		| "fund"
@@ -160,7 +159,7 @@
 	aria-label={`${kindLabel(entityKind)} focus mode: ${entityLabel}`}
 	tabindex="-1"
 	onclick={handleBackdrop}
-	transition:fade={{ duration: terminalDuration.tick, easing: quintOut }}
+	transition:fade={svelteTransitionFor("chrome", { duration: "tick" })}
 >
 	<div
 		bind:this={frameEl}
