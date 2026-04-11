@@ -43,7 +43,8 @@
   "scripts": {
     "dev": "svelte-package -w",
     "build": "svelte-kit sync && svelte-package -o dist",
-    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "check": "svelte-check --tsconfig ./tsconfig.json && pnpm run check:tokens",
+    "check:tokens": "node ../../scripts/check-terminal-tokens-sync.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

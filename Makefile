@@ -1,10 +1,19 @@
 .PHONY: check test lint typecheck architecture serve migrate migration help pipeline \
        dev-ui build-ui dev-credit build-credit dev-wealth build-wealth \
-       dev-all build-all lint-frontend check-all types coverage-runtime
+       dev-all build-all lint-frontend check-all types coverage-runtime \
+       tokens-sync
 
 # ── Unified gate ──────────────────────────────────────────
-check: lint architecture typecheck test
+check: lint architecture typecheck tokens-sync test
 	@echo "All checks passed."
+
+# ── Terminal token drift sentinel ─────────────────────────
+# Compares packages/investintell-ui/src/lib/tokens/terminal.css
+# against DEFAULT_TOKENS in terminal-options.ts. Fails the gate
+# if either side adds, renames, or removes a chart-relevant
+# token without updating the other. Pure Node — no install.
+tokens-sync:
+	node scripts/check-terminal-tokens-sync.mjs
 
 # ── Python backend ────────────────────────────────────────
 lint:

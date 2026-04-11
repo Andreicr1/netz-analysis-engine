@@ -110,7 +110,34 @@
 	}: Props = $props();
 
 	let hostEl: HTMLDivElement | undefined = $state();
-	// Tracked outside $state so proxy equality doesn't trip the $effect loop.
+
+	/*
+	 * ============================================================
+	 * DO NOT CONVERT `lastOption` TO `$state` — REACTIVITY TRAP
+	 * ============================================================
+	 *
+	 * `lastOption` is a PLAIN module-local variable on purpose. It
+	 * exists ONLY to short-circuit the `$effect` below when the
+	 * caller passes the same option reference twice.
+	 *
+	 * IF YOU WRAP THIS IN `$state`, THE FOLLOWING HAPPENS:
+	 *
+	 *   1. `$state` deeply proxies the EChartsOption object.
+	 *   2. The proxy is no longer reference-equal to the raw
+	 *      `option` prop the caller passed in (`option === lastOption`
+	 *      becomes permanently false).
+	 *   3. The `$effect` re-reads `lastOption` on every assignment,
+	 *      establishes a reactive dependency on it, and rebinds the
+	 *      ECharts instance via `setOption` on EVERY tick.
+	 *   4. ECharts triggers an internal redraw, which mutates the
+	 *      bound `instance` prop (`$bindable`), which re-runs the
+	 *      effect → INFINITE LOOP, browser tab freezes.
+	 *
+	 * This pattern is load-bearing for the entire `(terminal)/`
+	 * chart pipeline. The Phase 1 audit (2026-04-11) flagged it as
+	 * the #1 risk for future refactors. Leave it as a plain `let`.
+	 * ============================================================
+	 */
 	let lastOption: EChartsOption | null = null;
 
 	onMount(() => {
