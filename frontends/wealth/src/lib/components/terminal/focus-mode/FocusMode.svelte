@@ -108,20 +108,16 @@
 		};
 	});
 
-	// Focus trap — move focus inside the frame on mount, restore on
-	// unmount. Does NOT loop tab order (deferred to a dedicated
-	// focus-trap primitive in Part C); minimal protection against
-	// losing focus to background content.
+	// Focus lifecycle — move focus inside the frame on mount, restore
+	// on unmount. Pairs with the Tab trap $effect below to implement
+	// the full WAI-ARIA dialog focus contract (aria-modal="true").
 	$effect(() => {
 		if (typeof document === "undefined") return;
 		const previouslyFocused = document.activeElement as HTMLElement | null;
 		// Defer one microtask so the DOM is painted before querying.
 		const task = queueMicrotask(() => {
 			if (!frameEl) return;
-			const focusables = frameEl.querySelectorAll<HTMLElement>(
-				'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-			);
-			const target = focusables[0] ?? frameEl;
+			const target = queryFocusables(frameEl)[0] ?? frameEl;
 			target.focus({ preventScroll: true });
 		});
 		return () => {
@@ -133,6 +129,64 @@
 			}
 		};
 	});
+
+	// Tab trap — cycle keyboard focus within the frame on Tab and
+	// Shift+Tab, wrapping around at the edges. Satisfies the WAI-ARIA
+	// dialog pattern for aria-modal="true": keyboard focus must not
+	// escape to the inert background content. Defense-in-depth with
+	// the initial-focus $effect above.
+	$effect(() => {
+		if (typeof window === "undefined") return;
+		const handler = (event: KeyboardEvent) => {
+			if (event.key !== "Tab" || !frameEl) return;
+			const focusables = queryFocusables(frameEl);
+			if (focusables.length === 0) {
+				// No focusables inside the modal — park focus on the frame
+				// itself (tabindex="-1") so focus cannot leak out.
+				event.preventDefault();
+				frameEl.focus({ preventScroll: true });
+				return;
+			}
+			// Non-null assertions safe: length === 0 case already returned above.
+			const first = focusables[0]!;
+			const last = focusables[focusables.length - 1]!;
+			const active = document.activeElement as HTMLElement | null;
+			const outsideFrame = !active || !frameEl.contains(active);
+			if (event.shiftKey) {
+				if (outsideFrame || active === first) {
+					event.preventDefault();
+					last.focus({ preventScroll: true });
+				}
+			} else {
+				if (outsideFrame || active === last) {
+					event.preventDefault();
+					first.focus({ preventScroll: true });
+				}
+			}
+		};
+		window.addEventListener("keydown", handler);
+		return () => {
+			window.removeEventListener("keydown", handler);
+		};
+	});
+
+	// Shared focusable-descendants query used by both the initial
+	// focus and the Tab trap. Filters out elements that are not
+	// currently interactable (hidden via display:none, detached
+	// subtrees, inert containers, disabled form controls).
+	function queryFocusables(root: HTMLElement): HTMLElement[] {
+		const selector =
+			'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"])';
+		const nodes = Array.from(root.querySelectorAll<HTMLElement>(selector));
+		return nodes.filter((el) => {
+			// offsetParent === null approximates display:none / detached.
+			// closest("[inert]") catches the inert-subtree case even when
+			// the element itself is rendered.
+			if (el.offsetParent === null && el !== root) return false;
+			if (el.closest("[inert]")) return false;
+			return true;
+		});
+	}
 
 	function handleBackdrop(event: MouseEvent) {
 		if (event.target === event.currentTarget) {

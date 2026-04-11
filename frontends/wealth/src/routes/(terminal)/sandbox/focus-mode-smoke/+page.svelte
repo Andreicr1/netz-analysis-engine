@@ -37,6 +37,14 @@
 		isOpen = false;
 	}
 
+	// Noop handler for the per-module INSPECT buttons — they exist
+	// purely to give the focus trap something meaningful to cycle
+	// through. Real FocusMode consumers (Phase 3 screener, Phase 4
+	// builder) will wire these to drill-down actions.
+	function inspectModule(moduleId: string) {
+		console.debug(`[smoke] inspect module ${moduleId}`);
+	}
+
 	// Inner module cascade: 7 modules starting from the `tail` slot
 	// (after the shell's chrome → primary → secondary chain completes)
 	// with 80ms per-item stagger. Duration matches the opening slot.
@@ -131,7 +139,7 @@
 			<li>seven analytics modules cascade from 320ms with 80ms stagger</li>
 			<li>press ESC — closes smoothly, no flicker</li>
 			<li>click [ OPEN WAR ROOM ] again — focus returns to this button when closed</li>
-			<li>keyboard: tab navigates inside the modal</li>
+			<li>keyboard: tab cycles through 7 INSPECT buttons + the ESC · CLOSE button, wrapping at the edges (shift+tab reverses)</li>
 			<li>all text is monospace, all borders are 1px hairline, zero radius</li>
 			<li>DOM inspector shows CSS custom properties --terminal-* resolving, no hex literals</li>
 		</ol>
@@ -172,6 +180,15 @@
 					</header>
 					<div class="smoke-module-metric">{module.metric}</div>
 					<div class="smoke-module-ascii">{module.ascii}</div>
+					<footer class="smoke-module-footer">
+						<button
+							type="button"
+							class="smoke-module-inspect"
+							onclick={() => inspectModule(module.id)}
+						>
+							[ INSPECT ]
+						</button>
+					</footer>
 				</article>
 			{/each}
 		</div>
@@ -351,6 +368,41 @@
 		line-height: 1;
 		color: var(--terminal-accent-cyan);
 		letter-spacing: 0.05em;
+	}
+
+	.smoke-module-footer {
+		display: flex;
+		justify-content: flex-end;
+		border-top: 1px dashed var(--terminal-fg-muted);
+		padding-top: var(--terminal-space-2);
+	}
+
+	.smoke-module-inspect {
+		background: transparent;
+		border: var(--terminal-border-hairline);
+		border-radius: var(--terminal-radius-none);
+		color: var(--terminal-fg-secondary);
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-10);
+		letter-spacing: var(--terminal-tracking-caps);
+		padding: 4px 10px;
+		cursor: pointer;
+		text-transform: uppercase;
+		transition:
+			border-color var(--terminal-motion-tick) var(--terminal-motion-easing-out),
+			color var(--terminal-motion-tick) var(--terminal-motion-easing-out);
+	}
+
+	.smoke-module-inspect:hover {
+		border-color: var(--terminal-accent-amber);
+		color: var(--terminal-accent-amber);
+	}
+
+	.smoke-module-inspect:focus-visible {
+		outline: var(--terminal-border-focus);
+		outline-offset: 2px;
+		border-color: var(--terminal-accent-amber);
+		color: var(--terminal-accent-amber);
 	}
 
 	/* Rail content — metadata chips. */
