@@ -9,6 +9,7 @@
     - Numeric/status columns: text-align right, JetBrains Mono 10px
 -->
 <script lang="ts">
+	import { formatNumber } from "@investintell/ui";
 	export interface TradeLogEntry {
 		id: string;
 		instrumentId: string;
@@ -26,7 +27,7 @@
 	let { tradeLog }: Props = $props();
 
 	function fmtPct(n: number): string {
-		return (n * 100).toFixed(2) + "%";
+		return formatNumber(n * 100, 2) + "%";
 	}
 
 	function fmtTime(iso: string): string {

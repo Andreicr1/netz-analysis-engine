@@ -6,6 +6,7 @@
   Footer: dormant venue selector + "Approve & Execute" button.
 -->
 <script lang="ts">
+	import { formatNumber } from "@investintell/ui";
 	import TradeConfirmationDialog from "./TradeConfirmationDialog.svelte";
 	import type { InstrumentWeight } from "$lib/types/model-portfolio";
 
@@ -98,7 +99,7 @@
 	}
 
 	function fmtPct(n: number): string {
-		return (n * 100).toFixed(2) + "%";
+		return formatNumber(n * 100, 2) + "%";
 	}
 </script>
 

@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
 	import { onMount } from "svelte";
+	import { formatNumber } from "@investintell/ui";
 	import TradeConfirmationDialog from "./TradeConfirmationDialog.svelte";
 	import type { DraftHolding, OverlapResultRead } from "./LiveWorkbenchShell.svelte";
 
@@ -74,7 +75,7 @@
 		await new Promise((r) => setTimeout(r, 800));
 		execResult = {
 			ok: true,
-			message: `${generatedOrders.length} BUY orders executed. Portfolio funded with $${formatNumber(aumValue())}.`,
+			message: `${generatedOrders.length} BUY orders executed. Portfolio funded with ${formatCurrency(aumValue())}.`,
 		};
 		executing = false;
 	}
@@ -109,12 +110,8 @@
 		if (e.target === dialogEl && !showTradeConfirm) handleClose();
 	}
 
-	function formatNumber(n: number): string {
-		return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-	}
-
 	function formatCurrency(n: number): string {
-		return "$" + formatNumber(n);
+		return "$" + formatNumber(n, 0);
 	}
 </script>
 

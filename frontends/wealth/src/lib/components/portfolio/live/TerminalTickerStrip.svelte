@@ -8,6 +8,7 @@
   Strictly 44px height — never exceeds the grid-template-rows budget.
 -->
 <script lang="ts">
+	import { formatNumber } from "@investintell/ui";
 	import PortfolioDropdown from "./PortfolioDropdown.svelte";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 	import type { DraftHolding, OverlapResultRead } from "./LiveWorkbenchShell.svelte";
@@ -68,13 +69,13 @@
 
 	function fmt(n: number | null, decimals = 2): string {
 		if (n === null || n === undefined) return "---";
-		return n.toFixed(decimals);
+		return formatNumber(n, decimals);
 	}
 
 	function fmtPct(n: number | null): string {
 		if (n === null || n === undefined) return "---";
 		const sign = n >= 0 ? "+" : "";
-		return `${sign}${n.toFixed(2)}%`;
+		return `${sign}${formatNumber(n, 2)}%`;
 	}
 </script>
 
