@@ -224,6 +224,9 @@
 			</div>
 		{:else}
 			<div class="cd-body">
+				<!-- renderMarkdown applies DOMPurify with strict ALLOWED_TAGS/ATTR allowlist.
+				     Backend also sanitizes via nh3 at the persist boundary. Two-layer defense. -->
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 				{@html renderMarkdown(content.content_md)}
 			</div>
 		{/if}
