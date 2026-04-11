@@ -11,6 +11,8 @@ import {
 	SunburstChart,
 	PieChart,
 	CandlestickChart,
+	RadarChart,
+	BoxplotChart,
 } from "echarts/charts";
 import {
 	GridComponent,
@@ -22,6 +24,7 @@ import {
 	MarkAreaComponent,
 	ToolboxComponent,
 	TitleComponent,
+	RadarComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 
@@ -37,6 +40,8 @@ echarts.use([
 	SunburstChart,
 	PieChart,
 	CandlestickChart,
+	RadarChart,
+	BoxplotChart,
 	GridComponent,
 	TooltipComponent,
 	LegendComponent,
@@ -46,6 +51,7 @@ echarts.use([
 	MarkAreaComponent,
 	ToolboxComponent,
 	TitleComponent,
+	RadarComponent,
 	CanvasRenderer,
 ]);
 

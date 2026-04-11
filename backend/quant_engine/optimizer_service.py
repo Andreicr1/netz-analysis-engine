@@ -192,6 +192,7 @@ async def optimize_portfolio(
     objective: str = "max_sharpe",
     mandate: str | None = None,
     risk_aversion: float | None = None,
+    cf_relaxation_factor: float = 1.3,
 ) -> OptimizationResult:
     """Optimize portfolio weights using cvxpy.
 
@@ -337,6 +338,7 @@ async def optimize_fund_portfolio(
     regime_cvar_multiplier: float = 1.0,
     mandate: str | None = None,
     risk_aversion: float | None = None,
+    cf_relaxation_factor: float = 1.3,
 ) -> FundOptimizationResult:
     """Optimize fund-level weights with block-group sum constraints.
 
@@ -634,8 +636,8 @@ async def optimize_fund_portfolio(
     # Phase 1 uses to verify). We apply a conservative CF relaxation factor
     # so Phase 2 produces feasible, tail-aware candidates instead of
     # collapsing to min-variance. The exact factor is taken from the
-    # expected CF/Normal ratio for the portfolio moments; we fall back to a
-    # literature-standard 1.3 when moments are zero.
+    # expected CF/Normal ratio for the portfolio moments; we fall back to
+    # the injected `cf_relaxation_factor` (default 1.3) when moments are zero.
     from scipy.stats import norm as sp_norm
 
     assert cvar_limit is not None  # Phase 2 only reached when cvar_limit was set
@@ -647,8 +649,8 @@ async def optimize_fund_portfolio(
 
     # Estimate the portfolio-level CF/Normal ratio using the Phase-1 weights
     # (opt_w), which is the best feasible proxy available at this point. If
-    # the moment arrays are zero, fall back to a conservative ratio of 1.3
-    # (typical equity excess kurtosis ≈3).
+    # the moment arrays are zero, fall back to the conservative parameter
+    # `cf_relaxation_factor`.
     _port_skew = float(opt_w @ _skew)
     _port_kurt = float(opt_w @ _kurt)
     _z_cf = (
@@ -660,7 +662,7 @@ async def optimize_fund_portfolio(
     _cvar_coeff_cf = -_z_cf + sp_norm.pdf(_z_cf) / 0.05
     _cf_normal_ratio = _cvar_coeff_cf / cvar_coeff_normal
     if not np.isfinite(_cf_normal_ratio) or _cf_normal_ratio < 1.05:
-        _cf_normal_ratio = 1.30  # literature default when moments are degenerate
+        _cf_normal_ratio = cf_relaxation_factor
 
     # Relax the Normal coefficient so σ_max reflects the CF-measured tail.
     cvar_coeff = cvar_coeff_normal / _cf_normal_ratio

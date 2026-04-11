@@ -58,7 +58,7 @@ Columns report the **mean** at the latest calc_date snapshot in each environment
 
 **`cvar_95_conditional` populated for the first time (0 -> 5,111 rows, 95.2% coverage)** — this column was added in migration `0058_add_garch_and_conditional_cvar` but the code path to populate it depends on `macro_regime_history` having data, which requires a successful `regime_fit` worker run. On prod that worker never produced output because of the statsmodels 0.14 API incompatibility (see fix note below). Pass 1.6 of `run_global_risk_metrics` now filters each fund's daily returns to RISK_OFF + CRISIS dates from the Markov HMM classifier and recomputes a 95% CVaR on that subsample.
 
-**`peer_*_pctl` columns populated for the first time (0 -> 5,147 rows, 95.9% coverage)** — strategy-grouped peer percentile ranking added in commit `e38187c`. Ranks four dimensions per fund: Sharpe, Sortino, 1-year return, max drawdown. Computed over the currently-active universe with explicit survivorship-bias audit warning emitted per strategy group.
+**`peer_*_pctl` columns populated for the first time (0 -> 5,147 rows, 95.9% coverage)** — strategy-grouped peer percentile ranking added in commit `e38187c`. Ranks four dimensions per fund: Sharpe, Sortino, 1-year return, max drawdown. Computed over the entire universe (active and inactive), eliminating survivorship bias.
 
 **Base metrics (`volatility_1y`, `cvar_95_12m`, `max_drawdown_1y`, etc.)** — drifted by 0-1 bps, consistent with 9 days of market data movement between the prod snapshot (2026-03-30) and local snapshot (2026-04-08). No methodology change on these columns.
 
@@ -159,15 +159,13 @@ For SFPIX, MRVNX, MMTLX, MMTQX the `cvar_95_conditional` value is unchanged beca
 
 1. **`volatility_garch` is a mixed-provenance column.** When the GARCH(1,1) likelihood fails stationarity checks or the optimizer does not converge (`persistence >= 1.0` or `flag != 0`), the code falls back to EWMA with `lambda = 0.94` (the RiskMetrics 1996 standard). There is no column flag distinguishing GARCH-converged rows from EWMA fallback rows. Correct phrasing in client-facing material: *"conditional volatility estimated via GARCH(1,1) with EWMA-lambda-0.94 fallback for non-stationary fits"*. Roughly 320 of 5,182 rows show meaningful GARCH-vs-historical divergence, which is the lower bound on genuine GARCH-driven estimates.
 
-2. **`peer_*_pctl` is survivorship-biased upward.** `instruments_universe` only contains currently-active funds, so every rank is computed against survivors. This biases ranks upward (failed funds are not in the denominator). Industry-standard limitation shared with Morningstar, Lipper, and every commercial peer database. The worker emits a `peer_percentile_survivorship_biased` warning per strategy group during the run for audit.
+2. **Regime history only covers 2024-11-20 to 2026-04-01.** The `regime_fit` worker uses a 504-calendar-day preferred lookback (`PREFERRED_VIX_LOOKBACK`). For any fund with NAV history earlier than 2024-11-20, Pass 1.6 will not find a regime classification for those dates and those returns are implicitly excluded from the stress cohort. The 12-month risk window is fully covered; the 3-year window is partially covered.
 
-3. **Regime history only covers 2024-11-20 to 2026-04-01.** The `regime_fit` worker uses a 504-calendar-day preferred lookback (`PREFERRED_VIX_LOOKBACK`). For any fund with NAV history earlier than 2024-11-20, Pass 1.6 will not find a regime classification for those dates and those returns are implicitly excluded from the stress cohort. The 12-month risk window is fully covered; the 3-year window is partially covered.
+3. **35.6% stress-day share is high but consistent with 2024-2026 macro.** The lookback contains the April 2025 tariff episode (5 CRISIS days, VIX avg 44.58) plus an extended stretch of elevated volatility (120 RISK_OFF days, VIX avg 22.90 — slightly below the `_VIX_RISK_OFF = 25.0` scalar threshold, but above in HMM filtered probability). The Markov classifier is correctly capturing regime persistence rather than point-in-time VIX level.
 
-4. **35.6% stress-day share is high but consistent with 2024-2026 macro.** The lookback contains the April 2025 tariff episode (5 CRISIS days, VIX avg 44.58) plus an extended stretch of elevated volatility (120 RISK_OFF days, VIX avg 22.90 — slightly below the `_VIX_RISK_OFF = 25.0` scalar threshold, but above in HMM filtered probability). The Markov classifier is correctly capturing regime persistence rather than point-in-time VIX level.
+4. **No `vol_model` or `garch_converged` audit column.** Follow-up work to add a boolean or varchar column on `fund_risk_metrics` indicating whether `volatility_garch` came from a converged GARCH fit or the EWMA fallback.
 
-5. **No `vol_model` or `garch_converged` audit column.** Follow-up work to add a boolean or varchar column on `fund_risk_metrics` indicating whether `volatility_garch` came from a converged GARCH fit or the EWMA fallback.
-
-6. **No `return_rejected_count` audit column.** The `MAX_DAILY_RETURN_ABS` guard logs per-batch rejection counts but does not persist them per fund. If audit trail becomes a requirement, consider adding a `data_quality_flags` JSONB column.
+5. **No `return_rejected_count` audit column.** The `MAX_DAILY_RETURN_ABS` guard logs per-batch rejection counts but does not persist them per fund. If audit trail becomes a requirement, consider adding a `data_quality_flags` JSONB column.
 
 ## Execution sequence for reproducibility
 

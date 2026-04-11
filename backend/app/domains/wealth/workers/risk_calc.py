@@ -234,16 +234,16 @@ async def _batch_fetch_nav_returns(
     return_type_by_fund: dict[str, str],
     start_date: date,
     as_of_date: date,
-) -> dict[str, list[float]]:
+) -> tuple[dict[str, list[float]], dict[str, int]]:
     """Batch-fetch NAV daily returns for all fund IDs in at most 2 queries.
 
     Replaces the per-fund SELECT inside compute_fund_risk_metrics, reducing
-    N queries to at most 2 (one per return_type group). Returns a dict mapping
-    fund_id (str) → ordered list of float returns (ascending by nav_date),
-    filtered to the resolved return_type for each fund.
+    N queries to at most 2 (one per return_type group). Returns a tuple of:
+    - dict mapping fund_id (str) → ordered list of float returns (ascending by nav_date)
+    - dict mapping fund_id (str) → count of rejected implausible returns
     """
     if not fund_ids:
-        return {}
+        return {}, {}
 
     # Partition fund_ids by their resolved return_type
     log_fund_ids = [fid for fid in fund_ids if return_type_by_fund.get(str(fid), "log") == "log"]
@@ -285,7 +285,7 @@ async def _batch_fetch_nav_returns(
             sample_fund_ids=list(rejected_by_fund.keys())[:5],
         )
 
-    return raw_by_fund
+    return raw_by_fund, rejected_by_fund
 
 
 async def _fetch_stress_dates(
@@ -467,6 +467,7 @@ def _compute_metrics_from_returns(
     returns_raw: list[float],
     as_of_date: date,
     risk_free_rate: float = 0.04,
+    rejected_count: int = 0,
 ) -> dict | None:
     """Compute all risk metrics for a single fund from pre-fetched returns.
 
@@ -515,8 +516,16 @@ def _compute_metrics_from_returns(
     garch_result = fit_garch(returns)
     if garch_result is not None and garch_result.converged and garch_result.volatility_garch is not None:
         metrics["volatility_garch"] = round(garch_result.volatility_garch, 6)
+        metrics["vol_model"] = garch_result.vol_model
     else:
-        metrics["volatility_garch"] = _ewma_volatility(returns, lam=0.94)
+        ewma_vol = _ewma_volatility(returns, lam=0.94)
+        metrics["volatility_garch"] = ewma_vol
+        metrics["vol_model"] = "EWMA_0.94" if ewma_vol is not None else None
+
+    if rejected_count > 0:
+        metrics["data_quality_flags"] = {"return_rejected_count": rejected_count}
+    else:
+        metrics["data_quality_flags"] = {}
 
     return metrics
 
@@ -538,9 +547,10 @@ async def compute_fund_risk_metrics(
     start_date = as_of_date - timedelta(days=3 * 365 + 30)
 
     return_type_map = await _batch_resolve_return_types(db, [fund.instrument_id], start_date, as_of_date)
-    nav_map = await _batch_fetch_nav_returns(db, [fund.instrument_id], return_type_map, start_date, as_of_date)
+    nav_map, rejected_map = await _batch_fetch_nav_returns(db, [fund.instrument_id], return_type_map, start_date, as_of_date)
     raw = nav_map.get(str(fund.instrument_id), [])
-    return _compute_metrics_from_returns(fund, raw, as_of_date, risk_free_rate)
+    rejected = rejected_map.get(str(fund.instrument_id), 0)
+    return _compute_metrics_from_returns(fund, raw, as_of_date, risk_free_rate, rejected_count=rejected)
 
 
 _NUMERIC_10_6_MAX = 9999.999999  # Numeric(10,6) max absolute value
@@ -893,7 +903,7 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
             logger.info("Return types resolved", n_funds=len(return_type_by_fund))
 
             # Batch 2: fetch all NAV returns — at most 2 queries instead of N
-            nav_returns_by_fund = await _batch_fetch_nav_returns(
+            nav_returns_by_fund, rejected_by_fund = await _batch_fetch_nav_returns(
                 db, all_fund_ids, return_type_by_fund, start_date, eval_date,
             )
             logger.info("NAV returns batch-fetched", n_funds=len(nav_returns_by_fund))
@@ -903,7 +913,8 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
             for fund in funds:
                 fid_str = str(fund.instrument_id)
                 returns_raw = nav_returns_by_fund.get(fid_str, [])
-                metrics = _compute_metrics_from_returns(fund, returns_raw, eval_date, risk_free_rate=rfr)
+                rejected_count = rejected_by_fund.get(fid_str, 0)
+                metrics = _compute_metrics_from_returns(fund, returns_raw, eval_date, risk_free_rate=rfr, rejected_count=rejected_count)
                 if metrics is None:
                     results[fund.ticker or fid_str] = 0
                     continue
@@ -1082,7 +1093,7 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
                 )
 
                 # Batch fetch returns
-                nav_returns_by_fund = await _batch_fetch_nav_returns(
+                nav_returns_by_fund, rejected_by_fund = await _batch_fetch_nav_returns(
                     db, batch_ids, return_type_by_fund, start_date, eval_date,
                 )
 
@@ -1091,7 +1102,8 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
                 for fund in batch:
                     fid_str = str(fund.instrument_id)
                     returns_raw = nav_returns_by_fund.get(fid_str, [])
-                    metrics = _compute_metrics_from_returns(fund, returns_raw, eval_date, risk_free_rate=rfr)
+                    rejected_count = rejected_by_fund.get(fid_str, 0)
+                    metrics = _compute_metrics_from_returns(fund, returns_raw, eval_date, risk_free_rate=rfr, rejected_count=rejected_count)
                     if metrics is None:
                         results["skipped"] += 1
                         continue
@@ -1349,4 +1361,12 @@ def _pctl(value: float, arr: np.ndarray) -> float:
 
 
 if __name__ == "__main__":
-    asyncio.run(run_risk_calc())
+    import argparse
+    parser = argparse.ArgumentParser(description="Risk calculation worker")
+    parser.add_argument("--org-id", type=uuid.UUID, help="Compute org-scoped metrics with DTW drift for a specific tenant.")
+    args = parser.parse_args()
+
+    if args.org_id:
+        asyncio.run(run_risk_calc(args.org_id))
+    else:
+        asyncio.run(run_global_risk_metrics())

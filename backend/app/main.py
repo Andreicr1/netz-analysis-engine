@@ -125,6 +125,7 @@ from app.domains.wealth.routes.portfolio_views import router as wealth_portfolio
 from app.domains.wealth.routes.portfolios import router as wealth_portfolios_router
 from app.domains.wealth.routes.rebalancing import router as wealth_rebalancing_router
 from app.domains.wealth.routes.risk import router as wealth_risk_router
+from app.domains.wealth.routes.risk_timeseries import router as wealth_risk_timeseries_router
 from app.domains.wealth.routes.screener import router as wealth_screener_router
 from app.domains.wealth.routes.search import router as wealth_search_router
 from app.domains.wealth.routes.sec_analysis import router as wealth_sec_analysis_router
@@ -473,6 +474,7 @@ api_v1.include_router(wealth_analytics_router)
 api_v1.include_router(wealth_entity_analytics_router)
 api_v1.include_router(wealth_portfolios_router)
 api_v1.include_router(wealth_risk_router)
+api_v1.include_router(wealth_risk_timeseries_router)
 api_v1.include_router(wealth_macro_router)
 api_v1.include_router(wealth_workers_router)
 api_v1.include_router(wealth_library_router)

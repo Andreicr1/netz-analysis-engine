@@ -542,6 +542,40 @@ async def get_entity_analytics(
     except Exception:
         logger.warning("tail_risk_computation_failed", entity_id=str(resolved_id))
 
+    # ── 8. Insider Sentiment (Alternative Data) ────────────────────────
+    insider_data = None
+    if entity_type == "instrument":
+        try:
+            inst_row = await db.execute(
+                select(Instrument.attributes).where(Instrument.instrument_id == resolved_id)
+            )
+            attrs = inst_row.scalar_one_or_none()
+            if attrs:
+                cik = attrs.get("sec_cik")
+                ticker = attrs.get("sec_ticker")
+                
+                if cik or ticker:
+                    def fetch_insider_summary(sync_db):
+                        from app.domains.wealth.services.insider_queries import get_insider_summary
+                        return get_insider_summary(
+                            sync_db, 
+                            issuer_cik=str(cik).zfill(10) if cik else None, 
+                            issuer_ticker=str(ticker) if ticker else None
+                        )
+
+                    summary_raw = await db.run_sync(fetch_insider_summary)
+                    if summary_raw:
+                        from app.domains.wealth.schemas.entity_analytics import InsiderData, InsiderSummary
+                        insider_data = InsiderData(
+                            insider_sentiment_score=summary_raw.get("score"),
+                            insider_summary=InsiderSummary(
+                                buy_value=summary_raw.get("buy_value", 0.0),
+                                sell_value=summary_raw.get("sell_value", 0.0),
+                            )
+                        )
+        except Exception:
+            logger.warning("insider_sentiment_fetch_failed", entity_id=str(resolved_id))
+
     return EntityAnalyticsResponse(
         entity_id=resolved_id,
         entity_type=entity_type,
@@ -555,6 +589,7 @@ async def get_entity_analytics(
         distribution=distribution,
         return_statistics=return_stats_result,
         tail_risk=tail_risk_result,
+        insider_data=insider_data,
     )
 
 

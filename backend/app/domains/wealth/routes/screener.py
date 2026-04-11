@@ -957,8 +957,6 @@ async def import_fund(
         that window receives the same ``job_id`` and reattaches to
         the existing SSE stream.
     """
-    _require_investment_role(actor)
-
     normalized = (identifier or "").strip().upper()
     if not normalized:
         raise HTTPException(
@@ -1412,25 +1410,53 @@ async def get_catalog(
                 item.weighted_avg_maturity = mmf.weighted_avg_maturity
                 item.weighted_avg_life = mmf.weighted_avg_life
 
-    # Batch-enrich nav_status — check which tickers are already imported
+    # Batch-enrich nav_status + global instrument_id — resolve every
+    # ticker/ISIN pair against instruments_universe so downstream clients
+    # (risk timeseries, fact sheets) can reach the global UUID without a
+    # second round-trip. This replaces the tenant-scoped instrument_id
+    # the catalog query initialises to NULL.
     tickers_to_check = [
         item.ticker for item in items if item.ticker and item.disclosure.has_nav_history
     ]
-    imported_tickers: set[str] = set()
+    isins_to_check = [
+        item.isin for item in items
+        if item.isin and not item.ticker and item.disclosure.has_nav_history
+    ]
+
+    id_by_ticker: dict[str, str] = {}
+    id_by_isin: dict[str, str] = {}
+
     if tickers_to_check:
         nav_result = await db.execute(
-            select(Instrument.ticker)
+            select(Instrument.ticker, Instrument.instrument_id)
             .where(Instrument.ticker.in_(tickers_to_check))
             .where(Instrument.is_active == True)  # noqa: E712
         )
-        imported_tickers = {r[0] for r in nav_result.all()}
+        id_by_ticker = {r[0]: str(r[1]) for r in nav_result.all()}
+
+    if isins_to_check:
+        isin_result = await db.execute(
+            select(Instrument.isin, Instrument.instrument_id)
+            .where(Instrument.isin.in_(isins_to_check))
+            .where(Instrument.is_active == True)  # noqa: E712
+        )
+        id_by_isin = {r[0]: str(r[1]) for r in isin_result.all()}
 
     for item in items:
+        resolved_id: str | None = None
+        if item.ticker and item.ticker in id_by_ticker:
+            resolved_id = id_by_ticker[item.ticker]
+        elif item.isin and item.isin in id_by_isin:
+            resolved_id = id_by_isin[item.isin]
+
+        if resolved_id:
+            item.instrument_id = resolved_id
+
         if not item.disclosure.has_nav_history:
             item.disclosure.nav_status = "unavailable"
-        elif item.ticker and item.ticker in imported_tickers:
+        elif resolved_id:
             item.disclosure.nav_status = "available"
-        elif item.ticker:
+        elif item.ticker or item.isin:
             item.disclosure.nav_status = "pending_import"
         else:
             item.disclosure.nav_status = "unavailable"

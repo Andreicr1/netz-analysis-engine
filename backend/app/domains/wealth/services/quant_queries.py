@@ -69,7 +69,6 @@ async def fetch_returns_matrix(
         select(InstrumentOrg.block_id, InstrumentOrg.instrument_id)
         .where(
             InstrumentOrg.block_id.in_(block_ids),
-            InstrumentOrg.approval_status == "approved",
         )
         .distinct(InstrumentOrg.block_id)
         .order_by(InstrumentOrg.block_id, InstrumentOrg.selected_at.desc())
@@ -202,7 +201,6 @@ async def compute_inputs_from_nav(
         select(InstrumentOrg.block_id, InstrumentOrg.instrument_id)
         .where(
             InstrumentOrg.block_id.in_(block_ids),
-            InstrumentOrg.approval_status == "approved",
         )
         .distinct(InstrumentOrg.block_id)
         .order_by(InstrumentOrg.block_id, InstrumentOrg.selected_at.desc())

@@ -1,69 +1,145 @@
 <!--
-  LiveWorkbenchShell — Phase 9 Block B refactor.
+  LiveWorkbenchShell — 3-column terminal grid.
 
-  Consumes the new WorkbenchLayout primitive from @investintell/ui
-  (promoted from the Phase 8 bespoke grid) and routes the main
-  content based on the ``activeTool`` prop. The shell is pure
-  presentation — the parent +page.svelte owns BOTH URL-derived
-  inputs (``selectedId`` and ``activeTool``) and patches the URL
-  via ``onSelect`` / ``onToolChange`` callbacks.
+  Grid topology (professional trading dashboard):
 
-  Layout (now delegated to WorkbenchLayout):
+    ┌──────────────────────────────────────────────────────┐
+    │               HEADER (44px, 3 cols)                  │
+    ├──────────┬───────────────────────┬───────────────────┤
+    │          │                       │                   │
+    │   NEWS   │       CHART           │       OMS         │
+    │  (280px) │       (1fr)           │      (340px)      │
+    │          │                       │                   │
+    ├──────────┼───────────────────────┼───────────────────┤
+    │   NEWS   │      BLOTTER          │    TRADE LOG      │
+    │  (cont.) │   (positions)         │   (executions)    │
+    └──────────┴───────────────────────┴───────────────────┘
 
-    ┌── sidebar (280px) ┐ ┌─── header: title + ToolRibbon ──┐
-    │  LivePortfolio    │ ├──────────────────────────────────┤
-    │    Sidebar        │ │  main (switched on activeTool)   │
-    │                   │ │   overview       → KPI+Table     │
-    │                   │ │   drift_analysis → placeholder   │
-    │                   │ │   execution_desk → placeholder   │
-    └───────────────────┘ └──────────────────────────────────┘
-
-  Execution constraints honored (Phase 9 Block B mandate):
-    - Svelte 5 runes only ($state, $derived, $props, snippets)
-    - Zero new ECharts / data tables — drift & execution are
-      placeholder EmptyStates
-    - Shell of the interface + state routing, not the data layer
-    - DL15 — no localStorage, URL is source of truth via parent
-    - DL16 — formatters imported from @investintell/ui
-    - CLAUDE.md Stability Guardrails §3 — <svelte:boundary> +
-      PanelErrorState failed snippet preserved from Phase 8
+  Panel aesthetic: bg-black grid container with 2px gap,
+  each zone is a dark panel (#0b0f1a) — "cards colados".
 -->
 <script lang="ts">
-	import { Button, EmptyState, WorkbenchLayout } from "@investintell/ui";
+	import { getContext } from "svelte";
+	import { Button, EmptyState } from "@investintell/ui";
 	import { PanelErrorState } from "@investintell/ui/runtime";
 	import { goto } from "$app/navigation";
-	import { getContext } from "svelte";
-	import LivePortfolioSidebar from "./LivePortfolioSidebar.svelte";
-	import LivePortfolioKpiStrip from "./LivePortfolioKpiStrip.svelte";
-	import LiveAllocationsTable from "./LiveAllocationsTable.svelte";
-	import WorkbenchToolRibbon from "./WorkbenchToolRibbon.svelte";
-	import WorkbenchCoreChart from "./charts/WorkbenchCoreChart.svelte";
-	import WeightVectorTable from "./WeightVectorTable.svelte";
-	import RebalanceSuggestionPanel from "./RebalanceSuggestionPanel.svelte";
-	import { type WorkbenchTool } from "./workbench-state";
-	import {
-		LivePricePoller,
-		LIVE_PRICE_SPARKLINE_SLICE,
-		type PriceTick,
-	} from "$lib/workers/live_price_poll.svelte";
-	import { createClientApiClient } from "$lib/api/client";
+	import TerminalTickerStrip from "./TerminalTickerStrip.svelte";
+	import TerminalNewsFeed from "./TerminalNewsFeed.svelte";
+	import TerminalOmsPanel from "./TerminalOmsPanel.svelte";
+	import TerminalBlotter from "./TerminalBlotter.svelte";
+	import TerminalTradeLog from "./TerminalTradeLog.svelte";
+	import TerminalApprovedUniverse from "./TerminalApprovedUniverse.svelte";
+	import TerminalAllocator from "./TerminalAllocator.svelte";
+	import InitialFundingModal from "./InitialFundingModal.svelte";
+	import TerminalPriceChart from "./charts/TerminalPriceChart.svelte";
+	import OperationalRiskCard from "../../layout/OperationalRiskCard.svelte";
+	import TradeBlotter from "../../execution/TradeBlotter.svelte";
+	import type {
+		BarData,
+		LiveTick,
+	} from "./charts/TerminalPriceChart.svelte";
 	import type { ModelPortfolio, InstrumentWeight } from "$lib/types/model-portfolio";
+	import { createClientApiClient } from "$lib/api/client";
+
+	export interface CusipExposure {
+		cusip: string;
+		issuer_name: string | null;
+		total_exposure_pct: number;
+		funds_holding: string[];
+		is_breach: boolean;
+	}
+
+	export interface OverlapResultRead {
+		portfolio_id: string;
+		computed_at: string;
+		limit_pct: number;
+		total_holdings: number;
+		funds_analyzed: number;
+		top_cusip_exposures: CusipExposure[];
+		sector_exposures: any[];
+		breaches: CusipExposure[];
+	}
+
+	/** Draft holding for EDIT mode — instrument + target allocation. */
+	export interface DraftHolding {
+		instrument_id: string;
+		fund_name: string;
+		block_id: string;
+		targetWeight: number;
+	}
 
 	interface Props {
 		portfolios: readonly ModelPortfolio[];
 		selectedId: string | null;
+		initialMode?: "LIVE" | "EDIT";
 		onSelect: (portfolio: ModelPortfolio) => void;
-		activeTool: WorkbenchTool;
-		onToolChange: (tool: WorkbenchTool) => void;
 	}
 
-	let {
-		portfolios,
-		selectedId,
-		onSelect,
-		activeTool,
-		onToolChange,
-	}: Props = $props();
+	let { portfolios, selectedId, initialMode = "LIVE", onSelect }: Props = $props();
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const api = createClientApiClient(getToken);
+	let overlapResult = $state<OverlapResultRead | null>(null);
+
+	$effect(() => {
+		if (!selected?.id) {
+			overlapResult = null;
+			return;
+		}
+		let cancelled = false;
+		api.get<OverlapResultRead>(`/model-portfolios/${selected.id}/overlap?limit_pct=0.05`)
+			.then((res) => {
+				if (!cancelled) overlapResult = res;
+			})
+			.catch((err) => console.error("Overlap fetch error:", err));
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	// ── Mode State Machine ────────────────────────────────────
+	let mode = $state<"LIVE" | "EDIT">(initialMode);
+	let draftHoldings = $state<DraftHolding[]>([]);
+	let showFundingModal = $state(false);
+
+	function enterEditMode() {
+		draftHoldings = [];
+		mode = "EDIT";
+	}
+
+	function cancelEditMode() {
+		draftHoldings = [];
+		mode = "LIVE";
+	}
+
+	function addToDraft(instrument: { instrument_id: string; fund_name: string; block_id: string }) {
+		if (draftHoldings.some((h) => h.instrument_id === instrument.instrument_id)) return;
+		draftHoldings = [...draftHoldings, { ...instrument, targetWeight: 0 }];
+	}
+
+	function removeFromDraft(instrumentId: string) {
+		draftHoldings = draftHoldings.filter((h) => h.instrument_id !== instrumentId);
+	}
+
+	function updateDraftWeight(instrumentId: string, weight: number) {
+		draftHoldings = draftHoldings.map((h) =>
+			h.instrument_id === instrumentId ? { ...h, targetWeight: weight } : h,
+		);
+	}
+
+	function requestPublish() {
+		showFundingModal = true;
+	}
+
+	function handleFundingComplete() {
+		showFundingModal = false;
+		draftHoldings = [];
+		mode = "LIVE";
+	}
+
+	function handleFundingCancel() {
+		showFundingModal = false;
+	}
 
 	const hasPortfolios = $derived(portfolios.length > 0);
 	const selected = $derived.by(() => {
@@ -73,306 +149,390 @@
 		);
 	});
 
-	// ── Actual holdings state (OMS integration) ───────────────
-	// The shell owns the actual-holdings data so both
-	// WeightVectorTable (drift view) and RebalanceSuggestionPanel
-	// (execution desk) consume the same reactive source. After a
-	// successful trade execution, the panel calls refreshHoldings()
-	// and the drift table re-renders with zeroed drifts immediately.
-	const getToken = getContext<() => Promise<string>>("netz:getToken");
-	const api = createClientApiClient(getToken);
-
-	interface ActualHolding {
-		instrument_id: string;
-		fund_name: string;
-		instrument_type: string | null;
-		block_id: string;
-		weight: number;
-		score: number;
-	}
-
-	let actualHoldings = $state<ActualHolding[]>([]);
-	let holdingsLoading = $state(false);
-	let holdingsSource = $state<"actual" | "target_fallback" | "none">("none");
-	let holdingsError = $state<string | null>(null);
-
-	async function fetchHoldings(portfolioId: string): Promise<void> {
-		holdingsLoading = true;
-		holdingsError = null;
-		try {
-			const res = await api.get<{
-				portfolio_id: string;
-				source: "actual" | "target_fallback";
-				holdings: ActualHolding[];
-				last_rebalanced_at: string | null;
-			}>(`/model-portfolios/${portfolioId}/actual-holdings`);
-			actualHoldings = res.holdings;
-			holdingsSource = res.source;
-		} catch (err) {
-			holdingsError =
-				err instanceof Error ? err.message : "Failed to load holdings";
-			actualHoldings = [];
-			holdingsSource = "none";
-		} finally {
-			holdingsLoading = false;
-		}
-	}
-
-	async function refreshHoldings(): Promise<void> {
-		if (selected) {
-			await fetchHoldings(selected.id);
-		}
-	}
-
-	// Fetch actual holdings whenever the selected portfolio changes
-	// and the active tool is drift or execution (or eagerly for all).
+	// Reset instrument selection when portfolio changes
 	$effect(() => {
-		const p = selected;
-		if (!p) {
-			actualHoldings = [];
-			holdingsSource = "none";
-			return;
-		}
-		fetchHoldings(p.id);
+		const _id = selected?.id;
+		void _id;
+		selectedInstrumentId = null;
 	});
 
+	// ── Chart state ───────────────────────────────────────────
+	type Timeframe = "1D" | "1W" | "1M" | "3M";
+	let chartTimeframe = $state<Timeframe>("1M");
+	let mockLastTick = $state<LiveTick | null>(null);
+
+	function generateMockBars(seed: string, tf: Timeframe): BarData[] {
+		let hash = 0;
+		for (let i = 0; i < seed.length; i++) {
+			hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+		}
+		const basePrice = 80 + Math.abs(hash % 60);
+		const barCount =
+			tf === "1D" ? 78 : tf === "1W" ? 5 * 78 : tf === "1M" ? 22 * 78 : 66 * 78;
+		const count = Math.min(barCount, 500);
+		const intervalSec =
+			tf === "1D" ? 300 : tf === "1W" ? 300 : tf === "1M" ? 3600 : 3600 * 4;
+		const now = Math.floor(Date.now() / 1000);
+		const startTime = now - count * intervalSec;
+		const bars: BarData[] = [];
+		let price = basePrice;
+		for (let i = 0; i < count; i++) {
+			price += (Math.random() - 0.48) * 0.5;
+			price = Math.max(price * 0.95, Math.min(price * 1.05, price));
+			bars.push({
+				time: startTime + i * intervalSec,
+				value: Math.round(price * 100) / 100,
+			});
+		}
+		return bars;
+	}
+
+	// ── Target funds + mock actual holdings ──────────────────
 	const targetFunds = $derived<InstrumentWeight[]>(
 		selected?.fund_selection_schema?.funds ?? [],
 	);
 
-	// ── Live price feed lifecycle ──────────────────────────────
-	// The poller instance is torn down and rebuilt whenever the
-	// active tool leaves "overview" OR the selected portfolio
-	// changes. The $effect cleanup fires before the next run, so
-	// the previous interval is always drained before a new one
-	// starts. When the shell unmounts entirely, the cleanup fires
-	// one last time via Svelte 5's $effect teardown.
-	let poller = $state<LivePricePoller | null>(null);
+	const actualHoldings = $derived.by(() => {
+		return targetFunds.map((f) => ({
+			instrument_id: f.instrument_id,
+			fund_name: f.fund_name,
+			block_id: f.block_id,
+			weight: f.weight + (Math.random() - 0.5) * 0.04,
+		}));
+	});
 
+	let holdingsVersion = $state(1);
+
+	// ── Blotter → Chart instrument selection ─────────────────
+	let selectedInstrumentId = $state<string | null>(null);
+
+	function handleInstrumentSelect(instrumentId: string) {
+		selectedInstrumentId = instrumentId;
+	}
+
+	const defaultTicker = $derived(
+		selected?.fund_selection_schema?.funds?.[0]?.fund_name ?? selected?.profile ?? "PORT",
+	);
+
+	const effectiveChartTicker = $derived.by(() => {
+		if (selectedInstrumentId) {
+			const fund = targetFunds.find((f) => f.instrument_id === selectedInstrumentId);
+			if (fund) return fund.fund_name;
+		}
+		return defaultTicker;
+	});
+
+	const chartSeedKey = $derived(
+		(selectedInstrumentId ?? selected?.id ?? "") + chartTimeframe,
+	);
+
+	const historicalBars = $derived.by(() => {
+		if (!selected) return [];
+		return generateMockBars(chartSeedKey, chartTimeframe);
+	});
+
+	// Mock portfolio composite NAV — different seed so the curve
+	// diverges from the instrument line, showing the overlay effect.
+	const portfolioNavBars = $derived.by(() => {
+		if (!selected) return [];
+		return generateMockBars("nav:" + selected.id + chartTimeframe, chartTimeframe);
+	});
+
+	// Simulate live ticks — restarts on instrument/timeframe change
 	$effect(() => {
-		// Dependency pickup — these identifiers must be read inside
-		// the effect body so Svelte tracks them.
-		const shouldRun = activeTool === "overview" && selected !== null;
-		if (!shouldRun) {
-			poller = null;
+		if (!selected || historicalBars.length === 0) {
+			mockLastTick = null;
 			return;
 		}
-		// Deterministic-ish base price seeded from the portfolio id
-		// so switching between portfolios anchors the random walk
-		// at visually distinct starting levels without a database
-		// dependency. Range: [80, 140].
-		const idStr = selected!.id ?? "";
-		let hash = 0;
-		for (let i = 0; i < idStr.length; i++) {
-			hash = (hash * 31 + idStr.charCodeAt(i)) | 0;
-		}
-		const basePrice = 80 + Math.abs(hash % 60);
+		const _ticker = effectiveChartTicker;
+		void _ticker;
+		const lastBar = historicalBars[historicalBars.length - 1]!;
+		let price = lastBar.value;
+		mockLastTick = null;
+		const interval = setInterval(() => {
+			price += (Math.random() - 0.48) * 0.3;
+			mockLastTick = {
+				time: Math.floor(Date.now() / 1000),
+				value: Math.round(price * 100) / 100,
+			};
+		}, 2000);
+		return () => clearInterval(interval);
+	});
 
-		const p = new LivePricePoller({ basePrice, intervalMs: 1500 });
-		poller = p;
-		p.start();
+	function handleTimeframeChange(tf: Timeframe) {
+		chartTimeframe = tf;
+	}
 
-		return () => {
-			p.stop();
+	// Mock trade log
+	const tradeLog = $derived<Array<{
+		id: string;
+		instrumentId: string;
+		fundName: string;
+		action: "BUY" | "SELL";
+		deltaWeight: number;
+		executedAt: string;
+		fillStatus: string;
+	}>>([]);
+
+	// ── Header price data — follows effective ticker ─────────
+	const headerPriceData = $derived.by(() => {
+		const lastPrice = mockLastTick?.value ?? historicalBars[historicalBars.length - 1]?.value ?? 0;
+		const firstPrice = historicalBars[0]?.value ?? lastPrice;
+		const changePct = firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
+		return {
+			ticker: effectiveChartTicker,
+			price: lastPrice,
+			changePct: Math.round(changePct * 100) / 100,
+			bid: lastPrice > 0 ? Math.round((lastPrice - 0.02) * 100) / 100 : null,
+			ask: lastPrice > 0 ? Math.round((lastPrice + 0.02) * 100) / 100 : null,
 		};
 	});
 
-	const liveTicks = $derived<readonly PriceTick[]>(poller?.ticks ?? []);
-	const sparklineBuffer = $derived<readonly number[]>(
-		liveTicks.slice(-LIVE_PRICE_SPARKLINE_SLICE).map((t) => t.price),
-	);
-
-	// ── Viewport-driven chart height ───────────────────────────
-	// Terminal breakout mandate: the chart must fill the
-	// available vertical space inside the workbench main area.
-	// We reserve fixed budgets for the terminal chrome (sidebar
-	// not included — it is horizontal), the ultra-compact header,
-	// the allocations footer, and the inter-panel gaps, then hand
-	// the remainder to WorkbenchCoreChart via its ``height`` prop.
-	// A resize listener keeps the calc live so the chart tracks
-	// window resizes without touching the ECharts option config.
-	const TERMINAL_HEADER_HEIGHT = 44;
-	const ALLOCATIONS_FOOTER_HEIGHT = 280;
-	const OVERVIEW_VERTICAL_CHROME = 48; // paddings + gaps
-	const MIN_CHART_HEIGHT = 320;
-
-	let viewportHeight = $state(
-		typeof window !== "undefined" ? window.innerHeight : 900,
-	);
-
-	$effect(() => {
-		if (typeof window === "undefined") return;
-		const handler = () => {
-			viewportHeight = window.innerHeight;
+	const headerKpis = $derived.by(() => {
+		const opt = selected?.fund_selection_schema?.optimization;
+		return {
+			expectedReturn: opt?.expected_return != null
+				? Math.round(opt.expected_return * 10000) / 100
+				: null,
+			volatility: opt?.portfolio_volatility != null
+				? Math.round(opt.portfolio_volatility * 10000) / 100
+				: null,
+			driftAlerts: 0,
 		};
-		window.addEventListener("resize", handler);
-		return () => window.removeEventListener("resize", handler);
 	});
 
-	const chartHeight = $derived(
-		Math.max(
-			MIN_CHART_HEIGHT,
-			viewportHeight -
-				TERMINAL_HEADER_HEIGHT -
-				ALLOCATIONS_FOOTER_HEIGHT -
-				OVERVIEW_VERTICAL_CHROME,
-		),
-	);
-
-	function openBuilder() {
-		void goto("/portfolio");
+	function startNewPortfolio() {
+		mode = "EDIT";
+		draftHoldings = [];
 	}
 
 	function exitTerminal() {
-		// Back to Workspace — land on the Builder, which lives
-		// under the standard (app) chrome and gives the PM the
-		// three-phase ribbon back.
 		void goto("/portfolio");
 	}
 </script>
 
 <svelte:boundary>
-	{#if !hasPortfolios}
-		<div class="lws-empty">
+	{#if !hasPortfolios && mode === "LIVE"}
+		<div class="tg-empty">
 			<EmptyState
 				title="No live portfolios yet"
-				message="A portfolio enters the Live Workbench after it is constructed, validated, approved, and activated. Open the Builder to start a new portfolio or activate a draft."
+				message="Start by creating a portfolio in Edit mode. Add instruments from the Approved Universe, set target weights, and fund the portfolio."
 			/>
-			<div class="lws-empty-actions">
-				<Button variant="default" onclick={openBuilder}>
-					Open Builder →
+			<div class="tg-empty-actions">
+				<Button variant="default" onclick={startNewPortfolio}>
+					Create Portfolio
 				</Button>
 			</div>
 		</div>
 	{:else}
-		<WorkbenchLayout
-			sidebarLabel="Live portfolios"
-			headerLabel="Workbench toolbar"
-			mainLabel="Active workbench tool"
-		>
-			{#snippet sidebar()}
-				<LivePortfolioSidebar
+		<!-- Mobile lock screen -->
+		<div class="tg-mobile-lock">
+			<div class="tg-mobile-lock-icon" aria-hidden="true">&#9634;</div>
+			<h2 class="tg-mobile-lock-title">Terminal requires desktop resolution</h2>
+			<p class="tg-mobile-lock-msg">
+				This execution surface is designed for screens wider than 1200px.
+				Please use a desktop to access the Terminal.
+			</p>
+			<Button variant="default" onclick={exitTerminal}>
+				Back to Portfolio
+			</Button>
+		</div>
+
+		<div class="tg-root">
+			<!-- HEADER (spans all 3 columns) -->
+			<div class="tg-header-slot">
+				<TerminalTickerStrip
 					{portfolios}
-					{selectedId}
+					{selected}
 					{onSelect}
+					priceData={headerPriceData}
+					kpis={headerKpis}
+					{mode}
+					onEdit={enterEditMode}
+					onCancelEdit={cancelEditMode}
+					onPublish={requestPublish}
+					{draftHoldings}
+					onExit={exitTerminal}
+					{overlapResult}
 				/>
-			{/snippet}
+			</div>
 
-			{#snippet header()}
-				<div class="lws-term-header">
-					<div class="lws-term-title">
-						{#if selected}
-							<span class="lws-term-name">{selected.display_name}</span>
-						{:else}
-							<span class="lws-term-name lws-term-name--muted">
-								No portfolio selected
-							</span>
-						{/if}
-						<span class="lws-term-sep">·</span>
-						<span class="lws-term-mode">Live Execution</span>
-					</div>
-					<div class="lws-term-ribbon-slot">
-						<WorkbenchToolRibbon {activeTool} {onToolChange} />
-					</div>
-					<div class="lws-term-actions">
-						<button
-							type="button"
-							class="lws-term-exit"
-							onclick={exitTerminal}
-							title="Leave the terminal and return to the workspace"
-							aria-label="Exit terminal"
-						>
-							<span class="lws-term-exit-glyph" aria-hidden="true">←</span>
-							Exit Terminal
-						</button>
-					</div>
-				</div>
-			{/snippet}
+			<!-- NEWS / APPROVED UNIVERSE (left sidebar, spans 2 rows) -->
+			<div class="tg-zone tg-news" aria-label={mode === "LIVE" ? "News feed" : "Approved universe"}>
+				{#if mode === "LIVE"}
+					<TerminalNewsFeed />
+				{:else}
+					<TerminalApprovedUniverse
+						{draftHoldings}
+						onAdd={addToDraft}
+					/>
+				{/if}
+			</div>
 
-			{#snippet main()}
-				{#if selected}
-					{#if activeTool === "overview"}
-						<div class="lws-overview-stack">
-							<section
-								class="lws-overview-grid"
-								aria-label="Overview surface"
-							>
-								<div class="lws-panel lws-panel--chart">
-									<WorkbenchCoreChart
-										ticks={liveTicks}
-										height={chartHeight}
-									/>
-								</div>
-								<aside
-									class="lws-panel lws-panel--kpis"
-									aria-label="Portfolio KPI stack"
-								>
-									<LivePortfolioKpiStrip
-										portfolio={selected}
-										priceBuffer={sparklineBuffer}
-									/>
-								</aside>
-							</section>
-							<div class="lws-panel lws-panel--allocations">
-								<LiveAllocationsTable portfolio={selected} />
-							</div>
-						</div>
-					{:else if activeTool === "drift_analysis"}
-						<div class="lws-panel lws-panel--drift">
-							<WeightVectorTable
-								{targetFunds}
-								{actualHoldings}
-								loading={holdingsLoading}
+			<!-- CHART (center top) -->
+			<section class="tg-zone tg-chart" aria-label="Chart zone">
+				<TerminalPriceChart
+					ticker={effectiveChartTicker}
+					{historicalBars}
+					{portfolioNavBars}
+					lastTick={mockLastTick}
+					timeframe={chartTimeframe}
+					onTimeframeChange={handleTimeframeChange}
+				/>
+			</section>
+
+			<!-- OMS / ALLOCATOR (right top) -->
+			<aside class="tg-zone tg-oms" aria-label={mode === "LIVE" ? "Order management" : "Weight allocator"}>
+				{#if mode === "LIVE"}
+					<div class="flex flex-col w-full h-full gap-[2px] bg-black">
+						<OperationalRiskCard />
+						<div class="flex-1 min-h-0 relative">
+							<TradeBlotter
+								currentWeights={actualHoldings}
+								optimalWeights={targetFunds}
 							/>
 						</div>
-					{:else if activeTool === "execution_desk"}
-						<div class="lws-execution-grid">
-							<div class="lws-panel lws-panel--exec-table">
-								<WeightVectorTable
-									{targetFunds}
-									{actualHoldings}
-									loading={holdingsLoading}
-									compact
-								/>
-							</div>
-							<div class="lws-panel lws-panel--exec-orders">
-								<RebalanceSuggestionPanel
-									portfolioId={selected.id}
-									portfolioName={selected.display_name}
-									{targetFunds}
-									{actualHoldings}
-									loading={holdingsLoading}
-									onTradesExecuted={refreshHoldings}
-									apiPost={api.post.bind(api)}
-								/>
-							</div>
-						</div>
-					{/if}
-				{:else}
-					<div class="lws-tool-placeholder">
-						<EmptyState
-							title="Select a portfolio"
-							message="Pick a live portfolio from the left rail to activate the workbench tools."
-						/>
 					</div>
+				{:else}
+					<TerminalAllocator
+						{draftHoldings}
+						onUpdateWeight={updateDraftWeight}
+						onRemove={removeFromDraft}
+					/>
 				{/if}
-			{/snippet}
-		</WorkbenchLayout>
+			</aside>
+
+			<!-- BLOTTER (center bottom — positions only) -->
+			<div class="tg-zone tg-blotter" aria-label="Positions">
+				<TerminalBlotter
+					{mode}
+					{targetFunds}
+					{actualHoldings}
+					{draftHoldings}
+					{selectedInstrumentId}
+					onInstrumentSelect={handleInstrumentSelect}
+					{overlapResult}
+				/>
+			</div>
+
+			<!-- TRADE LOG (right bottom) -->
+			<div class="tg-zone tg-tradelog" aria-label="Trade log">
+				<TerminalTradeLog {tradeLog} />
+			</div>
+
+			<!-- INITIAL FUNDING MODAL (STP flow) -->
+			{#if showFundingModal}
+				<InitialFundingModal
+					{draftHoldings}
+					portfolioName={selected?.display_name ?? "New Portfolio"}
+					onComplete={handleFundingComplete}
+					onCancel={handleFundingCancel}
+					{overlapResult}
+				/>
+			{/if}
+		</div>
 	{/if}
 
 	{#snippet failed(err: unknown, reset: () => void)}
 		<PanelErrorState
-			title="Live Workbench failed to render"
+			title="Terminal failed to render"
 			message={err instanceof Error
 				? err.message
-				: "Unexpected error in the Live Workbench."}
+				: "Unexpected error in the Terminal."}
 			onRetry={reset}
 		/>
 	{/snippet}
 </svelte:boundary>
 
 <style>
-	.lws-empty {
+	/* ── Terminal Design Tokens ──────────────────────────────── */
+	.tg-root {
+		--tg-bg: #000000;
+		--tg-surface: #0b0f1a;
+		--tg-border: rgba(255, 255, 255, 0.06);
+		--tg-text: #c8d0dc;
+		--tg-text-muted: #5a6577;
+		--tg-accent: #2d7ef7;
+	}
+
+	/* ── 3-Column Grid ──────────────────────────────────────── */
+	.tg-root {
+		display: grid;
+		grid-template-areas:
+			"header  header  header"
+			"news    chart   oms"
+			"news    blotter tradelog";
+		grid-template-columns: 280px 1fr 340px;
+		grid-template-rows: 44px 1fr 35vh;
+		gap: 2px;
+		width: 100%;
+		height: 100%;
+		overflow: hidden;
+		background: var(--tg-bg);
+		font-family: "Urbanist", system-ui, sans-serif;
+	}
+
+	/* ── Zone base — iron rule ───────────────────────────────── */
+	.tg-zone {
+		display: flex;
+		min-width: 0;
+		min-height: 0;
+		max-height: 100%;
+		overflow: hidden;
+		background: var(--tg-surface);
+	}
+
+	/* ── Header slot ─────────────────────────────────────────── */
+	.tg-header-slot {
+		grid-area: header;
+		min-width: 0;
+		min-height: 0;
+		overflow: visible;
+		position: relative;
+		z-index: 50;
+		background: var(--tg-surface);
+	}
+
+	/* ── News feed — left sidebar, spans 2 rows ──────────────── */
+	.tg-news {
+		grid-area: news;
+		align-items: stretch;
+		justify-content: stretch;
+	}
+
+	/* ── Chart — center top ──────────────────────────────────── */
+	.tg-chart {
+		grid-area: chart;
+		align-items: stretch;
+		justify-content: stretch;
+		position: relative;
+		z-index: 0;
+		contain: layout paint;
+	}
+
+	/* ── OMS — right top ─────────────────────────────────────── */
+	.tg-oms {
+		grid-area: oms;
+		align-items: stretch;
+		justify-content: stretch;
+	}
+
+	/* ── Blotter — center bottom (positions) ──────────────────── */
+	.tg-blotter {
+		grid-area: blotter;
+		align-items: stretch;
+		justify-content: stretch;
+	}
+
+	/* ── Trade Log — right bottom ────────────────────────────── */
+	.tg-tradelog {
+		grid-area: tradelog;
+		align-items: stretch;
+		justify-content: stretch;
+	}
+
+	/* ── Empty state ─────────────────────────────────────────── */
+	.tg-empty {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -380,337 +540,99 @@
 		gap: 20px;
 		height: 100%;
 		padding: 48px 24px;
-		background: var(--ii-bg, #0e0f13);
+		background: #05080f;
 	}
-	.lws-empty-actions {
+	.tg-empty-actions {
 		display: flex;
 		gap: 12px;
 	}
 
-	/* Ultra-compact terminal header — 44px target including borders.
-	   Three-region layout: title left, tool ribbon center, exit
-	   button right. Overrides the WorkbenchLayout primitive's
-	   default ``.wb-header`` padding via :global() so the shell
-	   stays in control of its own density without touching the
-	   shared @investintell/ui primitive. */
-	:global(.terminal-root .wb-header) {
-		padding: 0 14px;
-		height: 44px;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-		background: #0e1320;
-	}
-	/* Override WorkbenchLayout primitive padding — the terminal
-	   uses its own tight budget so the chart + KPI + footer trio
-	   can claim the full viewport minus the 44px header. */
-	:global(.terminal-root .wb-main) {
-		padding: 12px;
-		gap: 12px;
-	}
-	:global(.terminal-root .wb-sidebar) {
-		background: #0e1320;
-		border-right-color: rgba(255, 255, 255, 0.1);
+	/* ── Mobile lock screen (hidden on desktop) ──────────────── */
+	.tg-mobile-lock {
+		display: none;
 	}
 
-	.lws-term-header {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-		align-items: center;
-		gap: 12px;
-		width: 100%;
-		min-width: 0;
-		height: 100%;
-	}
-
-	.lws-term-title {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		min-width: 0;
-		font-size: 12px;
-		font-weight: 600;
-		letter-spacing: 0.02em;
-		color: var(--ii-text-primary, #ffffff);
-	}
-	.lws-term-name {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		min-width: 0;
-	}
-	.lws-term-name--muted {
-		color: var(--ii-text-muted, #85a0bd);
-		font-weight: 500;
-	}
-	.lws-term-sep {
-		color: rgba(255, 255, 255, 0.2);
-		flex-shrink: 0;
-	}
-	.lws-term-mode {
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: #2d7ef7;
-		flex-shrink: 0;
-	}
-
-	.lws-term-ribbon-slot {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.lws-term-actions {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-	}
-	.lws-term-exit {
-		appearance: none;
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 5px 10px;
-		font-family: inherit;
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-		color: #85a0bd;
-		background: transparent;
-		border: 1px solid rgba(255, 255, 255, 0.12);
-		border-radius: 2px;
-		cursor: pointer;
-		transition:
-			color 120ms ease,
-			border-color 120ms ease,
-			background-color 120ms ease;
-	}
-	.lws-term-exit:hover {
-		color: #ffffff;
-		border-color: rgba(255, 255, 255, 0.3);
-		background: rgba(255, 255, 255, 0.04);
-	}
-	.lws-term-exit:focus-visible {
-		outline: 2px solid #2d7ef7;
-		outline-offset: 2px;
-	}
-	.lws-term-exit-glyph {
-		font-size: 12px;
-		line-height: 1;
-	}
-
-	.lws-tool-placeholder {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		min-height: 320px;
-		background: var(--ii-surface, #141519);
-		border: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.4));
-		border-radius: 8px;
-		padding: 32px 24px;
-	}
-
-	/* Phase 9 Block C terminal density — cockpit-style panel geometry.
-	   Vertical stack of overview → allocations with a tight gap,
-	   inner grid for chart (left) + KPI rail (right 320px), every
-	   macro-component encapsulated in an .lws-panel "module" with
-	   the shared terminal palette. */
-	.lws-overview-stack {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-		min-width: 0;
-	}
-	.lws-overview-grid {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) 320px;
-		gap: 12px;
-		align-items: stretch;
-		min-width: 0;
-	}
-
-	/* Shared panel module — "caixa fechada" aesthetic. Reused by
-	   the chart wrapper, the KPI rail, and the allocations wrap. */
-	.lws-panel {
-		background: #131722;
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 2px;
-		min-width: 0;
-		min-height: 0;
-	}
-	.lws-panel--chart {
-		padding: 8px;
-		display: flex;
-		flex-direction: column;
-	}
-	.lws-panel--kpis {
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-	}
-	.lws-panel--allocations {
-		padding: 0;
-		overflow: hidden; /* clip rounded corners of inner scroll area */
-		/* Terminal breakout: pin the allocations footer to a fixed
-		   vertical budget so the chart + KPI rail can claim the
-		   rest of the viewport. The footer scrolls internally. */
-		max-height: 260px;
-		display: flex;
-		flex-direction: column;
-	}
-
-	/* Chart root override — strip WorkbenchCoreChart's own panel
-	   chrome (background gradient, border, rounded, padding) so the
-	   outer .lws-panel--chart is the sole visible module. Scoped
-	   :global() so the WorkbenchCoreChart component file itself
-	   stays untouched per the mandate. */
-	.lws-panel--chart :global(.wcc-root) {
-		background: transparent;
-		border: none;
-		border-radius: 0;
-		padding: 0;
-	}
-	/* Allocations table root override — same pattern for the table
-	   so the outer .lws-panel--allocations is the sole border, and
-	   the table body scrolls inside the terminal-height budget. */
-	.lws-panel--allocations :global(.lat-root) {
-		background: transparent;
-		border: none;
-		border-radius: 0;
-		flex: 1;
-		min-height: 0;
-		overflow-y: auto;
-	}
-
-	/* ── Drift Analysis panel — full-width table ──────────── */
-	.lws-panel--drift {
-		padding: 0;
-		flex: 1;
-		min-height: 0;
-		overflow: hidden;
-		display: flex;
-		flex-direction: column;
-	}
-
-	/* ── Execution Desk — table center + orders rail ─────── */
-	.lws-execution-grid {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) 340px;
-		gap: 12px;
-		flex: 1;
-		min-height: 0;
-		align-items: stretch;
-	}
-	.lws-panel--exec-table {
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-	}
-	.lws-panel--exec-orders {
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-	}
-
-	/* Container query keyed on workbench-main — when the main area
-	   is too narrow, collapse grids to a single column so the
-	   secondary rail drops below. */
-	@container workbench-main (max-width: 960px) {
-		.lws-overview-grid {
-			grid-template-columns: minmax(0, 1fr);
+	/* ═══════════════════════════════════════════════════════════
+	   RESPONSIVE: lock at ≤1200px (3-col needs width)
+	   ═══════════════════════════════════════════════════════════ */
+	@media (max-width: 1200px) {
+		.tg-root {
+			display: none !important;
 		}
-		.lws-execution-grid {
-			grid-template-columns: minmax(0, 1fr);
+		.tg-mobile-lock {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 16px;
+			height: 100%;
+			padding: 32px 24px;
+			text-align: center;
+			background: #05080f;
+			color: #c8d0dc;
+		}
+		.tg-mobile-lock-icon {
+			font-size: 48px;
+			color: #5a6577;
+			line-height: 1;
+		}
+		.tg-mobile-lock-title {
+			font-size: 16px;
+			font-weight: 700;
+			margin: 0;
+		}
+		.tg-mobile-lock-msg {
+			font-size: 13px;
+			color: #5a6577;
+			max-width: 360px;
+			line-height: 1.5;
+			margin: 0;
 		}
 	}
 
-	/* ── @media print — Trade Sheet compliance output ─────────
-	   When window.print() fires from the Execution Desk, produce
-	   a clean A4 page: white background, black text, no terminal
-	   chrome, no dark mode bleeding. Only the trade panel content
-	   (with its own print-only header) hits paper.
-
-	   Hide:  sidebar, header bar, overview stack, chart, KPIs,
-	          allocations table, placeholders, empty states.
-	   Show:  execution grid → orders panel only (table optional).
-	   Force: white bg, auto height, no overflow clipping. */
+	/* ═══════════════════════════════════════════════════════════
+	   PRINT: Trade Sheet — OMS only, white bg
+	   ═══════════════════════════════════════════════════════════ */
 	@media print {
-		/* Kill terminal root dark bg */
 		:global(.terminal-root) {
 			position: static !important;
 			width: auto !important;
 			height: auto !important;
 			overflow: visible !important;
-			background: #fff !important;
+			background: #ffffff !important;
+			color: #000000 !important;
 		}
 		:global(body) {
 			overflow: visible !important;
-			background: #fff !important;
+			background: #ffffff !important;
 		}
 
-		/* Hide all non-printable chrome */
-		:global(.wb-sidebar),
-		:global(.wb-header) {
+		.tg-header-slot,
+		.tg-news,
+		.tg-chart,
+		.tg-blotter,
+		.tg-tradelog,
+		.tg-mobile-lock,
+		.tg-empty {
 			display: none !important;
 		}
-		:global(.wb-main-area) {
+
+		.tg-root {
 			display: block !important;
-			background: #fff !important;
-		}
-		:global(.wb-main) {
-			padding: 0 !important;
-			overflow: visible !important;
+			background: #ffffff !important;
 			height: auto !important;
-			background: #fff !important;
+			overflow: visible !important;
 		}
-
-		/* Overview stack — hide entirely on print */
-		.lws-overview-stack {
-			display: none !important;
-		}
-
-		/* Tool placeholder — hide */
-		.lws-tool-placeholder {
-			display: none !important;
-		}
-
-		/* Drift table panel — hide (only orders panel prints) */
-		.lws-panel--drift {
-			display: none !important;
-		}
-
-		/* Execution grid — flatten to single column, orders only */
-		.lws-execution-grid {
+		.tg-oms {
 			display: block !important;
-			background: #fff !important;
-		}
-		.lws-panel--exec-table {
-			display: none !important;
-		}
-		.lws-panel--exec-orders {
-			background: #fff !important;
-			border: none !important;
+			width: 100% !important;
 			max-height: none !important;
-			overflow: visible !important;
 			height: auto !important;
+			overflow: visible !important;
+			background: #ffffff !important;
+			color: #000000 !important;
 		}
 
-		/* All panels — strip terminal panel chrome on paper */
-		.lws-panel {
-			background: #fff !important;
-			border: none !important;
-			border-radius: 0 !important;
-		}
-
-		/* Empty state — hide */
-		.lws-empty {
-			display: none !important;
-		}
-
-		/* Page setup */
 		@page {
 			size: A4 portrait;
 			margin: 20mm 15mm;

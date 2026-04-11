@@ -57,7 +57,7 @@ def test_dispatch_extraction_background_tasks_uses_unified_pipeline(monkeypatch)
     func, args, kwargs = background_tasks.calls[0]
     assert args == ()
     assert kwargs == {}
-    asyncio.get_event_loop().run_until_complete(func())
+    asyncio.run(func())
 
     assert invoked == [{
         "source": "deals",

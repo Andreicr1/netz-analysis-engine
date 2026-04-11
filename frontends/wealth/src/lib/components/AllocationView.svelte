@@ -113,14 +113,14 @@
 	function switchProfile(profile: Profile) {
 		editing = false;
 		editingTactical = false;
-		goto(`/portfolio/builder?profile=${profile}`, { replaceState: true });
+		goto(`/portfolio/live?mode=edit&profile=${profile}`, { replaceState: true });
 	}
 
 	/** Re-fetch current profile after mutation (save strategic/tactical). */
 	async function reloadCurrentProfile() {
 		invalidateCache("/allocation");
 		invalidateCache("/blended-benchmarks");
-		await goto(`/portfolio/builder?profile=${activeProfile}`, {
+		await goto(`/portfolio/live?mode=edit&profile=${activeProfile}`, {
 			replaceState: true,
 			invalidateAll: true,
 		});

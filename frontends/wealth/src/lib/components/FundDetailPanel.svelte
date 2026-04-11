@@ -228,183 +228,170 @@
 	}
 </script>
 
-<ContextPanel {open} {onClose} title={fundName} width="480px">
+<ContextPanel {open} {onClose} title={fundName} width="520px" class="rounded-none font-mono text-[11px] bg-[#222]">
 	{#if fund}
-		<!-- Fund identity row -->
-		<div class="mb-5 flex items-start gap-3">
-			<div class="min-w-0 flex-1">
-				<p class="text-xs text-(--ii-text-muted)">{fundManager ?? "—"}</p>
+		<!-- Fund identity row — High density grid -->
+		<div class="grid grid-cols-[1fr_auto] gap-[1px] bg-[#222] border-b border-[#222]">
+			<div class="bg-black p-2 flex flex-col justify-center">
+				<p class="text-[10px] uppercase tracking-tighter text-(--ii-text-muted) leading-none mb-1">MANAGER</p>
+				<p class="font-bold truncate">{fundManager ?? "—"}</p>
 				{#if fundSubcategory}
-					<p class="mt-0.5 text-xs text-(--ii-text-muted)">{fundSubcategory}</p>
+					<p class="mt-1 text-[10px] text-(--ii-text-muted) border-t border-[#222] pt-1">{fundSubcategory.toUpperCase()}</p>
 				{/if}
 			</div>
-			<div class="flex shrink-0 flex-col items-end gap-1">
+			<div class="bg-black p-2 flex flex-col items-end justify-center min-w-[80px]">
 				{#if fundScore !== null}
-					<span class="text-lg font-bold text-(--ii-text-primary)">
+					<p class="text-[10px] uppercase tracking-tighter text-(--ii-text-muted) leading-none mb-1">SCORE</p>
+					<span class="text-xl font-black leading-none text-(--ii-brand-primary)">
 						{formatNumber(fundScore, 1, "pt-BR")}
 					</span>
-					<span class="text-xs text-(--ii-text-muted)">Score</span>
 				{/if}
 			</div>
 		</div>
 
-		<!-- Tabs -->
-		<Tabs.Root bind:value={activeTab}>
-			<Tabs.List>
+		<!-- Tabs — Brutalist variant -->
+		<Tabs.Root bind:value={activeTab} class="mt-[1px]">
+			<Tabs.List class="w-full justify-start rounded-none bg-[#222] p-0 h-auto gap-[1px]">
 				{#each tabs as tab (tab.value)}
-					<Tabs.Trigger value={tab.value}>{tab.label}</Tabs.Trigger>
+					<Tabs.Trigger 
+						value={tab.value} 
+						class="rounded-none bg-black px-4 py-2 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-[#222] data-[state=active]:text-white border-none h-full"
+					>
+						{tab.label}
+					</Tabs.Trigger>
 				{/each}
 			</Tabs.List>
 
 			<!-- Tab: Resumo -->
-			<Tabs.Content value="resumo">
-				<div class="space-y-4">
-					<!-- Key metrics -->
-					<div class="grid grid-cols-2 gap-3">
-						<MetricCard label="AUM" value={formatAum(fundAum)} />
-						<MetricCard
-							label="Score Geral"
-							value={formatNumber(fundScore, 1, "pt-BR")}
-						/>
-						{#if fundAnnualReturn !== null}
-							<MetricCard
-								label="Retorno Anual"
-								value={formatPct(fundAnnualReturn)}
-							/>
-						{/if}
-						{#if fundSharpeRatio !== null}
-							<MetricCard
-								label="Sharpe"
-								value={formatNumber(fundSharpeRatio, 2, "pt-BR")}
-							/>
-						{/if}
-						{#if fundMaxDrawdown !== null}
-							<MetricCard
-								label={humanizeMetric("max_drawdown")}
-								value={formatPct(fundMaxDrawdown)}
-							/>
-						{/if}
-						{#if fundCvar95 !== null}
-							<MetricCard
-								label={humanizeMetric("cvar_95")}
-								value={formatPct(fundCvar95)}
-							/>
-						{/if}
+			<Tabs.Content value="resumo" class="mt-0 outline-none">
+				<div class="flex flex-col gap-[1px] bg-[#222]">
+					<!-- Key metrics grid -->
+					<div class="grid grid-cols-3 gap-[1px]">
+						<div class="bg-black p-2">
+							<p class="text-[9px] uppercase font-bold text-(--ii-text-muted) mb-1">AUM (BRL)</p>
+							<p class="text-xs font-bold tabular-nums">{formatAum(fundAum)}</p>
+						</div>
+						<div class="bg-black p-2">
+							<p class="text-[9px] uppercase font-bold text-(--ii-text-muted) mb-1">ANNUAL RET</p>
+							<p class="text-xs font-bold tabular-nums {fundAnnualReturn && fundAnnualReturn >= 0 ? 'text-(--ii-success)' : 'text-(--ii-danger)'}">
+								{fundAnnualReturn !== null ? formatPct(fundAnnualReturn) : "—"}
+							</p>
+						</div>
+						<div class="bg-black p-2">
+							<p class="text-[9px] uppercase font-bold text-(--ii-text-muted) mb-1">SHARPE</p>
+							<p class="text-xs font-bold tabular-nums">{fundSharpeRatio !== null ? formatNumber(fundSharpeRatio, 2, "pt-BR") : "—"}</p>
+						</div>
+						<div class="bg-black p-2">
+							<p class="text-[9px] uppercase font-bold text-(--ii-text-muted) mb-1">MAX DRAWDOWN</p>
+							<p class="text-xs font-bold tabular-nums text-(--ii-danger)">{fundMaxDrawdown !== null ? formatPct(fundMaxDrawdown) : "—"}</p>
+						</div>
+						<div class="bg-black p-2">
+							<p class="text-[9px] uppercase font-bold text-(--ii-text-muted) mb-1">CVAR (95%)</p>
+							<p class="text-xs font-bold tabular-nums">{fundCvar95 !== null ? formatPct(fundCvar95) : "—"}</p>
+						</div>
+						<div class="bg-black p-2">
+							<p class="text-[9px] uppercase font-bold text-(--ii-text-muted) mb-1">UPDATED</p>
+							<p class="text-[10px] font-bold uppercase">{fundUpdatedAt ? formatDate(fundUpdatedAt, "short", "pt-BR") : "—"}</p>
+						</div>
 					</div>
 
-					<!-- Fund metadata -->
-					<SectionCard title="Informações">
-						{#snippet children()}
-							<dl class="space-y-2 text-sm">
-								{#if fundIsin}
-									<div class="flex justify-between">
-										<dt class="text-(--ii-text-muted)">ISIN</dt>
-										<dd class="font-mono text-(--ii-text-primary)">{fundIsin}</dd>
-									</div>
-								{/if}
-								{#if fundCnpj}
-									<div class="flex justify-between">
-										<dt class="text-(--ii-text-muted)">CNPJ</dt>
-										<dd class="font-mono text-(--ii-text-primary)">{fundCnpj}</dd>
-									</div>
-								{/if}
-								<div class="flex justify-between">
-									<dt class="text-(--ii-text-muted)">Estratégia</dt>
-									<dd class="text-(--ii-text-primary)">{fundStrategy ?? "—"}</dd>
+					<!-- Technical Attributes -->
+					<div class="bg-black p-2">
+						<p class="text-[10px] font-black uppercase tracking-widest text-white mb-2 border-b border-[#222] pb-1">TECHNICAL ATTRIBUTES</p>
+						<div class="grid grid-cols-1 gap-[1px] bg-[#222]">
+							{#if fundIsin}
+								<div class="flex justify-between bg-black py-1 px-1">
+									<dt class="text-(--ii-text-muted) uppercase text-[9px] font-bold">ISIN</dt>
+									<dd class="font-mono text-white text-[10px]">{fundIsin}</dd>
 								</div>
-								<div class="flex justify-between">
-									<dt class="text-(--ii-text-muted)">Gestor</dt>
-									<dd class="text-(--ii-text-primary)">{fundManager ?? "—"}</dd>
+							{/if}
+							{#if fundCnpj}
+								<div class="flex justify-between bg-black py-1 px-1">
+									<dt class="text-(--ii-text-muted) uppercase text-[9px] font-bold">CNPJ</dt>
+									<dd class="font-mono text-white text-[10px]">{fundCnpj}</dd>
 								</div>
-								<div class="flex justify-between">
-									<dt class="text-(--ii-text-muted)">Atualizado</dt>
-									<dd class="text-(--ii-text-primary)">{formatDate(fundUpdatedAt, "short", "pt-BR")}</dd>
+							{/if}
+							<div class="flex justify-between bg-black py-1 px-1">
+								<dt class="text-(--ii-text-muted) uppercase text-[9px] font-bold">STRATEGY</dt>
+								<dd class="text-white text-[10px] font-bold uppercase">{fundStrategy ?? "—"}</dd>
+							</div>
+							{#if fundInceptionDate}
+								<div class="flex justify-between bg-black py-1 px-1">
+									<dt class="text-(--ii-text-muted) uppercase text-[9px] font-bold">INCEPTION</dt>
+									<dd class="text-white text-[10px] uppercase">{formatDate(fundInceptionDate, "short", "pt-BR")}</dd>
 								</div>
-								{#if fundInceptionDate}
-									<div class="flex justify-between">
-										<dt class="text-(--ii-text-muted)">Início</dt>
-										<dd class="text-(--ii-text-primary)">{formatDate(fundInceptionDate, "short", "pt-BR")}</dd>
-									</div>
-								{/if}
-							</dl>
-						{/snippet}
-					</SectionCard>
+							{/if}
+						</div>
+					</div>
 				</div>
 			</Tabs.Content>
 
 			<!-- Tab: DD Report -->
-			<Tabs.Content value="dd-report">
-				<div class="space-y-4">
+			<Tabs.Content value="dd-report" class="mt-0 outline-none">
+				<div class="flex flex-col gap-[1px] bg-[#222]">
 					{#if fundDdReportStatus === "complete"}
-						<div class="rounded-lg border border-(--ii-border) bg-(--ii-surface-elevated) p-4">
-							<div class="mb-3 flex items-center justify-between">
-								<span class="text-sm font-medium text-(--ii-text-primary)">DD Report Completo</span>
-								<span
-									class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
-									style="background-color: color-mix(in srgb, var(--ii-success) 15%, transparent); color: var(--ii-success);"
-								>
-									Completo
-								</span>
-							</div>
+						<div class="bg-black p-4 text-center">
+							<p class="text-[10px] font-bold uppercase tracking-widest text-(--ii-success) mb-4">SYSTEM READY: DD REPORT AVAILABLE</p>
 							<a
 								href="/library?q={encodeURIComponent(fundFundId ?? '')}"
-								class="inline-flex items-center gap-1.5 rounded-md bg-(--ii-brand-primary) px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
+								class="inline-block w-full rounded-none bg-(--ii-brand-primary) px-4 py-3 text-[11px] font-black uppercase tracking-widest text-white hover:bg-white hover:text-black transition-colors"
 							>
-								Ver Relatório
-								<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-									<path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-								</svg>
+								ACCESS FULL ANALYSIS →
 							</a>
 						</div>
 
 					{:else if fundDdReportStatus === "generating" || ddSseStatus === "streaming"}
-						<div class="rounded-lg border border-(--ii-border) bg-(--ii-surface-elevated) p-4">
-							<div class="mb-3 flex items-center justify-between">
-								<span class="text-sm font-medium text-(--ii-text-primary)">Gerando relatório…</span>
+						<div class="bg-black p-4">
+							<div class="mb-2 flex items-center justify-between">
+								<span class="text-[10px] font-black uppercase tracking-widest text-white">PIPELINE EXECUTION: GENERATING...</span>
 								{#if ddProgress !== null}
-									<span class="text-xs text-(--ii-text-muted)">{ddProgress}%</span>
+									<span class="text-xs font-mono font-bold text-(--ii-brand-primary)">{ddProgress}%</span>
 								{/if}
 							</div>
-							<!-- Progress bar -->
-							<Progress value={ddProgress ?? 0} max={100} class="h-1.5" />
+							<!-- High-contrast progress bar -->
+							<div class="h-1 w-full bg-[#222]">
+								<div class="h-full bg-(--ii-brand-primary)" style="width: {ddProgress ?? 0}%"></div>
+							</div>
 							{#if ddProgressMessage}
-								<p class="mt-2 text-xs text-(--ii-text-muted)">{ddProgressMessage}</p>
+								<p class="mt-3 text-[10px] font-mono text-(--ii-text-muted) uppercase italic">{ddProgressMessage}</p>
 							{/if}
 						</div>
 
 					{:else if ddSseStatus === "error"}
-						<EmptyState
-							title="Erro na geração"
-							message="Ocorreu um erro ao gerar o DD Report. Tente novamente."
-						/>
+						<div class="bg-black p-4 text-center">
+							<p class="text-[10px] font-bold uppercase tracking-widest text-(--ii-danger)">FATAL: REPORT GENERATION FAILED</p>
+						</div>
 					{:else}
-						<EmptyState
-							title="DD Report Pendente"
-							message="Nenhum relatório de due diligence foi gerado para este fundo."
-							actionLabel="Gerar Relatório"
-							onAction={() => {}}
-						/>
+						<div class="bg-black p-4 text-center">
+							<p class="text-[10px] font-bold uppercase tracking-widest text-(--ii-text-muted) mb-4">SYSTEM STATUS: NO REPORT GENERATED</p>
+							<button
+								class="w-full rounded-none border border-[#222] bg-black px-4 py-3 text-[11px] font-black uppercase tracking-widest text-white hover:bg-white hover:text-black transition-colors"
+								onclick={() => {}}
+							>
+								INITIALIZE GENERATION
+							</button>
+						</div>
 					{/if}
 				</div>
 			</Tabs.Content>
 
 			<!-- Tab: Docs -->
-			<Tabs.Content value="docs">
-				<EmptyState
-					title="Documentos"
-					message="Os documentos deste fundo aparecerão aqui após o upload."
-				/>
+			<Tabs.Content value="docs" class="mt-0 outline-none">
+				<div class="bg-black p-4 text-center border-t border-[#222]">
+					<p class="text-[10px] font-bold uppercase tracking-widest text-(--ii-text-muted)">DATAROOM: ZERO FILES FOUND</p>
+				</div>
 			</Tabs.Content>
 
 			<!-- Tab: Screening -->
-			<Tabs.Content value="screening">
-				<EmptyState
-					title="Screening"
-					message="Os resultados de screening para este fundo aparecerão aqui após a execução do screener."
-				/>
+			<Tabs.Content value="screening" class="mt-0 outline-none">
+				<div class="bg-black p-4 text-center border-t border-[#222]">
+					<p class="text-[10px] font-bold uppercase tracking-widest text-(--ii-text-muted)">VALIDATION: SCREENING PENDING</p>
+				</div>
 			</Tabs.Content>
 		</Tabs.Root>
 	{:else}
-		<EmptyState title="Nenhum fundo selecionado" message="Selecione um fundo na tabela para ver os detalhes." />
+		<div class="bg-black p-8 text-center border border-[#222]">
+			<p class="text-[10px] font-black uppercase tracking-widest text-(--ii-text-muted)">AWAITING ENTITY SELECTION</p>
+		</div>
 	{/if}
 </ContextPanel>

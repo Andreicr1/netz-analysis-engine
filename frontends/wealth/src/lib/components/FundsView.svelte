@@ -1,6 +1,6 @@
 <!--
-  FundsView — Fund Universe with status tabs + detail panel.
-  Self-loading component for embedding in Screener tabs.
+  FundsView — Institutional Fund Universe.
+  Strict brutalism: 1px grid gaps, rounded-none, text-11px font-mono.
 -->
 <script lang="ts">
 	import { EmptyState, formatAUM as formatSharedAUM, formatDate as formatSharedDate, formatNumber } from "@investintell/ui";
@@ -57,10 +57,10 @@
 	let activeStatusTab = $state<StatusTab>("todos");
 
 	const statusTabs: { value: StatusTab; label: string }[] = [
-		{ value: "todos", label: "All" },
-		{ value: "aprovados", label: "Approved" },
-		{ value: "dd_pendente", label: "DD Pending" },
-		{ value: "watchlist", label: "Watchlist" },
+		{ value: "todos", label: "ALL" },
+		{ value: "aprovados", label: "APPROVED" },
+		{ value: "dd_pendente", label: "DD PENDING" },
+		{ value: "watchlist", label: "WATCHLIST" },
 	];
 
 	let tabCounts = $derived({
@@ -95,181 +95,109 @@
 		closingTimeout = setTimeout(() => { selectedFund = null; closingTimeout = null; }, 220);
 	}
 
-	$effect(() => {
-		return () => { if (closingTimeout) { clearTimeout(closingTimeout); closingTimeout = null; } };
-	});
-
-	// Strategy badge colors
-	const strategyColors: Record<string, { bg: string; text: string }> = {
-		"Senior Secured": { bg: "color-mix(in srgb, var(--ii-teal, #14b8a6) 15%, transparent)", text: "var(--ii-teal, #14b8a6)" },
-		"Long Only": { bg: "color-mix(in srgb, var(--ii-brand-primary) 15%, transparent)", text: "var(--ii-brand-primary)" },
-		"Fixed Income": { bg: "color-mix(in srgb, #8b5cf6 15%, transparent)", text: "#8b5cf6" },
-		"Risk Parity": { bg: "color-mix(in srgb, var(--ii-warning) 15%, transparent)", text: "var(--ii-warning)" },
-		"EM Bonds": { bg: "color-mix(in srgb, var(--ii-success) 15%, transparent)", text: "var(--ii-success)" },
-	};
-
-	function getStrategyStyle(strategy: string | null): string {
-		if (!strategy) return "";
-		const colors = strategyColors[strategy];
-		if (!colors) return `background: color-mix(in srgb, var(--ii-text-muted) 15%, transparent); color: var(--ii-text-muted);`;
-		return `background: ${colors.bg}; color: ${colors.text};`;
-	}
-
-	function getStatusStyle(status: string | null): string {
-		switch (status) {
-			case "aprovado": return "background: color-mix(in srgb, var(--ii-success) 15%, transparent); color: var(--ii-success);";
-			case "watchlist": return "background: color-mix(in srgb, var(--ii-warning) 15%, transparent); color: var(--ii-warning);";
-			default: return "background: color-mix(in srgb, var(--ii-text-muted) 15%, transparent); color: var(--ii-text-muted);";
-		}
-	}
-
-	function getStatusLabel(status: string | null): string {
-		switch (status) {
-			case "aprovado": return "Approved";
-			case "watchlist": return "Watchlist";
-			case "dd_pendente": return "DD Pending";
-			default: return status ?? "—";
-		}
-	}
-
-	function getDDReportStyle(ddStatus: string | null): string {
-		switch (ddStatus) {
-			case "complete": return "background: color-mix(in srgb, var(--ii-success) 15%, transparent); color: var(--ii-success);";
-			case "generating": return "background: color-mix(in srgb, var(--ii-brand-primary) 15%, transparent); color: var(--ii-brand-primary);";
-			default: return "background: color-mix(in srgb, var(--ii-text-muted) 15%, transparent); color: var(--ii-text-muted);";
-		}
-	}
-
-	function getDDReportLabel(ddStatus: string | null): string {
-		switch (ddStatus) {
-			case "complete": return "Complete";
-			case "generating": return "Generating...";
-			case "pendente": return "Pending";
-			default: return "Pending";
-		}
-	}
-
+	// Helpers
 	function formatAum(value: number | null): string { return formatSharedAUM(value, "BRL", "pt-BR"); }
-	function formatDate(value: string | null): string { return formatSharedDate(value); }
+	function formatDate(value: string | null): string { return formatSharedDate(value, "short", "pt-BR"); }
 
-	// Load on mount
 	fetchData();
 </script>
 
-<div class="space-y-4">
+<div class="flex flex-col h-full bg-[#222] font-mono text-[11px] tabular-nums">
 	{#if loading}
-		<div class="space-y-3">
-			{#each Array.from({length: 5}, (_, i) => i) as i (i)}
-				<Skeleton class="h-14 rounded-lg" />
+		<div class="flex flex-col gap-[1px]">
+			{#each Array.from({length: 8}, (_, i) => i) as i (i)}
+				<div class="h-10 bg-black animate-pulse"></div>
 			{/each}
 		</div>
 	{:else}
-		<div class="flex items-center justify-between">
-			<h3 class="text-sm font-semibold text-(--ii-text-primary)">Fund Universe ({funds.length})</h3>
-			<Button class="gap-1.5">
-				<svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-					<path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-				</svg>
-				Add Fund
-			</Button>
+		<div class="bg-black p-2 flex items-center justify-between border-b border-[#222]">
+			<h3 class="text-[10px] font-black uppercase tracking-widest text-white">FUND UNIVERSE [N={funds.length}]</h3>
+			<button 
+				class="bg-white text-black px-3 py-1 text-[10px] font-black uppercase tracking-widest hover:bg-(--ii-brand-primary) hover:text-white transition-colors"
+				onclick={() => {}}
+			>
+				+ ADD_ENTITY
+			</button>
 		</div>
 
-		<Tabs.Root bind:value={activeStatusTab}>
-		<div class="overflow-hidden rounded-(--ii-radius-xl) border border-(--ii-border-subtle) bg-(--ii-surface-panel) shadow-(--ii-shadow-card)">
-			<!-- Status Tabs -->
-			<div class="border-b border-(--ii-border-subtle) bg-(--ii-surface-highlight) px-3 py-3">
-				<Tabs.List>
-					{#each statusTabs as tab (tab.value)}
-						<Tabs.Trigger value={tab.value}>
-							{tab.label}
-							{#if tabCounts[tab.value] > 0}
-								<Badge variant={activeStatusTab === tab.value ? "default" : "secondary"}>
-									{tabCounts[tab.value]}
-								</Badge>
-							{/if}
-						</Tabs.Trigger>
-					{/each}
-				</Tabs.List>
-			</div>
+		<Tabs.Root bind:value={activeStatusTab} class="flex-1 flex flex-col min-h-0">
+			<!-- Brutalist Status Tabs -->
+			<Tabs.List class="flex w-full justify-start rounded-none bg-[#222] p-0 h-auto gap-[1px] border-b border-[#222]">
+				{#each statusTabs as tab (tab.value)}
+					<Tabs.Trigger 
+						value={tab.value} 
+						class="rounded-none bg-black px-4 py-2 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-[#222] data-[state=active]:text-white border-none"
+					>
+						{tab.label}
+						{#if tabCounts[tab.value] > 0}
+							<span class="ml-2 text-[9px] opacity-50">[{tabCounts[tab.value]}]</span>
+						{/if}
+					</Tabs.Trigger>
+				{/each}
+			</Tabs.List>
 
 			{#if filteredFunds.length > 0}
-				<div class="overflow-x-auto">
-					<table class="w-full min-w-200 text-sm">
-						<thead>
-							<tr class="border-b border-(--ii-border-subtle) bg-(--ii-surface-highlight)">
-								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">Fund</th>
-								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">Manager</th>
-								<th class="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">AUM</th>
-								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">Strategy</th>
-								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">Status</th>
-								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">DD Report</th>
-								<th class="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">Score</th>
-								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">Updated</th>
+				<div class="flex-1 overflow-auto bg-[#222]">
+					<table class="w-full border-collapse">
+						<thead class="sticky top-0 z-10 bg-[#222]">
+							<tr>
+								<th class="bg-black px-2 py-2 text-left text-[9px] font-black uppercase text-[#71717a] border-r border-[#222]">ENTITY_NAME</th>
+								<th class="bg-black px-2 py-2 text-left text-[9px] font-black uppercase text-[#71717a] border-r border-[#222]">MANAGER</th>
+								<th class="bg-black px-2 py-2 text-right text-[9px] font-black uppercase text-[#71717a] border-r border-[#222]">AUM_BRL</th>
+								<th class="bg-black px-2 py-2 text-left text-[9px] font-black uppercase text-[#71717a] border-r border-[#222]">STRATEGY</th>
+								<th class="bg-black px-2 py-2 text-left text-[9px] font-black uppercase text-[#71717a] border-r border-[#222]">STATUS</th>
+								<th class="bg-black px-2 py-2 text-left text-[9px] font-black uppercase text-[#71717a] border-r border-[#222]">DD_PIPELINE</th>
+								<th class="bg-black px-2 py-2 text-right text-[9px] font-black uppercase text-[#71717a] border-r border-[#222]">SCORE</th>
+								<th class="bg-black px-2 py-2 text-left text-[9px] font-black uppercase text-[#71717a]">UPDATED</th>
 							</tr>
 						</thead>
-						<tbody>
+						<tbody class="bg-[#222] gap-[1px]">
 							{#each filteredFunds as fund (fund.id)}
 								<tr
-									class="cursor-pointer border-b border-(--ii-border-subtle) bg-(--ii-surface-elevated) transition-colors last:border-b-0 hover:bg-(--ii-accent-soft)"
-									class:bg-(--ii-accent-soft)={selectedFund?.id === fund.id && panelOpen}
+									class="cursor-pointer bg-black hover:bg-[#111] group {selectedFund?.id === fund.id && panelOpen ? 'bg-[#111]' : ''}"
 									onclick={() => openPanel(fund)}
 								>
-									<td class="px-4 py-3">
-										<div>
-											<p class="font-medium text-(--ii-text-primary)">{fund.name}</p>
-											{#if fund.subcategory}
-												<p class="mt-0.5 text-xs text-(--ii-text-muted)">{fund.subcategory}</p>
-											{/if}
-										</div>
-									</td>
-									<td class="px-4 py-3 text-(--ii-text-secondary)">{fund.manager ?? "—"}</td>
-									<td class="px-4 py-3 text-right font-mono text-(--ii-text-primary)">{formatAum(fund.aum)}</td>
-									<td class="px-4 py-3">
+									<td class="px-2 py-1.5 border-r border-[#222] font-black uppercase truncate max-w-[250px]">{fund.name}</td>
+									<td class="px-2 py-1.5 border-r border-[#222] text-[#71717a] uppercase truncate max-w-[150px]">{fund.manager ?? "—"}</td>
+									<td class="px-2 py-1.5 border-r border-[#222] text-right font-black">{formatAum(fund.aum)}</td>
+									<td class="px-2 py-1.5 border-r border-[#222] truncate max-w-[120px]">
 										{#if fund.strategy}
-											<span class="inline-flex items-center rounded-(--ii-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={getStrategyStyle(fund.strategy)}>{fund.strategy}</span>
+											<span class="text-[9px] font-black uppercase tracking-tighter text-(--ii-brand-primary)">{fund.strategy}</span>
 										{:else}
-											<span class="text-(--ii-text-muted)">—</span>
+											<span class="text-[#3f3f46]">—</span>
 										{/if}
 									</td>
-									<td class="px-4 py-3">
-										<span class="inline-flex items-center gap-1.5 rounded-(--ii-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={getStatusStyle(fund.status)}>
-											<span class="h-1.5 w-1.5 rounded-full" style="background-color: currentColor;"></span>
-											{getStatusLabel(fund.status)}
+									<td class="px-2 py-1.5 border-r border-[#222]">
+										<div class="flex items-center gap-1">
+											<div class="w-1.5 h-1.5 {fund.status === 'aprovado' ? 'bg-(--ii-success)' : fund.status === 'watchlist' ? 'bg-(--ii-warning)' : 'bg-[#3f3f46]'}"></div>
+											<span class="text-[9px] font-black uppercase">{fund.status?.toUpperCase() ?? "PENDING"}</span>
+										</div>
+									</td>
+									<td class="px-2 py-1.5 border-r border-[#222]">
+										<span class="text-[9px] font-black uppercase {fund.dd_report_status === 'complete' ? 'text-(--ii-success)' : 'text-[#71717a]'}">
+											{fund.dd_report_status?.toUpperCase() ?? "PENDING"}
 										</span>
 									</td>
-									<td class="px-4 py-3">
-										<span class="inline-flex items-center gap-1.5 rounded-(--ii-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={getDDReportStyle(fund.dd_report_status)}>
-											{#if fund.dd_report_status === "generating"}
-												<Spinner class="size-3" />
-											{:else}
-												<span class="h-1.5 w-1.5 rounded-full" style="background-color: currentColor;"></span>
-											{/if}
-											{getDDReportLabel(fund.dd_report_status)}
-										</span>
-									</td>
-									<td class="px-4 py-3 text-right">
+									<td class="px-2 py-1.5 border-r border-[#222] text-right">
 										{#if fund.score !== null}
-											<span class="font-mono text-sm font-semibold" style="color: {fund.score >= 7 ? 'var(--ii-success)' : fund.score >= 5 ? 'var(--ii-warning)' : 'var(--ii-danger)'};">
+											<span class="font-black text-[12px] {fund.score >= 7 ? 'text-(--ii-success)' : fund.score >= 5 ? 'text-(--ii-warning)' : 'text-(--ii-danger)'}">
 												{formatNumber(fund.score, 1, "en-US")}
 											</span>
 										{:else}
-											<span class="text-(--ii-text-muted)">—</span>
+											<span class="text-[#3f3f46]">—</span>
 										{/if}
 									</td>
-									<td class="px-4 py-3 text-(--ii-text-muted)">{formatDate(fund.updated_at)}</td>
+									<td class="px-2 py-1.5 text-[#71717a] text-[9px]">{formatDate(fund.updated_at)}</td>
 								</tr>
 							{/each}
 						</tbody>
 					</table>
 				</div>
 			{:else}
-				<EmptyState
-					title="No funds found"
-					message={activeStatusTab === "todos" ? "Add funds to the universe to get started." : "No funds in this category at the moment."}
-					actionLabel={activeStatusTab === "todos" ? "Add Fund" : undefined}
-				/>
+				<div class="flex-1 bg-black flex items-center justify-center border border-[#222]">
+					<p class="text-[10px] font-black uppercase tracking-widest text-[#3f3f46]">ZERO ENTITIES IN CURRENT VIEW</p>
+				</div>
 			{/if}
-		</div>
 		</Tabs.Root>
 	{/if}
 </div>

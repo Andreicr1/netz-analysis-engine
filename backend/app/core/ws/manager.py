@@ -47,7 +47,7 @@ from typing import Any
 
 import orjson
 import redis.asyncio as aioredis
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 from app.core.jobs.tracker import get_redis_pool
 from app.core.runtime.broadcaster import (
@@ -76,10 +76,13 @@ _DEFAULT_CHANNEL_CFG = ChannelConfig(
     drop_policy=DropPolicy.DROP_OLDEST,
     eviction_threshold=3,
 )
-# Hard cap on simultaneously attached WS clients per process. Matches
-# the §2.2 default and the soak-test budget in §6.5 C18. Raise
-# deliberately for deployments that need more capacity.
-_DEFAULT_BROADCASTER_CFG = BroadcasterConfig(max_connections=64)
+# Hard cap on simultaneously attached WS clients per process. Raised
+# to 128 for Terminal Live Workspace density.
+_DEFAULT_BROADCASTER_CFG = BroadcasterConfig(max_connections=128)
+
+# Per-organization ceiling — prevents a single tenant from monopolising
+# the WS pool. Exceeded → close with 1013 (Try Again Later).
+_MAX_CONNECTIONS_PER_ORG = 16
 
 
 def _channel_for(ticker: str) -> str:
@@ -120,6 +123,7 @@ class ConnectionManager:
         *,
         channel_cfg: ChannelConfig | None = None,
         broadcaster_cfg: BroadcasterConfig | None = None,
+        max_per_org: int = _MAX_CONNECTIONS_PER_ORG,
     ) -> None:
         self._connections: dict[ConnectionId, ClientConnection] = {}
         # ticker -> set of conn_ids subscribed to it
@@ -131,6 +135,9 @@ class ConnectionManager:
             cfg=broadcaster_cfg or _DEFAULT_BROADCASTER_CFG,
         )
         self._started = False
+        self._max_per_org = max_per_org
+        # org_id -> set of conn_ids belonging to that org
+        self._org_connections: dict[str, set[ConnectionId]] = {}
 
     @property
     def active_count(self) -> int:
@@ -165,7 +172,23 @@ class ConnectionManager:
         broadcaster (which spawns its drain task), and returns the
         ``ClientConnection`` so the route can hold the conn_id for the
         rest of the handler.
+
+        Per-org limit: if the organization already has
+        ``_max_per_org`` active connections the socket is closed with
+        code **1013** (Try Again Later) before accepting.
         """
+        # ── Per-org connection ceiling ────────────────────────────
+        org_id = str(actor.organization_id) if actor.organization_id else "__none__"
+        org_conns = self._org_connections.get(org_id)
+        if org_conns is not None and len(org_conns) >= self._max_per_org:
+            logger.warning(
+                "ws_org_limit_reached org=%s limit=%d — closing 1013",
+                org_id,
+                self._max_per_org,
+            )
+            await ws.close(code=1013, reason="Too many connections for this organization")
+            raise WebSocketDisconnect(code=1013)
+
         await ws.accept()
         # Lazy-start the broadcaster on first accept so test fixtures
         # that construct a fresh manager don't need to remember to
@@ -177,12 +200,19 @@ class ConnectionManager:
         await self._broadcaster.attach(conn_id, ws)
         conn = ClientConnection(conn_id=conn_id, ws=ws, actor=actor)
         self._connections[conn_id] = conn
+
+        # Track per-org
+        if org_id not in self._org_connections:
+            self._org_connections[org_id] = set()
+        self._org_connections[org_id].add(conn_id)
+
         logger.info(
-            "ws_connected conn_id=%s actor=%s org=%s active=%d",
+            "ws_connected conn_id=%s actor=%s org=%s active=%d org_active=%d",
             conn_id,
             actor.actor_id,
             actor.organization_id,
             self.active_count,
+            len(self._org_connections[org_id]),
         )
         return conn
 
@@ -196,6 +226,14 @@ class ConnectionManager:
         conn = self._connections.pop(conn_id, None)
         if conn is None:
             return
+
+        # Remove from per-org tracking
+        org_id = str(conn.actor.organization_id) if conn.actor.organization_id else "__none__"
+        org_conns = self._org_connections.get(org_id)
+        if org_conns is not None:
+            org_conns.discard(conn_id)
+            if not org_conns:
+                del self._org_connections[org_id]
 
         # Remove from all ticker subscription sets
         for ticker in list(conn.tickers):

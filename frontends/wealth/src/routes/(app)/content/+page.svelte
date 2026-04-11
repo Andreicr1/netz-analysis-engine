@@ -1,8 +1,8 @@
 <!--
   Content — Flash Reports, Investment Outlooks, Manager Spotlights.
-  Tabbed grid view with generate, approve, download actions.
+  Tabbed grid view with generate and download actions.
   Polls for status updates after generation triggers.
-  Self-approval blocked: approve button disabled when actorId === created_by.
+  Kill the Bureaucracy: 0-friction content production.
 -->
 <script lang="ts">
 	import { getContext, onDestroy } from "svelte";
@@ -11,7 +11,6 @@
 		PageHeader, Button, StatusBadge, EmptyState, ConsequenceDialog,
 		formatDateTime,
 	} from "@investintell/ui";
-	import { ForbiddenError } from "@investintell/ui/utils";
 	import type { ConsequenceDialogPayload } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
@@ -65,7 +64,7 @@
 	let activeJobId = $state<string | null>(null);
 	let activeContentId = $state<string | null>(null);
 
-	let hasGenerating = $derived(content.some((c) => c.status === "draft"));
+	let hasGenerating = $derived(content.some((c) => c.status === "draft" || c.status === "generating"));
 
 	// Polling fallback: if no SSE active, poll while items are generating
 	$effect(() => {
@@ -229,35 +228,6 @@
 		await generateContent("spotlights", { instrument_id: spotlightFundId });
 	}
 
-	// ── Approve ───────────────────────────────────────────────────────────
-
-	let approveDialogOpen = $state(false);
-	let approveTargetId = $state<string | null>(null);
-	let approveTargetTitle = $state("");
-
-	function requestApprove(item: ContentSummary) {
-		approveTargetId = item.id;
-		approveTargetTitle = item.title ?? contentTypeLabel(item.content_type);
-		approveDialogOpen = true;
-	}
-
-	async function handleApprove(_payload: ConsequenceDialogPayload) {
-		if (!approveTargetId) return;
-		try {
-			const api = createClientApiClient(getToken);
-			await api.post(`/content/${approveTargetId}/approve`, {});
-			approveDialogOpen = false;
-			await invalidateAll();
-		} catch (e) {
-			if (e instanceof ForbiddenError) {
-				error = "Cannot approve your own content. Another team member must approve.";
-			} else {
-				error = e instanceof Error ? e.message : "Approval failed";
-			}
-			approveDialogOpen = false;
-		}
-	}
-
 	// ── Download ──────────────────────────────────────────────────────────
 
 	let downloadingId = $state<string | null>(null);
@@ -278,24 +248,6 @@
 		} finally {
 			downloadingId = null;
 		}
-	}
-
-	// ── Helpers ───────────────────────────────────────────────────────────
-
-	function isApprovable(item: ContentSummary): boolean {
-		return item.status === "draft" || item.status === "review";
-	}
-
-	function isSelfAuthored(item: ContentSummary): boolean {
-		return actorId !== null && item.created_by === actorId;
-	}
-
-	function canApprove(item: ContentSummary): boolean {
-		return isApprovable(item) && !isSelfAuthored(item);
-	}
-
-	function canDownload(item: ContentSummary): boolean {
-		return item.status === "approved" || item.status === "published";
 	}
 </script>
 
@@ -378,37 +330,18 @@
 						<div class="ct-created-by">by {item.created_by}</div>
 					{/if}
 
-					{#if item.approved_at}
-						<div class="ct-approved">
-							Approved {formatDateTime(item.approved_at)}
-							{#if item.approved_by}
-								by {item.approved_by}
-							{/if}
-						</div>
-					{/if}
-
-					{#if item.status === "draft"}
-						<div class="ct-generating">
-							<span class="ct-spinner"></span>
-							Generating&hellip;
-						</div>
-					{/if}
-
 					<div class="ct-card-actions">
-						{#if canApprove(item)}
-							<Button size="sm" variant="outline" onclick={() => requestApprove(item)}>Approve</Button>
-						{:else if isApprovable(item) && isSelfAuthored(item)}
-							<span class="ct-self-approve-hint" title="Cannot approve your own content. Another team member must approve.">
-								<Button size="sm" variant="outline" disabled>Approve</Button>
-							</span>
-						{/if}
-						{#if canDownload(item)}
-							<Button size="sm" onclick={() => downloadPdf(item)} disabled={downloadingId === item.id}>
-								{downloadingId === item.id ? "Downloading\u2026" : "Download PDF"}
-							</Button>
-						{/if}
-						{#if item.status === "failed"}
-							<Button size="sm" variant="outline" onclick={() => retryContent(item)}>Retry</Button>
+						{#if item.status === "draft" || item.status === "generating"}
+							<button class="brut-btn brut-btn-generating" disabled>[ GENERATING... ]</button>
+						{:else if item.status === "published" || item.status === "ready"}
+							<button class="brut-btn brut-btn-download" onclick={() => downloadPdf(item)} disabled={downloadingId === item.id}>
+								{downloadingId === item.id ? "[ DOWNLOADING... ]" : "[ DOWNLOAD PDF ]"}
+							</button>
+						{:else if item.status === "failed"}
+							<button class="brut-btn brut-btn-regenerate" onclick={() => retryContent(item)}>[ REGENERATE ]</button>
+						{:else}
+							<!-- Fallback just in case -->
+							<span class="ct-unknown-status">Status unknown</span>
 						{/if}
 					</div>
 				</div>
@@ -416,20 +349,6 @@
 		</div>
 	{/if}
 </div>
-
-<!-- Approve dialog -->
-<ConsequenceDialog
-	bind:open={approveDialogOpen}
-	title="Approve Content"
-	impactSummary="This content will be marked as approved and available for distribution."
-	requireRationale={true}
-	rationaleLabel="Approval Rationale"
-	rationalePlaceholder="Confirm this content meets committee standards (min 10 chars)."
-	rationaleMinLength={10}
-	confirmLabel="Approve"
-	metadata={[{ label: "Content", value: approveTargetTitle }]}
-	onConfirm={handleApprove}
-/>
 
 <!-- Spotlight fund picker dialog -->
 <ConsequenceDialog
@@ -631,45 +550,74 @@
 		color: var(--ii-text-muted);
 	}
 
-	.ct-approved {
-		padding: var(--ii-space-stack-2xs, 4px) var(--ii-space-inline-md, 16px);
-		font-size: var(--ii-text-label, 0.75rem);
-		color: var(--ii-success);
+	.ct-unknown-status {
+		color: var(--ii-text-muted);
+		font-size: 10px;
+		font-weight: 600;
+		font-family: monospace;
 	}
 
-	.ct-generating {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: var(--ii-space-stack-2xs, 6px) var(--ii-space-inline-md, 16px);
-		font-size: var(--ii-text-label, 0.75rem);
-		color: var(--ii-info);
-	}
-
-	.ct-spinner {
-		display: inline-block;
-		width: 12px;
-		height: 12px;
-		border: 2px solid color-mix(in srgb, var(--ii-info) 30%, transparent);
-		border-top-color: var(--ii-info);
-		border-radius: 50%;
-		animation: ct-spin 0.8s linear infinite;
-	}
-
-	@keyframes ct-spin {
-		to { transform: rotate(360deg); }
-	}
-
-	.ct-self-approve-hint {
-		cursor: not-allowed;
-	}
-
+	/* Brutalist Action Buttons */
 	.ct-card-actions {
 		display: flex;
 		gap: var(--ii-space-inline-xs, 6px);
 		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-md, 16px);
 		margin-top: auto;
 		border-top: 1px solid var(--ii-border-subtle);
+		background: #05080f;
+	}
+
+	.brut-btn {
+		width: 100%;
+		background: transparent;
+		font-family: monospace;
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		padding: 8px;
+		border: 1px solid var(--ii-border-subtle);
+		cursor: pointer;
+		transition: all 150ms ease;
+		text-align: center;
+		outline: none;
+	}
+
+	.brut-btn:disabled {
+		cursor: not-allowed;
+	}
+
+	.brut-btn-generating {
+		color: #ca8a04;
+		border-color: #ca8a04;
+		animation: pulseBorder 1.5s infinite alternate;
+	}
+
+	@keyframes pulseBorder {
+		0% { border-color: rgba(202, 138, 4, 0.4); color: rgba(202, 138, 4, 0.8); }
+		100% { border-color: rgba(202, 138, 4, 1); color: #ca8a04; }
+	}
+
+	.brut-btn-download {
+		color: #2d7ef7;
+		border-color: #2d7ef7;
+	}
+
+	.brut-btn-download:hover:not(:disabled) {
+		background: rgba(45, 126, 247, 0.1);
+	}
+
+	.brut-btn-download:disabled {
+		color: #5a6577;
+		border-color: var(--ii-border-subtle);
+	}
+
+	.brut-btn-regenerate {
+		color: #ef4444;
+		border-color: #ef4444;
+	}
+
+	.brut-btn-regenerate:hover {
+		background: rgba(239, 68, 68, 0.1);
 	}
 
 	/* Spotlight picker */

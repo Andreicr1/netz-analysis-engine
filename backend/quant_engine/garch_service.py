@@ -40,6 +40,7 @@ class GarchResult:
     persistence: float | None  # alpha + beta (< 1 for stationarity)
     log_likelihood: float | None
     converged: bool
+    vol_model: str
 
 
 def fit_garch(
@@ -96,6 +97,7 @@ def fit_garch(
                 persistence=None,
                 log_likelihood=None,
                 converged=False,
+                vol_model="EWMA_0.94",
             )
 
         params = result.params
@@ -147,6 +149,7 @@ def fit_garch(
             persistence=round(persistence, 6),
             log_likelihood=round(float(result.loglikelihood), 2),
             converged=True,
+            vol_model="GARCH(1,1)",
         )
 
     except Exception as e:
@@ -160,4 +163,5 @@ def fit_garch(
             persistence=None,
             log_likelihood=None,
             converged=False,
+            vol_model="EWMA_0.94",
         )

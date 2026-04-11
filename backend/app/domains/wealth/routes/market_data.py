@@ -234,9 +234,8 @@ async def dashboard_snapshot(
     if not instrument_ids:
         return await _fallback_approved_instruments(db)
 
-    # 3. Query instruments + latest NAV in one shot
-    placeholders = ", ".join(f"'{iid}'" for iid in instrument_ids)
-    query = text(f"""
+    # 3. Query instruments + latest NAV in one shot (parameterized)
+    query = text("""
         WITH latest_nav AS (
             SELECT DISTINCT ON (instrument_id)
                 instrument_id,
@@ -247,7 +246,7 @@ async def dashboard_snapshot(
                 currency,
                 source
             FROM nav_timeseries
-            WHERE instrument_id::text IN ({placeholders})
+            WHERE instrument_id::text = ANY(:ids)
             ORDER BY instrument_id, nav_date DESC
         ),
         prev_nav AS (
@@ -277,11 +276,11 @@ async def dashboard_snapshot(
         FROM instruments_universe iu
         LEFT JOIN latest_nav ln ON ln.instrument_id = iu.instrument_id
         LEFT JOIN prev_nav pn ON pn.instrument_id = iu.instrument_id
-        WHERE iu.instrument_id::text IN ({placeholders})
+        WHERE iu.instrument_id::text = ANY(:ids)
         ORDER BY COALESCE(ln.aum_usd, 0) DESC
     """)
 
-    result = await db.execute(query)
+    result = await db.execute(query, {"ids": instrument_ids})
     rows = result.mappings().all()
 
     # 4. Build holdings with weight as allocation percentage
@@ -530,14 +529,13 @@ async def portfolio_holdings(
             as_of=datetime.utcnow().date().isoformat(),
         )
 
-    # Query instruments + latest + previous NAV
-    placeholders = ", ".join(f"'{iid}'" for iid in instrument_ids)
-    query = text(f"""
+    # Query instruments + latest + previous NAV (parameterized)
+    query = text("""
         WITH latest_nav AS (
             SELECT DISTINCT ON (instrument_id)
                 instrument_id, nav_date, nav, aum_usd, currency
             FROM nav_timeseries
-            WHERE instrument_id::text IN ({placeholders})
+            WHERE instrument_id::text = ANY(:ids)
             ORDER BY instrument_id, nav_date DESC
         ),
         prev_nav AS (
@@ -559,11 +557,11 @@ async def portfolio_holdings(
         FROM instruments_universe iu
         LEFT JOIN latest_nav ln ON ln.instrument_id = iu.instrument_id
         LEFT JOIN prev_nav pn ON pn.instrument_id = iu.instrument_id
-        WHERE iu.instrument_id::text IN ({placeholders})
+        WHERE iu.instrument_id::text = ANY(:ids)
         ORDER BY COALESCE(ln.aum_usd, 0) DESC
     """)
 
-    rows = (await db.execute(query)).mappings().all()
+    rows = (await db.execute(query, {"ids": instrument_ids})).mappings().all()
 
     # Compute a synthetic portfolio NAV for notional quantity calculation
     portfolio_nav = Decimal(

@@ -21,6 +21,11 @@
   },
   {
     "method": "DELETE",
+    "path": "/api/v1/library/pins/{pin_id}",
+    "name": "delete_pin"
+  },
+  {
+    "method": "DELETE",
     "path": "/api/v1/model-portfolios/{portfolio_id}/views/{view_id}",
     "name": "delete_view"
   },
@@ -328,6 +333,16 @@
     "method": "GET",
     "path": "/api/v1/ai/portfolio/investments/{investment_id}/reviews/latest",
     "name": "get_latest_investment_review"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/alerts/inbox",
+    "name": "get_alerts_inbox"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/alerts/portfolio/{portfolio_id}/count",
+    "name": "get_portfolio_alert_count"
   },
   {
     "method": "GET",
@@ -776,6 +791,41 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/library/bundle/{bundle_id}/download",
+    "name": "download_bundle"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/library/documents/{document_id}",
+    "name": "get_document_detail"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/library/folders/{path:path}/children",
+    "name": "list_folder_children"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/library/pins",
+    "name": "list_pins"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/library/redirect-dd-report/{old_fund_id}/{old_report_id}",
+    "name": "redirect_dd_report"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/library/search",
+    "name": "search_library"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/library/tree",
+    "name": "get_library_tree"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/macro/bis",
     "name": "get_bis_data"
   },
@@ -916,6 +966,16 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/actual-holdings",
+    "name": "get_actual_holdings"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/calibration",
+    "name": "get_portfolio_calibration"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/model-portfolios/{portfolio_id}/drift",
     "name": "get_drift_report"
   },
@@ -951,8 +1011,23 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/runs/latest",
+    "name": "get_latest_construction_run"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/runs/{run_id}",
+    "name": "get_construction_run"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/model-portfolios/{portfolio_id}/track-record",
     "name": "get_track_record"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/trade-tickets",
+    "name": "list_trade_tickets"
   },
   {
     "method": "GET",
@@ -988,6 +1063,16 @@
     "method": "GET",
     "path": "/api/v1/pipeline/deals/{deal_id}/performance",
     "name": "get_deal_performance"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/portfolio/regime/current",
+    "name": "get_current_regime_endpoint"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/portfolio/stress-test/scenarios",
+    "name": "list_stress_scenarios"
   },
   {
     "method": "GET",
@@ -1083,6 +1168,11 @@
     "method": "GET",
     "path": "/api/v1/risk/summary",
     "name": "get_risk_summary_batch"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/risk/timeseries/{instrument_id}",
+    "name": "get_risk_timeseries"
   },
   {
     "method": "GET",
@@ -1606,6 +1696,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/alerts/{source}/{alert_id}/acknowledge",
+    "name": "acknowledge_alert"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/allocation/{profile}/simulate",
     "name": "simulate_allocation"
   },
@@ -1658,11 +1753,6 @@
     "method": "POST",
     "path": "/api/v1/content/spotlights",
     "name": "trigger_spotlight"
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/content/{content_id}/approve",
-    "name": "approve_content"
   },
   {
     "method": "POST",
@@ -1876,6 +1966,16 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/library/bundle",
+    "name": "create_bundle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/library/pins",
+    "name": "create_pin"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/macro/reviews/generate",
     "name": "generate_review"
   },
@@ -1916,6 +2016,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/execute-trades",
+    "name": "execute_trades"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/model-portfolios/{portfolio_id}/rebalance/preview",
     "name": "rebalance_preview"
   },
@@ -1933,6 +2038,11 @@
     "method": "POST",
     "path": "/api/v1/model-portfolios/{portfolio_id}/stress-test",
     "name": "run_parametric_stress_test"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/transitions",
+    "name": "apply_portfolio_transition"
   },
   {
     "method": "POST",
@@ -2141,6 +2251,21 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-library-bundle-builder",
+    "name": "trigger_run_library_bundle_builder"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-library-index-rebuild",
+    "name": "trigger_run_library_index_rebuild"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-library-pins-ttl",
+    "name": "trigger_run_library_pins_ttl"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-macro-ingestion",
     "name": "trigger_run_macro_ingestion"
   },
@@ -2243,5 +2368,10 @@
     "method": "PUT",
     "path": "/api/v1/allocation/{profile}/tactical",
     "name": "update_tactical"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/calibration",
+    "name": "update_portfolio_calibration"
   }
 ]

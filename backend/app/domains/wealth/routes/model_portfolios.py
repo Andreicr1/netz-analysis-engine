@@ -2004,6 +2004,12 @@ async def _run_construction_async(
             max_single_fund=active_constraints.max_single_fund_weight,
         )
 
+        from app.core.config.config_service import ConfigService
+        config_svc = ConfigService(db)
+        optimizer_result = await config_svc.get("wealth", "optimizer", str(org_id))
+        optimizer_config = optimizer_result.value if optimizer_result else {}
+        cf_factor = float(optimizer_config.get("cf_relaxation_factor", 1.3))
+
         fund_result: FundOptimizationResult = await optimize_fund_portfolio(
             fund_ids=opt_fund_ids,
             fund_blocks=sub_blocks,
@@ -2012,6 +2018,7 @@ async def _run_construction_async(
             constraints=active_constraints,
             skewness=sub_skewness,
             excess_kurtosis=sub_excess_kurtosis,
+            cf_relaxation_factor=cf_factor,
         )
 
         if fund_result.status.startswith("optimal") and fund_result.weights:
@@ -3363,6 +3370,9 @@ async def get_current_regime_endpoint(
 # Shadow OMS — Phase 9 Block D
 # ──────────────────────────────────────────────────────────────────
 
+from app.core.runtime.gates import get_idempotency_storage
+from app.core.runtime.idempotency import idempotent
+from app.core.security.clerk_auth import require_role
 from app.domains.wealth.models.shadow_oms import (
     PortfolioActualHoldings,
     TradeTicket,
@@ -3372,6 +3382,7 @@ from app.domains.wealth.schemas.shadow_oms import (
     ExecuteTradesRequest,
     ExecuteTradesResponse,
     HoldingWeight,
+    TradeTicketPage,
     TradeTicketResponse,
 )
 
@@ -3442,11 +3453,30 @@ async def get_actual_holdings(
     )
 
 
+def _execute_trades_idempotency_key(
+    portfolio_id: uuid.UUID,
+    payload: ExecuteTradesRequest,
+    **_kwargs: Any,
+) -> str:
+    """Derive idempotency key from portfolio + expected_version.
+
+    Two requests with the same portfolio and expected_version are
+    logically the same mutation — the second is a retry.
+    """
+    return f"exec_trades:{portfolio_id}:{payload.expected_version}"
+
+
 @router.post(
     "/{portfolio_id}/execute-trades",
     response_model=ExecuteTradesResponse,
     status_code=status.HTTP_200_OK,
     summary="Execute trade tickets and update actual holdings (Shadow OMS)",
+    dependencies=[Depends(require_role(Role.ADMIN, Role.INVESTMENT_TEAM))],
+)
+@idempotent(
+    key=_execute_trades_idempotency_key,
+    ttl_s=300,
+    storage=get_idempotency_storage(),
 )
 async def execute_trades(
     portfolio_id: uuid.UUID,
@@ -3458,15 +3488,18 @@ async def execute_trades(
 ) -> ExecuteTradesResponse:
     """Execute a batch of trade tickets against a live portfolio.
 
-    Phase 9 Block D. Transactional:
+    Phase 1 Terminal OMS Hardening. Transactional:
     1. Validate portfolio is in state='live'.
-    2. INSERT one ``trade_tickets`` row per ticket.
-    3. Load or initialise ``portfolio_actual_holdings``.
+    2. Optimistic lock: SELECT ... FOR UPDATE on actual holdings,
+       verify ``expected_version`` matches, else 409.
+    3. INSERT one ``trade_tickets`` row per ticket.
     4. Apply every BUY/SELL delta to the holdings JSONB.
-    5. UPDATE the holdings row atomically.
+    5. Increment ``holdings_version`` and persist.
 
     If any step fails, the entire transaction rolls back.
     """
+    from sqlalchemy.orm.attributes import flag_modified  # noqa: PLC0415
+
     # 1. Load portfolio — must be live
     stmt = select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
     result = await db.execute(stmt)
@@ -3481,7 +3514,40 @@ async def execute_trades(
 
     actor_id = actor.user_id if actor else None
 
-    # 2. Insert trade ticket rows
+    # 2. Load or bootstrap actual holdings with FOR UPDATE (optimistic lock)
+    stmt_actual = (
+        select(PortfolioActualHoldings)
+        .where(PortfolioActualHoldings.portfolio_id == portfolio_id)
+        .with_for_update()
+    )
+    result_actual = await db.execute(stmt_actual)
+    actual_row = result_actual.scalar_one_or_none()
+
+    if actual_row is None:
+        # Bootstrap from target weights — version starts at 1
+        fss = portfolio.fund_selection_schema or {}
+        seed_holdings = list(fss.get("funds", []))
+        actual_row = PortfolioActualHoldings(
+            portfolio_id=portfolio_id,
+            organization_id=org_id,
+            holdings=seed_holdings,
+            holdings_version=1,
+        )
+        db.add(actual_row)
+        await db.flush()
+
+    # Optimistic lock check
+    if actual_row.holdings_version != payload.expected_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Holdings version mismatch: expected {payload.expected_version}, "
+                f"current {actual_row.holdings_version}. "
+                "Another trade may have been executed concurrently — reload and retry."
+            ),
+        )
+
+    # 3. Insert trade ticket rows
     persisted_tickets: list[TradeTicketResponse] = []
     for t in payload.tickets:
         ticket = TradeTicket(
@@ -3501,27 +3567,10 @@ async def execute_trades(
                 action=ticket.action,
                 delta_weight=float(ticket.delta_weight),
                 executed_at=ticket.executed_at,
+                execution_venue=ticket.execution_venue,
+                fill_status=ticket.fill_status,
             ),
         )
-
-    # 3. Load or bootstrap actual holdings
-    stmt_actual = select(PortfolioActualHoldings).where(
-        PortfolioActualHoldings.portfolio_id == portfolio_id,
-    )
-    result_actual = await db.execute(stmt_actual)
-    actual_row = result_actual.scalar_one_or_none()
-
-    if actual_row is None:
-        # Bootstrap from target weights
-        fss = portfolio.fund_selection_schema or {}
-        seed_holdings = list(fss.get("funds", []))
-        actual_row = PortfolioActualHoldings(
-            portfolio_id=portfolio_id,
-            organization_id=org_id,
-            holdings=seed_holdings,
-        )
-        db.add(actual_row)
-        await db.flush()
 
     # 4. Apply deltas to the holdings JSONB
     holdings_list: list[dict] = list(actual_row.holdings or [])
@@ -3537,12 +3586,10 @@ async def execute_trades(
         elif t.action == "SELL":
             h["weight"] = max(0.0, current_weight - t.delta_weight)
 
-    # 5. Persist updated holdings
+    # 5. Persist updated holdings + increment version
     actual_row.holdings = holdings_list
+    actual_row.holdings_version += 1
     actual_row.last_rebalanced_at = func.now()
-    # Force JSONB dirty detection (SA sometimes misses in-place mutation)
-    from sqlalchemy.orm.attributes import flag_modified  # noqa: PLC0415
-
     flag_modified(actual_row, "holdings")
 
     await db.commit()
@@ -3551,4 +3598,63 @@ async def execute_trades(
         portfolio_id=str(portfolio_id),
         trades_executed=len(persisted_tickets),
         tickets=persisted_tickets,
+    )
+
+
+@router.get(
+    "/{portfolio_id}/trade-tickets",
+    response_model=TradeTicketPage,
+    summary="Paginated trade ticket history for a portfolio",
+)
+async def list_trade_tickets(
+    portfolio_id: uuid.UUID,
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(50, ge=1, le=200, description="Items per page"),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> TradeTicketPage:
+    """Return paginated trade tickets ordered by executed_at DESC.
+
+    Uses the composite index ``ix_trade_tickets_portfolio_executed_id``
+    for efficient keyset-friendly pagination.
+    """
+    offset = (page - 1) * page_size
+
+    # Count
+    count_stmt = (
+        select(func.count())
+        .select_from(TradeTicket)
+        .where(TradeTicket.portfolio_id == portfolio_id)
+    )
+    total = (await db.execute(count_stmt)).scalar() or 0
+
+    # Fetch page
+    data_stmt = (
+        select(TradeTicket)
+        .where(TradeTicket.portfolio_id == portfolio_id)
+        .order_by(TradeTicket.executed_at.desc(), TradeTicket.id.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    rows = (await db.execute(data_stmt)).scalars().all()
+
+    items = [
+        TradeTicketResponse(
+            id=str(t.id),
+            instrument_id=t.instrument_id,
+            action=t.action,
+            delta_weight=float(t.delta_weight),
+            executed_at=t.executed_at,
+            execution_venue=t.execution_venue,
+            fill_status=t.fill_status,
+        )
+        for t in rows
+    ]
+
+    return TradeTicketPage(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_next=(page * page_size < total),
     )

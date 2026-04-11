@@ -17,7 +17,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import DateTime, Numeric, String, Uuid, func
+from sqlalchemy import DateTime, Integer, Numeric, String, Uuid, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -39,6 +39,9 @@ class PortfolioActualHoldings(OrganizationScopedMixin, Base):
     )
     holdings: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, server_default="[]",
+    )
+    holdings_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1",
     )
     last_rebalanced_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
@@ -77,4 +80,10 @@ class TradeTicket(OrganizationScopedMixin, Base):
     )
     executed_by: Mapped[str | None] = mapped_column(
         String(128), nullable=True,
+    )
+    execution_venue: Mapped[str | None] = mapped_column(
+        String(50), nullable=True,
+    )
+    fill_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="simulated",
     )

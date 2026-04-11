@@ -10,6 +10,9 @@ regime states for conditional CVaR — replacing the VIX threshold proxy.
 Pipeline order:
     fred_ingestion → risk_calc → portfolio_eval → regime_fit
 
+Note: Operator must ensure `macro_ingestion.py` has been run to backfill VIX
+data if the macro_data table is empty or lacks historical coverage.
+
 Usage:
     python -m app.workers.regime_fit
 
@@ -39,7 +42,7 @@ logger = structlog.get_logger()
 
 LOCK_ID = 900_026
 MIN_VIX_OBS = 252        # absolute minimum for stable 2-state Markov estimation
-PREFERRED_VIX_LOOKBACK = 504  # 2 trading years (expanding window cap)
+PREFERRED_VIX_LOOKBACK = 3650  # 10 calendar years (covers 3-year risk window with burn-in)
 
 # Regime classification thresholds — aligned with regime_service._DEFAULT_THRESHOLDS
 _VIX_RISK_OFF = 25.0
@@ -95,6 +98,7 @@ def _fit_markov_regime(vix_series: list[float]) -> list[float] | None:
     Sorting by mean after each fit prevents regime 0↔1 flipping across weekly re-fits.
     """
     try:
+        import warnings
         from statsmodels.tsa.regime_switching.markov_regression import MarkovRegression
     except ImportError:
         logger.error(
@@ -112,13 +116,14 @@ def _fit_markov_regime(vix_series: list[float]) -> list[float] | None:
             trend="c",                # regime-specific intercept = mean log-VIX
             switching_variance=True,  # CRITICAL: distinct σ²; without this, regimes conflate
         )
-        res = mod.fit(
-            disp=False,
-            search_reps=10,    # multiple EM random starts → avoid local optima
-            em_iter=500,
-            maxiter=100,       # convergence cap to bound wall-clock time
-            tol=1e-4,          # convergence tolerance
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # Suppress statsmodels EM and convergence warnings
+            res = mod.fit(
+                disp=False,
+                search_reps=10,    # multiple EM random starts → avoid local optima
+                em_iter=500,
+                maxiter=100,       # convergence cap to bound wall-clock time
+            )
     except Exception as e:
         logger.warning("Markov fitting failed; threshold-based regime remains active", error=str(e))
         return None
