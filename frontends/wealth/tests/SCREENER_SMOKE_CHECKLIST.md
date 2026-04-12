@@ -22,3 +22,6 @@ Open http://localhost:5174/terminal-screener after `pnpm dev`.
 18. Already-approved funds show green "IN UNIVERSE" label
 19. Sparklines: green for positive trend, red for negative, em-dash for no data
 20. Canvas sparklines at 48x16px, no ECharts import in bundle
+21. Grid fills viewport width (2-column layout, no third column, no excessive padding)
+22. Error state renders as terminal-native [ ERR ] panel with RETRY + RELOAD, not raw stack trace
+23. Compact density: ~8px padding between shell chrome and screener content

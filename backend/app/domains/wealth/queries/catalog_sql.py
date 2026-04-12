@@ -368,6 +368,10 @@ def _build_base_stmt(f: CatalogFilters, *, include_risk_membership: bool = False
         conditions.append(mv_unified_funds.c.ticker.isnot(None))
 
     # 8b. In instruments_universe (real NAV data ingested)
+    # When include_risk_membership=True the base query already JOINs
+    # instruments_universe, so an EXISTS subquery against the same
+    # Table object triggers SQLAlchemy auto-correlation ambiguity.
+    # Use .correlate(mv_unified_funds) to anchor the subquery.
     if f.in_universe is True:
         conditions.append(
             exists(
@@ -376,7 +380,7 @@ def _build_base_stmt(f: CatalogFilters, *, include_risk_membership: bool = False
                         instruments_universe.c.ticker == mv_unified_funds.c.ticker,
                         instruments_universe.c.isin == mv_unified_funds.c.isin,
                     ),
-                )
+                ).correlate(mv_unified_funds)
             )
         )
 

@@ -13,7 +13,6 @@
 		aumMin: number;              // USD absolute, 0 = no filter
 		returnMin: number;           // % annualised 1Y, null/-999 = no filter
 		expenseMax: number;          // % annual fee, 10 = no filter
-		onlyWithNav: boolean;        // in_universe flag
 		eliteOnly: boolean;          // ELITE-flagged funds only
 	}
 
@@ -24,7 +23,6 @@
 		aumMin: 0,
 		returnMin: -999,
 		expenseMax: 10,
-		onlyWithNav: true,
 		eliteOnly: false,
 	};
 </script>
@@ -106,10 +104,6 @@
 		onFiltersChange({ ...filters, [field]: value });
 	}
 
-	function toggleOnlyWithNav() {
-		onFiltersChange({ ...filters, onlyWithNav: !filters.onlyWithNav });
-	}
-
 	function toggleEliteOnly() {
 		onFiltersChange({ ...filters, eliteOnly: !filters.eliteOnly });
 	}
@@ -122,7 +116,6 @@
 			aumMin: 0,
 			returnMin: -999,
 			expenseMax: 10,
-			onlyWithNav: true,
 			eliteOnly: false,
 		});
 	}
@@ -175,14 +168,6 @@
 			</button>
 			{#if sectionOpen.universe}
 				<div class="sf-section-body">
-					<label class="sf-check sf-check--strong">
-						<input
-							type="checkbox"
-							checked={filters.onlyWithNav}
-							onchange={toggleOnlyWithNav}
-						/>
-						<span class="sf-check-label">Only funds with NAV</span>
-					</label>
 					<div class="sf-check-grid">
 						{#each FUND_UNIVERSE as u}
 							<label class="sf-check">
@@ -448,12 +433,6 @@
 		padding: 2px 0;
 		cursor: pointer;
 	}
-	.sf-check--strong {
-		padding-bottom: 6px;
-		border-bottom: 1px dashed rgba(255, 255, 255, 0.04);
-		margin-bottom: 6px;
-	}
-
 	.sf-check input[type="checkbox"] {
 		width: 12px;
 		height: 12px;
