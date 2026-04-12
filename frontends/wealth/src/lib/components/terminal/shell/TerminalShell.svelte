@@ -51,9 +51,11 @@
 
 	interface TerminalShellProps {
 		children: Snippet;
+		/** Density for the LayoutCage: "standard" (24px) or "compact" (8px). */
+		cageDensity?: "standard" | "compact";
 	}
 
-	let { children }: TerminalShellProps = $props();
+	let { children, cageDensity = "standard" }: TerminalShellProps = $props();
 
 	// ─── Build metadata ─────────────────────────────────────────
 	// Exposed via vite `define` in frontends/wealth/vite.config.ts
@@ -247,7 +249,7 @@
 	</div>
 
 	<main class="ts-content">
-		<LayoutCage>
+		<LayoutCage density={cageDensity}>
 			{@render children()}
 		</LayoutCage>
 	</main>

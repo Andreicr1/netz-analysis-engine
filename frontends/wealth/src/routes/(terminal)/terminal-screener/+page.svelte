@@ -30,7 +30,6 @@
 			aumMin: Number(params.get("aum_min") ?? 0),
 			returnMin: Number(params.get("min_return") ?? -999),
 			expenseMax: Number(params.get("max_expense") ?? 10),
-			onlyWithNav: params.get("nav") !== "0",
 			eliteOnly: params.get("elite") === "1",
 		};
 	}
@@ -49,7 +48,6 @@
 		p.delete("aum_min");
 		p.delete("min_return");
 		p.delete("max_expense");
-		p.delete("nav");
 		p.delete("elite");
 
 		if (next.fundUniverse.size > 0) p.set("universe", [...next.fundUniverse].join(","));
@@ -58,7 +56,6 @@
 		if (next.aumMin > 0) p.set("aum_min", String(Math.round(next.aumMin)));
 		if (next.returnMin > -999) p.set("min_return", String(next.returnMin));
 		if (next.expenseMax < 10) p.set("max_expense", String(next.expenseMax));
-		if (!next.onlyWithNav) p.set("nav", "0");
 		if (next.eliteOnly) p.set("elite", "1");
 
 		const qs = p.toString();
@@ -85,7 +82,7 @@
 	}
 </script>
 
-<div bind:this={containerEl}>
+<div bind:this={containerEl} data-screener-root class="screener-page-root">
 	<TerminalScreenerShell filters={currentFilters} onFiltersChange={handleFiltersChange} />
 </div>
 
@@ -96,3 +93,19 @@
 		onClose={closeFocusMode}
 	/>
 {/if}
+
+<style>
+	.screener-page-root {
+		height: 100%;
+		overflow: hidden;
+	}
+
+	/*
+	 * Override LayoutCage padding for the screener surface.
+	 * Data-dense grids need every pixel — 8px vs the 24px default.
+	 * The :global targets the cage wrapper rendered by TerminalShell.
+	 */
+	:global(.lc-cage--standard:has([data-screener-root])) {
+		padding: var(--terminal-space-2) !important;
+	}
+</style>
