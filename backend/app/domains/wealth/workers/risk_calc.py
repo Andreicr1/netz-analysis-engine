@@ -1210,12 +1210,12 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
             # proportional to the global default strategic allocation
             # (Phase 2 Session B commit 7).
             try:
-                elite_stats = await _compute_elite_ranking(db, eval_date)
-                results["elite_ranked"] = elite_stats["total_elite"]
+                total_elite, per_strategy = await _compute_elite_ranking(db, eval_date)
+                results["elite_ranked"] = total_elite
                 logger.info(
                     "global_risk_metrics.elite_ranking_done",
-                    total_elite=elite_stats["total_elite"],
-                    per_strategy=elite_stats["per_strategy"],
+                    total_elite=total_elite,
+                    per_strategy=per_strategy,
                 )
             except Exception:
                 logger.exception("global_risk_metrics.elite_ranking_failed")
@@ -1401,7 +1401,7 @@ ELITE_ROUNDING_TOLERANCE = 3
 async def _compute_elite_ranking(
     db: AsyncSession,
     calc_date: date,
-) -> dict[str, int | dict[str, int]]:
+) -> tuple[int, dict[str, int]]:
     """ELITE ranking pass.
 
     For each asset_class bucket derived from
@@ -1430,11 +1430,11 @@ async def _compute_elite_ranking(
     manager_score is fresh and the ELITE cohort reflects the
     latest scoring pass.
 
-    Returns a dict with:
-      - ``total_elite``: int — sum of elite_flag = true across all
-        buckets after the pass
-      - ``per_strategy``: dict[asset_class, int] — the target count
-        actually applied per strategy (post rounding)
+    Returns:
+        ``(total_elite, per_strategy_targets)`` where
+        ``total_elite`` is the sum of ``elite_flag = true`` across
+        all buckets after the pass, and ``per_strategy_targets`` maps
+        each asset_class to the rounded target count that was applied.
     """
     from vertical_engines.wealth.elite_ranking.allocation_source import (
         compute_target_counts,
@@ -1560,10 +1560,7 @@ async def _compute_elite_ranking(
     )
     total_elite = int(total_result.scalar_one() or 0)
 
-    return {
-        "total_elite": total_elite,
-        "per_strategy": target_counts,
-    }
+    return total_elite, target_counts
 
 
 if __name__ == "__main__":

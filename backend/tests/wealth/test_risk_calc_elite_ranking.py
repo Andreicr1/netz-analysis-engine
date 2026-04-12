@@ -54,11 +54,11 @@ async def test_elite_ranking_marks_three_hundred_funds() -> None:
         pytest.skip("No global fund_risk_metrics rows in local dev")
 
     async with async_session_factory() as db:
-        stats = await _compute_elite_ranking(db, latest)
+        total_elite, _ = await _compute_elite_ranking(db, latest)
 
-    deviation = abs(int(stats["total_elite"]) - ELITE_TOTAL_COUNT)
+    deviation = abs(total_elite - ELITE_TOTAL_COUNT)
     assert deviation <= ELITE_ROUNDING_TOLERANCE, (
-        f"Total elite = {stats['total_elite']}, expected "
+        f"Total elite = {total_elite}, expected "
         f"{ELITE_TOTAL_COUNT} ± {ELITE_ROUNDING_TOLERANCE}"
     )
 
@@ -70,7 +70,7 @@ async def test_elite_ranking_respects_per_strategy_targets() -> None:
         pytest.skip("No global fund_risk_metrics rows in local dev")
 
     async with async_session_factory() as db:
-        stats = await _compute_elite_ranking(db, latest)
+        _, per_strategy = await _compute_elite_ranking(db, latest)
         result = await db.execute(
             text(
                 """
@@ -89,12 +89,11 @@ async def test_elite_ranking_respects_per_strategy_targets() -> None:
             ),
             {
                 "calc_date": latest,
-                "classes": list(stats["per_strategy"].keys()),
+                "classes": list(per_strategy.keys()),
             },
         )
         rows = result.mappings().all()
 
-    per_strategy = stats["per_strategy"]
     for row in rows:
         asset_class = row["asset_class"]
         expected = per_strategy[asset_class]
@@ -165,8 +164,8 @@ async def test_elite_ranking_is_idempotent() -> None:
         pytest.skip("No global fund_risk_metrics rows in local dev")
 
     async with async_session_factory() as db:
-        first = await _compute_elite_ranking(db, latest)
-        second = await _compute_elite_ranking(db, latest)
+        first_total, first_per = await _compute_elite_ranking(db, latest)
+        second_total, second_per = await _compute_elite_ranking(db, latest)
 
-    assert first["total_elite"] == second["total_elite"]
-    assert first["per_strategy"] == second["per_strategy"]
+    assert first_total == second_total
+    assert first_per == second_per

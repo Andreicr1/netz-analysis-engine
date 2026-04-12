@@ -57,12 +57,16 @@ def _autocommit_conninfo() -> str:
     sync_url = os.getenv("DATABASE_URL_SYNC", "")
     if sync_url:
         return sync_url.replace("+psycopg", "")
-    return op.get_bind().connection.dbapi_connection.info.dsn
+    dbapi = op.get_bind().connection.dbapi_connection
+    assert dbapi is not None, "Alembic bind has no live DBAPI connection"
+    return str(dbapi.info.dsn)
 
 
 def upgrade() -> None:
     conninfo = _autocommit_conninfo()
-    op.get_bind().connection.dbapi_connection.commit()
+    dbapi = op.get_bind().connection.dbapi_connection
+    assert dbapi is not None
+    dbapi.commit()
 
     with psycopg.connect(conninfo, autocommit=True) as conn:
         cursor = conn.cursor()
@@ -117,7 +121,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     conninfo = _autocommit_conninfo()
-    op.get_bind().connection.dbapi_connection.commit()
+    dbapi = op.get_bind().connection.dbapi_connection
+    assert dbapi is not None
+    dbapi.commit()
 
     with psycopg.connect(conninfo, autocommit=True) as conn:
         cursor = conn.cursor()
