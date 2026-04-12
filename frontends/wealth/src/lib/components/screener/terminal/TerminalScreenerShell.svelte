@@ -143,6 +143,7 @@
 		if (f.aumMin > 0) q.aum_min = String(f.aumMin);
 		if (f.returnMin > -999) q.min_return_1y = String(f.returnMin);
 		if (f.expenseMax < 10) q.max_expense_ratio = String(f.expenseMax);
+		if (f.managerNames.length > 0) q.manager_names = f.managerNames.join(",");
 		return q;
 	}
 

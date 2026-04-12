@@ -23,6 +23,8 @@
 		const strategyRaw = params.get("strategy");
 		const geoRaw = params.get("geography");
 
+		const managerRaw = params.get("manager");
+
 		return {
 			fundUniverse: universeRaw ? new Set(universeRaw.split(",")) : new Set(),
 			strategies: strategyRaw ? new Set(strategyRaw.split(",")) : new Set(),
@@ -31,6 +33,7 @@
 			returnMin: Number(params.get("min_return") ?? -999),
 			expenseMax: Number(params.get("max_expense") ?? 10),
 			eliteOnly: params.get("elite") === "1",
+			managerNames: managerRaw ? managerRaw.split(",") : [],
 		};
 	}
 
@@ -49,6 +52,7 @@
 		p.delete("min_return");
 		p.delete("max_expense");
 		p.delete("elite");
+		p.delete("manager");
 
 		if (next.fundUniverse.size > 0) p.set("universe", [...next.fundUniverse].join(","));
 		if (next.strategies.size > 0) p.set("strategy", [...next.strategies].join(","));
@@ -57,6 +61,7 @@
 		if (next.returnMin > -999) p.set("min_return", String(next.returnMin));
 		if (next.expenseMax < 10) p.set("max_expense", String(next.expenseMax));
 		if (next.eliteOnly) p.set("elite", "1");
+		if (next.managerNames.length > 0) p.set("manager", next.managerNames.join(","));
 
 		const qs = p.toString();
 		const target = url.pathname + (qs ? "?" + qs : "");

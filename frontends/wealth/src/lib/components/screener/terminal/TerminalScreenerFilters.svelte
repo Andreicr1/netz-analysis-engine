@@ -14,6 +14,7 @@
 		returnMin: number;           // % annualised 1Y, null/-999 = no filter
 		expenseMax: number;          // % annual fee, 10 = no filter
 		eliteOnly: boolean;          // ELITE-flagged funds only
+		managerNames: string[];      // multi-select exact manager names
 	}
 
 	export const DEFAULT_FILTERS: FilterState = {
@@ -24,11 +25,17 @@
 		returnMin: -999,
 		expenseMax: 10,
 		eliteOnly: false,
+		managerNames: [],
 	};
 </script>
 
 <script lang="ts">
+	import { getContext } from "svelte";
 	import { formatNumber } from "@investintell/ui";
+	import { createClientApiClient } from "$lib/api/client";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const api = createClientApiClient(getToken);
 
 	interface Props {
 		filters: FilterState;
@@ -36,6 +43,51 @@
 	}
 
 	let { filters, onFiltersChange }: Props = $props();
+
+	// ── Manager typeahead ────────────────────────────────
+	let managerQuery = $state("");
+	let managerSuggestions = $state<string[]>([]);
+	let managerDebounce: ReturnType<typeof setTimeout> | null = null;
+
+	function fetchManagerSuggestions() {
+		if (managerDebounce) clearTimeout(managerDebounce);
+		if (managerQuery.length < 2) {
+			managerSuggestions = [];
+			return;
+		}
+		managerDebounce = setTimeout(async () => {
+			try {
+				const results = await api.get<string[]>("/screener/managers", {
+					q: managerQuery,
+					limit: "10",
+				});
+				// Exclude already-selected managers
+				managerSuggestions = results.filter(
+					(n) => !filters.managerNames.includes(n),
+				);
+			} catch {
+				managerSuggestions = [];
+			}
+		}, 200);
+	}
+
+	function addManager(name: string) {
+		if (!filters.managerNames.includes(name)) {
+			onFiltersChange({
+				...filters,
+				managerNames: [...filters.managerNames, name],
+			});
+		}
+		managerQuery = "";
+		managerSuggestions = [];
+	}
+
+	function removeManager(name: string) {
+		onFiltersChange({
+			...filters,
+			managerNames: filters.managerNames.filter((n) => n !== name),
+		});
+	}
 
 	// Universe labels mirror the CatalogFilters backend contract.
 	const FUND_UNIVERSE: { key: string; label: string }[] = [
@@ -77,7 +129,7 @@
 		"Latin America",
 	];
 
-	let sectionOpen = $state({ universe: true, strategy: true, geography: true, metrics: true });
+	let sectionOpen = $state({ manager: true, universe: true, strategy: true, geography: true, metrics: true });
 
 	function toggleUniverse(key: string) {
 		const next = new Set(filters.fundUniverse);
@@ -109,6 +161,8 @@
 	}
 
 	function clearAll() {
+		managerQuery = "";
+		managerSuggestions = [];
 		onFiltersChange({
 			fundUniverse: new Set(),
 			strategies: new Set(),
@@ -117,6 +171,7 @@
 			returnMin: -999,
 			expenseMax: 10,
 			eliteOnly: false,
+			managerNames: [],
 		});
 	}
 
@@ -157,6 +212,57 @@
 	</div>
 
 	<div class="sf-scroll">
+		<!-- Manager typeahead -->
+		<div class="sf-section">
+			<button
+				class="sf-section-toggle"
+				onclick={() => (sectionOpen.manager = !sectionOpen.manager)}
+			>
+				<span class="sf-section-arrow" class:open={sectionOpen.manager}>&#9656;</span>
+				MANAGER
+			</button>
+			{#if sectionOpen.manager}
+				<div class="sf-section-body">
+					<div class="sf-manager-typeahead">
+						<input
+							type="text"
+							class="sf-manager-input"
+							placeholder="Search managers..."
+							bind:value={managerQuery}
+							oninput={fetchManagerSuggestions}
+						/>
+						{#if managerSuggestions.length > 0}
+							<ul class="sf-manager-suggestions" role="listbox">
+								{#each managerSuggestions as name (name)}
+									<li
+										role="option"
+										class="sf-manager-suggestion"
+										onclick={() => addManager(name)}
+									>
+										{name}
+									</li>
+								{/each}
+							</ul>
+						{/if}
+						{#if filters.managerNames.length > 0}
+							<div class="sf-manager-chips">
+								{#each filters.managerNames as name (name)}
+									<span class="sf-manager-chip">
+										{name}
+										<button
+											class="sf-manager-chip-x"
+											onclick={() => removeManager(name)}
+											aria-label="Remove {name}"
+										>x</button>
+									</span>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
+		</div>
+
 		<!-- Universe -->
 		<div class="sf-section">
 			<button
@@ -447,6 +553,93 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	/* ── Manager typeahead ────────────────────────────── */
+	.sf-manager-typeahead {
+		position: relative;
+	}
+
+	.sf-manager-input {
+		width: 100%;
+		background: transparent;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-radius: 0;
+		color: #c8d0dc;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 11px;
+		padding: 5px 8px;
+		outline: none;
+		box-sizing: border-box;
+	}
+	.sf-manager-input::placeholder {
+		color: #3d4a5c;
+	}
+	.sf-manager-input:focus {
+		border-color: rgba(45, 126, 247, 0.4);
+	}
+
+	.sf-manager-suggestions {
+		position: absolute;
+		left: 0;
+		right: 0;
+		z-index: 20;
+		background: #0d1220;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-top: none;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		max-height: 200px;
+		overflow-y: auto;
+	}
+
+	.sf-manager-suggestion {
+		padding: 5px 8px;
+		font-size: 11px;
+		color: #9aa3b3;
+		cursor: pointer;
+	}
+	.sf-manager-suggestion:hover {
+		background: rgba(45, 126, 247, 0.08);
+		color: #e2e8f0;
+	}
+
+	.sf-manager-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		margin-top: 6px;
+	}
+
+	.sf-manager-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 10px;
+		color: #22d3ee;
+		border: 1px solid rgba(34, 211, 238, 0.3);
+		padding: 2px 6px;
+		white-space: nowrap;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.sf-manager-chip-x {
+		background: none;
+		border: none;
+		color: #22d3ee;
+		font-size: 10px;
+		cursor: pointer;
+		padding: 0;
+		line-height: 1;
+		font-family: "JetBrains Mono", monospace;
+		opacity: 0.6;
+	}
+	.sf-manager-chip-x:hover {
+		opacity: 1;
 	}
 
 	/* ── Range sliders ─────────────────────────────────── */
