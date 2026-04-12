@@ -1,4 +1,4 @@
-"""Benchmark NAV ingestion worker — fetches benchmark prices from Yahoo Finance.
+"""Benchmark NAV ingestion worker — fetches benchmark prices from Tiingo.
 
 Downloads benchmark NAV data for all allocation blocks with a benchmark_ticker,
 then upserts into benchmark_nav (global table, no RLS).
@@ -12,14 +12,15 @@ import concurrent.futures
 import math
 from datetime import date, timedelta
 
+import pandas as pd
 import structlog
-import yfinance as yf
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.db.engine import async_session_factory as async_session
 from app.domains.wealth.models.benchmark_nav import BenchmarkNav
 from app.domains.wealth.models.block import AllocationBlock
+from app.services.providers.tiingo_instrument_provider import TiingoInstrumentProvider
 
 logger = structlog.get_logger()
 
@@ -41,31 +42,16 @@ _io_executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=2, thread_name_prefix="benchmark-io",
 )
 
-
-def _batch_download(tickers: list[str], start: str, end: str):
-    """Synchronous batch download — runs in dedicated thread pool.
-
-    Uses threads=True for yfinance's internal batch parallelism.
-    Never parallelize individual .info calls (yfinance global mutable state).
-    """
-    return yf.download(
-        tickers=tickers,
-        start=start,
-        end=end,
-        interval="1d",
-        auto_adjust=True,
-        repair=True,
-        threads=True,
-        group_by="ticker",
-        timeout=30,
-        progress=False,
-    )
-
-
 # Default lookback: ~15 years from today, capturing the full window since
 # 2007-01-01 (GFC, Taper Tantrum, COVID, 2022 rate shock). Stress-testing
 # engines require this depth — proxies were the previous workaround.
 DEFAULT_LOOKBACK_DAYS = 5475  # ~15y
+
+
+def _fetch_via_tiingo(tickers: list[str], period: str) -> dict[str, pd.DataFrame]:
+    """Synchronous batch fetch — runs in dedicated thread pool."""
+    with TiingoInstrumentProvider() as provider:
+        return provider.fetch_batch_history(tickers, period=period)
 
 
 async def run_benchmark_ingest(lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> dict[str, int | list[str]]:
@@ -123,45 +109,36 @@ async def _do_ingest(db, lookback_days: int) -> dict[str, int | list[str]]:
         tickers=unique_tickers,
     )
 
-    # 3. Batch download with retry
-    end_date = date.today()
-    start_date = end_date - timedelta(days=lookback_days)
-    # Floor at 2007-01-01 — guarantees GFC 2008 + Taper Tantrum 2013 in the
-    # window even if lookback_days is mis-configured short.
-    _GFC_FLOOR = date(2007, 1, 1)
-    if start_date > _GFC_FLOOR:
-        start_date = _GFC_FLOOR
-    hist = None
+    # 3. Resolve period and fetch via Tiingo with retry
+    period = _resolve_period(lookback_days)
+    hist: dict[str, pd.DataFrame] | None = None
 
     loop = asyncio.get_event_loop()
     for attempt in range(MAX_RETRIES):
         try:
             hist = await loop.run_in_executor(
                 _io_executor,
-                _batch_download,
+                _fetch_via_tiingo,
                 unique_tickers,
-                str(start_date),
-                str(end_date),
+                period,
             )
             break
         except Exception as e:
             wait = BACKOFF_BASE * (4 ** attempt)
             logger.warning(
-                "yfinance batch download failed, retrying",
+                "Tiingo batch download failed, retrying",
                 attempt=attempt + 1,
                 wait=wait,
                 error=str(e),
             )
             if attempt == MAX_RETRIES - 1:
-                logger.error("yfinance batch download exhausted retries")
+                logger.error("Tiingo batch download exhausted retries")
                 return {"blocks_updated": 0, "rows_upserted": 0, "stale_blocks": [], "skipped_tickers": unique_tickers}
             await asyncio.sleep(wait)
 
-    if hist is None or hist.empty:
-        logger.error("No data returned from yfinance batch download")
+    if hist is None or not hist:
+        logger.error("No data returned from Tiingo batch download")
         return {"blocks_updated": 0, "rows_upserted": 0, "stale_blocks": [], "skipped_tickers": unique_tickers}
-
-    is_multi = len(unique_tickers) > 1
 
     # 4. Process each ticker, validate, build rows
     all_rows: list[dict] = []
@@ -170,14 +147,22 @@ async def _do_ingest(db, lookback_days: int) -> dict[str, int | list[str]]:
 
     for ticker, block_ids in ticker_to_blocks.items():
         try:
-            ticker_data = hist[ticker] if is_multi else hist
+            ticker_data = hist.get(ticker)
+            if ticker_data is None or ticker_data.empty:
+                logger.error(
+                    "benchmark_ticker_not_found — ticker returned no data from Tiingo. "
+                    "Check allocation_blocks.benchmark_ticker is a valid symbol.",
+                    ticker=ticker,
+                    block_ids=block_ids,
+                )
+                skipped_tickers.append(ticker)
+                continue
 
             # Data validation: completely empty or all-NaN → invalid ticker
             close_col = ticker_data["Close"]
-            if ticker_data.empty or close_col.isna().all():
+            if close_col.isna().all():
                 logger.error(
-                    "benchmark_ticker_not_found — ticker returned no data from yfinance. "
-                    "Check allocation_blocks.benchmark_ticker is a valid yfinance symbol.",
+                    "benchmark_ticker_not_found — all-NaN Close column",
                     ticker=ticker,
                     block_ids=block_ids,
                 )
@@ -252,7 +237,7 @@ async def _do_ingest(db, lookback_days: int) -> dict[str, int | list[str]]:
                         "nav": round(close_price, 6),
                         "return_1d": round(return_1d, 8) if return_1d is not None else None,
                         "return_type": "log",
-                        "source": "yfinance",
+                        "source": "tiingo",
                     })
 
             all_rows.extend(rows)
@@ -334,6 +319,26 @@ async def _do_ingest(db, lookback_days: int) -> dict[str, int | list[str]]:
         "stale_blocks": stale_blocks,
         "skipped_tickers": skipped_tickers,
     }
+
+
+# Lookback-to-period mapping — same vocabulary as instrument_ingestion.
+_LOOKBACK_TO_PERIOD = {
+    30: "1mo",
+    90: "3mo",
+    365: "1y",
+    730: "2y",
+    1095: "3y",
+    1825: "5y",
+    3650: "10y",
+}
+
+
+def _resolve_period(lookback_days: int) -> str:
+    """Map lookback_days to the closest provider period string."""
+    for threshold, period in sorted(_LOOKBACK_TO_PERIOD.items()):
+        if lookback_days <= threshold:
+            return period
+    return "max"
 
 
 if __name__ == "__main__":

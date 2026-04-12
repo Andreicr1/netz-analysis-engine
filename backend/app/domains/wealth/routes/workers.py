@@ -27,7 +27,7 @@ from app.core.jobs.worker_idempotency import (
     mark_worker_running,
 )
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
-from app.domains.wealth.workers.ingestion import run_ingestion
+from app.domains.wealth.workers.instrument_ingestion import run_instrument_ingestion
 from app.domains.wealth.workers.macro_ingestion import run_macro_ingestion
 from app.domains.wealth.workers.portfolio_eval import run_portfolio_eval
 from app.domains.wealth.workers.risk_calc import run_global_risk_metrics, run_risk_calc
@@ -145,8 +145,8 @@ async def _dispatch_worker(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Trigger NAV ingestion",
     description=(
-        "Schedules the NAV ingestion worker as a background task. "
-        "Fetches latest prices from Yahoo Finance for all active funds "
+        "Schedules the global instrument NAV ingestion worker as a background task. "
+        "Fetches latest prices from Tiingo for all active instruments "
         "and upserts results into nav_timeseries. Returns immediately."
     ),
     tags=["workers"],
@@ -158,9 +158,9 @@ async def trigger_run_ingestion(
 ) -> WorkerScheduledResponse:
     _require_admin_role(actor)
     return await _dispatch_worker(
-        background_tasks, "run-ingestion", str(user.organization_id),
-        run_ingestion, user.organization_id,
-        timeout_seconds=_HEAVY_WORKER_TIMEOUT, org_id=user.organization_id,
+        background_tasks, "run-ingestion", "global",
+        run_instrument_ingestion,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
     )
 
 

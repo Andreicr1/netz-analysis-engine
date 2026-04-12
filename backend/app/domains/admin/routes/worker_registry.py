@@ -36,7 +36,6 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
     from app.domains.wealth.workers.esma_ingestion import run_esma_ingestion
     from app.domains.wealth.workers.fast_track_eviction import run_fast_track_eviction
     from app.domains.wealth.workers.imf_ingestion import run_imf_ingestion
-    from app.domains.wealth.workers.ingestion import run_ingestion
     from app.domains.wealth.workers.instrument_ingestion import run_instrument_ingestion
     from app.domains.wealth.workers.macro_ingestion import run_macro_ingestion
     from app.domains.wealth.workers.nport_fund_discovery import run_nport_fund_discovery
@@ -78,7 +77,6 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         "regime_fit": (run_regime_fit, "global", _LIGHT),
         "fast_track_eviction": (run_fast_track_eviction, "global", _LIGHT),
         # ── Org-scoped workers (dispatched per active org) ────
-        "ingestion": (run_ingestion, "org", _HEAVY),
         "instrument_ingestion": (run_instrument_ingestion, "global", _HEAVY),
         "risk_calc": (run_risk_calc, "org", _HEAVY),
         "portfolio_eval": (run_portfolio_eval, "org", _LIGHT),

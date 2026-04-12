@@ -1306,7 +1306,7 @@ def _build_disclosure(
             has_13f_overlay=has_13f_overlay,
             has_peer_analysis=True,
             holdings_source="nport" if has_holdings else None,
-            nav_source="yfinance" if has_nav else None,
+            nav_source="tiingo" if has_nav else None,
             aum_source="nport",
         )
     if universe == "private_us":
@@ -1332,8 +1332,8 @@ def _build_disclosure(
         has_13f_overlay=False,
         has_peer_analysis=has_nav,
         holdings_source=None,
-        nav_source="yfinance" if has_nav else None,
-        aum_source="yfinance" if has_nav else None,
+        nav_source="tiingo" if has_nav else None,
+        aum_source="tiingo" if has_nav else None,
     )
 
 

@@ -34,7 +34,7 @@ class BenchmarkNav(Base):
         String(10), nullable=False, server_default="log",
     )
     source: Mapped[str] = mapped_column(
-        String(30), nullable=False, server_default="yfinance",
+        String(30), nullable=False, server_default="tiingo",
     )
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
