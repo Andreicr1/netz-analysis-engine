@@ -87,6 +87,22 @@ class CashQuantMetrics:
 
 
 @dataclass(frozen=True, slots=True)
+class AltQuantMetrics:
+    """Alternatives fund screening metrics from fund_risk_metrics (pre-computed).
+
+    Profile-specific scoring uses these common metrics with different weights.
+    """
+
+    diversification_value: float
+    downside_protection: float
+    crisis_alpha: float
+    inflation_hedge: float
+    risk_adjusted_return: float
+    fee_efficiency: float
+    alt_profile: str  # reit | commodity | gold | hedge | cta | generic_alt
+
+
+@dataclass(frozen=True, slots=True)
 class BondQuantMetrics:
     """Bond screening metrics from attributes (no timeseries needed)."""
 

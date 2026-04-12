@@ -20,8 +20,10 @@ STRATEGY_LABEL_TO_BLOCKS: dict[str, list[str]] = {
     "Large Growth": ["na_equity_large", "na_equity_growth"],
     "Large Value": ["na_equity_large", "na_equity_value"],
     "Multi-Cap Core": ["na_equity_large"],
-    "Long/Short Equity": ["na_equity_large"],
-    "Multi-Strategy": ["na_equity_large"],
+    "Long/Short Equity": ["alt_hedge_fund", "na_equity_large"],
+    "Multi-Strategy": ["alt_hedge_fund"],
+    "Market Neutral": ["alt_hedge_fund"],
+    "Managed Futures": ["alt_managed_futures"],
     # Equity — US growth
     "Growth": ["na_equity_growth"],
     "Growth Equity": ["na_equity_growth"],

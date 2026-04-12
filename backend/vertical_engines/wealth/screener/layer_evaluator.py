@@ -72,6 +72,16 @@ class LayerEvaluator:
                 if result is not None:
                     results.append(result)
 
+        # Compound Alternatives gate: if fund is alternatives, also evaluate fund_alternatives rules
+        if instrument_type == "fund" and attributes.get("asset_class") == "alternatives":
+            alt_criteria = criteria.get("fund_alternatives", {})
+            for criterion, expected in alt_criteria.items():
+                result = self._evaluate_criterion(
+                    criterion, expected, attributes, "fund_alternatives", layer=1,
+                )
+                if result is not None:
+                    results.append(result)
+
         return results
 
     def evaluate_layer2(

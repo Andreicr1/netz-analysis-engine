@@ -25,6 +25,7 @@ from vertical_engines.wealth.screener.models import (
     ScreeningRunResult,
 )
 from vertical_engines.wealth.screener.quant_metrics import (
+    AltQuantMetrics,
     BondQuantMetrics,
     CashQuantMetrics,
     FIQuantMetrics,
@@ -217,7 +218,7 @@ class ScreenerService:
     def _compute_layer3_score(
         self,
         instrument_type: str,
-        quant_metrics: QuantMetrics | BondQuantMetrics | FIQuantMetrics | CashQuantMetrics | None,
+        quant_metrics: QuantMetrics | BondQuantMetrics | FIQuantMetrics | CashQuantMetrics | AltQuantMetrics | None,
         peer_values: dict[str, list[float]] | None,
     ) -> float | None:
         """Compute Layer 3 composite score."""
@@ -229,6 +230,8 @@ class ScreenerService:
             config_key = "fund_fixed_income"
         elif isinstance(quant_metrics, CashQuantMetrics):
             config_key = "fund_cash"
+        elif isinstance(quant_metrics, AltQuantMetrics):
+            config_key = "fund_alternatives"
         else:
             config_key = instrument_type
 
@@ -253,6 +256,15 @@ class ScreenerService:
                 "nav_stability": quant_metrics.nav_stability,
                 "liquidity_quality": quant_metrics.liquidity_quality,
                 "maturity_discipline": quant_metrics.maturity_discipline,
+                "fee_efficiency": quant_metrics.fee_efficiency,
+            }
+        elif isinstance(quant_metrics, AltQuantMetrics):
+            metrics_dict = {
+                "diversification_value": quant_metrics.diversification_value,
+                "downside_protection": quant_metrics.downside_protection,
+                "crisis_alpha": quant_metrics.crisis_alpha,
+                "inflation_hedge": quant_metrics.inflation_hedge,
+                "risk_adjusted_return": quant_metrics.risk_adjusted_return,
                 "fee_efficiency": quant_metrics.fee_efficiency,
             }
         elif isinstance(quant_metrics, QuantMetrics):
