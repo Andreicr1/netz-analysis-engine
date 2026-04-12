@@ -362,7 +362,7 @@
 						</span>
 						<span class="dg-td dg-col-action dg-center">
 							{#if asset.inUniverse}
-								<span class="dg-action-label dg-action-approved">IN UNIVERSE</span>
+								<span class="dg-action-label dg-action-approved">APPROVED</span>
 							{:else if asset.approvalStatus === "pending" || actionPending.has(asset.id)}
 								<span class="dg-action-label dg-action-pending">PENDING</span>
 							{:else if LIQUID_UNIVERSES.has(asset.universe ?? asset.fundType)}
@@ -374,7 +374,7 @@
 										await onApprove(asset);
 									}}
 								>
-									{"\u2192"} UNIVERSE
+									APPROVE
 								</button>
 							{:else}
 								<button
