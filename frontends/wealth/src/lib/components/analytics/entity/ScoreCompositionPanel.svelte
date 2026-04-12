@@ -50,6 +50,62 @@
 		fee_efficiency: { label: "Fee Efficiency", weight: 0.10 },
 	};
 
+	const ALT_REIT_WEIGHTS: Record<string, { label: string; weight: number }> = {
+		income_generation: { label: "Income Generation", weight: 0.25 },
+		diversification_value: { label: "Diversification", weight: 0.25 },
+		downside_protection: { label: "Downside Protection", weight: 0.20 },
+		inflation_hedge: { label: "Inflation Hedge", weight: 0.20 },
+		fee_efficiency: { label: "Fee Efficiency", weight: 0.10 },
+	};
+
+	const ALT_COMMODITY_WEIGHTS: Record<string, { label: string; weight: number }> = {
+		inflation_hedge: { label: "Inflation Hedge", weight: 0.30 },
+		diversification_value: { label: "Diversification", weight: 0.25 },
+		crisis_alpha: { label: "Crisis Alpha", weight: 0.20 },
+		drawdown_control: { label: "Drawdown Control", weight: 0.15 },
+		fee_efficiency: { label: "Fee Efficiency", weight: 0.10 },
+	};
+
+	const ALT_GOLD_WEIGHTS: Record<string, { label: string; weight: number }> = {
+		crisis_alpha: { label: "Crisis Alpha", weight: 0.30 },
+		diversification_value: { label: "Diversification", weight: 0.30 },
+		inflation_hedge: { label: "Inflation Hedge", weight: 0.20 },
+		tracking_efficiency: { label: "Tracking Efficiency", weight: 0.10 },
+		fee_efficiency: { label: "Fee Efficiency", weight: 0.10 },
+	};
+
+	const ALT_HEDGE_WEIGHTS: Record<string, { label: string; weight: number }> = {
+		alpha_generation: { label: "Alpha Generation", weight: 0.30 },
+		downside_protection: { label: "Downside Protection", weight: 0.25 },
+		diversification_value: { label: "Diversification", weight: 0.20 },
+		crisis_alpha: { label: "Crisis Alpha", weight: 0.15 },
+		fee_efficiency: { label: "Fee Efficiency", weight: 0.10 },
+	};
+
+	const ALT_CTA_WEIGHTS: Record<string, { label: string; weight: number }> = {
+		crisis_alpha: { label: "Crisis Alpha", weight: 0.40 },
+		diversification_value: { label: "Diversification", weight: 0.25 },
+		risk_adjusted_return: { label: "Risk-Adj Return", weight: 0.25 },
+		fee_efficiency: { label: "Fee Efficiency", weight: 0.10 },
+	};
+
+	const ALT_GENERIC_WEIGHTS: Record<string, { label: string; weight: number }> = {
+		diversification_value: { label: "Diversification", weight: 0.30 },
+		downside_protection: { label: "Downside Protection", weight: 0.25 },
+		risk_adjusted_return: { label: "Risk-Adj Return", weight: 0.20 },
+		crisis_alpha: { label: "Crisis Alpha", weight: 0.15 },
+		fee_efficiency: { label: "Fee Efficiency", weight: 0.10 },
+	};
+
+	const ALT_PROFILE_MAPS: Record<string, Record<string, { label: string; weight: number }>> = {
+		reit: ALT_REIT_WEIGHTS,
+		commodity: ALT_COMMODITY_WEIGHTS,
+		gold: ALT_GOLD_WEIGHTS,
+		hedge: ALT_HEDGE_WEIGHTS,
+		cta: ALT_CTA_WEIGHTS,
+		generic_alt: ALT_GENERIC_WEIGHTS,
+	};
+
 	const WEIGHT_MAPS: Record<string, Record<string, { label: string; weight: number }>> = {
 		fixed_income: FI_WEIGHTS,
 		cash: CASH_WEIGHTS,
@@ -73,8 +129,14 @@
 					compositeScore = sm.manager_score;
 				}
 				scoringModel = sm?.scoring_model || "equity";
-				const weightMap = WEIGHT_MAPS[scoringModel] ?? EQUITY_WEIGHTS;
 				const sc = sm?.score_components;
+				let weightMap: Record<string, { label: string; weight: number }>;
+				if (scoringModel === "alternatives") {
+					const altProfile = sc?._alt_profile || "generic_alt";
+					weightMap = ALT_PROFILE_MAPS[altProfile] ?? ALT_GENERIC_WEIGHTS;
+				} else {
+					weightMap = WEIGHT_MAPS[scoringModel] ?? EQUITY_WEIGHTS;
+				}
 				if (sc && typeof sc === "object") {
 					const parsed: ScoreComponent[] = [];
 					for (const [key, meta] of Object.entries(weightMap)) {

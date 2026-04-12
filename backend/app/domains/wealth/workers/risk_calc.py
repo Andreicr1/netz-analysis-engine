@@ -28,6 +28,7 @@ from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.macro import MacroData
 from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.risk import FundRiskMetrics
+from quant_engine.alternatives_analytics_service import AltAnalyticsConfig, compute_alt_analytics
 from quant_engine.cvar_service import compute_cvar_from_returns
 from quant_engine.drift_service import DtwDriftResult, DtwDriftStatus, compute_dtw_drift_batch
 from quant_engine.fixed_income_analytics_service import FIRegressionConfig, compute_fi_analytics
@@ -976,6 +977,94 @@ async def _batch_fetch_mmf_yields(
     return out
 
 
+async def _fetch_benchmark_dated_returns(
+    db: AsyncSession,
+    block_id: str,
+    start_date: date,
+    as_of_date: date,
+) -> list[tuple[date, float]]:
+    """Fetch daily returns for a benchmark (e.g. SPY via na_equity_large).
+
+    Returns list of (nav_date, return_1d) tuples from benchmark_nav.
+    """
+    result = await db.execute(
+        text("""
+            SELECT nav_date, return_1d FROM benchmark_nav
+            WHERE block_id = :block_id
+              AND nav_date >= :start_date AND nav_date <= :as_of
+              AND return_1d IS NOT NULL
+            ORDER BY nav_date
+        """),
+        {"block_id": block_id, "start_date": start_date, "as_of": as_of_date},
+    )
+    return [(row[0], float(row[1])) for row in result.all()]
+
+
+async def _fetch_monthly_cpi_changes(
+    db: AsyncSession,
+    start_date: date,
+    as_of_date: date,
+) -> list[tuple[date, float]]:
+    """Fetch monthly CPI changes from macro_data (CPIAUCSL).
+
+    CPI is an index level (e.g. 310.5). We compute month-over-month
+    percentage change: delta = (CPI_t - CPI_{t-1}) / CPI_{t-1}.
+    Returns list of (obs_date, pct_change) tuples.
+    """
+    result = await db.execute(
+        text("""
+            SELECT observation_date, value FROM macro_data
+            WHERE series_id = 'CPIAUCSL'
+              AND observation_date >= :start_date AND observation_date <= :as_of
+              AND value IS NOT NULL
+            ORDER BY observation_date
+        """),
+        {"start_date": start_date, "as_of": as_of_date},
+    )
+    raw = [(row[0], float(row[1])) for row in result.all()]
+    if len(raw) < 2:
+        return []
+    changes: list[tuple[date, float]] = []
+    for i in range(1, len(raw)):
+        prev_val = raw[i - 1][1]
+        if prev_val > 0:
+            delta = (raw[i][1] - prev_val) / prev_val
+            changes.append((raw[i][0], delta))
+    return changes
+
+
+# ── Alternatives profile resolution ──────────────────────────────
+_BLOCK_TO_ALT_PROFILE: dict[str, str] = {
+    "alt_real_estate": "reit",
+    "alt_commodities": "commodity",
+    "alt_gold": "gold",
+    "alt_hedge_fund": "hedge",
+    "alt_managed_futures": "cta",
+}
+
+
+def _resolve_alt_profile(block_id: str | None) -> str:
+    """Resolve alt profile from block_id. Used in org-scoped worker."""
+    if not block_id:
+        return "generic_alt"
+    return _BLOCK_TO_ALT_PROFILE.get(block_id, "generic_alt")
+
+
+def _resolve_alt_profile_from_strategy(strategy_label: str | None) -> str:
+    """Resolve alt profile from strategy_label via block_mapping.
+
+    Used in GLOBAL worker where block_id is NOT available.
+    """
+    if not strategy_label:
+        return "generic_alt"
+    from vertical_engines.wealth.model_portfolio.block_mapping import blocks_for_strategy_label
+    blocks = blocks_for_strategy_label(strategy_label)
+    for b in blocks:
+        if b in _BLOCK_TO_ALT_PROFILE:
+            return _BLOCK_TO_ALT_PROFILE[b]
+    return "generic_alt"
+
+
 class _MetricsAdapter:
     """Adapter to expose a metrics dict as the RiskMetrics protocol for scoring."""
 
@@ -991,6 +1080,8 @@ def _score_metrics(
     scoring_config: dict | None = None,
     expense_ratio_pct: float | None = None,
     asset_class: str = "equity",
+    block_id: str | None = None,
+    strategy_label: str | None = None,
 ) -> None:
     """Compute manager_score and score_components from base metrics in-place."""
     adapter = _MetricsAdapter(metrics)
@@ -998,6 +1089,15 @@ def _score_metrics(
 
     fi_adapter = _MetricsAdapter(metrics) if asset_class == "fixed_income" else None
     cash_adapter = _MetricsAdapter(metrics) if asset_class == "cash" else None
+    alt_adapter = _MetricsAdapter(metrics) if asset_class == "alternatives" else None
+
+    # Resolve alt profile: org worker uses block_id, global uses strategy_label
+    alt_profile: str | None = None
+    if asset_class == "alternatives":
+        if block_id:
+            alt_profile = _resolve_alt_profile(block_id)
+        else:
+            alt_profile = _resolve_alt_profile_from_strategy(strategy_label)
 
     score_val, components = compute_fund_score(
         adapter,
@@ -1007,8 +1107,13 @@ def _score_metrics(
         asset_class=asset_class,
         fi_metrics=fi_adapter,
         cash_metrics=cash_adapter,
+        alt_metrics=alt_adapter,
+        alt_profile=alt_profile,
     )
     metrics["manager_score"] = round(score_val, 2)
+    # Store alt_profile in score_components for frontend rendering
+    if alt_profile:
+        components["_alt_profile"] = alt_profile
     metrics["score_components"] = components
 
 
@@ -1196,7 +1301,45 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                     metrics["weighted_avg_maturity_days"] = mmf_info.get("weighted_avg_maturity")
                 logger.info("cash_analytics_computed", cash_funds=len(cash_fund_ids))
 
-            # Assign scoring_model = "equity" for funds not covered by FI or Cash
+            # Pass 1.78: Alternatives analytics (correlation, capture, crisis alpha, inflation beta)
+            alt_fund_ids = {str(f.instrument_id) for f, _ in computed if f.asset_class == "alternatives"}
+            if alt_fund_ids:
+                alt_config = AltAnalyticsConfig()
+                # Fetch SPY benchmark returns (via na_equity_large block)
+                spy_returns = await _fetch_benchmark_dated_returns(db, "na_equity_large", start_date, eval_date)
+                # Fetch monthly CPI changes for inflation beta regression
+                cpi_changes = await _fetch_monthly_cpi_changes(db, start_date, eval_date)
+                # Reuse dated_returns if already fetched, else fetch now
+                if not stress_dates and not fi_fund_ids:
+                    dated_returns_by_fund = await _batch_fetch_dated_returns(
+                        db, all_fund_ids, return_type_by_fund, start_date, eval_date,
+                    )
+                for fund, metrics in computed:
+                    fid_str = str(fund.instrument_id)
+                    if fid_str not in alt_fund_ids:
+                        continue
+                    metrics["scoring_model"] = "alternatives"
+                    fund_dated_returns = dated_returns_by_fund.get(fid_str, [])
+                    if not fund_dated_returns:
+                        continue
+                    alt_result = compute_alt_analytics(
+                        fund_dated_returns=fund_dated_returns,
+                        benchmark_dated_returns=spy_returns,
+                        cpi_monthly_changes=cpi_changes,
+                        return_3y_ann=metrics.get("return_3y_ann"),
+                        max_drawdown_3y=metrics.get("max_drawdown_3y"),
+                        config=alt_config,
+                    )
+                    metrics["equity_correlation_252d"] = round(alt_result.equity_correlation_252d, 4) if alt_result.equity_correlation_252d is not None else None
+                    metrics["downside_capture_1y"] = round(alt_result.downside_capture_1y, 4) if alt_result.downside_capture_1y is not None else None
+                    metrics["upside_capture_1y"] = round(alt_result.upside_capture_1y, 4) if alt_result.upside_capture_1y is not None else None
+                    metrics["crisis_alpha_score"] = round(alt_result.crisis_alpha_score, 6) if alt_result.crisis_alpha_score is not None else None
+                    metrics["calmar_ratio_3y"] = round(alt_result.calmar_ratio_3y, 4) if alt_result.calmar_ratio_3y is not None else None
+                    metrics["inflation_beta"] = round(alt_result.inflation_beta, 4) if alt_result.inflation_beta is not None else None
+                    metrics["inflation_beta_r2"] = round(alt_result.inflation_beta_r2, 4) if alt_result.inflation_beta_r2 is not None else None
+                logger.info("alt_analytics_computed", alt_funds=len(alt_fund_ids))
+
+            # Assign scoring_model = "equity" for funds not covered by FI, Cash, or Alternatives
             for fund, metrics in computed:
                 if "scoring_model" not in metrics:
                     metrics["scoring_model"] = "equity"
@@ -1204,11 +1347,15 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
             # Pass 1.8: compute manager_score from base metrics + momentum + config
             for fund, metrics in computed:
                 er = (fund.attributes or {}).get("expense_ratio_pct")
+                bid = block_id_map.get(str(fund.instrument_id))
+                strategy_lbl = (fund.attributes or {}).get("strategy_label")
                 _score_metrics(
                     metrics,
                     scoring_config=scoring_config,
                     expense_ratio_pct=float(er) if er is not None else None,
                     asset_class=fund.asset_class or "equity",
+                    block_id=bid,
+                    strategy_label=strategy_lbl,
                 )
 
             # Pass 2: compute DTW drift scores per block (reuses DB session, no extra query per fund)
@@ -1436,7 +1583,42 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
                         metrics["weighted_avg_maturity_days"] = mmf_info.get("weighted_avg_maturity")
                     logger.info("cash_analytics_computed", cash_funds=len(cash_fund_ids_g), batch_start=batch_start)
 
-                # Assign scoring_model = "equity" for funds not covered by FI or Cash
+                # Pass 1.78: Alternatives analytics for alt funds in this batch
+                alt_fund_ids_g = {str(f.instrument_id) for f, _ in computed if f.asset_class == "alternatives"}
+                if alt_fund_ids_g:
+                    alt_config = AltAnalyticsConfig()
+                    spy_returns = await _fetch_benchmark_dated_returns(db, "na_equity_large", start_date, eval_date)
+                    cpi_changes = await _fetch_monthly_cpi_changes(db, start_date, eval_date)
+                    if not stress_dates and not fi_fund_ids:
+                        dated_returns_by_fund = await _batch_fetch_dated_returns(
+                            db, batch_ids, return_type_by_fund, start_date, eval_date,
+                        )
+                    for fund, metrics in computed:
+                        fid_str = str(fund.instrument_id)
+                        if fid_str not in alt_fund_ids_g:
+                            continue
+                        metrics["scoring_model"] = "alternatives"
+                        fund_dated_returns = dated_returns_by_fund.get(fid_str, [])
+                        if not fund_dated_returns:
+                            continue
+                        alt_result = compute_alt_analytics(
+                            fund_dated_returns=fund_dated_returns,
+                            benchmark_dated_returns=spy_returns,
+                            cpi_monthly_changes=cpi_changes,
+                            return_3y_ann=metrics.get("return_3y_ann"),
+                            max_drawdown_3y=metrics.get("max_drawdown_3y"),
+                            config=alt_config,
+                        )
+                        metrics["equity_correlation_252d"] = round(alt_result.equity_correlation_252d, 4) if alt_result.equity_correlation_252d is not None else None
+                        metrics["downside_capture_1y"] = round(alt_result.downside_capture_1y, 4) if alt_result.downside_capture_1y is not None else None
+                        metrics["upside_capture_1y"] = round(alt_result.upside_capture_1y, 4) if alt_result.upside_capture_1y is not None else None
+                        metrics["crisis_alpha_score"] = round(alt_result.crisis_alpha_score, 6) if alt_result.crisis_alpha_score is not None else None
+                        metrics["calmar_ratio_3y"] = round(alt_result.calmar_ratio_3y, 4) if alt_result.calmar_ratio_3y is not None else None
+                        metrics["inflation_beta"] = round(alt_result.inflation_beta, 4) if alt_result.inflation_beta is not None else None
+                        metrics["inflation_beta_r2"] = round(alt_result.inflation_beta_r2, 4) if alt_result.inflation_beta_r2 is not None else None
+                    logger.info("alt_analytics_computed", alt_funds=len(alt_fund_ids_g), batch_start=batch_start)
+
+                # Assign scoring_model = "equity" for funds not covered by FI, Cash, or Alternatives
                 for fund, metrics in computed:
                     if "scoring_model" not in metrics:
                         metrics["scoring_model"] = "equity"
@@ -1458,10 +1640,12 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
 
                 for fund, metrics in computed:
                     er = er_map.get(fund.ticker) if fund.ticker else None
+                    strategy_lbl = (fund.attributes or {}).get("strategy_label")
                     _score_metrics(
                         metrics,
                         expense_ratio_pct=er,
                         asset_class=fund.asset_class or "equity",
+                        strategy_label=strategy_lbl,
                     )
 
                 # Upsert batch — no DTW drift, no org_id

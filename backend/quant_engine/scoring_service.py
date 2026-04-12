@@ -445,7 +445,10 @@ def _compute_alternatives_score(
     weights = resolve_alt_profile_weights(profile, config)
 
     score = sum(components.get(k, 50.0) * w for k, w in weights.items())
-    return round(score, 2), {k: round(v, 2) for k, v in components.items()}
+    # Only return components that carry weight in this profile.
+    # Prevents nonsensical display (e.g., "Income Generation: 38" on a CTA fund).
+    active_components = {k: round(v, 2) for k, v in components.items() if weights.get(k, 0) > 0}
+    return round(score, 2), active_components
 
 
 def compute_fund_score(

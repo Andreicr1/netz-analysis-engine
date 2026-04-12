@@ -103,6 +103,15 @@ class FundRiskMetrics(Base):
     pct_weekly_liquid: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
     weighted_avg_maturity_days: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
 
+    # Alternatives analytics (pre-computed by risk_calc alternatives analytics pass)
+    equity_correlation_252d: Mapped[Decimal | None] = mapped_column(Numeric(6, 4), nullable=True)
+    downside_capture_1y: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
+    upside_capture_1y: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
+    crisis_alpha_score: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    calmar_ratio_3y: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
+    inflation_beta: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
+    inflation_beta_r2: Mapped[Decimal | None] = mapped_column(Numeric(6, 4), nullable=True)
+
     # Audit & data quality flags
     data_quality_flags: Mapped[dict | None] = mapped_column(JSONB, server_default=text("'{}'::jsonb"), nullable=True)
 
