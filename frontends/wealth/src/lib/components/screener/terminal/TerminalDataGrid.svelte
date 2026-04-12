@@ -30,12 +30,15 @@
 		inceptionDate: string | null;
 		isin: string | null;
 		navStatus: string | null;   // available | pending_import | unavailable | null
+		eliteFlag: boolean;
+		inUniverse: boolean;
 	}
 </script>
 
 <script lang="ts">
 	import { formatNumber } from "@investintell/ui";
 	import { sandboxBasket } from "$lib/stores/sandbox.svelte";
+	import { focusTrigger } from "$lib/components/terminal/focus-mode/focus-trigger";
 
 	interface Props {
 		assets: ScreenerAsset[];
@@ -44,7 +47,6 @@
 		errorMessage: string | null;
 		selectedId: string | null;
 		onSelect: (asset: ScreenerAsset) => void;
-		onOpenWarRoom?: (fundId: string) => void;
 	}
 
 	let {
@@ -54,7 +56,6 @@
 		errorMessage,
 		selectedId,
 		onSelect,
-		onOpenWarRoom,
 	}: Props = $props();
 
 	function fmtPct(v: number | null, decimals: number = 2): string {
@@ -106,13 +107,13 @@
 						class="dg-row"
 						class:selected={selectedId === asset.id}
 						class:zebra={i % 2 === 1}
-						onclick={() => {
-							onSelect(asset);
-							onOpenWarRoom?.(asset.id);
-						}}
+						use:focusTrigger={{ entityKind: "fund", entityId: asset.id, entityLabel: asset.name }}
+						onclick={() => onSelect(asset)}
 					>
 						<td class="dg-td dg-left dg-ticker" title={asset.ticker ?? asset.isin ?? ""}>
 							{asset.ticker ?? asset.isin ?? "—"}
+							{#if asset.eliteFlag}<span class="dg-elite-badge">ELITE</span>{/if}
+							{#if asset.inUniverse}<span class="dg-universe-badge">IN UNIVERSE</span>{/if}
 						</td>
 						<td class="dg-td dg-left dg-name-col dg-name" title={asset.name}>{asset.name}</td>
 						<td class="dg-td dg-left dg-class">{asset.universeLabel}</td>
@@ -293,6 +294,27 @@
 		color: #5a6577;
 		font-size: 11px;
 		font-style: italic;
+	}
+
+	/* ── Badges ──────────────────────────────────────── */
+	.dg-elite-badge {
+		font-family: "JetBrains Mono", monospace;
+		font-size: 8px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		color: #f59e0b;
+		margin-left: 6px;
+		vertical-align: middle;
+	}
+
+	.dg-universe-badge {
+		font-family: "JetBrains Mono", monospace;
+		font-size: 8px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		color: #22c55e;
+		margin-left: 6px;
+		vertical-align: middle;
 	}
 
 	/* ── Sandbox add button ───────────────────────────── */

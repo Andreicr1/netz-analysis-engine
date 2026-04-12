@@ -14,6 +14,7 @@
 		returnMin: number;           // % annualised 1Y, null/-999 = no filter
 		expenseMax: number;          // % annual fee, 10 = no filter
 		onlyWithNav: boolean;        // in_universe flag
+		eliteOnly: boolean;          // ELITE-flagged funds only
 	}
 
 	export const DEFAULT_FILTERS: FilterState = {
@@ -24,6 +25,7 @@
 		returnMin: -999,
 		expenseMax: 10,
 		onlyWithNav: true,
+		eliteOnly: false,
 	};
 </script>
 
@@ -108,6 +110,10 @@
 		onFiltersChange({ ...filters, onlyWithNav: !filters.onlyWithNav });
 	}
 
+	function toggleEliteOnly() {
+		onFiltersChange({ ...filters, eliteOnly: !filters.eliteOnly });
+	}
+
 	function clearAll() {
 		onFiltersChange({
 			fundUniverse: new Set(),
@@ -117,6 +123,7 @@
 			returnMin: -999,
 			expenseMax: 10,
 			onlyWithNav: true,
+			eliteOnly: false,
 		});
 	}
 
@@ -144,6 +151,16 @@
 	<div class="sf-header">
 		<span class="sf-title">FILTERS</span>
 		<button class="sf-clear" onclick={clearAll}>Clear</button>
+	</div>
+
+	<div class="sf-elite-chip-row">
+		<button
+			class="sf-elite-chip"
+			class:sf-elite-chip--active={filters.eliteOnly}
+			onclick={toggleEliteOnly}
+		>
+			ELITE
+		</button>
 	</div>
 
 	<div class="sf-scroll">
@@ -342,6 +359,35 @@
 	}
 	.sf-clear:hover {
 		color: #5a9ef7;
+	}
+
+	.sf-elite-chip-row {
+		padding: 8px 12px;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		flex-shrink: 0;
+	}
+
+	.sf-elite-chip {
+		font-family: "JetBrains Mono", monospace;
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		padding: 4px 12px;
+		background: transparent;
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		color: #8a94a6;
+		cursor: pointer;
+		transition: all 80ms ease;
+	}
+	.sf-elite-chip:hover {
+		border-color: #f59e0b;
+		color: #f59e0b;
+	}
+	.sf-elite-chip--active {
+		border-color: #f59e0b;
+		color: #f59e0b;
+		background: rgba(245, 158, 11, 0.08);
 	}
 
 	.sf-scroll {

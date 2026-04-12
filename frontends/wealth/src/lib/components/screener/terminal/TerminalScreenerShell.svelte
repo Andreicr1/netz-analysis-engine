@@ -2,12 +2,12 @@
   TerminalScreenerShell — 3-column high-density screener grid.
 
   Grid topology:
-    ┌──────────┬──────────────────────┬─────────────┐
+    ┌──────────┬──���───────────────────┬─────────────┐
     │          │                      │             │
     │ FILTERS  │      DATA GRID       │ QUICK STATS │
     │ (280px)  │       (1fr)          │   (320px)   │
     │          │                      │             │
-    └──────────┴──────────────────────┴─────────────┘
+    └────���─────┴──────────────────��───┴──────────��──┘
 
   Data source: `/screener/catalog` (materialized view mv_unified_funds
   over SEC N-CEN/XBRL, ESMA Fund Register, and hedge/private fund
@@ -22,7 +22,6 @@
 	import { createClientApiClient } from "$lib/api/client";
 	import TerminalScreenerFilters, {
 		type FilterState,
-		DEFAULT_FILTERS,
 	} from "./TerminalScreenerFilters.svelte";
 	import TerminalDataGrid, { type ScreenerAsset } from "./TerminalDataGrid.svelte";
 	import TerminalScreenerQuickStats from "./TerminalScreenerQuickStats.svelte";
@@ -31,12 +30,13 @@
 	const api = createClientApiClient(getToken);
 
 	interface Props {
-		onOpenWarRoom?: (fundId: string) => void;
+		filters: FilterState;
+		onFiltersChange: (filters: FilterState) => void;
 	}
 
-	let { onOpenWarRoom }: Props = $props();
+	let { filters, onFiltersChange }: Props = $props();
 
-	// ── Universe labels ─────────────────────────────────
+	// ── Universe labels ──────────────────────��──────────
 	const FUND_TYPE_LABELS: Record<string, string> = {
 		mutual_fund: "Mutual",
 		etf: "ETF",
@@ -71,6 +71,8 @@
 		expense_ratio_pct: number | null;
 		avg_annual_return_1y: number | null;
 		avg_annual_return_10y: number | null;
+		elite_flag: boolean | null;
+		in_universe: boolean;
 		disclosure?: { nav_status?: string | null };
 	}
 
@@ -103,11 +105,12 @@
 			inceptionDate: raw.inception_date,
 			isin: raw.isin,
 			navStatus: raw.disclosure?.nav_status ?? null,
+			eliteFlag: raw.elite_flag === true,
+			inUniverse: raw.in_universe === true,
 		};
 	}
 
 	// ── State ───────────────────────────────────────────
-	let filters = $state<FilterState>({ ...DEFAULT_FILTERS });
 	let assets = $state<ScreenerAsset[]>([]);
 	let total = $state(0);
 	let loading = $state(false);
@@ -118,7 +121,7 @@
 		assets.find((a) => a.id === selectedId) ?? null,
 	);
 
-	// ── Query builder ───────────────────────────────────
+	// ── Query builder ──────────────���────────────────────
 	function buildQuery(f: FilterState): Record<string, string> {
 		const q: Record<string, string> = {
 			page: "1",
@@ -126,6 +129,7 @@
 			sort: "aum_desc",
 		};
 		if (f.onlyWithNav) q.in_universe = "true";
+		if (f.eliteOnly) q.elite_only = "true";
 		if (f.fundUniverse.size > 0) q.fund_universe = [...f.fundUniverse].join(",");
 		if (f.strategies.size > 0) q.strategy_label = [...f.strategies].join(",");
 		if (f.geographies.size > 0) q.investment_geography = [...f.geographies].join(",");
@@ -177,15 +181,11 @@
 	function handleSelect(asset: ScreenerAsset) {
 		selectedId = asset.id;
 	}
-
-	function handleFiltersChange(next: FilterState) {
-		filters = next;
-	}
 </script>
 
 <div class="ts-root">
 	<div class="ts-zone ts-filters" aria-label="Screener filters">
-		<TerminalScreenerFilters {filters} onFiltersChange={handleFiltersChange} />
+		<TerminalScreenerFilters {filters} {onFiltersChange} />
 	</div>
 	<div class="ts-zone ts-datagrid" aria-label="Instrument data grid">
 		<TerminalDataGrid
@@ -195,7 +195,6 @@
 			{errorMessage}
 			{selectedId}
 			onSelect={handleSelect}
-			{onOpenWarRoom}
 		/>
 	</div>
 	<div class="ts-zone ts-stats" aria-label="Quick stats">
