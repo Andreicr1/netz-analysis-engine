@@ -11,9 +11,19 @@
 		strategies: Set<string>;     // strategy_label
 		geographies: Set<string>;    // investment_geography
 		aumMin: number;              // USD absolute, 0 = no filter
+		aumMax: number;              // USD absolute, 0 = no filter
 		returnMin: number;           // % annualised 1Y, null/-999 = no filter
+		returnMax: number;           // % annualised 1Y, 999 = no filter
 		expenseMax: number;          // % annual fee, 10 = no filter
 		eliteOnly: boolean;          // ELITE-flagged funds only
+		managerNames: string[];      // multi-select exact manager names
+		sharpeMin: string;           // Sharpe ratio (1Y) min — string for input binding
+		sharpeMax: string;
+		drawdownMinPct: string;      // Positive %, converted to negative for backend
+		drawdownMaxPct: string;
+		volatilityMax: string;       // Annualized vol (1Y)
+		return10yMin: string;        // % annualised 10Y
+		return10yMax: string;
 	}
 
 	export const DEFAULT_FILTERS: FilterState = {
@@ -21,14 +31,29 @@
 		strategies: new Set<string>(),
 		geographies: new Set<string>(),
 		aumMin: 0,
+		aumMax: 0,
 		returnMin: -999,
+		returnMax: 999,
 		expenseMax: 10,
 		eliteOnly: false,
+		managerNames: [],
+		sharpeMin: "",
+		sharpeMax: "",
+		drawdownMinPct: "",
+		drawdownMaxPct: "",
+		volatilityMax: "",
+		return10yMin: "",
+		return10yMax: "",
 	};
 </script>
 
 <script lang="ts">
+	import { getContext } from "svelte";
 	import { formatNumber } from "@investintell/ui";
+	import { createClientApiClient } from "$lib/api/client";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const api = createClientApiClient(getToken);
 
 	interface Props {
 		filters: FilterState;
@@ -36,6 +61,51 @@
 	}
 
 	let { filters, onFiltersChange }: Props = $props();
+
+	// ── Manager typeahead ────────────────────────────────
+	let managerQuery = $state("");
+	let managerSuggestions = $state<string[]>([]);
+	let managerDebounce: ReturnType<typeof setTimeout> | null = null;
+
+	function fetchManagerSuggestions() {
+		if (managerDebounce) clearTimeout(managerDebounce);
+		if (managerQuery.length < 2) {
+			managerSuggestions = [];
+			return;
+		}
+		managerDebounce = setTimeout(async () => {
+			try {
+				const results = await api.get<string[]>("/screener/managers", {
+					q: managerQuery,
+					limit: "10",
+				});
+				// Exclude already-selected managers
+				managerSuggestions = results.filter(
+					(n) => !filters.managerNames.includes(n),
+				);
+			} catch {
+				managerSuggestions = [];
+			}
+		}, 200);
+	}
+
+	function addManager(name: string) {
+		if (!filters.managerNames.includes(name)) {
+			onFiltersChange({
+				...filters,
+				managerNames: [...filters.managerNames, name],
+			});
+		}
+		managerQuery = "";
+		managerSuggestions = [];
+	}
+
+	function removeManager(name: string) {
+		onFiltersChange({
+			...filters,
+			managerNames: filters.managerNames.filter((n) => n !== name),
+		});
+	}
 
 	// Universe labels mirror the CatalogFilters backend contract.
 	const FUND_UNIVERSE: { key: string; label: string }[] = [
@@ -77,7 +147,7 @@
 		"Latin America",
 	];
 
-	let sectionOpen = $state({ universe: true, strategy: true, geography: true, metrics: true });
+	let sectionOpen = $state({ manager: true, universe: true, strategy: true, geography: true, metrics: true });
 
 	function toggleUniverse(key: string) {
 		const next = new Set(filters.fundUniverse);
@@ -100,7 +170,7 @@
 		onFiltersChange({ ...filters, geographies: next });
 	}
 
-	function setRange<K extends "aumMin" | "returnMin" | "expenseMax">(field: K, value: number) {
+	function setRange<K extends "aumMin" | "aumMax" | "returnMin" | "returnMax" | "expenseMax">(field: K, value: number) {
 		onFiltersChange({ ...filters, [field]: value });
 	}
 
@@ -108,15 +178,38 @@
 		onFiltersChange({ ...filters, eliteOnly: !filters.eliteOnly });
 	}
 
+	// ── Debounced metric input handler ────────────────────
+	type MetricKey = "sharpeMin" | "sharpeMax" | "drawdownMinPct" | "drawdownMaxPct" | "volatilityMax" | "return10yMin" | "return10yMax";
+	let metricDebounce: ReturnType<typeof setTimeout> | null = null;
+
+	function debouncedMetric(field: MetricKey, value: string) {
+		if (metricDebounce) clearTimeout(metricDebounce);
+		metricDebounce = setTimeout(() => {
+			onFiltersChange({ ...filters, [field]: value });
+		}, 500);
+	}
+
 	function clearAll() {
+		managerQuery = "";
+		managerSuggestions = [];
 		onFiltersChange({
 			fundUniverse: new Set(),
 			strategies: new Set(),
 			geographies: new Set(),
 			aumMin: 0,
+			aumMax: 0,
 			returnMin: -999,
+			returnMax: 999,
 			expenseMax: 10,
 			eliteOnly: false,
+			managerNames: [],
+			sharpeMin: "",
+			sharpeMax: "",
+			drawdownMinPct: "",
+			drawdownMaxPct: "",
+			volatilityMax: "",
+			return10yMin: "",
+			return10yMax: "",
 		});
 	}
 
@@ -157,6 +250,57 @@
 	</div>
 
 	<div class="sf-scroll">
+		<!-- Manager typeahead -->
+		<div class="sf-section">
+			<button
+				class="sf-section-toggle"
+				onclick={() => (sectionOpen.manager = !sectionOpen.manager)}
+			>
+				<span class="sf-section-arrow" class:open={sectionOpen.manager}>&#9656;</span>
+				MANAGER
+			</button>
+			{#if sectionOpen.manager}
+				<div class="sf-section-body">
+					<div class="sf-manager-typeahead">
+						<input
+							type="text"
+							class="sf-manager-input"
+							placeholder="Search managers..."
+							bind:value={managerQuery}
+							oninput={fetchManagerSuggestions}
+						/>
+						{#if managerSuggestions.length > 0}
+							<ul class="sf-manager-suggestions" role="listbox">
+								{#each managerSuggestions as name (name)}
+									<li
+										role="option"
+										class="sf-manager-suggestion"
+										onclick={() => addManager(name)}
+									>
+										{name}
+									</li>
+								{/each}
+							</ul>
+						{/if}
+						{#if filters.managerNames.length > 0}
+							<div class="sf-manager-chips">
+								{#each filters.managerNames as name (name)}
+									<span class="sf-manager-chip">
+										{name}
+										<button
+											class="sf-manager-chip-x"
+											onclick={() => removeManager(name)}
+											aria-label="Remove {name}"
+										>x</button>
+									</span>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
+		</div>
+
 		<!-- Universe -->
 		<div class="sf-section">
 			<button
@@ -265,38 +409,76 @@
 						/>
 					</div>
 
-					<div class="sf-range-group">
-						<div class="sf-range-header">
-							<span>Min 1Y Return (%)</span>
-							<span class="sf-range-value">
-								{filters.returnMin <= -999 ? "any" : formatNumber(filters.returnMin, 0) + "%"}
-							</span>
+					<div class="sf-metric-row">
+						<span class="sf-metric-label">SHARPE (1Y)</span>
+						<div class="sf-metric-inputs">
+							<input type="number" step="0.1" placeholder="min" class="sf-metric-input" value={filters.sharpeMin}
+								oninput={(e) => debouncedMetric("sharpeMin", e.currentTarget.value)} />
+							<span class="sf-metric-sep">&mdash;</span>
+							<input type="number" step="0.1" placeholder="max" class="sf-metric-input" value={filters.sharpeMax}
+								oninput={(e) => debouncedMetric("sharpeMax", e.currentTarget.value)} />
 						</div>
-						<input
-							type="range"
-							min={-50}
-							max={100}
-							step={1}
-							value={filters.returnMin <= -999 ? -50 : filters.returnMin}
-							oninput={(e) => setRange("returnMin", +e.currentTarget.value)}
-							class="sf-slider"
-						/>
 					</div>
 
-					<div class="sf-range-group">
-						<div class="sf-range-header">
-							<span>Max Expense Ratio (%)</span>
-							<span class="sf-range-value">{formatNumber(filters.expenseMax, 2)}%</span>
+					<div class="sf-metric-row">
+						<span class="sf-metric-label">MAX DRAWDOWN (%)</span>
+						<div class="sf-metric-inputs">
+							<input type="number" step="1" placeholder="min" class="sf-metric-input" value={filters.drawdownMinPct}
+								oninput={(e) => debouncedMetric("drawdownMinPct", e.currentTarget.value)} />
+							<span class="sf-metric-sep">&mdash;</span>
+							<input type="number" step="1" placeholder="max" class="sf-metric-input" value={filters.drawdownMaxPct}
+								oninput={(e) => debouncedMetric("drawdownMaxPct", e.currentTarget.value)} />
 						</div>
-						<input
-							type="range"
-							min={0}
-							max={10}
-							step={0.05}
-							value={filters.expenseMax}
-							oninput={(e) => setRange("expenseMax", +e.currentTarget.value)}
-							class="sf-slider"
-						/>
+					</div>
+
+					<div class="sf-metric-row">
+						<span class="sf-metric-label">VOLATILITY (MAX)</span>
+						<div class="sf-metric-inputs">
+							<input type="number" step="0.01" placeholder="max" class="sf-metric-input" value={filters.volatilityMax}
+								oninput={(e) => debouncedMetric("volatilityMax", e.currentTarget.value)} />
+						</div>
+					</div>
+
+					<div class="sf-metric-row">
+						<span class="sf-metric-label">EXPENSE RATIO (MAX %)</span>
+						<div class="sf-metric-inputs">
+							<input type="number" step="0.05" placeholder="max" class="sf-metric-input"
+								value={filters.expenseMax >= 10 ? "" : String(filters.expenseMax)}
+								oninput={(e) => {
+									const v = e.currentTarget.value;
+									setRange("expenseMax", v === "" ? 10 : +v);
+								}} />
+						</div>
+					</div>
+
+					<div class="sf-metric-row">
+						<span class="sf-metric-label">1Y RETURN (%)</span>
+						<div class="sf-metric-inputs">
+							<input type="number" step="1" placeholder="min" class="sf-metric-input"
+								value={filters.returnMin <= -999 ? "" : String(filters.returnMin)}
+								oninput={(e) => {
+									const v = e.currentTarget.value;
+									setRange("returnMin", v === "" ? -999 : +v);
+								}} />
+							<span class="sf-metric-sep">&mdash;</span>
+							<input type="number" step="1" placeholder="max" class="sf-metric-input"
+								value={filters.returnMax >= 999 ? "" : String(filters.returnMax)}
+								oninput={(e) => {
+									const v = e.currentTarget.value;
+									setRange("returnMax", v === "" ? 999 : +v);
+								}} />
+						</div>
+					</div>
+
+					<div class="sf-metric-row">
+						<span class="sf-metric-label">10Y RETURN (%)</span>
+						<div class="sf-metric-inputs">
+							<input type="number" step="1" placeholder="min" class="sf-metric-input" value={filters.return10yMin}
+								oninput={(e) => debouncedMetric("return10yMin", e.currentTarget.value)} />
+							<span class="sf-metric-sep">&mdash;</span>
+							<input type="number" step="1" placeholder="max" class="sf-metric-input" value={filters.return10yMax}
+								oninput={(e) => debouncedMetric("return10yMax", e.currentTarget.value)} />
+						</div>
 					</div>
 				</div>
 			{/if}
@@ -447,6 +629,150 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	/* ── Metric range inputs ─────────────────────────── */
+	.sf-metric-row {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		margin-bottom: 8px;
+	}
+
+	.sf-metric-label {
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: #5a6577;
+	}
+
+	.sf-metric-inputs {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.sf-metric-input {
+		flex: 1;
+		min-width: 0;
+		width: 56px;
+		background: transparent;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-radius: 0;
+		color: #c8d0dc;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 11px;
+		padding: 4px 6px;
+		text-align: right;
+		outline: none;
+		box-sizing: border-box;
+		-moz-appearance: textfield;
+	}
+	.sf-metric-input::-webkit-inner-spin-button,
+	.sf-metric-input::-webkit-outer-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
+	}
+	.sf-metric-input::placeholder {
+		color: #3d4a5c;
+		text-align: right;
+	}
+	.sf-metric-input:focus {
+		border-color: rgba(45, 126, 247, 0.4);
+	}
+
+	.sf-metric-sep {
+		color: #3d4a5c;
+		font-size: 10px;
+		flex-shrink: 0;
+	}
+
+	/* ── Manager typeahead ────────────────────────────── */
+	.sf-manager-typeahead {
+		position: relative;
+	}
+
+	.sf-manager-input {
+		width: 100%;
+		background: transparent;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-radius: 0;
+		color: #c8d0dc;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 11px;
+		padding: 5px 8px;
+		outline: none;
+		box-sizing: border-box;
+	}
+	.sf-manager-input::placeholder {
+		color: #3d4a5c;
+	}
+	.sf-manager-input:focus {
+		border-color: rgba(45, 126, 247, 0.4);
+	}
+
+	.sf-manager-suggestions {
+		position: absolute;
+		left: 0;
+		right: 0;
+		z-index: 20;
+		background: #0d1220;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-top: none;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		max-height: 200px;
+		overflow-y: auto;
+	}
+
+	.sf-manager-suggestion {
+		padding: 5px 8px;
+		font-size: 11px;
+		color: #9aa3b3;
+		cursor: pointer;
+	}
+	.sf-manager-suggestion:hover {
+		background: rgba(45, 126, 247, 0.08);
+		color: #e2e8f0;
+	}
+
+	.sf-manager-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		margin-top: 6px;
+	}
+
+	.sf-manager-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 10px;
+		color: #22d3ee;
+		border: 1px solid rgba(34, 211, 238, 0.3);
+		padding: 2px 6px;
+		white-space: nowrap;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.sf-manager-chip-x {
+		background: none;
+		border: none;
+		color: #22d3ee;
+		font-size: 10px;
+		cursor: pointer;
+		padding: 0;
+		line-height: 1;
+		font-family: "JetBrains Mono", monospace;
+		opacity: 0.6;
+	}
+	.sf-manager-chip-x:hover {
+		opacity: 1;
 	}
 
 	/* ── Range sliders ─────────────────────────────────── */

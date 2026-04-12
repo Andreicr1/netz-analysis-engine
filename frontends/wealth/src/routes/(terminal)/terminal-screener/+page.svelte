@@ -23,14 +23,26 @@
 		const strategyRaw = params.get("strategy");
 		const geoRaw = params.get("geography");
 
+		const managerRaw = params.get("manager");
+
 		return {
 			fundUniverse: universeRaw ? new Set(universeRaw.split(",")) : new Set(),
 			strategies: strategyRaw ? new Set(strategyRaw.split(",")) : new Set(),
 			geographies: geoRaw ? new Set(geoRaw.split(",")) : new Set(),
 			aumMin: Number(params.get("aum_min") ?? 0),
+			aumMax: Number(params.get("aum_max") ?? 0),
 			returnMin: Number(params.get("min_return") ?? -999),
+			returnMax: Number(params.get("max_return") ?? 999),
 			expenseMax: Number(params.get("max_expense") ?? 10),
 			eliteOnly: params.get("elite") === "1",
+			managerNames: managerRaw ? managerRaw.split(",") : [],
+			sharpeMin: params.get("sharpe_min") ?? "",
+			sharpeMax: params.get("sharpe_max") ?? "",
+			drawdownMinPct: params.get("dd_min") ?? "",
+			drawdownMaxPct: params.get("dd_max") ?? "",
+			volatilityMax: params.get("vol_max") ?? "",
+			return10yMin: params.get("ret_10y_min") ?? "",
+			return10yMax: params.get("ret_10y_max") ?? "",
 		};
 	}
 
@@ -42,21 +54,28 @@
 		const p = url.searchParams;
 
 		// Clear all filter params first, then set non-default values
-		p.delete("universe");
-		p.delete("strategy");
-		p.delete("geography");
-		p.delete("aum_min");
-		p.delete("min_return");
-		p.delete("max_expense");
-		p.delete("elite");
+		// Clear all filter params
+		for (const k of ["universe", "strategy", "geography", "aum_min", "aum_max", "min_return", "max_return", "max_expense", "elite", "manager", "sharpe_min", "sharpe_max", "dd_min", "dd_max", "vol_max", "ret_10y_min", "ret_10y_max"]) {
+			p.delete(k);
+		}
 
 		if (next.fundUniverse.size > 0) p.set("universe", [...next.fundUniverse].join(","));
 		if (next.strategies.size > 0) p.set("strategy", [...next.strategies].join(","));
 		if (next.geographies.size > 0) p.set("geography", [...next.geographies].join(","));
 		if (next.aumMin > 0) p.set("aum_min", String(Math.round(next.aumMin)));
+		if (next.aumMax > 0) p.set("aum_max", String(Math.round(next.aumMax)));
 		if (next.returnMin > -999) p.set("min_return", String(next.returnMin));
+		if (next.returnMax < 999) p.set("max_return", String(next.returnMax));
 		if (next.expenseMax < 10) p.set("max_expense", String(next.expenseMax));
 		if (next.eliteOnly) p.set("elite", "1");
+		if (next.managerNames.length > 0) p.set("manager", next.managerNames.join(","));
+		if (next.sharpeMin) p.set("sharpe_min", next.sharpeMin);
+		if (next.sharpeMax) p.set("sharpe_max", next.sharpeMax);
+		if (next.drawdownMinPct) p.set("dd_min", next.drawdownMinPct);
+		if (next.drawdownMaxPct) p.set("dd_max", next.drawdownMaxPct);
+		if (next.volatilityMax) p.set("vol_max", next.volatilityMax);
+		if (next.return10yMin) p.set("ret_10y_min", next.return10yMin);
+		if (next.return10yMax) p.set("ret_10y_max", next.return10yMax);
 
 		const qs = p.toString();
 		const target = url.pathname + (qs ? "?" + qs : "");

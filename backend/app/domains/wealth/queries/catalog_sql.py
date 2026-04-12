@@ -181,6 +181,9 @@ class CatalogFilters:
     # Phase 3: ELITE filter — True = only funds with elite_flag=true
     elite_only: bool | None = None
 
+    # Phase 3: multi-select manager filter (exact match, distinct from ILIKE `manager`)
+    manager_names: list[str] | None = None
+
     # Phase 3: keyset cursor (base64 encoded, replaces offset when present)
     cursor: str | None = None
 
@@ -189,6 +192,17 @@ class CatalogFilters:
     max_expense_ratio: float | None = None      # e.g. 0.50 → ER ≤ 0.50%
     min_return_1y: float | None = None          # e.g. 5.0 → return ≥ 5%
     min_return_10y: float | None = None         # e.g. 8.0 → return ≥ 8%
+
+    # Phase 3 Sprint 3: expanded metric range filters (from mv_fund_risk_latest)
+    sharpe_min: float | None = None
+    sharpe_max: float | None = None
+    max_drawdown_min: float | None = None       # e.g. -0.15 = no worse than 15%
+    max_drawdown_max: float | None = None
+    volatility_max: float | None = None
+    aum_max: float | None = None
+    return_1y_max: float | None = None
+    return_10y_min: float | None = None
+    return_10y_max: float | None = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -400,6 +414,10 @@ def _build_base_stmt(f: CatalogFilters, *, include_risk_membership: bool = False
     # 10b. Manager ID (exact CRD match)
     if f.manager_id:
         conditions.append(mv_unified_funds.c.manager_id == f.manager_id)
+
+    # 10c. Multi-select manager names (exact match, for typeahead chips)
+    if f.manager_names:
+        conditions.append(mv_unified_funds.c.manager_name.in_(f.manager_names))
         
     # 11. Prospectus filters
     if f.max_expense_ratio is not None:
@@ -411,6 +429,29 @@ def _build_base_stmt(f: CatalogFilters, *, include_risk_membership: bool = False
     if f.min_return_10y is not None:
         # User enters 8.0 (meaning 8%), DB stores 0.08
         conditions.append(mv_unified_funds.c.avg_annual_return_10y >= f.min_return_10y / 100.0)
+
+    # 12. Expanded metric range filters (from mv_fund_risk_latest, requires JOIN)
+    if include_risk_membership:
+        if f.sharpe_min is not None:
+            conditions.append(mv_fund_risk_latest.c.sharpe_1y >= f.sharpe_min)
+        if f.sharpe_max is not None:
+            conditions.append(mv_fund_risk_latest.c.sharpe_1y <= f.sharpe_max)
+        if f.max_drawdown_min is not None:
+            # Drawdown is negative: -0.15 means 15% drawdown.
+            # "No worse than 15%" means WHERE max_drawdown_1y >= -0.15
+            conditions.append(mv_fund_risk_latest.c.max_drawdown_1y >= f.max_drawdown_min)
+        if f.max_drawdown_max is not None:
+            conditions.append(mv_fund_risk_latest.c.max_drawdown_1y <= f.max_drawdown_max)
+        if f.volatility_max is not None:
+            conditions.append(mv_fund_risk_latest.c.volatility_1y <= f.volatility_max)
+        if f.return_1y_max is not None:
+            conditions.append(mv_fund_risk_latest.c.return_1y <= f.return_1y_max)
+    if f.aum_max is not None:
+        conditions.append(mv_unified_funds.c.aum_usd <= f.aum_max)
+    if f.return_10y_min is not None:
+        conditions.append(mv_unified_funds.c.avg_annual_return_10y >= f.return_10y_min / 100.0)
+    if f.return_10y_max is not None:
+        conditions.append(mv_unified_funds.c.avg_annual_return_10y <= f.return_10y_max / 100.0)
 
     if conditions:
         stmt = stmt.where(and_(*conditions))
