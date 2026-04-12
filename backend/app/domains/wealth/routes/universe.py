@@ -11,6 +11,7 @@ import uuid
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.audit import get_audit_log, write_audit_event
@@ -591,3 +592,125 @@ def _require_ic_role(actor: Actor) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Investment Committee role required for universe approvals",
         )
+
+
+# ── Phase 3 Session A commit 4: fast-track liquid approval ────────
+
+_LIQUID_UNIVERSES = frozenset({"registered_us", "etf", "ucits_eu", "money_market"})
+_DD_REQUIRED_UNIVERSES = frozenset({"private_us", "bdc"})
+
+
+class FastApproveRequest(BaseModel):
+    """Request body for fast-track universe approval."""
+
+    instrument_ids: list[uuid.UUID]
+    block_id: str | None = None
+    source: str = "screener_fast_path"
+
+
+class FastApproveResponse(BaseModel):
+    """Response body for fast-track universe approval."""
+
+    approved: list[str]
+    rejected_dd_required: list[str]
+
+
+@router.post(
+    "/fast-approve",
+    response_model=FastApproveResponse,
+    summary="Fast-track liquid fund approval from screener",
+)
+async def fast_approve(
+    body: FastApproveRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+    org_id: str = Depends(get_org_id),
+) -> FastApproveResponse:
+    """Approve liquid funds directly from the screener in one click.
+
+    Liquid funds (registered_us, etf, ucits_eu, money_market) are
+    approved immediately. Private funds and BDCs are rejected with a
+    ``dd_required`` marker — they need a completed DD report before
+    universe approval.
+
+    Idempotent: if a fund is already approved for this org, it is
+    returned in the ``approved`` list without creating a duplicate row.
+    """
+    _require_ic_role(actor)
+
+    if not body.instrument_ids:
+        return FastApproveResponse(approved=[], rejected_dd_required=[])
+
+    from sqlalchemy import select as sa_select
+
+    from app.domains.wealth.models.instrument import Instrument
+    from app.domains.wealth.models.instrument_org import InstrumentOrg
+
+    # Load instruments to check universe type
+    instruments = (
+        await db.execute(
+            sa_select(
+                Instrument.instrument_id,
+                Instrument.attributes["sec_universe"].astext.label("sec_universe"),
+            ).where(Instrument.instrument_id.in_(body.instrument_ids))
+        )
+    ).all()
+
+    inst_map = {r.instrument_id: r.sec_universe for r in instruments}
+
+    approved: list[str] = []
+    rejected_dd: list[str] = []
+
+    for iid in body.instrument_ids:
+        universe = inst_map.get(iid)
+
+        if universe in _DD_REQUIRED_UNIVERSES:
+            rejected_dd.append(str(iid))
+            continue
+
+        # Check if already approved (idempotent)
+        existing = (
+            await db.execute(
+                sa_select(InstrumentOrg.id).where(
+                    InstrumentOrg.instrument_id == iid,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if existing:
+            # Already exists — treat as success
+            approved.append(str(iid))
+            continue
+
+        # Create new instruments_org row with approved status
+        new_org = InstrumentOrg(
+            instrument_id=iid,
+            organization_id=uuid.UUID(org_id),
+            block_id=body.block_id,
+            approval_status="approved",
+        )
+        db.add(new_org)
+        approved.append(str(iid))
+
+        await write_audit_event(
+            db,
+            actor_id=actor.actor_id,
+            action="universe.fast_approve",
+            entity_type="InstrumentOrg",
+            entity_id=str(iid),
+            before=None,
+            after={
+                "approval_status": "approved",
+                "source": body.source,
+                "block_id": body.block_id,
+            },
+        )
+
+    if approved:
+        await db.commit()
+
+    return FastApproveResponse(
+        approved=approved,
+        rejected_dd_required=rejected_dd,
+    )

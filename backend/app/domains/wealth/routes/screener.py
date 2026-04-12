@@ -47,6 +47,7 @@ from app.domains.wealth.queries.catalog_sql import (
     build_catalog_facets_query,
     build_catalog_query,
     build_manager_catalog_query,
+    encode_cursor,
     sec_money_market_funds,
 )
 from app.domains.wealth.schemas.catalog import (
@@ -302,6 +303,82 @@ async def get_elite_catalog(
         for row in rows
     ]
     return EliteCatalogPage(items=items, total=len(items), limit=limit)
+
+
+# ── Phase 3 Session A commit 3: batch sparkline endpoint ─────────
+
+
+class SparklinePoint(BaseModel):
+    """Single monthly data point for inline grid sparklines."""
+
+    month: str  # ISO date string (YYYY-MM-DD)
+    nav_close: float
+    return_1m: float | None = None
+
+
+class SparklineRequest(BaseModel):
+    """Request body for batch sparkline endpoint."""
+
+    instrument_ids: list[uuid.UUID]
+    months: int = 60  # 5 years of monthly data
+
+
+@router.post(
+    "/sparklines",
+    summary="Batch sparkline data for grid inline charts",
+)
+async def get_screener_sparklines(
+    body: SparklineRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> dict[str, list[SparklinePoint]]:
+    """Return monthly NAV data for a batch of instruments.
+
+    Reads from ``nav_monthly_returns_agg`` CAGG. Returns at most
+    ``months`` data points per instrument, ordered chronologically.
+    Instruments with no data are omitted from the response dict.
+    Capped at 100 instrument IDs per request (frontend sends visible
+    rows only, ~40 from virtualization).
+    """
+    if len(body.instrument_ids) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximum 100 instrument IDs per request",
+        )
+    if not body.instrument_ids:
+        return {}
+
+    ids = [str(iid) for iid in body.instrument_ids]
+    months = min(max(body.months, 1), 120)  # clamp to 1-120
+
+    result = await db.execute(
+        text(
+            """
+            SELECT
+                instrument_id::text AS instrument_id,
+                month,
+                nav_close,
+                (nav_close / NULLIF(nav_open, 0)) - 1 AS return_1m
+            FROM nav_monthly_returns_agg
+            WHERE instrument_id = ANY(:ids)
+              AND month >= NOW() - make_interval(months => :months)
+            ORDER BY instrument_id, month ASC
+            """,
+        ),
+        {"ids": ids, "months": months},
+    )
+    rows = result.mappings().all()
+
+    out: dict[str, list[SparklinePoint]] = {}
+    for r in rows:
+        iid = str(r["instrument_id"])
+        point = SparklinePoint(
+            month=r["month"].isoformat() if hasattr(r["month"], "isoformat") else str(r["month"]),
+            nav_close=float(r["nav_close"]) if r["nav_close"] is not None else 0.0,
+            return_1m=float(r["return_1m"]) if r["return_1m"] is not None else None,
+        )
+        out.setdefault(iid, []).append(point)
+
+    return out
 
 
 @router.post(
@@ -1458,6 +1535,8 @@ async def get_catalog(
     max_expense_ratio: float | None = Query(None, ge=0, le=10, description="Max expense ratio %"),
     min_return_1y: float | None = Query(None, description="Min avg annual return 1Y %"),
     min_return_10y: float | None = Query(None, description="Min avg annual return 10Y %"),
+    elite_only: bool | None = Query(None, description="Only ELITE-flagged funds (top 300 per strategy)"),
+    cursor: str | None = Query(None, description="Keyset cursor from previous page (base64). When present, replaces offset-based pagination."),
     db: AsyncSession = Depends(get_db_with_rls),
 ) -> UnifiedCatalogPage:
     filters = CatalogFilters(
@@ -1480,6 +1559,8 @@ async def get_catalog(
         max_expense_ratio=max_expense_ratio,
         min_return_1y=min_return_1y,
         min_return_10y=min_return_10y,
+        elite_only=elite_only,
+        cursor=cursor,
     )
 
     stmt = build_catalog_query(filters)
@@ -1508,6 +1589,14 @@ async def get_catalog(
                 inception = r.inception_date
             except (ValueError, TypeError):
                 pass
+
+        # Phase 3: instrument_id resolved via instruments_universe JOIN
+        resolved_id = str(r.iu_instrument_id) if getattr(r, "iu_instrument_id", None) else None
+
+        # Phase 3: org membership from v_screener_org_membership JOIN
+        org_approval = getattr(r, "org_approval_status", None)
+
+        has_nav_flag = bool(r.has_nav)
 
         items.append(
             UnifiedFundItem(
@@ -1540,10 +1629,18 @@ async def get_catalog(
                 is_index=bool(r.is_index) if getattr(r, "is_index", None) is not None else None,
                 is_target_date=bool(r.is_target_date) if getattr(r, "is_target_date", None) is not None else None,
                 is_fund_of_fund=bool(r.is_fund_of_fund) if getattr(r, "is_fund_of_fund", None) is not None else None,
+                # Phase 3: instrument_id from bridge JOIN
+                instrument_id=resolved_id,
+                # Phase 3: ELITE ranking from mv_fund_risk_latest
+                elite_flag=bool(r.elite_flag) if getattr(r, "elite_flag", None) is not None else None,
+                elite_rank_within_strategy=getattr(r, "elite_rank_within_strategy", None),
+                # Phase 3: org membership from v_screener_org_membership
+                in_universe=(org_approval == "approved"),
+                approval_status=org_approval,
                 disclosure=_build_disclosure(
                     universe=r.universe,
                     has_holdings=bool(r.has_holdings),
-                    has_nav=bool(r.has_nav),
+                    has_nav=has_nav_flag,
                     has_13f_overlay=bool(getattr(r, "has_13f_overlay", False)),
                     has_prospectus=(
                         getattr(r, "expense_ratio_pct", None) is not None
@@ -1579,63 +1676,33 @@ async def get_catalog(
                 item.weighted_avg_maturity = mmf.weighted_avg_maturity
                 item.weighted_avg_life = mmf.weighted_avg_life
 
-    # Batch-enrich nav_status + global instrument_id — resolve every
-    # ticker/ISIN pair against instruments_universe so downstream clients
-    # (risk timeseries, fact sheets) can reach the global UUID without a
-    # second round-trip. This replaces the tenant-scoped instrument_id
-    # the catalog query initialises to NULL.
-    tickers_to_check = [
-        item.ticker for item in items if item.ticker and item.disclosure.has_nav_history
-    ]
-    isins_to_check = [
-        item.isin for item in items
-        if item.isin and not item.ticker and item.disclosure.has_nav_history
-    ]
-
-    id_by_ticker: dict[str, str] = {}
-    id_by_isin: dict[str, str] = {}
-
-    if tickers_to_check:
-        nav_result = await db.execute(
-            select(Instrument.ticker, Instrument.instrument_id)
-            .where(Instrument.ticker.in_(tickers_to_check))
-            .where(Instrument.is_active == True)  # noqa: E712
-        )
-        id_by_ticker = {r[0]: str(r[1]) for r in nav_result.all()}
-
-    if isins_to_check:
-        isin_result = await db.execute(
-            select(Instrument.isin, Instrument.instrument_id)
-            .where(Instrument.isin.in_(isins_to_check))
-            .where(Instrument.is_active == True)  # noqa: E712
-        )
-        id_by_isin = {r[0]: str(r[1]) for r in isin_result.all()}
-
+    # nav_status derivation — now uses instrument_id resolved by the
+    # instruments_universe bridge JOIN (replaces post-hoc ticker/ISIN
+    # resolution queries that added N+1 round-trips).
     for item in items:
-        resolved_id: str | None = None
-        if item.ticker and item.ticker in id_by_ticker:
-            resolved_id = id_by_ticker[item.ticker]
-        elif item.isin and item.isin in id_by_isin:
-            resolved_id = id_by_isin[item.isin]
-
-        if resolved_id:
-            item.instrument_id = resolved_id
-
         if not item.disclosure.has_nav_history:
             item.disclosure.nav_status = "unavailable"
-        elif resolved_id:
+        elif item.instrument_id:
             item.disclosure.nav_status = "available"
         elif item.ticker or item.isin:
             item.disclosure.nav_status = "pending_import"
         else:
             item.disclosure.nav_status = "unavailable"
 
+    # Compute next_cursor from the last row's tiebreaker columns
+    has_next = (offset + page_size) < total if not cursor else len(items) == page_size
+    next_cursor: str | None = None
+    if items and has_next:
+        last = items[-1]
+        next_cursor = encode_cursor([last.aum, last.external_id])
+
     return UnifiedCatalogPage(
         items=items,
         total=total,
         page=page,
         page_size=page_size,
-        has_next=(offset + page_size) < total,
+        has_next=has_next,
+        next_cursor=next_cursor,
     )
 
 
