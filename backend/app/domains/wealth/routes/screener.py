@@ -1566,6 +1566,15 @@ async def get_catalog(
     elite_only: bool | None = Query(None, description="Only ELITE-flagged funds (top 300 per strategy)"),
     cursor: str | None = Query(None, description="Keyset cursor from previous page (base64). When present, replaces offset-based pagination."),
     manager_names: str | None = Query(None, description="Comma-separated exact manager names for multi-select filter"),
+    sharpe_min: float | None = Query(None, description="Min Sharpe ratio (1Y)"),
+    sharpe_max: float | None = Query(None, description="Max Sharpe ratio (1Y)"),
+    max_drawdown_min: float | None = Query(None, description="Max drawdown floor (negative, e.g. -0.15)"),
+    max_drawdown_max: float | None = Query(None, description="Max drawdown ceiling (negative)"),
+    volatility_max: float | None = Query(None, ge=0, description="Max annualized volatility (1Y)"),
+    aum_max: float | None = Query(None, ge=0, description="Maximum AUM in USD"),
+    return_1y_max: float | None = Query(None, description="Max 1Y return (decimal)"),
+    return_10y_min: float | None = Query(None, description="Min 10Y annualized return %"),
+    return_10y_max: float | None = Query(None, description="Max 10Y annualized return %"),
     db: AsyncSession = Depends(get_db_with_rls),
 ) -> UnifiedCatalogPage:
     parsed_manager_names = [n.strip() for n in manager_names.split(",") if n.strip()] if manager_names else None
@@ -1592,6 +1601,15 @@ async def get_catalog(
         elite_only=elite_only,
         cursor=cursor,
         manager_names=parsed_manager_names,
+        sharpe_min=sharpe_min,
+        sharpe_max=sharpe_max,
+        max_drawdown_min=max_drawdown_min,
+        max_drawdown_max=max_drawdown_max,
+        volatility_max=volatility_max,
+        aum_max=aum_max,
+        return_1y_max=return_1y_max,
+        return_10y_min=return_10y_min,
+        return_10y_max=return_10y_max,
     )
 
     stmt = build_catalog_query(filters)
