@@ -116,6 +116,7 @@
 	let loading = $state(false);
 	let errorMessage = $state<string | null>(null);
 	let selectedId = $state<string | null>(null);
+	let highlightedIndex = $state(-1);
 
 	const selectedAsset = $derived<ScreenerAsset | null>(
 		assets.find((a) => a.id === selectedId) ?? null,
@@ -181,6 +182,10 @@
 	function handleSelect(asset: ScreenerAsset) {
 		selectedId = asset.id;
 	}
+
+	function handleHighlight(index: number) {
+		highlightedIndex = index;
+	}
 </script>
 
 <div class="ts-root">
@@ -194,7 +199,9 @@
 			{loading}
 			{errorMessage}
 			{selectedId}
+			{highlightedIndex}
 			onSelect={handleSelect}
+			onHighlight={handleHighlight}
 		/>
 	</div>
 	<div class="ts-zone ts-stats" aria-label="Quick stats">
