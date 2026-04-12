@@ -26,6 +26,7 @@ from vertical_engines.wealth.screener.models import (
 )
 from vertical_engines.wealth.screener.quant_metrics import (
     BondQuantMetrics,
+    FIQuantMetrics,
     QuantMetrics,
     composite_score,
 )
@@ -66,7 +67,7 @@ class ScreenerService:
         instrument_type: str,
         attributes: dict[str, Any],
         block_id: str | None = None,
-        quant_metrics: QuantMetrics | BondQuantMetrics | None = None,
+        quant_metrics: QuantMetrics | BondQuantMetrics | FIQuantMetrics | None = None,
         peer_values: dict[str, list[float]] | None = None,
         previous_status: str | None = None,
     ) -> InstrumentScreeningResult:
@@ -215,21 +216,35 @@ class ScreenerService:
     def _compute_layer3_score(
         self,
         instrument_type: str,
-        quant_metrics: QuantMetrics | BondQuantMetrics | None,
+        quant_metrics: QuantMetrics | BondQuantMetrics | FIQuantMetrics | None,
         peer_values: dict[str, list[float]] | None,
     ) -> float | None:
         """Compute Layer 3 composite score."""
         if quant_metrics is None:
             return None
 
-        type_config = self._config_layer3.get(instrument_type, {})
+        # FI funds use "fund_fixed_income" config key for distinct weights
+        if isinstance(quant_metrics, FIQuantMetrics):
+            config_key = "fund_fixed_income"
+        else:
+            config_key = instrument_type
+
+        type_config = self._config_layer3.get(config_key, {})
         weights = type_config.get("weights", {})
 
         if not weights:
             return None
 
         # Convert dataclass to dict for scoring
-        if isinstance(quant_metrics, QuantMetrics):
+        if isinstance(quant_metrics, FIQuantMetrics):
+            metrics_dict = {
+                "empirical_duration": quant_metrics.empirical_duration,
+                "credit_beta": quant_metrics.credit_beta,
+                "yield_proxy_12m": quant_metrics.yield_proxy_12m,
+                "duration_adj_drawdown": quant_metrics.duration_adj_drawdown,
+                "sharpe_ratio": quant_metrics.sharpe_ratio,
+            }
+        elif isinstance(quant_metrics, QuantMetrics):
             metrics_dict = {
                 "sharpe_ratio": quant_metrics.sharpe_ratio,
                 "max_drawdown": quant_metrics.max_drawdown_pct,
