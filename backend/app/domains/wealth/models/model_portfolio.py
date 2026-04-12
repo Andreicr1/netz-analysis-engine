@@ -242,6 +242,14 @@ class PortfolioConstructionRun(OrganizationScopedMixin, Base):
         JSONB, nullable=False, server_default="{}",
     )
 
+    # ── SSE event log (migration 0111) ──────────────────────────
+    # Append-only JSONB array of {seq, type, ts, payload} entries
+    # emitted by construction_run_executor during the run. Feeds the
+    # Builder SSE late-subscriber replay and mv_construction_run_diff.
+    event_log: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default="[]",
+    )
+
 
 class PortfolioWeightSnapshot(Base):
     """Strategic / tactical / effective weight triples per day.
