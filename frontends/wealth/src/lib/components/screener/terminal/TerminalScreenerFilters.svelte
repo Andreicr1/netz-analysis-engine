@@ -11,10 +11,19 @@
 		strategies: Set<string>;     // strategy_label
 		geographies: Set<string>;    // investment_geography
 		aumMin: number;              // USD absolute, 0 = no filter
+		aumMax: number;              // USD absolute, 0 = no filter
 		returnMin: number;           // % annualised 1Y, null/-999 = no filter
+		returnMax: number;           // % annualised 1Y, 999 = no filter
 		expenseMax: number;          // % annual fee, 10 = no filter
 		eliteOnly: boolean;          // ELITE-flagged funds only
 		managerNames: string[];      // multi-select exact manager names
+		sharpeMin: string;           // Sharpe ratio (1Y) min — string for input binding
+		sharpeMax: string;
+		drawdownMinPct: string;      // Positive %, converted to negative for backend
+		drawdownMaxPct: string;
+		volatilityMax: string;       // Annualized vol (1Y)
+		return10yMin: string;        // % annualised 10Y
+		return10yMax: string;
 	}
 
 	export const DEFAULT_FILTERS: FilterState = {
@@ -22,10 +31,19 @@
 		strategies: new Set<string>(),
 		geographies: new Set<string>(),
 		aumMin: 0,
+		aumMax: 0,
 		returnMin: -999,
+		returnMax: 999,
 		expenseMax: 10,
 		eliteOnly: false,
 		managerNames: [],
+		sharpeMin: "",
+		sharpeMax: "",
+		drawdownMinPct: "",
+		drawdownMaxPct: "",
+		volatilityMax: "",
+		return10yMin: "",
+		return10yMax: "",
 	};
 </script>
 
@@ -152,12 +170,23 @@
 		onFiltersChange({ ...filters, geographies: next });
 	}
 
-	function setRange<K extends "aumMin" | "returnMin" | "expenseMax">(field: K, value: number) {
+	function setRange<K extends "aumMin" | "aumMax" | "returnMin" | "returnMax" | "expenseMax">(field: K, value: number) {
 		onFiltersChange({ ...filters, [field]: value });
 	}
 
 	function toggleEliteOnly() {
 		onFiltersChange({ ...filters, eliteOnly: !filters.eliteOnly });
+	}
+
+	// ── Debounced metric input handler ────────────────────
+	type MetricKey = "sharpeMin" | "sharpeMax" | "drawdownMinPct" | "drawdownMaxPct" | "volatilityMax" | "return10yMin" | "return10yMax";
+	let metricDebounce: ReturnType<typeof setTimeout> | null = null;
+
+	function debouncedMetric(field: MetricKey, value: string) {
+		if (metricDebounce) clearTimeout(metricDebounce);
+		metricDebounce = setTimeout(() => {
+			onFiltersChange({ ...filters, [field]: value });
+		}, 500);
 	}
 
 	function clearAll() {
@@ -168,10 +197,19 @@
 			strategies: new Set(),
 			geographies: new Set(),
 			aumMin: 0,
+			aumMax: 0,
 			returnMin: -999,
+			returnMax: 999,
 			expenseMax: 10,
 			eliteOnly: false,
 			managerNames: [],
+			sharpeMin: "",
+			sharpeMax: "",
+			drawdownMinPct: "",
+			drawdownMaxPct: "",
+			volatilityMax: "",
+			return10yMin: "",
+			return10yMax: "",
 		});
 	}
 
@@ -371,38 +409,76 @@
 						/>
 					</div>
 
-					<div class="sf-range-group">
-						<div class="sf-range-header">
-							<span>Min 1Y Return (%)</span>
-							<span class="sf-range-value">
-								{filters.returnMin <= -999 ? "any" : formatNumber(filters.returnMin, 0) + "%"}
-							</span>
+					<div class="sf-metric-row">
+						<span class="sf-metric-label">SHARPE (1Y)</span>
+						<div class="sf-metric-inputs">
+							<input type="number" step="0.1" placeholder="min" class="sf-metric-input" value={filters.sharpeMin}
+								oninput={(e) => debouncedMetric("sharpeMin", e.currentTarget.value)} />
+							<span class="sf-metric-sep">&mdash;</span>
+							<input type="number" step="0.1" placeholder="max" class="sf-metric-input" value={filters.sharpeMax}
+								oninput={(e) => debouncedMetric("sharpeMax", e.currentTarget.value)} />
 						</div>
-						<input
-							type="range"
-							min={-50}
-							max={100}
-							step={1}
-							value={filters.returnMin <= -999 ? -50 : filters.returnMin}
-							oninput={(e) => setRange("returnMin", +e.currentTarget.value)}
-							class="sf-slider"
-						/>
 					</div>
 
-					<div class="sf-range-group">
-						<div class="sf-range-header">
-							<span>Max Expense Ratio (%)</span>
-							<span class="sf-range-value">{formatNumber(filters.expenseMax, 2)}%</span>
+					<div class="sf-metric-row">
+						<span class="sf-metric-label">MAX DRAWDOWN (%)</span>
+						<div class="sf-metric-inputs">
+							<input type="number" step="1" placeholder="min" class="sf-metric-input" value={filters.drawdownMinPct}
+								oninput={(e) => debouncedMetric("drawdownMinPct", e.currentTarget.value)} />
+							<span class="sf-metric-sep">&mdash;</span>
+							<input type="number" step="1" placeholder="max" class="sf-metric-input" value={filters.drawdownMaxPct}
+								oninput={(e) => debouncedMetric("drawdownMaxPct", e.currentTarget.value)} />
 						</div>
-						<input
-							type="range"
-							min={0}
-							max={10}
-							step={0.05}
-							value={filters.expenseMax}
-							oninput={(e) => setRange("expenseMax", +e.currentTarget.value)}
-							class="sf-slider"
-						/>
+					</div>
+
+					<div class="sf-metric-row">
+						<span class="sf-metric-label">VOLATILITY (MAX)</span>
+						<div class="sf-metric-inputs">
+							<input type="number" step="0.01" placeholder="max" class="sf-metric-input" value={filters.volatilityMax}
+								oninput={(e) => debouncedMetric("volatilityMax", e.currentTarget.value)} />
+						</div>
+					</div>
+
+					<div class="sf-metric-row">
+						<span class="sf-metric-label">EXPENSE RATIO (MAX %)</span>
+						<div class="sf-metric-inputs">
+							<input type="number" step="0.05" placeholder="max" class="sf-metric-input"
+								value={filters.expenseMax >= 10 ? "" : String(filters.expenseMax)}
+								oninput={(e) => {
+									const v = e.currentTarget.value;
+									setRange("expenseMax", v === "" ? 10 : +v);
+								}} />
+						</div>
+					</div>
+
+					<div class="sf-metric-row">
+						<span class="sf-metric-label">1Y RETURN (%)</span>
+						<div class="sf-metric-inputs">
+							<input type="number" step="1" placeholder="min" class="sf-metric-input"
+								value={filters.returnMin <= -999 ? "" : String(filters.returnMin)}
+								oninput={(e) => {
+									const v = e.currentTarget.value;
+									setRange("returnMin", v === "" ? -999 : +v);
+								}} />
+							<span class="sf-metric-sep">&mdash;</span>
+							<input type="number" step="1" placeholder="max" class="sf-metric-input"
+								value={filters.returnMax >= 999 ? "" : String(filters.returnMax)}
+								oninput={(e) => {
+									const v = e.currentTarget.value;
+									setRange("returnMax", v === "" ? 999 : +v);
+								}} />
+						</div>
+					</div>
+
+					<div class="sf-metric-row">
+						<span class="sf-metric-label">10Y RETURN (%)</span>
+						<div class="sf-metric-inputs">
+							<input type="number" step="1" placeholder="min" class="sf-metric-input" value={filters.return10yMin}
+								oninput={(e) => debouncedMetric("return10yMin", e.currentTarget.value)} />
+							<span class="sf-metric-sep">&mdash;</span>
+							<input type="number" step="1" placeholder="max" class="sf-metric-input" value={filters.return10yMax}
+								oninput={(e) => debouncedMetric("return10yMax", e.currentTarget.value)} />
+						</div>
 					</div>
 				</div>
 			{/if}
@@ -553,6 +629,63 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	/* ── Metric range inputs ─────────────────────────── */
+	.sf-metric-row {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		margin-bottom: 8px;
+	}
+
+	.sf-metric-label {
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: #5a6577;
+	}
+
+	.sf-metric-inputs {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.sf-metric-input {
+		flex: 1;
+		min-width: 0;
+		width: 56px;
+		background: transparent;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-radius: 0;
+		color: #c8d0dc;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 11px;
+		padding: 4px 6px;
+		text-align: right;
+		outline: none;
+		box-sizing: border-box;
+		-moz-appearance: textfield;
+	}
+	.sf-metric-input::-webkit-inner-spin-button,
+	.sf-metric-input::-webkit-outer-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
+	}
+	.sf-metric-input::placeholder {
+		color: #3d4a5c;
+		text-align: right;
+	}
+	.sf-metric-input:focus {
+		border-color: rgba(45, 126, 247, 0.4);
+	}
+
+	.sf-metric-sep {
+		color: #3d4a5c;
+		font-size: 10px;
+		flex-shrink: 0;
 	}
 
 	/* ── Manager typeahead ────────────────────────────── */

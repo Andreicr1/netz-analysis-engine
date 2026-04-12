@@ -141,9 +141,25 @@
 		if (f.strategies.size > 0) q.strategy_label = [...f.strategies].join(",");
 		if (f.geographies.size > 0) q.investment_geography = [...f.geographies].join(",");
 		if (f.aumMin > 0) q.aum_min = String(f.aumMin);
+		if (f.aumMax > 0) q.aum_max = String(f.aumMax);
 		if (f.returnMin > -999) q.min_return_1y = String(f.returnMin);
+		if (f.returnMax < 999) q.return_1y_max = String(f.returnMax / 100);
 		if (f.expenseMax < 10) q.max_expense_ratio = String(f.expenseMax);
 		if (f.managerNames.length > 0) q.manager_names = f.managerNames.join(",");
+
+		// Expanded metric filters
+		if (f.sharpeMin) q.sharpe_min = f.sharpeMin;
+		if (f.sharpeMax) q.sharpe_max = f.sharpeMax;
+		if (f.volatilityMax) q.volatility_max = f.volatilityMax;
+		if (f.return10yMin) q.return_10y_min = f.return10yMin;
+		if (f.return10yMax) q.return_10y_max = f.return10yMax;
+
+		// Drawdown: user enters positive % (e.g. 15 = 15%), backend expects negative decimal
+		// "No worse than 15%" → max_drawdown_min = -0.15 (floor)
+		// "At least 5% drawdown" → max_drawdown_max = -0.05 (ceiling)
+		if (f.drawdownMaxPct) q.max_drawdown_min = String(-Math.abs(+f.drawdownMaxPct) / 100);
+		if (f.drawdownMinPct) q.max_drawdown_max = String(-Math.abs(+f.drawdownMinPct) / 100);
+
 		return q;
 	}
 
