@@ -1206,6 +1206,32 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
             except Exception:
                 logger.exception("global_risk_metrics.peer_ranking_failed")
 
+            # Pass 3: ELITE ranking — top 300 funds by manager_score
+            # proportional to the global default strategic allocation
+            # (Phase 2 Session B commit 7).
+            try:
+                elite_stats = await _compute_elite_ranking(db, eval_date)
+                results["elite_ranked"] = elite_stats["total_elite"]
+                logger.info(
+                    "global_risk_metrics.elite_ranking_done",
+                    total_elite=elite_stats["total_elite"],
+                    per_strategy=elite_stats["per_strategy"],
+                )
+            except Exception:
+                logger.exception("global_risk_metrics.elite_ranking_failed")
+
+            # Pass 4: refresh the screener hot-path materialized view
+            # so Phase 3 Screener sees the new elite_flag + metrics.
+            try:
+                await db.execute(
+                    text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_fund_risk_latest"),
+                )
+                await db.commit()
+                logger.info("global_risk_metrics.mv_fund_risk_latest_refreshed")
+            except Exception:
+                await db.rollback()
+                logger.exception("global_risk_metrics.mv_refresh_failed")
+
             logger.info("global_risk_metrics.done", **results)
             return results
         finally:
@@ -1358,6 +1384,186 @@ def _pctl(value: float, arr: np.ndarray) -> float:
     if len(arr) == 0:
         return 50.0
     return round(float(np.sum(arr <= value)) / len(arr) * 100, 2)
+
+
+#: Phase 2 Session B commit 7 — total ELITE cohort size.
+ELITE_TOTAL_COUNT = 300
+
+#: Max acceptable deviation between ``sum(target_counts)`` and
+#: ``ELITE_TOTAL_COUNT`` after rounding. At the current canonical
+#: moderate profile (0.50 / 0.33 / 0.12 / 0.05) the sum is exactly
+#: 300, but a future re-seed with fractional weights may round up
+#: or down by 1–2 funds per bucket. Beyond this tolerance the
+#: worker logs a warning.
+ELITE_ROUNDING_TOLERANCE = 3
+
+
+async def _compute_elite_ranking(
+    db: AsyncSession,
+    calc_date: date,
+) -> dict[str, int | dict[str, int]]:
+    """ELITE ranking pass.
+
+    For each asset_class bucket derived from
+    ``get_global_default_strategy_weights`` the function computes
+    ``target_count = round(300 * weight)`` and marks the top
+    ``target_count`` funds (ordered by manager_score DESC NULLS LAST)
+    with::
+
+        elite_flag = true
+        elite_rank_within_strategy = 1 .. target_count
+        elite_target_count_per_strategy = target_count
+
+    All other funds in the same bucket have::
+
+        elite_flag = false
+        elite_rank_within_strategy = NULL
+        elite_target_count_per_strategy = target_count
+
+    The ranking is computed against the GLOBAL set of funds —
+    ``fund_risk_metrics`` rows where ``organization_id IS NULL`` and
+    ``calc_date = :calc_date`` — joined to ``instruments_universe``
+    on ``asset_class``. Per-tenant DTW overlay rows are untouched.
+
+    Runs under the same advisory lock as the global risk worker
+    (lock 900_071). Called AFTER peer percentile computation so the
+    manager_score is fresh and the ELITE cohort reflects the
+    latest scoring pass.
+
+    Returns a dict with:
+      - ``total_elite``: int — sum of elite_flag = true across all
+        buckets after the pass
+      - ``per_strategy``: dict[asset_class, int] — the target count
+        actually applied per strategy (post rounding)
+    """
+    from vertical_engines.wealth.elite_ranking.allocation_source import (
+        compute_target_counts,
+        get_global_default_strategy_weights,
+    )
+
+    weights = await get_global_default_strategy_weights(db)
+    target_counts = compute_target_counts(weights, total_elite=ELITE_TOTAL_COUNT)
+
+    rounding_deviation = abs(sum(target_counts.values()) - ELITE_TOTAL_COUNT)
+    if rounding_deviation > ELITE_ROUNDING_TOLERANCE:
+        logger.warning(
+            "elite_ranking.rounding_deviation_exceeds_tolerance",
+            sum_targets=sum(target_counts.values()),
+            expected=ELITE_TOTAL_COUNT,
+            tolerance=ELITE_ROUNDING_TOLERANCE,
+            per_strategy=target_counts,
+        )
+
+    # Pass A — clear stale ELITE state on all global rows for
+    # this calc_date. A bucket-by-bucket UPDATE without this would
+    # leave yesterday's elite flag stuck on funds that rotated out.
+    await db.execute(
+        text(
+            """
+            UPDATE fund_risk_metrics
+            SET elite_flag = false,
+                elite_rank_within_strategy = NULL,
+                elite_target_count_per_strategy = NULL
+            WHERE calc_date = :calc_date
+              AND organization_id IS NULL
+            """,
+        ),
+        {"calc_date": calc_date},
+    )
+
+    # Pass B — per bucket, rank by manager_score and write the top N.
+    rank_query = text(
+        """
+        WITH ranked AS (
+            SELECT
+                frm.instrument_id,
+                ROW_NUMBER() OVER (
+                    ORDER BY frm.manager_score DESC NULLS LAST
+                ) AS rnk
+            FROM fund_risk_metrics frm
+            JOIN instruments_universe iu
+              ON iu.instrument_id = frm.instrument_id
+            WHERE frm.calc_date = :calc_date
+              AND frm.organization_id IS NULL
+              AND frm.manager_score IS NOT NULL
+              AND iu.is_active = true
+              AND iu.asset_class = :asset_class
+        )
+        UPDATE fund_risk_metrics frm
+        SET elite_flag = true,
+            elite_rank_within_strategy = ranked.rnk::smallint,
+            elite_target_count_per_strategy = :target_count
+        FROM ranked
+        WHERE frm.instrument_id = ranked.instrument_id
+          AND frm.calc_date = :calc_date
+          AND frm.organization_id IS NULL
+          AND ranked.rnk <= :target_count
+        """,
+    )
+
+    # Also record the bucket's target count on all funds in that
+    # bucket (whether elite or not) so the screener can show
+    # "ranked N of 300 (elite cutoff: M)" even for funds that
+    # didn't make the cut.
+    target_count_query = text(
+        """
+        UPDATE fund_risk_metrics frm
+        SET elite_target_count_per_strategy = :target_count
+        FROM instruments_universe iu
+        WHERE frm.instrument_id = iu.instrument_id
+          AND frm.calc_date = :calc_date
+          AND frm.organization_id IS NULL
+          AND iu.is_active = true
+          AND iu.asset_class = :asset_class
+          AND (frm.elite_target_count_per_strategy IS NULL
+               OR frm.elite_target_count_per_strategy <> :target_count)
+        """,
+    )
+
+    for asset_class, target_count in target_counts.items():
+        await db.execute(
+            target_count_query,
+            {
+                "calc_date": calc_date,
+                "asset_class": asset_class,
+                "target_count": target_count,
+            },
+        )
+        await db.execute(
+            rank_query,
+            {
+                "calc_date": calc_date,
+                "asset_class": asset_class,
+                "target_count": target_count,
+            },
+        )
+        logger.info(
+            "elite_ranking.strategy_processed",
+            asset_class=asset_class,
+            target_count=target_count,
+        )
+
+    await db.commit()
+
+    # Observability — read back the actuals for logging.
+    total_result = await db.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM fund_risk_metrics
+            WHERE calc_date = :calc_date
+              AND organization_id IS NULL
+              AND elite_flag = true
+            """,
+        ),
+        {"calc_date": calc_date},
+    )
+    total_elite = int(total_result.scalar_one() or 0)
+
+    return {
+        "total_elite": total_elite,
+        "per_strategy": target_counts,
+    }
 
 
 if __name__ == "__main__":
