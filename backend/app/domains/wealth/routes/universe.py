@@ -642,7 +642,7 @@ async def fast_approve(
     if not body.instrument_ids:
         return FastApproveResponse(approved=[], rejected_dd_required=[])
 
-    from sqlalchemy import select as sa_select, text as sa_text
+    from sqlalchemy import select as sa_select
 
     from app.domains.wealth.models.instrument import Instrument
     from app.domains.wealth.models.instrument_org import InstrumentOrg
