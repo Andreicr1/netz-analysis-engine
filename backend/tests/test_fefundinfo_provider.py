@@ -503,15 +503,18 @@ class TestAssetClassInference:
 
 
 class TestProviderFactory:
-    def test_returns_yahoo_when_disabled(self) -> None:
+    def test_returns_tiingo_when_fefundinfo_disabled(self) -> None:
         from app.services.providers import get_instrument_provider
-        from app.services.providers.yahoo_finance_provider import YahooFinanceProvider
+        from app.services.providers.tiingo_instrument_provider import (
+            TiingoInstrumentProvider,
+        )
 
         with patch("app.core.config.settings.settings") as mock_settings:
             mock_settings.feature_fefundinfo_enabled = False
+            mock_settings.tiingo_api_key = "test-key"
             provider = get_instrument_provider()
 
-        assert isinstance(provider, YahooFinanceProvider)
+        assert isinstance(provider, TiingoInstrumentProvider)
 
     def test_returns_fefundinfo_when_enabled(self) -> None:
         from app.services.providers import get_instrument_provider
