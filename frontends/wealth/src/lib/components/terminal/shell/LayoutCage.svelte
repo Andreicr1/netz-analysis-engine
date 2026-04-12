@@ -29,12 +29,17 @@
 		 * cage frame.
 		 */
 		class?: string;
+		/**
+		 * Density variant. "standard" (24px padding) for narrative
+		 * surfaces; "compact" (8px) for data-dense grids.
+		 */
+		density?: "standard" | "compact";
 	}
 
-	let { children, class: className = "" }: LayoutCageProps = $props();
+	let { children, class: className = "", density = "standard" }: LayoutCageProps = $props();
 </script>
 
-<div class="lc-cage {className}">
+<div class="lc-cage lc-cage--{density} {className}">
 	{@render children()}
 </div>
 
@@ -44,8 +49,15 @@
 		box-sizing: border-box;
 		width: 100%;
 		height: 100%;
-		padding: var(--terminal-space-6);
 		background: var(--terminal-bg-void);
 		overflow: hidden;
+	}
+
+	.lc-cage--standard {
+		padding: var(--terminal-space-6); /* 24px — narrative surfaces */
+	}
+
+	.lc-cage--compact {
+		padding: var(--terminal-space-2); /* 8px — data-dense surfaces */
 	}
 </style>

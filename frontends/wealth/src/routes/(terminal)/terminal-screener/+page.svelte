@@ -85,7 +85,7 @@
 	}
 </script>
 
-<div bind:this={containerEl}>
+<div bind:this={containerEl} data-screener-root>
 	<TerminalScreenerShell filters={currentFilters} onFiltersChange={handleFiltersChange} />
 </div>
 
@@ -96,3 +96,14 @@
 		onClose={closeFocusMode}
 	/>
 {/if}
+
+<style>
+	/*
+	 * Override LayoutCage padding for the screener surface.
+	 * Data-dense grids need every pixel — 8px vs the 24px default.
+	 * The :global targets the cage wrapper rendered by TerminalShell.
+	 */
+	:global(.lc-cage--standard:has([data-screener-root])) {
+		padding: var(--terminal-space-2) !important;
+	}
+</style>
