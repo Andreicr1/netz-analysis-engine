@@ -27,8 +27,8 @@ class DisclosureMatrix(BaseModel):
     has_13f_overlay: bool = False
     has_peer_analysis: bool = False
     holdings_source: Literal["nport", "13f"] | None = None
-    nav_source: Literal["yfinance"] | None = None
-    aum_source: Literal["nport", "schedule_d", "yfinance"] | None = None
+    nav_source: Literal["yfinance", "tiingo"] | None = None
+    aum_source: Literal["nport", "schedule_d", "yfinance", "tiingo"] | None = None
     nav_status: Literal["available", "pending_import", "unavailable"] = "unavailable"
 
 

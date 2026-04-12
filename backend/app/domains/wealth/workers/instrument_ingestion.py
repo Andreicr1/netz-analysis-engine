@@ -4,7 +4,7 @@ Fetches NAV history for ALL active instruments across all tenants
 using the provider factory (get_instrument_provider), computes log returns,
 and upserts into nav_timeseries (global table, no RLS).
 
-Deduplicates by ticker — one Yahoo call per unique ticker regardless of
+Deduplicates by ticker — one Tiingo call per unique ticker regardless of
 how many tenants have selected the instrument.
 """
 
@@ -39,11 +39,11 @@ _io_executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=2, thread_name_prefix="instrument-io",
 )
 
-# Map lookback_days to yfinance period strings.
-# 15y+ uses "max" — yfinance has no "15y" literal, and "max" returns every
-# bar Yahoo holds (typically since 1970 for equities, since inception for ETFs).
-# This is critical for stress-testing engines that need real GFC 2008 and
-# Taper Tantrum 2013 data instead of proxies.
+# Map lookback_days to period strings consumed by the provider.
+# 15y+ uses "max" — returns every bar the provider holds (typically since
+# 1970 for equities, since inception for ETFs). This is critical for
+# stress-testing engines that need real GFC 2008 and Taper Tantrum 2013
+# data instead of proxies.
 _LOOKBACK_TO_PERIOD = {
     30: "1mo",
     90: "3mo",
@@ -59,7 +59,7 @@ DEFAULT_LOOKBACK_DAYS = 5475  # ~15y
 
 
 def _resolve_period(lookback_days: int) -> str:
-    """Map lookback_days to the closest yfinance period string."""
+    """Map lookback_days to the closest provider period string."""
     for threshold, period in sorted(_LOOKBACK_TO_PERIOD.items()):
         if lookback_days <= threshold:
             return period
@@ -276,7 +276,7 @@ async def _do_ingest(
                             else None,
                             "return_type": "log",
                             "currency": currency,
-                            "source": "yahoo",
+                            "source": "tiingo",
                         },
                     )
 

@@ -23,7 +23,7 @@ from app.domains.wealth.models.benchmark_nav import BenchmarkNav
 
 # ═══════════════════════════════════════════════════════════════════
 #  Model integrity tests
-# ═══════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════���══════════════
 
 
 class TestBenchmarkNavModel:
@@ -48,6 +48,10 @@ class TestBenchmarkNavModel:
         col = BenchmarkNav.__table__.columns["return_type"]
         assert col.server_default.arg == "log"
 
+    def test_source_default_is_tiingo(self):
+        col = BenchmarkNav.__table__.columns["source"]
+        assert col.server_default.arg == "tiingo"
+
 
 # ═══════════════════════════════════════════════════════════════════
 #  Worker logic tests (mocked I/O)
@@ -61,9 +65,12 @@ def _make_price_df(
     nan_pct: float = 0.0,
     zero_price_at: int | None = None,
 ) -> pd.DataFrame:
-    """Helper: generate synthetic price DataFrame matching yf.download output."""
-    dates = pd.date_range(end=date.today(), periods=days, freq="B")
-    n = len(dates)  # may differ from `days` on weekends/holidays
+    """Helper: generate synthetic price DataFrame matching Tiingo provider output.
+
+    Returns a DataFrame with a Close column and DatetimeIndex (UTC).
+    """
+    dates = pd.date_range(end=date.today(), periods=days, freq="B", tz="UTC")
+    n = len(dates)
     np.random.seed(42)
     returns = np.random.normal(0.0005, 0.01, n)
     prices = start_price * np.cumprod(1 + returns)
@@ -82,12 +89,12 @@ def _make_price_df(
     return df
 
 
-def _make_multi_ticker_df(tickers: list[str], days: int = 30) -> pd.DataFrame:
-    """Build multi-ticker DataFrame matching yf.download(group_by='ticker')."""
-    frames = {}
+def _make_tiingo_result(tickers: list[str], days: int = 30) -> dict[str, pd.DataFrame]:
+    """Build dict[ticker, DataFrame] matching TiingoInstrumentProvider.fetch_batch_history output."""
+    result = {}
     for i, ticker in enumerate(tickers):
-        frames[ticker] = _make_price_df(ticker, days, start_price=100.0 + i * 10)
-    return pd.concat(frames, axis=1)
+        result[ticker] = _make_price_df(ticker, days, start_price=100.0 + i * 10)
+    return result
 
 
 class TestBenchmarkIngestValidation:
@@ -123,7 +130,7 @@ class TestBenchmarkIngestValidation:
 
 
 class TestBenchmarkIngestWorker:
-    """Integration-style tests with mocked DB and yfinance."""
+    """Integration-style tests with mocked DB and Tiingo provider."""
 
     @pytest.mark.asyncio
     async def test_empty_blocks_raises(self):
@@ -170,8 +177,7 @@ class TestBenchmarkIngestWorker:
         stale_result = MagicMock()
         stale_result.scalar.return_value = date.today()
 
-        # execute calls: 1 block query + N upsert chunks + 3 staleness queries
-        # Use a side_effect function to handle different call patterns
+        # execute calls: 1 block query + N upsert chunks + staleness query
         call_count = {"n": 0}
 
         async def _mock_execute(stmt, *args, **kwargs):
@@ -183,11 +189,11 @@ class TestBenchmarkIngestWorker:
         mock_db.execute = _mock_execute
         mock_db.commit = AsyncMock()
 
-        # Mock yf.download
-        mock_hist = _make_multi_ticker_df(["SPY", "AGG"], days=10)
+        # Mock Tiingo provider result
+        mock_hist = _make_tiingo_result(["SPY", "AGG"], days=10)
 
         with patch(
-            "app.domains.wealth.workers.benchmark_ingest._batch_download",
+            "app.domains.wealth.workers.benchmark_ingest._fetch_via_tiingo",
             return_value=mock_hist,
         ), patch("asyncio.get_event_loop") as mock_loop:
             # Make run_in_executor call the function directly
@@ -234,11 +240,11 @@ class TestInvalidTickerHandling:
         mock_db.execute = _mock_execute
         mock_db.commit = AsyncMock()
 
-        # Return empty DataFrame for the invalid ticker
-        empty_hist = pd.DataFrame({"Close": []})
+        # Tiingo returns empty dict for unknown ticker
+        empty_hist: dict[str, pd.DataFrame] = {}
 
         with patch(
-            "app.domains.wealth.workers.benchmark_ingest._batch_download",
+            "app.domains.wealth.workers.benchmark_ingest._fetch_via_tiingo",
             return_value=empty_hist,
         ), patch("asyncio.get_event_loop") as mock_loop:
             async def run_sync(executor, fn, *args):
@@ -279,12 +285,12 @@ class TestInvalidTickerHandling:
         mock_db.execute = _mock_execute
         mock_db.commit = AsyncMock()
 
-        # All-NaN DataFrame
-        dates = pd.date_range(end=date.today(), periods=10, freq="B")
-        nan_hist = pd.DataFrame({"Close": [np.nan] * len(dates)}, index=dates)
+        # All-NaN DataFrame from Tiingo
+        dates = pd.date_range(end=date.today(), periods=10, freq="B", tz="UTC")
+        nan_hist = {"BADTICKER": pd.DataFrame({"Close": [np.nan] * len(dates)}, index=dates)}
 
         with patch(
-            "app.domains.wealth.workers.benchmark_ingest._batch_download",
+            "app.domains.wealth.workers.benchmark_ingest._fetch_via_tiingo",
             return_value=nan_hist,
         ), patch("asyncio.get_event_loop") as mock_loop:
             async def run_sync(executor, fn, *args):
@@ -314,3 +320,20 @@ class TestStalenessDetection:
 
         recent_date = date.today() - timedelta(days=3)
         assert recent_date >= cutoff  # would not be flagged
+
+
+class TestResolvePeriod:
+    def test_short_lookback(self):
+        from app.domains.wealth.workers.benchmark_ingest import _resolve_period
+
+        assert _resolve_period(30) == "1mo"
+
+    def test_long_lookback_returns_max(self):
+        from app.domains.wealth.workers.benchmark_ingest import _resolve_period
+
+        assert _resolve_period(5475) == "max"
+
+    def test_3y_lookback(self):
+        from app.domains.wealth.workers.benchmark_ingest import _resolve_period
+
+        assert _resolve_period(1095) == "3y"
