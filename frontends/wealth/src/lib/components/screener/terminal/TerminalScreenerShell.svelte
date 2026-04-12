@@ -397,7 +397,7 @@
 		display: grid;
 		grid-template-areas: "filters datagrid";
 		grid-template-columns: 280px 1fr;
-		grid-template-rows: 100%;
+		grid-template-rows: 1fr;
 		gap: 2px;
 		width: 100%;
 		height: 100%;

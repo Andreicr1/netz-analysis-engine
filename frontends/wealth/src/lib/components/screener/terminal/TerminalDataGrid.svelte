@@ -396,6 +396,7 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
+		overflow: hidden;
 		background: #0b0f1a;
 		font-family: "Urbanist", system-ui, sans-serif;
 		font-size: 11px;

@@ -82,7 +82,7 @@
 	}
 </script>
 
-<div bind:this={containerEl} data-screener-root>
+<div bind:this={containerEl} data-screener-root class="screener-page-root">
 	<TerminalScreenerShell filters={currentFilters} onFiltersChange={handleFiltersChange} />
 </div>
 
@@ -95,6 +95,11 @@
 {/if}
 
 <style>
+	.screener-page-root {
+		height: 100%;
+		overflow: hidden;
+	}
+
 	/*
 	 * Override LayoutCage padding for the screener surface.
 	 * Data-dense grids need every pixel — 8px vs the 24px default.
