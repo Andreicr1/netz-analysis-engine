@@ -36,6 +36,16 @@ class FIMetrics(Protocol):
     duration_adj_drawdown_1y: Decimal | float | None
 
 
+class CashMetrics(Protocol):
+    """Protocol for cash/MMF metrics — satisfied by FundRiskMetrics ORM or adapter."""
+
+    seven_day_net_yield: Decimal | float | None
+    fed_funds_rate_at_calc: Decimal | float | None
+    nav_per_share_mmf: Decimal | float | None
+    pct_weekly_liquid: Decimal | float | None
+    weighted_avg_maturity_days: int | float | None
+
+
 # Hardcoded fallback — used only if config parameter is not provided.
 # fee_efficiency replaces Lipper rating (provider never contracted).
 # insider_sentiment is opt-in (add weight > 0 in config to activate).
@@ -65,6 +75,20 @@ _DEFAULT_FI_SCORING_WEIGHTS: dict[str, float] = {
     "fee_efficiency": 0.10,
 }
 
+# Cash/MMF scoring weights — calibrated for money market fund evaluation.
+# yield_vs_risk_free: relative yield advantage over fed funds rate.
+# nav_stability: deviation from $1.00 par (break-the-buck risk).
+# liquidity_quality: weekly liquid assets % (SEC Rule 2a-7 minimum 30%).
+# maturity_discipline: lower WAM = less interest rate risk.
+# fee_efficiency: same as equity/FI (critical at cash yields).
+_DEFAULT_CASH_SCORING_WEIGHTS: dict[str, float] = {
+    "yield_vs_risk_free": 0.30,
+    "nav_stability": 0.25,
+    "liquidity_quality": 0.20,
+    "maturity_discipline": 0.15,
+    "fee_efficiency": 0.10,
+}
+
 
 def resolve_scoring_weights(
     config: dict[str, Any] | None = None,
@@ -74,7 +98,11 @@ def resolve_scoring_weights(
 
     Falls back to asset-class-appropriate defaults if config is None or malformed.
     """
-    default = _DEFAULT_FI_SCORING_WEIGHTS if asset_class == "fixed_income" else _DEFAULT_SCORING_WEIGHTS
+    _defaults_by_class = {
+        "fixed_income": _DEFAULT_FI_SCORING_WEIGHTS,
+        "cash": _DEFAULT_CASH_SCORING_WEIGHTS,
+    }
+    default = _defaults_by_class.get(asset_class, _DEFAULT_SCORING_WEIGHTS)
     if config is None:
         return default
 
@@ -179,6 +207,71 @@ def _compute_fi_score(
     return round(score, 2), {k: round(v, 2) for k, v in components.items()}
 
 
+def _compute_cash_score(
+    cash: CashMetrics,
+    config: dict[str, Any] | None,
+    expense_ratio_pct: float | None,
+    peer_medians: dict[str, float] | None,
+) -> tuple[float, dict[str, float]]:
+    """Compute Cash/MMF-specific composite score. Returns (score, components).
+
+    Five components: yield_vs_risk_free, nav_stability, liquidity_quality,
+    maturity_discipline, fee_efficiency.
+    """
+    pm = peer_medians or {}
+    components: dict[str, float] = {}
+
+    # yield_vs_risk_free: relative yield advantage over fed funds rate
+    yld = float(cash.seven_day_net_yield) if cash.seven_day_net_yield is not None else None
+    ffr = float(cash.fed_funds_rate_at_calc) if cash.fed_funds_rate_at_calc is not None else None
+    if yld is not None and ffr is not None:
+        if ffr > 0:
+            relative_yield = (yld - ffr) / ffr
+        else:
+            relative_yield = 0.10 if yld > 0 else 0.0
+        components["yield_vs_risk_free"] = _normalize(
+            relative_yield, -0.20, 0.20, pm.get("yield_vs_risk_free"),
+        )
+    else:
+        components["yield_vs_risk_free"] = pm.get("yield_vs_risk_free", 45.0) - 5.0
+
+    # nav_stability: deviation from $1.00 par value
+    nav = float(cash.nav_per_share_mmf) if cash.nav_per_share_mmf is not None else None
+    if nav is not None:
+        deviation = abs(nav - 1.0)
+        stability = max(0.0, 1.0 - deviation * 1000)  # 0.001 deviation = 0 score
+        components["nav_stability"] = stability * 100
+    else:
+        components["nav_stability"] = pm.get("nav_stability", 45.0) - 5.0
+
+    # liquidity_quality: weekly liquid assets %
+    wl = float(cash.pct_weekly_liquid) if cash.pct_weekly_liquid is not None else None
+    if wl is not None:
+        # Range 30% (SEC 2a-7 regulatory min) to 100%
+        components["liquidity_quality"] = _normalize(
+            wl, 30.0, 100.0, pm.get("liquidity_quality"),
+        )
+    else:
+        components["liquidity_quality"] = pm.get("liquidity_quality", 45.0) - 5.0
+
+    # maturity_discipline: lower WAM = less interest rate risk = better
+    wam = float(cash.weighted_avg_maturity_days) if cash.weighted_avg_maturity_days is not None else None
+    if wam is not None:
+        # 0 days = 100 (all overnight), 60 days = 0 (regulatory max). Inverted scale.
+        wam_score = max(0.0, (1.0 - wam / 60.0)) * 100
+        components["maturity_discipline"] = wam_score
+    else:
+        components["maturity_discipline"] = pm.get("maturity_discipline", 45.0) - 5.0
+
+    # fee_efficiency: same logic as equity/FI
+    components["fee_efficiency"] = _compute_fee_efficiency(expense_ratio_pct, pm)
+
+    weights = resolve_scoring_weights(config, asset_class="cash")
+
+    score = sum(components.get(k, 50.0) * w for k, w in weights.items())
+    return round(score, 2), {k: round(v, 2) for k, v in components.items()}
+
+
 def compute_fund_score(
     metrics: RiskMetrics,
     flows_momentum_score: float = 50.0,
@@ -188,6 +281,7 @@ def compute_fund_score(
     peer_medians: dict[str, float] | None = None,
     asset_class: str = "equity",
     fi_metrics: FIMetrics | None = None,
+    cash_metrics: CashMetrics | None = None,
 ) -> tuple[float, dict[str, float]]:
     """Compute composite score from risk metrics. Returns (score, components).
 
@@ -202,11 +296,17 @@ def compute_fund_score(
         peer_medians: Dict of component_name → median score from strategy peers.
                Used as fallback for missing data (with -5pt penalty) instead of
                blind neutral 50. Penalizes opaque/short-history funds.
-        asset_class: "equity" (default) or "fixed_income". Determines scoring model.
+        asset_class: "equity" (default), "fixed_income", or "cash". Determines scoring model.
         fi_metrics: Fixed income metrics. Required when asset_class="fixed_income".
+               Falls back to equity scoring if None.
+        cash_metrics: Cash/MMF metrics. Required when asset_class="cash".
                Falls back to equity scoring if None.
 
     """
+    # Dispatch to Cash scoring when asset_class is cash AND cash_metrics provided
+    if asset_class == "cash" and cash_metrics is not None:
+        return _compute_cash_score(cash_metrics, config, expense_ratio_pct, peer_medians)
+
     # Dispatch to FI scoring when asset_class is fixed_income AND fi_metrics provided
     if asset_class == "fixed_income" and fi_metrics is not None:
         return _compute_fi_score(fi_metrics, config, expense_ratio_pct, peer_medians)

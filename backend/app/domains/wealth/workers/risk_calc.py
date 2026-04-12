@@ -866,6 +866,116 @@ async def _write_risk_cache(
         logger.warning("Failed to write risk cache to Redis — continuing without cache")
 
 
+async def _fetch_latest_macro_value(
+    db: AsyncSession, series_id: str, as_of_date: date,
+) -> float | None:
+    """Fetch the latest value for a macro_data series on or before as_of_date."""
+    result = await db.execute(
+        text("""
+            SELECT value FROM macro_data
+            WHERE series_id = :series_id AND observation_date <= :as_of
+            ORDER BY observation_date DESC
+            LIMIT 1
+        """),
+        {"series_id": series_id, "as_of": as_of_date},
+    )
+    row = result.scalar_one_or_none()
+    return float(row) if row is not None else None
+
+
+async def _batch_fetch_mmf_data(
+    db: AsyncSession,
+    computed: list[tuple],
+    cash_fund_ids: set[str],
+) -> dict[str, dict]:
+    """Batch fetch MMF metadata (WAM, liquidity, NAV) from sec_money_market_funds.
+
+    Links instruments_universe → sec_money_market_funds via attributes->>'series_id'.
+    Returns {instrument_id_str: {column_name: value}}.
+    """
+    # Collect series_id → instrument_id mapping for cash funds
+    series_to_fund: dict[str, str] = {}
+    for fund, _ in computed:
+        fid = str(fund.instrument_id)
+        if fid in cash_fund_ids:
+            sid = (fund.attributes or {}).get("series_id")
+            if sid:
+                series_to_fund[sid] = fid
+
+    if not series_to_fund:
+        return {}
+
+    series_ids = list(series_to_fund.keys())
+    result = await db.execute(
+        text("""
+            SELECT series_id, weighted_avg_maturity, pct_weekly_liquid_latest,
+                   stable_nav_price, seeks_stable_nav, net_assets
+            FROM sec_money_market_funds
+            WHERE series_id = ANY(:series_ids)
+        """),
+        {"series_ids": series_ids},
+    )
+    rows = result.mappings().all()
+
+    out: dict[str, dict] = {}
+    for row in rows:
+        fid = series_to_fund.get(row["series_id"])
+        if fid:
+            out[fid] = {
+                "weighted_avg_maturity": row["weighted_avg_maturity"],
+                "pct_weekly_liquid_latest": float(row["pct_weekly_liquid_latest"]) if row["pct_weekly_liquid_latest"] is not None else None,
+                "stable_nav_price": float(row["stable_nav_price"]) if row["stable_nav_price"] is not None else None,
+                "seeks_stable_nav": row["seeks_stable_nav"],
+                "net_assets": float(row["net_assets"]) if row["net_assets"] is not None else None,
+            }
+    return out
+
+
+async def _batch_fetch_mmf_yields(
+    db: AsyncSession,
+    computed: list[tuple],
+    cash_fund_ids: set[str],
+) -> dict[str, dict]:
+    """Batch fetch latest 7-day net yield from sec_mmf_metrics.
+
+    Links via series_id (same as _batch_fetch_mmf_data). Uses the most
+    recent metric_date for each series_id.
+    Returns {instrument_id_str: {"seven_day_net_yield": float | None}}.
+    """
+    series_to_fund: dict[str, str] = {}
+    for fund, _ in computed:
+        fid = str(fund.instrument_id)
+        if fid in cash_fund_ids:
+            sid = (fund.attributes or {}).get("series_id")
+            if sid:
+                series_to_fund[sid] = fid
+
+    if not series_to_fund:
+        return {}
+
+    series_ids = list(series_to_fund.keys())
+    result = await db.execute(
+        text("""
+            SELECT DISTINCT ON (series_id)
+                series_id, seven_day_net_yield
+            FROM sec_mmf_metrics
+            WHERE series_id = ANY(:series_ids)
+            ORDER BY series_id, metric_date DESC
+        """),
+        {"series_ids": series_ids},
+    )
+    rows = result.mappings().all()
+
+    out: dict[str, dict] = {}
+    for row in rows:
+        fid = series_to_fund.get(row["series_id"])
+        if fid:
+            out[fid] = {
+                "seven_day_net_yield": float(row["seven_day_net_yield"]) if row["seven_day_net_yield"] is not None else None,
+            }
+    return out
+
+
 class _MetricsAdapter:
     """Adapter to expose a metrics dict as the RiskMetrics protocol for scoring."""
 
@@ -887,6 +997,7 @@ def _score_metrics(
     flows = float(metrics.get("blended_momentum_score") or 50.0)
 
     fi_adapter = _MetricsAdapter(metrics) if asset_class == "fixed_income" else None
+    cash_adapter = _MetricsAdapter(metrics) if asset_class == "cash" else None
 
     score_val, components = compute_fund_score(
         adapter,
@@ -895,6 +1006,7 @@ def _score_metrics(
         expense_ratio_pct=expense_ratio_pct,
         asset_class=asset_class,
         fi_metrics=fi_adapter,
+        cash_metrics=cash_adapter,
     )
     metrics["manager_score"] = round(score_val, 2)
     metrics["score_components"] = components
@@ -1029,6 +1141,7 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
 
             # Pass 1.7: FI analytics (empirical duration, credit beta) for fixed_income funds
             fi_fund_ids = {str(f.instrument_id) for f, _ in computed if f.asset_class == "fixed_income"}
+            cash_fund_ids = {str(f.instrument_id) for f, _ in computed if f.asset_class == "cash"}
             if fi_fund_ids:
                 fi_config = FIRegressionConfig()
                 yield_changes = await _batch_fetch_macro_yield_changes(db, start_date, eval_date)
@@ -1040,7 +1153,6 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                 for fund, metrics in computed:
                     fid_str = str(fund.instrument_id)
                     if fid_str not in fi_fund_ids:
-                        metrics["scoring_model"] = "equity"
                         continue
                     metrics["scoring_model"] = "fixed_income"
                     fund_dated_returns = dated_returns_by_fund.get(fid_str, [])
@@ -1060,8 +1172,33 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                     metrics["yield_proxy_12m"] = round(fi_result.yield_proxy_12m, 6) if fi_result.yield_proxy_12m is not None else None
                     metrics["duration_adj_drawdown_1y"] = round(fi_result.duration_adj_drawdown, 6) if fi_result.duration_adj_drawdown is not None else None
                 logger.info("fi_analytics_computed", fi_funds=len(fi_fund_ids))
-            else:
-                for _, metrics in computed:
+
+            # Pass 1.75: Cash/MMF analytics from sec_money_market_funds + sec_mmf_metrics + FRED DFF
+            if cash_fund_ids:
+                # Batch fetch: latest DFF from macro_data
+                fed_funds_rate = await _fetch_latest_macro_value(db, "DFF", eval_date)
+                # Batch fetch: MMF metadata (WAM, liquidity, NAV) from sec_money_market_funds
+                mmf_data = await _batch_fetch_mmf_data(db, computed, cash_fund_ids)
+                # Batch fetch: latest 7-day net yield from sec_mmf_metrics
+                mmf_yields = await _batch_fetch_mmf_yields(db, computed, cash_fund_ids)
+
+                for fund, metrics in computed:
+                    fid_str = str(fund.instrument_id)
+                    if fid_str not in cash_fund_ids:
+                        continue
+                    metrics["scoring_model"] = "cash"
+                    mmf_info = mmf_data.get(fid_str, {})
+                    yield_info = mmf_yields.get(fid_str, {})
+                    metrics["seven_day_net_yield"] = yield_info.get("seven_day_net_yield")
+                    metrics["fed_funds_rate_at_calc"] = fed_funds_rate
+                    metrics["nav_per_share_mmf"] = mmf_info.get("stable_nav_price") or mmf_info.get("nav_per_share")
+                    metrics["pct_weekly_liquid"] = mmf_info.get("pct_weekly_liquid_latest")
+                    metrics["weighted_avg_maturity_days"] = mmf_info.get("weighted_avg_maturity")
+                logger.info("cash_analytics_computed", cash_funds=len(cash_fund_ids))
+
+            # Assign scoring_model = "equity" for funds not covered by FI or Cash
+            for fund, metrics in computed:
+                if "scoring_model" not in metrics:
                     metrics["scoring_model"] = "equity"
 
             # Pass 1.8: compute manager_score from base metrics + momentum + config
@@ -1248,6 +1385,7 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
 
                 # Pass 1.7: FI analytics for fixed_income funds in this batch
                 fi_fund_ids = {str(f.instrument_id) for f, _ in computed if f.asset_class == "fixed_income"}
+                cash_fund_ids_g = {str(f.instrument_id) for f, _ in computed if f.asset_class == "cash"}
                 if fi_fund_ids:
                     fi_config = FIRegressionConfig()
                     yield_changes = await _batch_fetch_macro_yield_changes(db, start_date, eval_date)
@@ -1259,7 +1397,6 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
                     for fund, metrics in computed:
                         fid_str = str(fund.instrument_id)
                         if fid_str not in fi_fund_ids:
-                            metrics["scoring_model"] = "equity"
                             continue
                         metrics["scoring_model"] = "fixed_income"
                         fund_dated_returns = dated_returns_by_fund.get(fid_str, [])
@@ -1279,8 +1416,29 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
                         metrics["yield_proxy_12m"] = round(fi_result.yield_proxy_12m, 6) if fi_result.yield_proxy_12m is not None else None
                         metrics["duration_adj_drawdown_1y"] = round(fi_result.duration_adj_drawdown, 6) if fi_result.duration_adj_drawdown is not None else None
                     logger.info("fi_analytics_computed", fi_funds=len(fi_fund_ids), batch_start=batch_start)
-                else:
-                    for _, metrics in computed:
+
+                # Pass 1.75: Cash/MMF analytics for cash funds in this batch
+                if cash_fund_ids_g:
+                    fed_funds_rate = await _fetch_latest_macro_value(db, "DFF", eval_date)
+                    mmf_data = await _batch_fetch_mmf_data(db, computed, cash_fund_ids_g)
+                    mmf_yields = await _batch_fetch_mmf_yields(db, computed, cash_fund_ids_g)
+                    for fund, metrics in computed:
+                        fid_str = str(fund.instrument_id)
+                        if fid_str not in cash_fund_ids_g:
+                            continue
+                        metrics["scoring_model"] = "cash"
+                        mmf_info = mmf_data.get(fid_str, {})
+                        yield_info = mmf_yields.get(fid_str, {})
+                        metrics["seven_day_net_yield"] = yield_info.get("seven_day_net_yield")
+                        metrics["fed_funds_rate_at_calc"] = fed_funds_rate
+                        metrics["nav_per_share_mmf"] = mmf_info.get("stable_nav_price") or mmf_info.get("nav_per_share")
+                        metrics["pct_weekly_liquid"] = mmf_info.get("pct_weekly_liquid_latest")
+                        metrics["weighted_avg_maturity_days"] = mmf_info.get("weighted_avg_maturity")
+                    logger.info("cash_analytics_computed", cash_funds=len(cash_fund_ids_g), batch_start=batch_start)
+
+                # Assign scoring_model = "equity" for funds not covered by FI or Cash
+                for fund, metrics in computed:
+                    if "scoring_model" not in metrics:
                         metrics["scoring_model"] = "equity"
 
                 # Pass 1.8: compute manager_score from base metrics + momentum + expense ratio

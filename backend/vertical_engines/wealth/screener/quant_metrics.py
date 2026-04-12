@@ -71,6 +71,22 @@ class FIQuantMetrics:
 
 
 @dataclass(frozen=True, slots=True)
+class CashQuantMetrics:
+    """Cash/MMF screening metrics from fund_risk_metrics (pre-computed).
+
+    Bypasses compute_quant_metrics() entirely — no MIN_ANNUALIZED_VOL guard
+    issue because cash metrics come from SEC N-MFP filings, not NAV volatility.
+    """
+
+    yield_vs_risk_free: float
+    nav_stability: float
+    liquidity_quality: float
+    maturity_discipline: float
+    fee_efficiency: float
+    data_source: str  # mmf_filing | nav_proxy
+
+
+@dataclass(frozen=True, slots=True)
 class BondQuantMetrics:
     """Bond screening metrics from attributes (no timeseries needed)."""
 

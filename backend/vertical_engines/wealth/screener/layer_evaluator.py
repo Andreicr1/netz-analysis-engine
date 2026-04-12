@@ -62,6 +62,16 @@ class LayerEvaluator:
                 if result is not None:
                     results.append(result)
 
+        # Compound Cash gate: if fund is cash, also evaluate fund_cash rules
+        if instrument_type == "fund" and attributes.get("asset_class") == "cash":
+            cash_criteria = criteria.get("fund_cash", {})
+            for criterion, expected in cash_criteria.items():
+                result = self._evaluate_criterion(
+                    criterion, expected, attributes, "fund_cash", layer=1,
+                )
+                if result is not None:
+                    results.append(result)
+
         return results
 
     def evaluate_layer2(

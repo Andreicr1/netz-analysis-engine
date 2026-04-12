@@ -42,6 +42,19 @@
 		fee_efficiency: { label: "Fee Efficiency", weight: 0.10 },
 	};
 
+	const CASH_WEIGHTS: Record<string, { label: string; weight: number }> = {
+		yield_vs_risk_free: { label: "Yield vs Risk-Free", weight: 0.30 },
+		nav_stability: { label: "NAV Stability", weight: 0.25 },
+		liquidity_quality: { label: "Liquidity Quality", weight: 0.20 },
+		maturity_discipline: { label: "Maturity Discipline", weight: 0.15 },
+		fee_efficiency: { label: "Fee Efficiency", weight: 0.10 },
+	};
+
+	const WEIGHT_MAPS: Record<string, Record<string, { label: string; weight: number }>> = {
+		fixed_income: FI_WEIGHTS,
+		cash: CASH_WEIGHTS,
+	};
+
 	let compositeScore = $state<number | null>(null);
 	let components = $state<ScoreComponent[]>([]);
 	let scoringModel = $state<string>("equity");
@@ -60,7 +73,7 @@
 					compositeScore = sm.manager_score;
 				}
 				scoringModel = sm?.scoring_model || "equity";
-				const weightMap = scoringModel === "fixed_income" ? FI_WEIGHTS : EQUITY_WEIGHTS;
+				const weightMap = WEIGHT_MAPS[scoringModel] ?? EQUITY_WEIGHTS;
 				const sc = sm?.score_components;
 				if (sc && typeof sc === "object") {
 					const parsed: ScoreComponent[] = [];
@@ -134,8 +147,8 @@
 				<div class="scp-degraded-score">COMPOSITE: {formatNumber(compositeScore, 1)}</div>
 			{/if}
 			<div class="scp-degraded-weights">
-				<div class="scp-degraded-title">Component weights ({scoringModel === "fixed_income" ? "FI" : "equity"} model):</div>
-				{#each Object.entries(scoringModel === "fixed_income" ? FI_WEIGHTS : EQUITY_WEIGHTS) as [, meta]}
+				<div class="scp-degraded-title">Component weights ({scoringModel} model):</div>
+				{#each Object.entries(WEIGHT_MAPS[scoringModel] ?? EQUITY_WEIGHTS) as [, meta]}
 					<div class="scp-degraded-row">
 						<span>{meta.label}</span>
 						<span>{Math.round(meta.weight * 100)}%</span>

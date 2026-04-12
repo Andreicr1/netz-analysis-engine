@@ -26,6 +26,7 @@ from vertical_engines.wealth.screener.models import (
 )
 from vertical_engines.wealth.screener.quant_metrics import (
     BondQuantMetrics,
+    CashQuantMetrics,
     FIQuantMetrics,
     QuantMetrics,
     composite_score,
@@ -216,16 +217,18 @@ class ScreenerService:
     def _compute_layer3_score(
         self,
         instrument_type: str,
-        quant_metrics: QuantMetrics | BondQuantMetrics | FIQuantMetrics | None,
+        quant_metrics: QuantMetrics | BondQuantMetrics | FIQuantMetrics | CashQuantMetrics | None,
         peer_values: dict[str, list[float]] | None,
     ) -> float | None:
         """Compute Layer 3 composite score."""
         if quant_metrics is None:
             return None
 
-        # FI funds use "fund_fixed_income" config key for distinct weights
+        # Dispatch config key by metrics type
         if isinstance(quant_metrics, FIQuantMetrics):
             config_key = "fund_fixed_income"
+        elif isinstance(quant_metrics, CashQuantMetrics):
+            config_key = "fund_cash"
         else:
             config_key = instrument_type
 
@@ -243,6 +246,14 @@ class ScreenerService:
                 "yield_proxy_12m": quant_metrics.yield_proxy_12m,
                 "duration_adj_drawdown": quant_metrics.duration_adj_drawdown,
                 "sharpe_ratio": quant_metrics.sharpe_ratio,
+            }
+        elif isinstance(quant_metrics, CashQuantMetrics):
+            metrics_dict = {
+                "yield_vs_risk_free": quant_metrics.yield_vs_risk_free,
+                "nav_stability": quant_metrics.nav_stability,
+                "liquidity_quality": quant_metrics.liquidity_quality,
+                "maturity_discipline": quant_metrics.maturity_discipline,
+                "fee_efficiency": quant_metrics.fee_efficiency,
             }
         elif isinstance(quant_metrics, QuantMetrics):
             metrics_dict = {
