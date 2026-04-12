@@ -125,6 +125,7 @@ class UnifiedCatalogPage(BaseModel):
     page: int
     page_size: int
     has_next: bool
+    next_cursor: str | None = None
     facets: CatalogFacets | None = None
 
 

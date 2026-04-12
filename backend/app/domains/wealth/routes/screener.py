@@ -47,6 +47,7 @@ from app.domains.wealth.queries.catalog_sql import (
     build_catalog_facets_query,
     build_catalog_query,
     build_manager_catalog_query,
+    encode_cursor,
     sec_money_market_funds,
 )
 from app.domains.wealth.schemas.catalog import (
@@ -1535,6 +1536,7 @@ async def get_catalog(
     min_return_1y: float | None = Query(None, description="Min avg annual return 1Y %"),
     min_return_10y: float | None = Query(None, description="Min avg annual return 10Y %"),
     elite_only: bool | None = Query(None, description="Only ELITE-flagged funds (top 300 per strategy)"),
+    cursor: str | None = Query(None, description="Keyset cursor from previous page (base64). When present, replaces offset-based pagination."),
     db: AsyncSession = Depends(get_db_with_rls),
 ) -> UnifiedCatalogPage:
     filters = CatalogFilters(
@@ -1558,6 +1560,7 @@ async def get_catalog(
         min_return_1y=min_return_1y,
         min_return_10y=min_return_10y,
         elite_only=elite_only,
+        cursor=cursor,
     )
 
     stmt = build_catalog_query(filters)
@@ -1686,12 +1689,20 @@ async def get_catalog(
         else:
             item.disclosure.nav_status = "unavailable"
 
+    # Compute next_cursor from the last row's tiebreaker columns
+    has_next = (offset + page_size) < total if not cursor else len(items) == page_size
+    next_cursor: str | None = None
+    if items and has_next:
+        last = items[-1]
+        next_cursor = encode_cursor([last.aum, last.external_id])
+
     return UnifiedCatalogPage(
         items=items,
         total=total,
         page=page,
         page_size=page_size,
-        has_next=(offset + page_size) < total,
+        has_next=has_next,
+        next_cursor=next_cursor,
     )
 
 
