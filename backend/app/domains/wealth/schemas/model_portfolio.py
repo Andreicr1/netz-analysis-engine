@@ -479,3 +479,90 @@ class ConstructionAdviceRead(BaseModel):
     minimum_viable_set: MinimumViableSetRead | None = None
     alternative_profiles: list[AlternativeProfileRead] = []
     projected_cvar_is_heuristic: bool = True
+
+
+# ── Construction Run Diff (Session C commit 4) ───────────────────────────
+#
+# Backing store: ``mv_construction_run_diff`` materialized view (shipped
+# in Session 2.B commit 0118). One row per successful construction run
+# that has a previous run. Consumed by Phase 4 Builder's "Compare to
+# previous run" analytics panel.
+#
+# Sanitisation posture: primary jargon stripping happens upstream when
+# construction_run_executor writes ``ex_ante_metrics`` and the diff view
+# is computed over those already-clean JSONB keys. We still run every
+# response body through ``sanitize_dict_keys`` at model-validator time
+# as a belt-and-suspenders guard against future upstream regressions.
+
+
+class ConstructionRunWeightDelta(BaseModel):
+    """Per-instrument weight comparison between two construction runs.
+
+    ``from_weight`` and ``to_weight`` are absolute portfolio weights
+    (0.0 - 1.0). ``delta`` is ``to_weight - from_weight``; positive
+    means the instrument gained weight in the newer run.
+    """
+
+    from_weight: float = Field(alias="from")
+    to_weight: float = Field(alias="to")
+    delta: float
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+
+class ConstructionRunMetricDelta(BaseModel):
+    """Per-metric before/after/delta triple.
+
+    ``from_value`` and ``to_value`` are the raw ex-ante metric values
+    (e.g. expected return, portfolio volatility). ``delta`` is the
+    numeric subtraction when both sides are numeric, otherwise ``None``
+    (the MV computes the delta only for numeric metrics).
+    """
+
+    from_value: float | None = Field(default=None, alias="from")
+    to_value: float | None = Field(default=None, alias="to")
+    delta: float | None = None
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+
+class ConstructionRunDiffOut(BaseModel):
+    """Response body for ``GET /{portfolio_id}/construction/runs/{run_id}/diff``.
+
+    Reads directly from ``mv_construction_run_diff``. 404 when the
+    requested ``(portfolio_id, run_id)`` pair has no row, which means
+    either the run has not completed yet or the materialized view is
+    stale — in both cases the caller should refresh the view or wait
+    for the run to finish.
+    """
+
+    portfolio_id: uuid.UUID
+    run_id: uuid.UUID
+    previous_run_id: uuid.UUID | None
+    requested_at: datetime | None
+    weight_delta: dict[str, ConstructionRunWeightDelta]
+    metrics_delta: dict[str, ConstructionRunMetricDelta]
+    status_delta_text: str
+
+    @model_validator(mode="after")
+    def _sanitize_metrics_delta(self) -> "ConstructionRunDiffOut":
+        """Belt-and-suspenders jargon stripping on metrics_delta keys.
+
+        Primary sanitisation happens upstream in
+        ``construction_run_executor`` (Session C commit 1) — by the
+        time values land in the MV, keys are already in institutional
+        phrasing. This validator translates any residual raw keys
+        through ``METRIC_LABELS`` so a future upstream regression
+        does not leak jargon through this endpoint. Values (the
+        ``ConstructionRunMetricDelta`` triples) are preserved
+        unchanged; only the outer dict keys are rewritten.
+        """
+        from app.domains.wealth.schemas.sanitized import humanize_metric
+
+        md = self.metrics_delta
+        if md:
+            translated: dict[str, ConstructionRunMetricDelta] = {
+                humanize_metric(k): v for k, v in md.items()
+            }
+            object.__setattr__(self, "metrics_delta", translated)
+        return self

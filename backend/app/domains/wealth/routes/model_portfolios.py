@@ -35,6 +35,9 @@ from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.schemas.generated_report import ReportGenerateRequest
 from app.domains.wealth.schemas.model_portfolio import (
     ConstructionAdviceRead,
+    ConstructionRunDiffOut,
+    ConstructionRunMetricDelta,
+    ConstructionRunWeightDelta,
     ConstructRunAccepted,
     CusipExposureRead,
     ModelPortfolioCreate,
@@ -3227,6 +3230,114 @@ async def get_latest_construction_run(
         "rationale_per_weight": run.rationale_per_weight,
         "weights_proposed": run.weights_proposed,
     }
+
+
+# ── Phase 2 Session C commit 4: mv_construction_run_diff endpoint ────
+
+
+@router.get(
+    "/{portfolio_id}/construction/runs/{run_id}/diff",
+    response_model=ConstructionRunDiffOut,
+    summary="Weight + metrics delta between a run and its predecessor",
+)
+async def get_construction_run_diff(
+    portfolio_id: uuid.UUID,
+    run_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> ConstructionRunDiffOut:
+    """Return the weight and ex-ante metric deltas for this run.
+
+    Reads from the ``mv_construction_run_diff`` materialized view
+    (shipped in Session 2.B commit 0118). The view pre-computes, for
+    every run whose status is ``succeeded`` or ``superseded``, a
+    JSONB dict keyed by instrument_id for weight changes and keyed by
+    ex-ante metric name for metric changes, compared against the
+    immediately preceding run on the same portfolio.
+
+    404 is returned when:
+
+    * The ``(portfolio_id, run_id)`` pair has no row in the MV. This
+      happens for runs that have not reached a terminal success state,
+      or when the MV has not been refreshed since the run landed.
+
+    The response body shape is laid down by
+    ``ConstructionRunDiffOut`` in ``schemas/model_portfolio.py``. The
+    schema runs a belt-and-suspenders sanitisation pass on
+    ``metrics_delta`` keys via ``humanize_metric`` so any residual
+    jargon from a future upstream regression is stripped at the API
+    boundary.
+    """
+    result = await db.execute(
+        text(
+            """
+            SELECT
+                portfolio_id,
+                run_id,
+                previous_run_id,
+                requested_at,
+                weight_delta_jsonb,
+                metrics_delta_jsonb,
+                status_delta_text
+            FROM mv_construction_run_diff
+            WHERE portfolio_id = :portfolio_id
+              AND run_id = :run_id
+            """,
+        ),
+        {"portfolio_id": portfolio_id, "run_id": run_id},
+    )
+    row = result.mappings().one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "Construction run diff not available yet. The run may "
+                "not have completed or the materialized view needs a "
+                "refresh."
+            ),
+        )
+
+    # The MV emits raw JSONB dicts — convert to the typed Pydantic
+    # model shape. Each weight_delta_jsonb value is a {from, to, delta}
+    # triple; metrics_delta_jsonb values are the same shape but with
+    # possibly-None numeric fields.
+    weight_delta_raw: dict[str, dict[str, Any]] = dict(row["weight_delta_jsonb"] or {})
+    metrics_delta_raw: dict[str, dict[str, Any]] = dict(row["metrics_delta_jsonb"] or {})
+
+    weight_delta: dict[str, ConstructionRunWeightDelta] = {
+        instrument_id: ConstructionRunWeightDelta.model_validate(delta)
+        for instrument_id, delta in weight_delta_raw.items()
+    }
+
+    metrics_delta: dict[str, ConstructionRunMetricDelta] = {}
+    for metric_key, delta in metrics_delta_raw.items():
+        # ``delta`` may be None if ex-ante metric was non-numeric —
+        # the MV emits {"from": "...", "to": "...", "delta": null}
+        def _coerce_optional_float(v: Any) -> float | None:
+            if v is None:
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        metrics_delta[metric_key] = ConstructionRunMetricDelta(
+            **{
+                "from": _coerce_optional_float(delta.get("from")),
+                "to": _coerce_optional_float(delta.get("to")),
+                "delta": _coerce_optional_float(delta.get("delta")),
+            },
+        )
+
+    return ConstructionRunDiffOut(
+        portfolio_id=row["portfolio_id"],
+        run_id=row["run_id"],
+        previous_run_id=row["previous_run_id"],
+        requested_at=row["requested_at"],
+        weight_delta=weight_delta,
+        metrics_delta=metrics_delta,
+        status_delta_text=row["status_delta_text"],
+    )
 
 
 # Separate router prefixed /portfolio for the catalog + regime endpoints.

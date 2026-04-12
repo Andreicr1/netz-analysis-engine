@@ -37,9 +37,11 @@ from app.domains.wealth.schemas.dd_report import (
     DDReportApproveRequest,
     DDReportCreate,
     DDReportListItem,
+    DDReportQueueItem,
     DDReportRead,
     DDReportRegenerate,
     DDReportRejectRequest,
+    DDReportsQueueOut,
     DDReportSummary,
 )
 from app.shared.enums import Role
@@ -116,6 +118,125 @@ async def list_all_dd_reports(
         )
         for report, inst_name, inst_ticker in rows
     ]
+
+
+# ── Phase 2 Session C commit 5: DD reports queue aggregator ─────
+
+
+# Bucket mapping — aligned with the DDReportStatus enum in
+# ``app.domains.wealth.enums``:
+#
+# draft             → pending      (row exists, generation not started)
+# generating        → in_progress  (pipeline actively running)
+# pending_approval  → in_progress  (analytical work done, awaiting
+#                                   human review — still occupies
+#                                   a slot from the queue's POV)
+# approved          → completed_recent
+# rejected          → completed_recent
+# failed            → completed_recent
+_QUEUE_PENDING = ("draft",)
+_QUEUE_IN_PROGRESS = ("generating", "pending_approval")
+_QUEUE_COMPLETED = ("approved", "rejected", "failed")
+
+
+@router.get(
+    "/queue",
+    response_model=DDReportsQueueOut,
+    summary="DD reports queue state (pending / in_progress / completed_recent)",
+)
+async def get_dd_reports_queue(
+    recent_limit: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> DDReportsQueueOut:
+    """Return the tenant-scoped DD reports queue in three buckets.
+
+    Phase 6 DD Track UI consumes this endpoint to render its kanban
+    without stitching together three separate list calls. RLS
+    filters by ``organization_id`` automatically through
+    ``get_db_with_rls`` so cross-tenant leakage is impossible.
+
+    Bucket semantics (see ``_QUEUE_*`` constants above for the
+    exact status→bucket mapping):
+
+    * ``pending``          — rows where generation has not started
+    * ``in_progress``      — rows where the pipeline is running or
+      awaiting human approval (both states block a generation slot
+      so they belong in the same active-work bucket)
+    * ``completed_recent`` — the last ``recent_limit`` rows in any
+      terminal state (approved / rejected / failed), sorted by
+      ``created_at DESC``. The ``created_at`` fallback is used
+      because ``DDReport`` has no ``completed_at`` column today
+      and the queue shape is stable as soon as the row lands.
+
+    Every bucket is further constrained to ``is_current = TRUE``
+    so prior versions of a re-run report do not clutter the queue.
+
+    ``instrument_label`` denormalises the instrument's display name
+    via a single LEFT JOIN on ``instruments_universe``.
+    """
+    from app.domains.wealth.models.instrument import Instrument
+
+    base_query = (
+        select(
+            DDReport,
+            Instrument.name.label("instrument_label"),
+        )
+        .outerjoin(
+            Instrument, DDReport.instrument_id == Instrument.instrument_id,
+        )
+        .where(DDReport.is_current.is_(True))
+    )
+
+    pending_q = (
+        base_query.where(DDReport.status.in_(_QUEUE_PENDING))
+        .order_by(DDReport.created_at)
+    )
+    in_progress_q = (
+        base_query.where(DDReport.status.in_(_QUEUE_IN_PROGRESS))
+        .order_by(DDReport.created_at)
+    )
+    completed_q = (
+        base_query.where(DDReport.status.in_(_QUEUE_COMPLETED))
+        .order_by(DDReport.created_at.desc())
+        .limit(recent_limit)
+    )
+
+    pending_rows = (await db.execute(pending_q)).all()
+    in_progress_rows = (await db.execute(in_progress_q)).all()
+    completed_rows = (await db.execute(completed_q)).all()
+
+    def _to_item(row: Any) -> DDReportQueueItem:
+        report, label = row
+        return DDReportQueueItem(
+            id=report.id,
+            instrument_id=report.instrument_id,
+            instrument_label=label,
+            report_type=report.report_type,
+            version=report.version,
+            status=report.status,
+            confidence_score=report.confidence_score,
+            decision_anchor=report.decision_anchor,
+            created_at=report.created_at,
+            approved_at=report.approved_at,
+            progress_pct=None,
+            current_chapter=None,
+        )
+
+    pending = [_to_item(r) for r in pending_rows]
+    in_progress = [_to_item(r) for r in in_progress_rows]
+    completed_recent = [_to_item(r) for r in completed_rows]
+
+    return DDReportsQueueOut(
+        pending=pending,
+        in_progress=in_progress,
+        completed_recent=completed_recent,
+        counts={
+            "pending": len(pending),
+            "in_progress": len(in_progress),
+            "completed_recent": len(completed_recent),
+        },
+    )
 
 
 @router.post(

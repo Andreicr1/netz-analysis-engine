@@ -23,10 +23,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config.settings import settings
+from app.core.db.audit import write_audit_event
 from app.core.db.engine import engine
 from app.core.jobs.sse import create_job_stream
-from app.core.jobs.tracker import close_redis_pool, get_job_state, publish_event, verify_job_owner
+from app.core.jobs.tracker import (
+    close_redis_pool,
+    get_job_state,
+    publish_event,
+    request_cancellation,
+    verify_job_owner,
+)
 from app.core.security.clerk_auth import Actor, get_actor
+from app.core.tenancy.middleware import get_db_with_rls
 
 # ── Admin domain routers ─────────────────────────────────────
 from app.domains.admin.routes.assets import router as admin_assets_router
@@ -440,6 +448,65 @@ async def get_job_status(job_id: str, actor: Actor = Depends(get_actor)):
     if state is None:
         raise HTTPException(status_code=404, detail="Job state not available yet")
     return state
+
+
+# ── Cooperative cancellation endpoint ────────────────────────
+
+@api_v1.delete("/jobs/{job_id}", tags=["jobs"], status_code=202)
+async def cancel_job(
+    job_id: str,
+    actor: Actor = Depends(get_actor),
+    db=Depends(get_db_with_rls),
+) -> JSONResponse:
+    """Request cooperative cancellation of an in-flight job.
+
+    Sets a Redis flag (``job:cancel:{job_id}``) that long-running
+    workers poll at phase boundaries. The worker exits gracefully,
+    publishes a terminal ``run_cancelled`` event, and marks the
+    underlying entity (e.g. ``portfolio_construction_runs.status``)
+    as ``cancelled``.
+
+    This endpoint returns 202 Accepted immediately — it does NOT
+    wait for the worker to acknowledge. Clients should subscribe to
+    the job stream (``GET /jobs/{job_id}/stream``) to observe the
+    cancellation taking effect, or poll
+    ``GET /jobs/{job_id}/status`` for the terminal state.
+
+    Authorisation is enforced via :func:`verify_job_owner` so a
+    client can only cancel jobs in its own organisation. Returns
+    404 for any job that is either unknown or belongs to another
+    tenant — the two cases are deliberately collapsed.
+
+    Every cancel request is recorded as an audit event via
+    :func:`write_audit_event`.
+    """
+    if not await verify_job_owner(job_id, str(actor.organization_id)):
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    await request_cancellation(job_id)
+
+    await write_audit_event(
+        db,
+        actor_id=actor.actor_id,
+        actor_roles=[r.value for r in actor.roles],
+        action="job.cancel_requested",
+        entity_type="job",
+        entity_id=job_id,
+        before=None,
+        after={"cancellation_requested": True},
+    )
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "job_id": job_id,
+            "status": "cancellation_requested",
+            "message": (
+                "Cancellation requested. Subscribe to the job stream to "
+                "observe the worker exiting gracefully."
+            ),
+        },
+    )
 
 
 # ── SSE test endpoint (dev only) ─────────────────────────────

@@ -109,3 +109,52 @@ class AuditEventRead(BaseModel):
     before: dict | None
     after: dict | None
     created_at: str | None
+
+
+# ── DD reports queue aggregator (Session C commit 5) ────────────
+#
+# The Phase 6 DD Track UI renders a kanban with three columns:
+# pending, in_progress, completed_recent. This aggregator packs
+# all three into a single tenant-scoped request so the frontend
+# does not have to make three round-trips + a count endpoint.
+
+
+class DDReportQueueItem(BaseModel):
+    """Slim row shape for the queue kanban — one DD report per row.
+
+    ``instrument_label`` denormalises the fund/ETF display name from
+    ``instruments_universe`` so the UI can render the card without a
+    second lookup. ``progress_pct`` is left None until the DD pipeline
+    exposes a real progress counter — included here so the wire shape
+    is stable once it lands.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    instrument_id: uuid.UUID
+    instrument_label: str | None = None
+    report_type: str = "dd_report"
+    version: int
+    status: str
+    confidence_score: Decimal | None = None
+    decision_anchor: str | None = None
+    created_at: datetime
+    approved_at: datetime | None = None
+    progress_pct: int | None = None
+    current_chapter: str | None = None
+
+
+class DDReportsQueueOut(BaseModel):
+    """Full queue payload: three buckets + count dict.
+
+    The counts dict is a pre-computed sum for each bucket so the
+    frontend can render the badge numbers without counting the lists
+    client-side (especially important when ``completed_recent`` is
+    capped by ``recent_limit``).
+    """
+
+    pending: list[DDReportQueueItem]
+    in_progress: list[DDReportQueueItem]
+    completed_recent: list[DDReportQueueItem]
+    counts: dict[str, int]
