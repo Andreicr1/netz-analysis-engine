@@ -874,8 +874,8 @@ async def _fetch_latest_macro_value(
     result = await db.execute(
         text("""
             SELECT value FROM macro_data
-            WHERE series_id = :series_id AND observation_date <= :as_of
-            ORDER BY observation_date DESC
+            WHERE series_id = :series_id AND obs_date <= :as_of
+            ORDER BY obs_date DESC
             LIMIT 1
         """),
         {"series_id": series_id, "as_of": as_of_date},
@@ -1013,11 +1013,11 @@ async def _fetch_monthly_cpi_changes(
     """
     result = await db.execute(
         text("""
-            SELECT observation_date, value FROM macro_data
+            SELECT obs_date, value FROM macro_data
             WHERE series_id = 'CPIAUCSL'
-              AND observation_date >= :start_date AND observation_date <= :as_of
+              AND obs_date >= :start_date AND obs_date <= :as_of
               AND value IS NOT NULL
-            ORDER BY observation_date
+            ORDER BY obs_date
         """),
         {"start_date": start_date, "as_of": as_of_date},
     )
