@@ -33,6 +33,52 @@ UNIVERSE_SYNC_LOCK_ID = 900_070
 SEC_MF_TICKERS_URL = "https://www.sec.gov/files/company_tickers_mf.json"
 SEC_USER_AGENT = "Netz/1.0 (andrei@investintell.com)"
 
+# ── Asset class classification constants (centralized) ─────────────────
+# All sync phases share these keyword lists. CASE evaluation order:
+# cash → explicit equity → alternatives → fixed_income → ELSE equity.
+# %% escaping is normalized to % by SQLAlchemy text() for asyncpg.
+
+_CASH_KW = [
+    "%%money market%%", "%%cash%%", "%%liquidity%%", "%%ultra short%%",
+]
+_EQUITY_EXPLICIT_KW = [
+    "%%equity income%%", "%%dividend income%%", "%%growth & income%%",
+    "%%growth and income%%", "%%balanced%%", "%%allocation%%",
+    "%%long/short equity%%", "%%long short equity%%",
+]
+_ALTERNATIVES_KW = [
+    "%%real estate%%", "%%reit%%", "%%commodity%%", "%%commodities%%",
+    "%%gold%%", "%%infrastructure%%", "%%private credit%%",
+    "%%private equity%%", "%%venture capital%%", "%%hedge%%",
+    "%%long/short%%", "%%long short%%", "%%market neutral%%",
+    "%%event driven%%", "%%merger arbitrage%%", "%%multi-strategy%%",
+    "%%managed futures%%", "%%convertible%%", "%%alternative%%",
+]
+_FI_KW = [
+    "%%bond%%", "%%fixed income%%", "%%treasury%%", "%%government bond%%",
+    "%%aggregate bond%%", "%%municipal%%", "%%muni %%",
+    "%%investment grade%%", "%%high yield%%", "%%corporate bond%%",
+    "%%sovereign%%", "%%mortgage%%", "%%structured%%", "%%securitized%%",
+    "%%inflation protected%%", "%%tips%%", "%%floating rate%%",
+    "%%bank loan%%", "%%loan%%",
+]
+
+
+def _asset_class_case(col: str) -> str:
+    """Build asset_class CASE SQL for the given strategy_label column."""
+    def _arr(kws: list[str]) -> str:
+        return "ARRAY[" + ",".join(f"'{k}'" for k in kws) + "]"
+
+    return (
+        f"CASE\n"
+        f"                WHEN {col} ILIKE ANY({_arr(_CASH_KW)}) THEN 'cash'\n"
+        f"                WHEN {col} ILIKE ANY({_arr(_EQUITY_EXPLICIT_KW)}) THEN 'equity'\n"
+        f"                WHEN {col} ILIKE ANY({_arr(_ALTERNATIVES_KW)}) THEN 'alternatives'\n"
+        f"                WHEN {col} ILIKE ANY({_arr(_FI_KW)}) THEN 'fixed_income'\n"
+        f"                ELSE 'equity'\n"
+        f"            END"
+    )
+
 
 async def run_universe_sync() -> dict[str, Any]:
     """Sync global instrument catalog from SEC/ESMA sources."""
@@ -137,7 +183,7 @@ async def _refresh_mf_tickers(db: AsyncSession) -> dict[str, Any]:
 
 async def _sync_sec_etfs(db: AsyncSession) -> dict[str, Any]:
     """Upsert SEC ETFs into instruments_universe."""
-    result = cast(CursorResult[Any], await db.execute(text("""
+    _sql = """
         INSERT INTO instruments_universe (
             instrument_id, instrument_type, name, isin, ticker,
             asset_class, geography, currency, is_active, attributes
@@ -148,11 +194,7 @@ async def _sync_sec_etfs(db: AsyncSession) -> dict[str, Any]:
             e.fund_name,
             e.series_id,
             e.ticker,
-            CASE
-                WHEN e.strategy_label ILIKE ANY(ARRAY['%bond%','%fixed%','%treasury%','%muni%','%credit%','%income%']) THEN 'fixed_income'
-                WHEN e.strategy_label ILIKE ANY(ARRAY['%commodity%','%gold%','%real estate%','%reit%','%alternative%']) THEN 'alternatives'
-                ELSE 'equity'
-            END,
+            __ASSET_CLASS__,
             'north_america',
             'USD',
             true,
@@ -176,7 +218,8 @@ async def _sync_sec_etfs(db: AsyncSession) -> dict[str, Any]:
             name = EXCLUDED.name,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
-    """)))
+    """.replace("__ASSET_CLASS__", _asset_class_case("e.strategy_label"))
+    result = cast(CursorResult[Any], await db.execute(text(_sql)))
     await db.commit()
     count = result.rowcount
     logger.info("universe_sync.sec_etfs", upserted=count)
@@ -188,7 +231,7 @@ async def _sync_sec_etfs(db: AsyncSession) -> dict[str, Any]:
 
 async def _sync_sec_mf_series(db: AsyncSession) -> dict[str, Any]:
     """Upsert SEC mutual fund series — one per series_id, canonical share class."""
-    result = cast(CursorResult[Any], await db.execute(text("""
+    _sql = """
         WITH per_series AS (
             SELECT DISTINCT ON (fc.series_id)
                 fc.series_id,
@@ -229,12 +272,7 @@ async def _sync_sec_mf_series(db: AsyncSession) -> dict[str, Any]:
             c.series_name,
             c.series_id,
             c.ticker,
-            CASE
-                WHEN c.strategy_label ILIKE ANY(ARRAY['%%bond%%','%%fixed%%','%%treasury%%','%%muni%%','%%credit%%','%%income%%']) THEN 'fixed_income'
-                WHEN c.strategy_label ILIKE '%%money market%%' THEN 'cash'
-                WHEN c.strategy_label ILIKE ANY(ARRAY['%%commodity%%','%%gold%%','%%real estate%%','%%reit%%','%%alternative%%']) THEN 'alternatives'
-                ELSE 'equity'
-            END,
+            __ASSET_CLASS__,
             'north_america',
             'USD',
             true,
@@ -257,7 +295,8 @@ async def _sync_sec_mf_series(db: AsyncSession) -> dict[str, Any]:
             name = EXCLUDED.name,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
-    """)))
+    """.replace("__ASSET_CLASS__", _asset_class_case("c.strategy_label"))
+    result = cast(CursorResult[Any], await db.execute(text(_sql)))
     await db.commit()
     count = result.rowcount
     logger.info("universe_sync.sec_mf_series", upserted=count)
@@ -269,7 +308,7 @@ async def _sync_sec_mf_series(db: AsyncSession) -> dict[str, Any]:
 
 async def _sync_sec_registered(db: AsyncSession) -> dict[str, Any]:
     """Upsert SEC registered funds that have a direct ticker (supplements Phase 2)."""
-    result = cast(CursorResult[Any], await db.execute(text("""
+    _sql = """
         INSERT INTO instruments_universe (
             instrument_id, instrument_type, name, isin, ticker,
             asset_class, geography, currency, is_active, attributes
@@ -280,12 +319,7 @@ async def _sync_sec_registered(db: AsyncSession) -> dict[str, Any]:
             rf.fund_name,
             rf.cik,
             rf.ticker,
-            CASE
-                WHEN rf.strategy_label ILIKE ANY(ARRAY['%%bond%%','%%fixed%%','%%treasury%%','%%muni%%','%%credit%%','%%income%%']) THEN 'fixed_income'
-                WHEN rf.strategy_label ILIKE '%%money market%%' THEN 'cash'
-                WHEN rf.strategy_label ILIKE ANY(ARRAY['%%commodity%%','%%gold%%','%%real estate%%','%%reit%%','%%alternative%%']) THEN 'alternatives'
-                ELSE 'equity'
-            END,
+            __ASSET_CLASS__,
             'north_america',
             'USD',
             true,
@@ -309,7 +343,8 @@ async def _sync_sec_registered(db: AsyncSession) -> dict[str, Any]:
               SELECT 1 FROM instruments_universe iu WHERE iu.ticker = rf.ticker
           )
         ON CONFLICT (ticker) DO NOTHING
-    """)))
+    """.replace("__ASSET_CLASS__", _asset_class_case("rf.strategy_label"))
+    result = cast(CursorResult[Any], await db.execute(text(_sql)))
     await db.commit()
     count = result.rowcount
     logger.info("universe_sync.sec_registered", upserted=count)
@@ -368,7 +403,7 @@ async def _sync_sec_bdcs(db: AsyncSession) -> dict[str, Any]:
 
 async def _sync_esma_funds(db: AsyncSession) -> dict[str, Any]:
     """Upsert ESMA UCITS funds with resolved yahoo_ticker."""
-    result = cast(CursorResult[Any], await db.execute(text("""
+    _sql = """
         INSERT INTO instruments_universe (
             instrument_id, instrument_type, name, isin, ticker,
             asset_class, geography, currency, is_active, attributes
@@ -379,12 +414,7 @@ async def _sync_esma_funds(db: AsyncSession) -> dict[str, Any]:
             ef.fund_name,
             ef.isin,
             ef.yahoo_ticker,
-            CASE
-                WHEN ef.strategy_label ILIKE ANY(ARRAY['%%bond%%','%%fixed%%','%%treasury%%','%%muni%%','%%credit%%','%%income%%']) THEN 'fixed_income'
-                WHEN ef.strategy_label ILIKE '%%money market%%' THEN 'cash'
-                WHEN ef.strategy_label ILIKE ANY(ARRAY['%%commodity%%','%%gold%%','%%real estate%%','%%reit%%','%%alternative%%']) THEN 'alternatives'
-                ELSE 'equity'
-            END,
+            __ASSET_CLASS__,
             CASE ef.domicile
                 WHEN 'IE' THEN 'dm_europe' WHEN 'LU' THEN 'dm_europe'
                 WHEN 'DE' THEN 'dm_europe' WHEN 'FR' THEN 'dm_europe'
@@ -426,7 +456,8 @@ async def _sync_esma_funds(db: AsyncSession) -> dict[str, Any]:
             name = EXCLUDED.name,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
-    """)))
+    """.replace("__ASSET_CLASS__", _asset_class_case("ef.strategy_label"))
+    result = cast(CursorResult[Any], await db.execute(text(_sql)))
     await db.commit()
     count = result.rowcount
     logger.info("universe_sync.esma_funds", upserted=count)
