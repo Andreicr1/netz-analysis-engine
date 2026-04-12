@@ -13,19 +13,20 @@ from __future__ import annotations
 import pytest
 
 from quant_engine.cash_analytics_service import (
+    _DEFAULT_CASH_SCORING_WEIGHTS,
     CashAnalyticsResult,
     CashScoreResult,
-    _DEFAULT_CASH_SCORING_WEIGHTS,
     compute_cash_score,
 )
 from quant_engine.scoring_service import (
     _DEFAULT_CASH_SCORING_WEIGHTS as SCORING_CASH_WEIGHTS,
+)
+from quant_engine.scoring_service import (
     compute_fund_score,
     resolve_scoring_weights,
 )
 from vertical_engines.wealth.screener.layer_evaluator import LayerEvaluator
 from vertical_engines.wealth.screener.quant_metrics import CashQuantMetrics
-
 
 # ═══════════════════════════════════════════════════════════════════
 #  Helpers
