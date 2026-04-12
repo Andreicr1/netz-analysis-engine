@@ -46,6 +46,20 @@ class CashMetrics(Protocol):
     weighted_avg_maturity_days: int | float | None
 
 
+class AltMetrics(Protocol):
+    """Protocol for alternatives metrics — satisfied by FundRiskMetrics ORM or adapter."""
+
+    equity_correlation_252d: Decimal | float | None
+    downside_capture_1y: Decimal | float | None
+    upside_capture_1y: Decimal | float | None
+    crisis_alpha_score: Decimal | float | None
+    calmar_ratio_3y: Decimal | float | None
+    sortino_1y: Decimal | float | None
+    inflation_beta: Decimal | float | None
+    yield_proxy_12m: Decimal | float | None  # Reused from FI (for REIT income)
+    tracking_error_1y: Decimal | float | None  # For gold tracking efficiency
+
+
 # Hardcoded fallback — used only if config parameter is not provided.
 # fee_efficiency replaces Lipper rating (provider never contracted).
 # insider_sentiment is opt-in (add weight > 0 in config to activate).
@@ -89,6 +103,86 @@ _DEFAULT_CASH_SCORING_WEIGHTS: dict[str, float] = {
     "fee_efficiency": 0.10,
 }
 
+# ── Alternatives scoring weights per profile ──────────────────────────
+# All profiles share 5 components (sum = 1.0) but with different weights
+# reflecting what matters most for each alternative strategy.
+
+_DEFAULT_ALT_REIT_WEIGHTS: dict[str, float] = {
+    "income_generation": 0.25,
+    "diversification_value": 0.25,
+    "downside_protection": 0.20,
+    "inflation_hedge": 0.20,
+    "fee_efficiency": 0.10,
+}
+
+_DEFAULT_ALT_COMMODITY_WEIGHTS: dict[str, float] = {
+    "inflation_hedge": 0.30,
+    "diversification_value": 0.25,
+    "crisis_alpha": 0.20,
+    "drawdown_control": 0.15,
+    "fee_efficiency": 0.10,
+}
+
+_DEFAULT_ALT_GOLD_WEIGHTS: dict[str, float] = {
+    "crisis_alpha": 0.30,
+    "diversification_value": 0.30,
+    "inflation_hedge": 0.20,
+    "tracking_efficiency": 0.10,
+    "fee_efficiency": 0.10,
+}
+
+_DEFAULT_ALT_HEDGE_WEIGHTS: dict[str, float] = {
+    "alpha_generation": 0.30,
+    "downside_protection": 0.25,
+    "diversification_value": 0.20,
+    "crisis_alpha": 0.15,
+    "fee_efficiency": 0.10,
+}
+
+_DEFAULT_ALT_CTA_WEIGHTS: dict[str, float] = {
+    "crisis_alpha": 0.40,
+    "diversification_value": 0.25,
+    "risk_adjusted_return": 0.25,
+    "fee_efficiency": 0.10,
+}
+
+_DEFAULT_ALT_GENERIC_WEIGHTS: dict[str, float] = {
+    "diversification_value": 0.30,
+    "downside_protection": 0.25,
+    "risk_adjusted_return": 0.20,
+    "crisis_alpha": 0.15,
+    "fee_efficiency": 0.10,
+}
+
+# Profile name → default weight dict
+_ALT_PROFILE_WEIGHTS: dict[str, dict[str, float]] = {
+    "reit": _DEFAULT_ALT_REIT_WEIGHTS,
+    "commodity": _DEFAULT_ALT_COMMODITY_WEIGHTS,
+    "gold": _DEFAULT_ALT_GOLD_WEIGHTS,
+    "hedge": _DEFAULT_ALT_HEDGE_WEIGHTS,
+    "cta": _DEFAULT_ALT_CTA_WEIGHTS,
+    "generic_alt": _DEFAULT_ALT_GENERIC_WEIGHTS,
+}
+
+
+def resolve_alt_profile_weights(
+    profile: str,
+    config: dict[str, Any] | None = None,
+) -> dict[str, float]:
+    """Resolve alternatives scoring weights for a specific profile.
+
+    Falls back to generic_alt if profile is unknown. Config override
+    takes precedence when provided.
+    """
+    if config is not None:
+        try:
+            weights = config.get("scoring_weights", config)
+            if isinstance(weights, dict) and weights:
+                return {k: float(v) for k, v in weights.items()}
+        except (TypeError, ValueError):
+            pass
+    return _ALT_PROFILE_WEIGHTS.get(profile, _DEFAULT_ALT_GENERIC_WEIGHTS)
+
 
 def resolve_scoring_weights(
     config: dict[str, Any] | None = None,
@@ -97,10 +191,12 @@ def resolve_scoring_weights(
     """Extract scoring weights from config dict.
 
     Falls back to asset-class-appropriate defaults if config is None or malformed.
+    For alternatives, use resolve_alt_profile_weights() instead (profile-specific).
     """
     _defaults_by_class = {
         "fixed_income": _DEFAULT_FI_SCORING_WEIGHTS,
         "cash": _DEFAULT_CASH_SCORING_WEIGHTS,
+        "alternatives": _DEFAULT_ALT_GENERIC_WEIGHTS,
     }
     default = _defaults_by_class.get(asset_class, _DEFAULT_SCORING_WEIGHTS)
     if config is None:
@@ -272,6 +368,86 @@ def _compute_cash_score(
     return round(score, 2), {k: round(v, 2) for k, v in components.items()}
 
 
+def _compute_alternatives_score(
+    alt: AltMetrics,
+    profile: str,
+    config: dict[str, Any] | None,
+    expense_ratio_pct: float | None,
+    peer_medians: dict[str, float] | None,
+) -> tuple[float, dict[str, float]]:
+    """Compute Alternatives composite score. Returns (score, components).
+
+    Profile-specific weights determine which components matter most.
+    All components are computed for all alt funds; weights select relevance.
+    """
+    pm = peer_medians or {}
+    components: dict[str, float] = {}
+
+    # diversification_value: 1 - abs(equity_correlation_252d)
+    # Lower equity correlation = higher diversification. Score 100 at corr=0.
+    eq_corr = float(alt.equity_correlation_252d) if alt.equity_correlation_252d is not None else None
+    if eq_corr is not None:
+        div_value = 1.0 - abs(eq_corr)
+        components["diversification_value"] = _normalize(div_value, 0.0, 1.0, pm.get("diversification_value"))
+    else:
+        components["diversification_value"] = pm.get("diversification_value", 45.0) - 5.0
+
+    # downside_protection: 1 - downside_capture_1y
+    # Score 100 at capture=0, score 50 at capture=1.0, score 0 at capture >= 2.0.
+    dc = float(alt.downside_capture_1y) if alt.downside_capture_1y is not None else None
+    if dc is not None:
+        protection = 1.0 - dc
+        components["downside_protection"] = _normalize(protection, -1.0, 1.0, pm.get("downside_protection"))
+    else:
+        components["downside_protection"] = pm.get("downside_protection", 45.0) - 5.0
+
+    # crisis_alpha: excess return vs benchmark during drawdown periods
+    # Range: -0.20 to 0.30. Score 100 = outperforms by 30% in crises.
+    ca = float(alt.crisis_alpha_score) if alt.crisis_alpha_score is not None else None
+    components["crisis_alpha"] = _normalize(ca, -0.20, 0.30, pm.get("crisis_alpha"))
+
+    # inflation_hedge: inflation beta (regression of returns vs CPI changes)
+    # Range: -2.0 to 4.0. Score 100 at beta=4, score 50 at beta=1.
+    ib = float(alt.inflation_beta) if alt.inflation_beta is not None else None
+    components["inflation_hedge"] = _normalize(ib, -2.0, 4.0, pm.get("inflation_hedge"))
+
+    # income_generation: yield_proxy_12m (reused from FI for REITs)
+    # Range: 0% to 10%.
+    yp = float(alt.yield_proxy_12m) if alt.yield_proxy_12m is not None else None
+    components["income_generation"] = _normalize(yp, 0.0, 0.10, pm.get("income_generation"))
+
+    # alpha_generation: sortino_1y (not Sharpe -- Sharpe penalizes upside vol)
+    # Range: -1.0 to 3.0. Sortino isolates downside risk.
+    sortino = float(alt.sortino_1y) if alt.sortino_1y is not None else None
+    components["alpha_generation"] = _normalize(sortino, -1.0, 3.0, pm.get("alpha_generation"))
+
+    # risk_adjusted_return: calmar_ratio_3y (return / max drawdown)
+    # Range: 0 to 2.0. Score 100 at Calmar 2.0.
+    calmar = float(alt.calmar_ratio_3y) if alt.calmar_ratio_3y is not None else None
+    components["risk_adjusted_return"] = _normalize(calmar, 0.0, 2.0, pm.get("risk_adjusted_return"))
+
+    # drawdown_control: calmar_ratio_3y (same metric, different normalization for commodity profile)
+    components["drawdown_control"] = _normalize(calmar, 0.0, 2.0, pm.get("drawdown_control"))
+
+    # tracking_efficiency: lower tracking error = better (for gold passive exposure)
+    # Range: 0 to 5% TE. Score 100 at TE=0, score 0 at TE >= 5%.
+    te = float(alt.tracking_error_1y) if alt.tracking_error_1y is not None else None
+    if te is not None:
+        # Inverted: lower TE is better
+        te_score = max(0.0, min(100.0, (1.0 - te / 0.05) * 100))
+        components["tracking_efficiency"] = te_score
+    else:
+        components["tracking_efficiency"] = pm.get("tracking_efficiency", 45.0) - 5.0
+
+    # fee_efficiency: shared formula
+    components["fee_efficiency"] = _compute_fee_efficiency(expense_ratio_pct, pm)
+
+    weights = resolve_alt_profile_weights(profile, config)
+
+    score = sum(components.get(k, 50.0) * w for k, w in weights.items())
+    return round(score, 2), {k: round(v, 2) for k, v in components.items()}
+
+
 def compute_fund_score(
     metrics: RiskMetrics,
     flows_momentum_score: float = 50.0,
@@ -282,6 +458,8 @@ def compute_fund_score(
     asset_class: str = "equity",
     fi_metrics: FIMetrics | None = None,
     cash_metrics: CashMetrics | None = None,
+    alt_metrics: AltMetrics | None = None,
+    alt_profile: str | None = None,
 ) -> tuple[float, dict[str, float]]:
     """Compute composite score from risk metrics. Returns (score, components).
 
@@ -296,13 +474,24 @@ def compute_fund_score(
         peer_medians: Dict of component_name → median score from strategy peers.
                Used as fallback for missing data (with -5pt penalty) instead of
                blind neutral 50. Penalizes opaque/short-history funds.
-        asset_class: "equity" (default), "fixed_income", or "cash". Determines scoring model.
+        asset_class: "equity" (default), "fixed_income", "cash", or "alternatives".
+               Determines scoring model.
         fi_metrics: Fixed income metrics. Required when asset_class="fixed_income".
                Falls back to equity scoring if None.
         cash_metrics: Cash/MMF metrics. Required when asset_class="cash".
                Falls back to equity scoring if None.
+        alt_metrics: Alternatives metrics. Required when asset_class="alternatives".
+               Falls back to equity scoring if None.
+        alt_profile: Alternatives profile name (reit, commodity, gold, hedge, cta,
+               generic_alt). Determines weight distribution across components.
 
     """
+    # Dispatch to Alternatives scoring when asset_class is alternatives AND alt_metrics provided
+    if asset_class == "alternatives" and alt_metrics is not None:
+        return _compute_alternatives_score(
+            alt_metrics, alt_profile or "generic_alt", config, expense_ratio_pct, peer_medians,
+        )
+
     # Dispatch to Cash scoring when asset_class is cash AND cash_metrics provided
     if asset_class == "cash" and cash_metrics is not None:
         return _compute_cash_score(cash_metrics, config, expense_ratio_pct, peer_medians)

@@ -113,6 +113,20 @@ blocks:
     benchmark_ticker: GLD
     description: "Physical gold exposure"
 
+  alt_hedge_fund:
+    geography: global
+    asset_class: alternatives
+    display_name: "Hedge Funds / Multi-Strategy"
+    benchmark_ticker: QAI
+    description: "Alternative multi-strategy exposure"
+
+  alt_managed_futures:
+    geography: global
+    asset_class: alternatives
+    display_name: "Managed Futures / CTA"
+    benchmark_ticker: DBMF
+    description: "Trend-following CTA strategies"
+
   # Cash
   cash:
     geography: north_america
