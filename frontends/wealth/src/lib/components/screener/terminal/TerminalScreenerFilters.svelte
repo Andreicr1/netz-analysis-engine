@@ -147,7 +147,34 @@
 		"Latin America",
 	];
 
-	let sectionOpen = $state({ manager: true, universe: true, strategy: true, geography: true, metrics: true });
+	let sectionOpen = $state({ manager: false, universe: false, strategy: false, geography: false, metrics: false });
+
+	// Active filter counts for collapsed section badges
+	const activeManagerCount = $derived(filters.managerNames.length);
+	const activeUniverseCount = $derived(filters.fundUniverse.size);
+	const activeStrategyCount = $derived(filters.strategies.size);
+	const activeGeographyCount = $derived(filters.geographies.size);
+	const activeMetricsCount = $derived(
+		(filters.aumMin > 0 ? 1 : 0) +
+		(filters.aumMax > 0 ? 1 : 0) +
+		(filters.sharpeMin !== "" ? 1 : 0) +
+		(filters.sharpeMax !== "" ? 1 : 0) +
+		(filters.drawdownMinPct !== "" ? 1 : 0) +
+		(filters.drawdownMaxPct !== "" ? 1 : 0) +
+		(filters.volatilityMax !== "" ? 1 : 0) +
+		(filters.expenseMax < 10 ? 1 : 0) +
+		(filters.returnMin > -999 ? 1 : 0) +
+		(filters.returnMax < 999 ? 1 : 0) +
+		(filters.return10yMin !== "" ? 1 : 0) +
+		(filters.return10yMax !== "" ? 1 : 0)
+	);
+
+	function expandAll() {
+		sectionOpen = { manager: true, universe: true, strategy: true, geography: true, metrics: true };
+	}
+	function collapseAll() {
+		sectionOpen = { manager: false, universe: false, strategy: false, geography: false, metrics: false };
+	}
 
 	function toggleUniverse(key: string) {
 		const next = new Set(filters.fundUniverse);
@@ -236,7 +263,11 @@
 <div class="sf-root">
 	<div class="sf-header">
 		<span class="sf-title">FILTERS</span>
-		<button class="sf-clear" onclick={clearAll}>Clear</button>
+		<div class="sf-header-actions">
+			<button class="sf-action" onclick={expandAll} title="Expand all sections">ALL</button>
+			<button class="sf-action" onclick={collapseAll} title="Collapse all sections">NONE</button>
+			<button class="sf-clear" onclick={clearAll}>Clear</button>
+		</div>
 	</div>
 
 	<div class="sf-elite-chip-row">
@@ -258,6 +289,7 @@
 			>
 				<span class="sf-section-arrow" class:open={sectionOpen.manager}>&#9656;</span>
 				MANAGER
+				{#if activeManagerCount > 0}<span class="sf-active-count">{activeManagerCount}</span>{/if}
 			</button>
 			{#if sectionOpen.manager}
 				<div class="sf-section-body">
@@ -309,6 +341,7 @@
 			>
 				<span class="sf-section-arrow" class:open={sectionOpen.universe}>&#9656;</span>
 				UNIVERSE
+				{#if activeUniverseCount > 0}<span class="sf-active-count">{activeUniverseCount}</span>{/if}
 			</button>
 			{#if sectionOpen.universe}
 				<div class="sf-section-body">
@@ -336,6 +369,7 @@
 			>
 				<span class="sf-section-arrow" class:open={sectionOpen.strategy}>&#9656;</span>
 				STRATEGY
+				{#if activeStrategyCount > 0}<span class="sf-active-count">{activeStrategyCount}</span>{/if}
 			</button>
 			{#if sectionOpen.strategy}
 				<div class="sf-section-body">
@@ -363,6 +397,7 @@
 			>
 				<span class="sf-section-arrow" class:open={sectionOpen.geography}>&#9656;</span>
 				GEOGRAPHY
+				{#if activeGeographyCount > 0}<span class="sf-active-count">{activeGeographyCount}</span>{/if}
 			</button>
 			{#if sectionOpen.geography}
 				<div class="sf-section-body">
@@ -390,6 +425,7 @@
 			>
 				<span class="sf-section-arrow" class:open={sectionOpen.metrics}>&#9656;</span>
 				METRICS
+				{#if activeMetricsCount > 0}<span class="sf-active-count">{activeMetricsCount}</span>{/if}
 			</button>
 			{#if sectionOpen.metrics}
 				<div class="sf-section-body">
@@ -515,6 +551,27 @@
 		text-transform: uppercase;
 	}
 
+	.sf-header-actions {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.sf-action {
+		font-size: 9px;
+		color: #5a6577;
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0;
+		font-family: "JetBrains Mono", monospace;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+	}
+	.sf-action:hover {
+		color: #9aa3b3;
+	}
+
 	.sf-clear {
 		font-size: 10px;
 		color: #2d7ef7;
@@ -596,6 +653,22 @@
 	}
 	.sf-section-arrow.open {
 		transform: rotate(90deg);
+	}
+
+	.sf-active-count {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 16px;
+		height: 16px;
+		border-radius: 50%;
+		background: #22d3ee;
+		color: #0b0f1a;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 9px;
+		font-weight: 700;
+		margin-left: 4px;
+		padding: 0 3px;
 	}
 
 	.sf-section-body {
