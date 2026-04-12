@@ -97,3 +97,16 @@ class FundRiskMetrics(Base):
     peer_return_pctl: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     peer_drawdown_pctl: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     peer_count: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+
+    # ELITE ranking (populated by risk_calc ELITE ranking pass, lock 900_071).
+    # elite_flag marks funds in the top-N of their strategy bucket where N is
+    # round(300 * strategy_weight) and strategy weights come from the global
+    # default allocation (liquid_funds.portfolio_profiles.moderate aggregated
+    # per asset_class). See vertical_engines.wealth.elite_ranking.
+    elite_flag: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
+    elite_rank_within_strategy: Mapped[int | None] = mapped_column(
+        sa.SmallInteger, nullable=True,
+    )
+    elite_target_count_per_strategy: Mapped[int | None] = mapped_column(
+        sa.SmallInteger, nullable=True,
+    )
