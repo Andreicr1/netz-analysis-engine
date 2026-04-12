@@ -77,6 +77,26 @@
 		onQueueDD,
 	}: Props = $props();
 
+	// ── Type badge map ────────────────────────────────
+	const TYPE_BADGES: Record<string, { label: string; title: string }> = {
+		mutual_fund:  { label: "MF",    title: "Mutual Fund" },
+		registered_us: { label: "MF",   title: "Mutual Fund" },
+		etf:          { label: "ETF",   title: "Exchange-Traded Fund" },
+		closed_end:   { label: "CEF",   title: "Closed-End Fund" },
+		interval_fund: { label: "INT",  title: "Interval Fund" },
+		bdc:          { label: "BDC",   title: "Business Development Company" },
+		money_market: { label: "MMF",   title: "Money Market Fund" },
+		hedge_fund:   { label: "HF",    title: "Hedge Fund" },
+		private_fund: { label: "PRIV",  title: "Private Fund" },
+		private_equity_fund: { label: "PE", title: "Private Equity Fund" },
+		ucits:        { label: "UCITS", title: "UCITS (European)" },
+		ucits_eu:     { label: "UCITS", title: "UCITS (European)" },
+	};
+
+	function getTypeBadge(asset: ScreenerAsset): { label: string; title: string } {
+		return TYPE_BADGES[asset.universe ?? asset.fundType] ?? TYPE_BADGES[asset.fundType] ?? { label: asset.universeLabel, title: asset.fundType };
+	}
+
 	// ── Action column state ────────────────────────────
 	const LIQUID_UNIVERSES = new Set(["registered_us", "etf", "ucits_eu", "money_market"]);
 	let actionPending = $state(new Set<string>());
@@ -271,7 +291,7 @@
 	<div class="dg-header" role="row" aria-rowindex={1}>
 		<span class="dg-th dg-col-ticker">Ticker</span>
 		<span class="dg-th dg-col-name">Name</span>
-		<span class="dg-th dg-col-universe">Universe</span>
+		<span class="dg-th dg-col-type">Type</span>
 		<span class="dg-th dg-col-strategy">Strategy</span>
 		<span class="dg-th dg-col-geo">Geo</span>
 		<span class="dg-th dg-col-aum dg-right">AUM</span>
@@ -312,11 +332,14 @@
 					>
 						<span class="dg-td dg-col-ticker dg-ticker" title={asset.ticker ?? asset.isin ?? ""}>
 							{asset.ticker ?? asset.isin ?? "\u2014"}
-							{#if asset.eliteFlag}<span class="dg-elite-badge">ELITE</span>{/if}
-							{#if asset.inUniverse}<span class="dg-universe-badge">IN UNIVERSE</span>{/if}
 						</span>
 						<span class="dg-td dg-col-name dg-name" title={asset.name}>{asset.name}</span>
-						<span class="dg-td dg-col-universe dg-class">{asset.universeLabel}</span>
+						<span class="dg-td dg-col-type">
+							<span class="dg-type-badges">
+								<span class="dg-type-badge" title={getTypeBadge(asset).title}>{getTypeBadge(asset).label}</span>
+								{#if asset.eliteFlag}<span class="dg-elite-inline" title="ELITE — top in strategy">ELITE</span>{/if}
+							</span>
+						</span>
 						<span class="dg-td dg-col-strategy dg-strategy" title={asset.strategy ?? ""}>
 							{asset.strategy ?? "\u2014"}
 						</span>
@@ -408,17 +431,18 @@
 	.dg-row {
 		display: grid;
 		grid-template-columns:
-			80px       /* ticker */
-			1fr        /* name */
-			90px       /* universe */
-			150px      /* strategy */
-			80px       /* geo */
-			72px       /* aum */
-			72px       /* 1y ret */
-			72px       /* 10y ret */
-			56px       /* er */
-			52px       /* sparkline */
-			100px;     /* action */
+			72px                  /* ticker — fixed, always visible */
+			minmax(100px, 1fr)    /* name — flex absorbs remaining space */
+			90px                  /* type badges (MF/ETF + ELITE) */
+			110px                 /* strategy — fixed */
+			36px                  /* geo — 2-letter code */
+			72px                  /* aum — right-aligned, compact format */
+			60px                  /* 1y ret — right-aligned */
+			60px                  /* 10y ret — right-aligned */
+			48px                  /* er% — right-aligned */
+			50px                  /* sparkline — 48px canvas + border */
+			72px;                 /* action — APPROVE/+DD button */
+		column-gap: 2px;
 		align-items: center;
 	}
 
@@ -431,7 +455,7 @@
 	}
 
 	.dg-th {
-		padding: 6px 10px;
+		padding: 6px 6px;
 		font-size: 10px;
 		font-weight: 700;
 		letter-spacing: 0.08em;
@@ -493,7 +517,7 @@
 
 	/* ── Cells ────────────────────────────────────────── */
 	.dg-td {
-		padding: 5px 10px;
+		padding: 5px 6px;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -511,11 +535,34 @@
 		color: #9aa3b3;
 	}
 
-	.dg-class {
-		color: #5a6577;
-		font-size: 10px;
-		text-transform: uppercase;
+	/* ── Type badges ────────────────────────────────── */
+	.dg-type-badges {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.dg-type-badge {
+		font-family: "JetBrains Mono", monospace;
+		font-size: 9px;
+		font-weight: 600;
 		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--terminal-fg-tertiary, #5a6577);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		padding: 1px 4px;
+		white-space: nowrap;
+	}
+
+	.dg-elite-inline {
+		font-family: "JetBrains Mono", monospace;
+		font-size: 8px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		color: var(--terminal-accent-amber, #f59e0b);
+		border: 1px solid rgba(245, 158, 11, 0.35);
+		padding: 1px 4px;
+		white-space: nowrap;
 	}
 
 	.dg-strategy {
@@ -556,26 +603,7 @@
 		font-size: 10px;
 	}
 
-	/* ── Badges ──────────────────────────────────────── */
-	.dg-elite-badge {
-		font-family: "JetBrains Mono", monospace;
-		font-size: 8px;
-		font-weight: 700;
-		letter-spacing: 0.06em;
-		color: #f59e0b;
-		margin-left: 6px;
-		vertical-align: middle;
-	}
-
-	.dg-universe-badge {
-		font-family: "JetBrains Mono", monospace;
-		font-size: 8px;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		color: #22c55e;
-		margin-left: 6px;
-		vertical-align: middle;
-	}
+	/* ── (old ticker badges removed — moved to TYPE column) ── */
 
 	/* ── Action column ────────────────────────────────── */
 	.dg-action-btn {
