@@ -24,9 +24,10 @@
 		managerName: string | null;
 		managerId: string | null;
 		aum: number | null;
-		expenseRatioPct: number | null;
-		ret1y: number | null;
-		ret10y: number | null;
+		expenseRatioPct: number | null;  // Already in human % (0.85 = 0.85%)
+		ret1y: number | null;            // Already in human % (5.0 = 5%)
+		ret10y: number | null;           // Already in human % (8.0 = 8%)
+		managerScore: number | null;     // Composite score 0-100
 		inceptionDate: string | null;
 		isin: string | null;
 		navStatus: string | null;   // available | pending_import | unavailable | null
@@ -364,7 +365,7 @@
 						<span class="dg-td dg-col-aum dg-right dg-num">{fmtAum(asset.aum)}</span>
 						<span class="dg-td dg-col-ret dg-right dg-num {retClass(asset.ret1y)}">{fmtPct(asset.ret1y)}</span>
 						<span class="dg-td dg-col-ret dg-right dg-num {retClass(asset.ret10y)}">{fmtPct(asset.ret10y)}</span>
-						<span class="dg-td dg-col-er dg-right dg-num">{fmtNum(asset.expenseRatioPct)}</span>
+						<span class="dg-td dg-col-er dg-right dg-num">{fmtPct(asset.expenseRatioPct)}</span>
 						<span class="dg-td dg-col-spark">
 							{#if asset.instrumentId && sparklineCache.has(asset.instrumentId)}
 								<canvas
