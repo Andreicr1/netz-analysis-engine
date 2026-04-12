@@ -60,7 +60,7 @@ quant = [
     "numpy>=2.0",
     "scipy>=1.14",
     "cvxpy>=1.5",
-    "yfinance>=0.2",
+
     "statsmodels>=0.14",
     "scikit-learn>=1.6",
     "datacommons-client[Pandas]>=1.0",
@@ -166,7 +166,7 @@ warn_unused_configs = true
 [[tool.mypy.overrides]]
 module = [
     "redis.*", "sse_starlette.*", "edgar.*", "rapidfuzz.*", "pyarrow.*",
-    "duckdb.*", "pgvector.*", "yfinance.*", "scipy.*",
+    "duckdb.*", "pgvector.*", "scipy.*",
     "asyncpg", "asyncpg.*", "fitz", "fitz.*", "pandas", "pandas.*",
     "reportlab.*", "yaml", "jsonschema", "dateutil.*", "requests",
     "cachetools", "openpyxl.*", "boto3", "botocore.*", "sklearn.*",

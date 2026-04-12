@@ -14,7 +14,7 @@ Phases (run in order):
     Phase 1:   ESMA Solr API → esma_managers + esma_funds (LEI as PK)
     Phase 1.5: FIRDS FULINS_C → esma_isin_ticker_map (real ISINs linked to LEIs)
     Phase 2:   ISIN resolution via OpenFIGI → esma_isin_ticker_map (yahoo tickers)
-    Phase 3:   NAV backfill via yfinance → nav_timeseries
+    Phase 3:   NAV backfill via Tiingo → nav_timeseries
     Phase 4:   SEC cross-reference via fuzzy match → esma_managers.sec_crd_number
 """
 from __future__ import annotations
@@ -532,41 +532,26 @@ async def _backfill_single_ticker(
 ) -> int:
     """Download NAV history for a single ticker and upsert to nav_timeseries."""
     import asyncio
-    from datetime import date, timedelta
 
     from sqlalchemy import text as sa_text
 
     def _download() -> list[tuple[str, float]]:
-        import logging
+        from app.services.providers.tiingo_instrument_provider import (
+            TiingoInstrumentProvider,
+        )
 
-        import yfinance as yf
-
-        # Suppress yfinance stderr noise for delisted tickers
-        logging.getLogger("yfinance").setLevel(logging.CRITICAL)
-
-        end = date.today()
-        start = end - timedelta(days=years * 365)
-        try:
-            df = yf.download(
-                ticker,
-                start=start.isoformat(),
-                end=end.isoformat(),
-                progress=False,
-            )
-        except Exception:
-            return []
+        provider = TiingoInstrumentProvider()
+        period = f"{years}y" if years <= 10 else "10y"
+        history = provider.fetch_batch_history([ticker], period=period)
+        df = history.get(ticker)
         if df is None or df.empty:
             return []
-        # Flatten MultiIndex columns (yfinance >= 0.2.31)
-        if hasattr(df.columns, "levels"):
-            df.columns = df.columns.get_level_values(0)
-        # Use Close (Adj Close removed in recent yfinance)
-        col = "Close"
+        col = "close" if "close" in df.columns else "Close"
         if col not in df.columns:
             return []
-        series = df[col]
+        series = df[col].dropna()
         return [
-            (idx.date(), float(val))
+            (idx.date() if hasattr(idx, "date") else idx, float(val))
             for idx, val in series.items()
             if val == val  # skip NaN
         ]

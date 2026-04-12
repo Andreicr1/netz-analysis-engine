@@ -31,7 +31,7 @@ def _make_history_df(
     prices: list[float],
     start_date: str = "2026-01-01",
 ) -> pd.DataFrame:
-    """Create a price DataFrame resembling yfinance output."""
+    """Create a price DataFrame resembling provider output."""
     dates = pd.bdate_range(start=start_date, periods=len(prices))
     return pd.DataFrame(
         {"Close": prices, "Open": prices, "High": prices, "Low": prices},
@@ -60,7 +60,7 @@ class TestResolvePeriod:
         assert _resolve_period(3650) == "10y"
 
     def test_beyond_max(self):
-        # >10y maps to "max" (yfinance has no "15y" literal).
+        # >10y maps to "max" (no "15y" literal).
         # See instrument_ingestion.py _LOOKBACK_TO_PERIOD — full history
         # is required for GFC 2008 / Taper Tantrum 2013 stress scenarios.
         assert _resolve_period(5000) == "max"
@@ -137,7 +137,7 @@ class TestRunInstrumentIngestion:
 
     @pytest.mark.asyncio
     async def test_uses_provider_factory(self, mock_db):
-        """Calls get_instrument_provider(), not direct YahooFinanceProvider()."""
+        """Calls get_instrument_provider(), not direct provider instantiation."""
         instruments_result = MagicMock()
         instruments_result.scalars.return_value.all.return_value = []
 
@@ -410,12 +410,11 @@ class TestRunInstrumentIngestion:
 
 
 class TestImportEndpointUsesFactory:
-    def test_import_from_yahoo_uses_factory(self):
-        """Verify import_from_yahoo uses get_instrument_provider, not direct import."""
+    def test_import_uses_factory(self):
+        """Verify import endpoint uses get_instrument_provider, not direct instantiation."""
         import inspect
 
         from app.domains.wealth.routes.instruments import import_from_yahoo
 
         source = inspect.getsource(import_from_yahoo)
         assert "get_instrument_provider" in source
-        assert "YahooFinanceProvider()" not in source

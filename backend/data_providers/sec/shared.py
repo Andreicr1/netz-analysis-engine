@@ -519,10 +519,9 @@ def _sic_range_to_sector(sic: str) -> str | None:
     return None
 
 
-# Canonical GICS sector labels — normalizes yfinance/alternative labels.
-# yfinance uses slightly different names than GICS standard.
+# Canonical GICS sector labels — normalizes alternative labels to GICS standard.
 _SECTOR_CANONICAL: dict[str, str] = {
-    # yfinance → GICS
+    # Common alternative names → GICS
     "Financial Services": "Financials",
     "Technology": "Information Technology",
     "Basic Materials": "Materials",
@@ -649,7 +648,7 @@ def _resolve_sector_via_sic(issuer_name: str) -> str | None:
 
 
 def _resolve_sector_via_openfigi(cusip: str) -> str | None:
-    """Tier 2: CUSIP → ticker (OpenFIGI) → sector (yfinance)."""
+    """Tier 2: CUSIP → ticker (OpenFIGI). Sector left None when OpenFIGI cannot resolve."""
     try:
         import httpx
     except ImportError:
@@ -668,29 +667,17 @@ def _resolve_sector_via_openfigi(cusip: str) -> str | None:
         data = resp.json()
         if not data or not data[0].get("data"):
             return None
-        ticker = data[0]["data"][0].get("ticker")
-        if not ticker:
-            return None
-    except Exception as exc:
-        logger.debug("openfigi_lookup_failed", cusip=cusip, error=str(exc))
-        return None
-
-    # yfinance sector lookup
-    try:
-        import yfinance as yf
-
-        info = yf.Ticker(ticker).info
-        sector = info.get("sector")
+        figi_data = data[0]["data"][0]
+        sector = figi_data.get("marketSector")
         if sector:
             logger.debug(
-                "sector_resolved_via_yfinance",
+                "sector_resolved_via_openfigi",
                 cusip=cusip,
-                ticker=ticker,
                 sector=sector,
             )
             return sector
     except Exception as exc:
-        logger.debug("yfinance_sector_failed", cusip=cusip, ticker=ticker, error=str(exc))
+        logger.debug("openfigi_lookup_failed", cusip=cusip, error=str(exc))
 
     return None
 
@@ -715,7 +702,7 @@ def resolve_sector(
     """Resolve industry sector for a CUSIP via 3-tier cascade.
 
     1. EDGAR SIC code mapping (resolve_cik → Company.sic → GICS)
-    2. OpenFIGI CUSIP→ticker → yfinance sector
+    2. OpenFIGI CUSIP→ticker → marketSector
     3. issuer_name keyword heuristic
 
     Results are cached in Redis (30d TTL) and in-process.
@@ -731,7 +718,7 @@ def resolve_sector(
         # Tier 1: SIC mapping
         sector = _resolve_sector_via_sic(issuer_name)
 
-        # Tier 2: OpenFIGI + yfinance
+        # Tier 2: OpenFIGI marketSector
         if not sector:
             sector = _resolve_sector_via_openfigi(cusip)
 
@@ -842,10 +829,10 @@ async def get_current_price_for_cusip(
     *,
     db_session_factory: Callable[..., Any],
 ) -> float | None:
-    """Get current market price for a CUSIP via YFinance.
+    """Get current market price for a CUSIP via Tiingo EOD.
 
     Resolves CUSIP → ticker from sec_cusip_ticker_map.
-    Returns None if CUSIP is not tradeable or YFinance fails.
+    Returns None if CUSIP is not tradeable or Tiingo fails.
     Never raises.
     """
     try:
@@ -867,9 +854,22 @@ async def get_current_price_for_cusip(
         ticker = row[0]
 
         def _fetch_price() -> float | None:
-            import yfinance as yf
-            info = yf.Ticker(ticker).fast_info
-            return float(info.get("last_price") or info.get("regularMarketPrice", 0))
+            import httpx
+
+            api_key = os.environ.get("TIINGO_API_KEY", "")
+            if not api_key:
+                return None
+            resp = httpx.get(
+                f"https://api.tiingo.com/tiingo/daily/{ticker}/prices",
+                headers={"Authorization": f"Token {api_key}"},
+                timeout=10.0,
+            )
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            if not data:
+                return None
+            return float(data[0].get("close") or data[0].get("adjClose") or 0)
 
         return await asyncio.to_thread(_fetch_price)
     except Exception as exc:

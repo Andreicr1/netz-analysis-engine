@@ -345,11 +345,11 @@ async def main() -> None:
         # 3.1 Provider factory
         try:
             from app.services.providers import get_instrument_provider
-            from app.services.providers.yahoo_finance_provider import YahooFinanceProvider
+            from app.services.providers.tiingo_instrument_provider import TiingoInstrumentProvider
 
             provider = get_instrument_provider()
-            is_yahoo = isinstance(provider, YahooFinanceProvider)
-            ok("3.1 Provider factory", f"type={type(provider).__name__}, is_yahoo={is_yahoo}")
+            is_tiingo = isinstance(provider, TiingoInstrumentProvider)
+            ok("3.1 Provider factory", f"type={type(provider).__name__}, is_tiingo={is_tiingo}")
         except Exception as e:
             fail("3.1 Provider factory", str(e))
             provider = None

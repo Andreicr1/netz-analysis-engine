@@ -6,7 +6,7 @@ Covers:
 - QuantMetrics computation (Sharpe, drawdown, bond metrics)
 - Composite scoring with percentile rank
 - CsvImportAdapter (valid CSV, invalid rows, formula injection)
-- YahooFinanceProvider protocol conformance
+- TiingoInstrumentProvider protocol conformance
 - Hysteresis / status determination
 """
 
@@ -558,10 +558,10 @@ class TestCsvImportAdapter:
 # ═══════════════════════════════════════════════════════════════════
 
 class TestProviderProtocol:
-    def test_yahoo_provider_implements_protocol(self):
+    def test_tiingo_provider_implements_protocol(self):
         from app.services.providers.protocol import InstrumentDataProvider
-        from app.services.providers.yahoo_finance_provider import YahooFinanceProvider
-        provider = YahooFinanceProvider()
+        from app.services.providers.tiingo_instrument_provider import TiingoInstrumentProvider
+        provider = TiingoInstrumentProvider()
         assert isinstance(provider, InstrumentDataProvider)
 
     def test_safe_get_handles_nan(self):

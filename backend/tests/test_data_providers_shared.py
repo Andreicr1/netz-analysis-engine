@@ -534,22 +534,22 @@ class TestSicToGicsSector:
 
 
 class TestCanonicalizeSector:
-    def test_yfinance_financial_services(self):
+    def test_financial_services(self):
         assert _canonicalize_sector("Financial Services") == "Financials"
 
-    def test_yfinance_technology(self):
+    def test_technology(self):
         assert _canonicalize_sector("Technology") == "Information Technology"
 
-    def test_yfinance_basic_materials(self):
+    def test_basic_materials(self):
         assert _canonicalize_sector("Basic Materials") == "Materials"
 
-    def test_yfinance_healthcare(self):
+    def test_healthcare(self):
         assert _canonicalize_sector("Healthcare") == "Health Care"
 
-    def test_yfinance_consumer_cyclical(self):
+    def test_consumer_cyclical(self):
         assert _canonicalize_sector("Consumer Cyclical") == "Consumer Discretionary"
 
-    def test_yfinance_consumer_defensive(self):
+    def test_consumer_defensive(self):
         assert _canonicalize_sector("Consumer Defensive") == "Consumer Staples"
 
     def test_gics_passthrough(self):
@@ -640,7 +640,7 @@ class TestResolveSector:
     @patch("data_providers.sec.shared._resolve_sector_via_openfigi", return_value="Technology")
     def test_tier2_openfigi(self, mock_figi, mock_sic, mock_cache_get, mock_cache_set):
         result = resolve_sector("037833100", "Apple Inc")
-        # yfinance "Technology" canonicalized to GICS "Information Technology"
+        # "Technology" canonicalized to GICS "Information Technology"
         assert result == "Information Technology"
 
     @patch("data_providers.sec.shared._set_cached_sector")

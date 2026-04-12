@@ -48,7 +48,7 @@ async def run_sec_13f_ingestion(
     Steps per CIK:
     1. fetch_holdings(force_refresh=True) — EDGAR API → sec_13f_holdings
     2. compute_diffs for last 2 quarters   — DB read  → sec_13f_diffs
-    3. enrich_holdings_with_sectors         — OpenFIGI/yfinance → DB update
+    3. enrich_holdings_with_sectors         — OpenFIGI/SIC/keyword → DB update
     """
     async with async_session() as db:
         lock_result = await db.execute(

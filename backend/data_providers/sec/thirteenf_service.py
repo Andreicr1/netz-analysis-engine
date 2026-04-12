@@ -303,7 +303,7 @@ class ThirteenFService:
         """Backfill sector for holdings missing sector data.
 
         Resolves sector per unique CUSIP via ``resolve_sector()`` (3-tier:
-        SIC mapping, OpenFIGI/yfinance, keyword heuristic). Updates DB rows.
+        SIC mapping, OpenFIGI/keyword heuristic). Updates DB rows.
         Returns count of CUSIPs enriched. Never raises.
         """
         if not _validate_cik(cik):
