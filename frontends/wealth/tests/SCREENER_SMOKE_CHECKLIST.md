@@ -25,3 +25,16 @@ Open http://localhost:5174/terminal-screener after `pnpm dev`.
 21. Grid fills viewport width (2-column layout, no third column, no excessive padding)
 22. Error state renders as terminal-native [ ERR ] panel with RETRY + RELOAD, not raw stack trace
 23. Compact density: ~8px padding between shell chrome and screener content
+24. Infinite scroll: scroll to row ~195 -- next page loads automatically, footer updates "Showing 400 of 9,193"
+25. Infinite scroll continues: subsequent pages append without replacing existing data
+26. END OF CATALOG indicator appears after last page loads (or ELITE-filtered small set)
+27. Filter change resets infinite scroll: change any filter -- data clears and reloads from page 1
+28. Manager typeahead: type 2+ chars in MANAGER input -- suggestions dropdown appears
+29. Manager chips: select suggestion -- chip appears, grid filters, URL updates with ?manager=
+30. Manager multi-select: add multiple managers -- chips stack, grid shows union
+31. Manager chip remove: click x on chip -- removed, grid updates
+32. Metric range: Sharpe min/max -- dual input fields with 500ms debounce
+33. Metric range: Max Drawdown -- positive user input converts to negative backend value
+34. Metric range: Volatility max, Expense Ratio max, 1Y/10Y Return min/max all present
+35. Metric URL sync: ?sharpe_min=0.5&dd_max=15 persists on reload
+36. Combined filter: ELITE + Manager + Sharpe produces narrow intersection
