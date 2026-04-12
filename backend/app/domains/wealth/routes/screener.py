@@ -436,16 +436,52 @@ async def trigger_screening(
     db.add(run)
     await db.flush()
 
+    # Batch-fetch latest risk metrics for FI attribute injection
+    from app.domains.wealth.models.risk import FundRiskMetrics
+    from vertical_engines.wealth.screener.quant_metrics import FIQuantMetrics
+
+    inst_ids = [row[0].instrument_id for row in rows]
+    risk_metrics_map: dict[uuid.UUID, Any] = {}
+    if inst_ids:
+        rm_res = await db.execute(
+            select(FundRiskMetrics)
+            .where(FundRiskMetrics.instrument_id.in_(inst_ids))
+            .distinct(FundRiskMetrics.instrument_id)
+            .order_by(FundRiskMetrics.instrument_id, FundRiskMetrics.calc_date.desc())
+        )
+        for rm in rm_res.scalars().all():
+            risk_metrics_map[rm.instrument_id] = rm
+
     # Extract instrument data for screening (cross async boundary safely)
-    instrument_dicts = [
-        {
-            "instrument_id": row[0].instrument_id,
-            "instrument_type": row[0].instrument_type,
-            "attributes": dict(row[0].attributes) if row[0].attributes else {},
+    instrument_dicts = []
+    for row in rows:
+        inst = row[0]
+        attrs = dict(inst.attributes) if inst.attributes else {}
+        inst_dict: dict[str, Any] = {
+            "instrument_id": inst.instrument_id,
+            "instrument_type": inst.instrument_type,
+            "attributes": attrs,
             "block_id": row.org_block_id,
         }
-        for row in rows
-    ]
+
+        # Inject FI metrics from fund_risk_metrics into attributes + quant_metrics
+        rm = risk_metrics_map.get(inst.instrument_id)
+        if rm and attrs.get("asset_class") == "fixed_income":
+            attrs["empirical_duration"] = float(rm.empirical_duration) if rm.empirical_duration is not None else None
+            attrs["duration_r2"] = float(rm.empirical_duration_r2) if rm.empirical_duration_r2 is not None else None
+            attrs["credit_beta"] = float(rm.credit_beta) if rm.credit_beta is not None else None
+            if rm.empirical_duration is not None and rm.credit_beta is not None:
+                inst_dict["quant_metrics"] = FIQuantMetrics(
+                    empirical_duration=float(rm.empirical_duration),
+                    credit_beta=float(rm.credit_beta),
+                    yield_proxy_12m=float(rm.yield_proxy_12m) if rm.yield_proxy_12m is not None else 0.0,
+                    duration_adj_drawdown=float(rm.duration_adj_drawdown_1y) if rm.duration_adj_drawdown_1y is not None else 0.0,
+                    sharpe_ratio=float(rm.sharpe_1y) if rm.sharpe_1y is not None else 0.0,
+                    annual_return_pct=float(rm.return_1y or 0) * 100,
+                    data_period_days=int(rm.data_points or 0),
+                )
+
+        instrument_dicts.append(inst_dict)
 
     # Run screening in thread (pure CPU logic)
     from vertical_engines.wealth.screener.service import ScreenerService
@@ -2249,6 +2285,7 @@ async def get_fund_fact_sheet(
             scoring_metrics = {
                 "manager_score": m.manager_score,
                 "score_components": m.score_components,
+                "scoring_model": m.scoring_model or "equity",
                 "peer_percentiles": {
                     "sharpe": m.peer_sharpe_pctl,
                     "sortino": m.peer_sortino_pctl,

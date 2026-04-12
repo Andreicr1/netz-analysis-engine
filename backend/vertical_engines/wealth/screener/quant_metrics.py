@@ -53,6 +53,24 @@ class QuantMetrics:
 
 
 @dataclass(frozen=True, slots=True)
+class FIQuantMetrics:
+    """Fixed income fund screening metrics from fund_risk_metrics (timeseries-based).
+
+    Distinct from BondQuantMetrics (individual bonds, attribute-based).
+    FIQuantMetrics is for bond *funds* with timeseries regressions.
+    """
+
+    empirical_duration: float
+    credit_beta: float
+    yield_proxy_12m: float
+    duration_adj_drawdown: float
+    sharpe_ratio: float
+    annual_return_pct: float
+    data_period_days: int
+    data_quality_flag: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class BondQuantMetrics:
     """Bond screening metrics from attributes (no timeseries needed)."""
 

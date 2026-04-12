@@ -25,17 +25,26 @@
 		weighted: number;
 	}
 
-	const COMPONENT_WEIGHTS: Record<string, { label: string; weight: number }> = {
-		risk_adjusted_return: { label: "Risk-Adj Return", weight: 0.25 },
+	const EQUITY_WEIGHTS: Record<string, { label: string; weight: number }> = {
+		risk_adjusted_return: { label: "Risk-Adj Return", weight: 0.30 },
 		return_consistency: { label: "Return Consistency", weight: 0.20 },
 		drawdown_control: { label: "Drawdown Control", weight: 0.20 },
 		information_ratio: { label: "Information Ratio", weight: 0.15 },
 		fee_efficiency: { label: "Fee Efficiency", weight: 0.10 },
-		flows_momentum: { label: "Flows Momentum", weight: 0.10 },
+		flows_momentum: { label: "Flows Momentum", weight: 0.05 },
+	};
+
+	const FI_WEIGHTS: Record<string, { label: string; weight: number }> = {
+		duration_management: { label: "Duration Mgmt", weight: 0.25 },
+		duration_adjusted_drawdown: { label: "Dur-Adj Drawdown", weight: 0.25 },
+		yield_consistency: { label: "Yield Consistency", weight: 0.20 },
+		spread_capture: { label: "Spread Capture", weight: 0.20 },
+		fee_efficiency: { label: "Fee Efficiency", weight: 0.10 },
 	};
 
 	let compositeScore = $state<number | null>(null);
 	let components = $state<ScoreComponent[]>([]);
+	let scoringModel = $state<string>("equity");
 	let loading = $state(true);
 	let hasData = $state(false);
 
@@ -50,10 +59,12 @@
 				if (sm?.manager_score != null) {
 					compositeScore = sm.manager_score;
 				}
+				scoringModel = sm?.scoring_model || "equity";
+				const weightMap = scoringModel === "fixed_income" ? FI_WEIGHTS : EQUITY_WEIGHTS;
 				const sc = sm?.score_components;
 				if (sc && typeof sc === "object") {
 					const parsed: ScoreComponent[] = [];
-					for (const [key, meta] of Object.entries(COMPONENT_WEIGHTS)) {
+					for (const [key, meta] of Object.entries(weightMap)) {
 						const value = sc[key];
 						if (value != null) {
 							parsed.push({
@@ -123,8 +134,8 @@
 				<div class="scp-degraded-score">COMPOSITE: {formatNumber(compositeScore, 1)}</div>
 			{/if}
 			<div class="scp-degraded-weights">
-				<div class="scp-degraded-title">Component weights (scoring model):</div>
-				{#each Object.entries(COMPONENT_WEIGHTS) as [, meta]}
+				<div class="scp-degraded-title">Component weights ({scoringModel === "fixed_income" ? "FI" : "equity"} model):</div>
+				{#each Object.entries(scoringModel === "fixed_income" ? FI_WEIGHTS : EQUITY_WEIGHTS) as [, meta]}
 					<div class="scp-degraded-row">
 						<span>{meta.label}</span>
 						<span>{Math.round(meta.weight * 100)}%</span>

@@ -52,6 +52,16 @@ class LayerEvaluator:
             if result is not None:
                 results.append(result)
 
+        # Compound FI gate: if fund is fixed_income, also evaluate fund_fixed_income rules
+        if instrument_type == "fund" and attributes.get("asset_class") == "fixed_income":
+            fi_criteria = criteria.get("fund_fixed_income", {})
+            for criterion, expected in fi_criteria.items():
+                result = self._evaluate_criterion(
+                    criterion, expected, attributes, "fund_fixed_income", layer=1,
+                )
+                if result is not None:
+                    results.append(result)
+
         return results
 
     def evaluate_layer2(
