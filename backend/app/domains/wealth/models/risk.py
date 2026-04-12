@@ -96,6 +96,13 @@ class FundRiskMetrics(Base):
     duration_adj_drawdown_1y: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
     scoring_model: Mapped[str | None] = mapped_column(String(20), server_default="equity", nullable=True)
 
+    # Cash/MMF analytics (pre-computed by risk_calc cash analytics pass)
+    seven_day_net_yield: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
+    fed_funds_rate_at_calc: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
+    nav_per_share_mmf: Mapped[Decimal | None] = mapped_column(Numeric(12, 6), nullable=True)
+    pct_weekly_liquid: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
+    weighted_avg_maturity_days: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+
     # Audit & data quality flags
     data_quality_flags: Mapped[dict | None] = mapped_column(JSONB, server_default=text("'{}'::jsonb"), nullable=True)
 
