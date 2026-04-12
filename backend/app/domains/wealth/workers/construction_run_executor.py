@@ -67,6 +67,10 @@ from app.domains.wealth.models.model_portfolio import (
     PortfolioConstructionRun,
     PortfolioStressResult,
 )
+from app.domains.wealth.schemas.sanitized import (
+    humanize_event_type,
+    sanitize_payload,
+)
 from vertical_engines.wealth.model_portfolio.narrative_templater import (
     render_narrative,
 )
@@ -123,6 +127,132 @@ def compute_cache_key(
 def _portfolio_lock_key(portfolio_id: uuid.UUID | str) -> int:
     """Derive a stable 32-bit lock partition key for a portfolio UUID."""
     return zlib.crc32(str(portfolio_id).encode("utf-8")) & 0x7FFFFFFF
+
+
+async def _publish_event_sanitized(
+    db: AsyncSession,
+    *,
+    run_id: uuid.UUID,
+    job_id: str | None,
+    raw_type: str,
+    raw_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Emit a sanitised SSE event AND append it to ``event_log``.
+
+    Two side effects:
+
+    1. Publishes to the Redis SSE channel (same bus as the raw
+       ``publish_event``) with the raw event type mapped to an
+       institutional label via ``EVENT_TYPE_LABELS`` and the payload
+       walked through ``sanitize_payload`` so jargon keys and regime
+       enums are translated at the wire boundary.
+    2. Appends a structured ``{seq, type, raw_type, ts, payload}``
+       entry to ``portfolio_construction_runs.event_log`` so late
+       subscribers (Phase 4 Builder analytics replay) can reconstruct
+       the run history from the column without needing access to the
+       live SSE stream.
+
+    Returns the sanitised event dict for unit-test inspection.
+    """
+    raw_payload = raw_payload or {}
+    public_type = humanize_event_type(raw_type)
+    public_payload = sanitize_payload(raw_payload)
+
+    event: dict[str, Any] = {
+        "type": public_type,
+        "raw_type": raw_type,
+        "ts": datetime.now(tz=timezone.utc).isoformat(),
+        "payload": public_payload,
+    }
+
+    # Side effect 1 — SSE bus (only when a job is attached)
+    if job_id:
+        await publish_event(job_id, public_type, public_payload)
+
+    # Side effect 2 — DB append to event_log, assigning the next seq
+    # atomically via jsonb_array_length so concurrent appends remain
+    # strictly ordered. The UPDATE uses the run's server-side array
+    # length + 1 so callers don't need to track a counter.
+    await db.execute(
+        text(
+            """
+            UPDATE portfolio_construction_runs
+            SET event_log = event_log || jsonb_build_array(
+                jsonb_build_object(
+                    'seq', COALESCE(jsonb_array_length(event_log), 0),
+                    'type', CAST(:public_type AS text),
+                    'raw_type', CAST(:raw_type AS text),
+                    'ts', CAST(:ts AS text),
+                    'payload', CAST(:payload AS jsonb)
+                )
+            )
+            WHERE id = :run_id
+            """,
+        ),
+        {
+            "run_id": run_id,
+            "public_type": public_type,
+            "raw_type": raw_type,
+            "ts": event["ts"],
+            "payload": json.dumps(public_payload),
+        },
+    )
+    return event
+
+
+async def _publish_terminal_event_sanitized(
+    db: AsyncSession,
+    *,
+    run_id: uuid.UUID,
+    job_id: str | None,
+    raw_type: str,
+    raw_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Terminal variant — same sanitisation, then clear the ownership key.
+
+    ``publish_terminal_event`` differs from ``publish_event`` only in
+    that it additionally schedules cleanup of the job ownership key,
+    so late-reconnecting clients can still pick up the final event.
+    """
+    raw_payload = raw_payload or {}
+    public_type = humanize_event_type(raw_type)
+    public_payload = sanitize_payload(raw_payload)
+
+    event: dict[str, Any] = {
+        "type": public_type,
+        "raw_type": raw_type,
+        "ts": datetime.now(tz=timezone.utc).isoformat(),
+        "payload": public_payload,
+    }
+
+    if job_id:
+        await publish_terminal_event(job_id, public_type, public_payload)
+
+    await db.execute(
+        text(
+            """
+            UPDATE portfolio_construction_runs
+            SET event_log = event_log || jsonb_build_array(
+                jsonb_build_object(
+                    'seq', COALESCE(jsonb_array_length(event_log), 0),
+                    'type', CAST(:public_type AS text),
+                    'raw_type', CAST(:raw_type AS text),
+                    'ts', CAST(:ts AS text),
+                    'payload', CAST(:payload AS jsonb)
+                )
+            )
+            WHERE id = :run_id
+            """,
+        ),
+        {
+            "run_id": run_id,
+            "public_type": public_type,
+            "raw_type": raw_type,
+            "ts": event["ts"],
+            "payload": json.dumps(public_payload),
+        },
+    )
+    return event
 
 
 async def _acquire_advisory_lock(
@@ -416,12 +546,13 @@ async def execute_construction_run(
 
     run_id = run.id
 
-    if job_id:
-        await publish_event(
-            job_id,
-            "run_started",
-            {"run_id": str(run_id), "portfolio_id": str(portfolio_id)},
-        )
+    await _publish_event_sanitized(
+        db,
+        run_id=run_id,
+        job_id=job_id,
+        raw_type="run_started",
+        raw_payload={"run_id": str(run_id), "portfolio_id": str(portfolio_id)},
+    )
 
     try:
         # ── 3. Wall-clock bound (DL18 P1) ──
@@ -443,11 +574,13 @@ async def execute_construction_run(
         run.completed_at = datetime.now(tz=timezone.utc)
         run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
         await db.flush()
-        if job_id:
-            await publish_terminal_event(
-                job_id, "error",
-                {"run_id": str(run_id), "reason": "timeout"},
-            )
+        await _publish_terminal_event_sanitized(
+            db,
+            run_id=run_id,
+            job_id=job_id,
+            raw_type="run_failed",
+            raw_payload={"run_id": str(run_id), "reason": "timeout"},
+        )
         logger.warning(
             "construction_run_timeout",
             extra={"run_id": str(run_id), "portfolio_id": str(portfolio_id)},
@@ -459,11 +592,13 @@ async def execute_construction_run(
         run.completed_at = datetime.now(tz=timezone.utc)
         run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
         await db.flush()
-        if job_id:
-            await publish_terminal_event(
-                job_id, "error",
-                {"run_id": str(run_id), "reason": str(exc)},
-            )
+        await _publish_terminal_event_sanitized(
+            db,
+            run_id=run_id,
+            job_id=job_id,
+            raw_type="run_failed",
+            raw_payload={"run_id": str(run_id), "reason": str(exc)},
+        )
         logger.exception(
             "construction_run_failed",
             extra={"run_id": str(run_id), "portfolio_id": str(portfolio_id)},
@@ -475,15 +610,17 @@ async def execute_construction_run(
     run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
     await db.flush()
 
-    if job_id:
-        await publish_terminal_event(
-            job_id, "done",
-            {
-                "run_id": str(run_id),
-                "status": "succeeded",
-                "wall_clock_ms": run.wall_clock_ms,
-            },
-        )
+    await _publish_terminal_event_sanitized(
+        db,
+        run_id=run_id,
+        job_id=job_id,
+        raw_type="run_succeeded",
+        raw_payload={
+            "run_id": str(run_id),
+            "status": "succeeded",
+            "wall_clock_ms": run.wall_clock_ms,
+        },
+    )
 
     logger.info(
         "construction_run_succeeded",
@@ -524,8 +661,13 @@ async def _execute_inner(
     profile = portfolio.profile
     organization_id = portfolio.organization_id
 
-    if job_id:
-        await publish_event(job_id, "optimizer_started", {"profile": profile})
+    await _publish_event_sanitized(
+        db,
+        run_id=run.id,
+        job_id=job_id,
+        raw_type="optimizer_started",
+        raw_payload={"profile": profile},
+    )
 
     # ── 4. Optimizer cascade ──
     base_result = await _run_construction_async(
@@ -558,8 +700,13 @@ async def _execute_inner(
     factor_exposure = optimization.get("factor_exposures") or {}
 
     # ── 5. Stress suite (sequence: after optimizer, before advisor) ──
-    if job_id:
-        await publish_event(job_id, "stress_started", {})
+    await _publish_event_sanitized(
+        db,
+        run_id=run.id,
+        job_id=job_id,
+        raw_type="stress_started",
+        raw_payload={},
+    )
     active_scenarios = list(calibration_snapshot.get("stress_scenarios_active") or [])
     severity = float(calibration_snapshot.get("stress_severity_multiplier") or 1.0)
     stress_results = _run_stress_suite(base_result, active_scenarios, severity)
@@ -589,8 +736,13 @@ async def _execute_inner(
     # ── 6. Advisor fold-in (Task 3.3) — only if enabled ──
     advisor_result: dict[str, Any] | None = None
     if calibration_snapshot.get("advisor_enabled"):
-        if job_id:
-            await publish_event(job_id, "advisor_started", {})
+        await _publish_event_sanitized(
+            db,
+            run_id=run.id,
+            job_id=job_id,
+            raw_type="advisor_started",
+            raw_payload={},
+        )
         try:
             advisor_result = await _build_advisor_result(
                 db, portfolio_id, profile, base_result,
@@ -603,8 +755,13 @@ async def _execute_inner(
             advisor_result = {"error": f"{type(exc).__name__}: {exc}"}
 
     # ── 7. Validation gate (15 checks, no fail-fast) ──
-    if job_id:
-        await publish_event(job_id, "validation_started", {})
+    await _publish_event_sanitized(
+        db,
+        run_id=run.id,
+        job_id=job_id,
+        raw_type="validation_started",
+        raw_payload={},
+    )
 
     # Build the JSONB-shaped payload the validation gate expects.
     validation_payload: dict[str, Any] = {
@@ -625,8 +782,13 @@ async def _execute_inner(
     validation_jsonb = to_jsonb(validation_result)
 
     # ── 8. Narrative templater (pure Jinja2, no LLM) ──
-    if job_id:
-        await publish_event(job_id, "narrative_started", {})
+    await _publish_event_sanitized(
+        db,
+        run_id=run.id,
+        job_id=job_id,
+        raw_type="narrative_started",
+        raw_payload={},
+    )
 
     narrative_payload: dict[str, Any] = {
         **validation_payload,

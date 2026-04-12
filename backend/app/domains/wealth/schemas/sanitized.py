@@ -114,6 +114,77 @@ REGIME_LABELS: dict[str, str] = {
     "STRESS": "Stress",
 }
 
+# Event-type labels used by construction_run_executor and any other
+# SSE-publishing worker. Raw internal names (e.g. "optimizer_started")
+# get translated to institutional phrasing before emission. Anything
+# not in this dict passes through unchanged so a new event type added
+# by a worker remains visible on the wire until a label is registered.
+EVENT_TYPE_LABELS: dict[str, str] = {
+    # Lifecycle
+    "run_started": "Construction started",
+    "run_cancelled": "Construction cancelled",
+    "run_succeeded": "Construction succeeded",
+    "run_failed": "Construction failed",
+    # Optimizer cascade
+    "optimizer_started": "Optimizer started",
+    "optimizer_phase_completed": "Optimizer phase completed",
+    "optimizer_cascade_completed": "Optimizer cascade completed",
+    # Stress suite
+    "stress_started": "Stress tests started",
+    "stress_scenario_completed": "Stress scenario completed",
+    "stress_completed": "Stress tests completed",
+    # Advisor
+    "advisor_started": "Advisor started",
+    "advisor_completed": "Advisor completed",
+    # Validation gate
+    "validation_started": "Validation gate started",
+    "validation_passed": "Validation gate passed",
+    "validation_failed": "Validation gate failed",
+    # Narrative
+    "narrative_started": "Narrative generation started",
+    "narrative_completed": "Narrative generation completed",
+}
+
+
+def humanize_event_type(raw: str) -> str:
+    """Translate a raw internal event type to its public label.
+
+    Pass-through for unknown event types — a worker that emits a new
+    event type remains visible until its label is added here.
+    """
+    if not isinstance(raw, str):
+        return raw
+    return EVENT_TYPE_LABELS.get(raw, raw)
+
+
+def sanitize_payload(raw: Any) -> Any:
+    """Walk an arbitrary payload recursively, translating jargon.
+
+    - Dict keys matching ``METRIC_LABELS`` are translated to institutional
+      labels.
+    - String values matching ``REGIME_LABELS`` are translated to the
+      tri-state phrasing (Expansion / Cautious / Stress).
+    - Lists are walked element-by-element.
+    - Anything else passes through unchanged (numbers, booleans, None,
+      unrecognised strings).
+
+    The transformation is non-mutating — the caller's original payload
+    is never touched. Used by construction_run_executor to sanitise
+    every SSE event before it crosses the wire AND before it lands in
+    ``portfolio_construction_runs.event_log``.
+    """
+    if isinstance(raw, dict):
+        out: dict[str, Any] = {}
+        for k, v in raw.items():
+            public_key = humanize_metric(k) if isinstance(k, str) else k
+            out[public_key] = sanitize_payload(v)
+        return out
+    if isinstance(raw, list):
+        return [sanitize_payload(item) for item in raw]
+    if isinstance(raw, str):
+        return humanize_regime(raw)
+    return raw
+
 
 def _normalise_metric_key(raw: str) -> str:
     return raw.strip().lower().replace("-", "_").replace(" ", "_")
