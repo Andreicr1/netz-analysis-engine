@@ -44,11 +44,11 @@ _CASH_KW = [
 _EQUITY_EXPLICIT_KW = [
     "%%equity income%%", "%%dividend income%%", "%%growth & income%%",
     "%%growth and income%%", "%%balanced%%", "%%allocation%%",
-    "%%long/short equity%%", "%%long short equity%%",
 ]
 _ALTERNATIVES_KW = [
     "%%real estate%%", "%%reit%%", "%%commodity%%", "%%commodities%%",
-    "%%gold%%", "%%infrastructure%%", "%%private credit%%",
+    "%%gold%%", "%%precious metal%%", "%%natural resource%%",
+    "%%infrastructure%%", "%%private credit%%",
     "%%private equity%%", "%%venture capital%%", "%%hedge%%",
     "%%long/short%%", "%%long short%%", "%%market neutral%%",
     "%%event driven%%", "%%merger arbitrage%%", "%%multi-strategy%%",
