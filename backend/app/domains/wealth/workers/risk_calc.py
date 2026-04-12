@@ -1107,7 +1107,18 @@ def _score_metrics(
     flows = float(metrics.get("blended_momentum_score") or 50.0)
 
     fi_adapter = _MetricsAdapter(metrics) if asset_class == "fixed_income" else None
-    cash_adapter = _MetricsAdapter(metrics) if asset_class == "cash" else None
+
+    # Only dispatch to cash scoring if the fund has actual MMF data.
+    # Cash-classified funds without sec_money_market_funds data (ultra-short
+    # ETFs, cash management MFs) have all 5 MMF metrics as NULL, which
+    # penalty-defaults every component to ~40.  Fall back to equity scoring
+    # for these — they have valid NAV-based metrics (Sharpe, drawdown, etc.).
+    _has_mmf_data = asset_class == "cash" and any(
+        metrics.get(k) is not None
+        for k in ("seven_day_net_yield", "nav_per_share_mmf", "pct_weekly_liquid")
+    )
+    cash_adapter = _MetricsAdapter(metrics) if _has_mmf_data else None
+
     alt_adapter = _MetricsAdapter(metrics) if asset_class == "alternatives" else None
 
     # Resolve alt profile: org worker uses block_id, global uses strategy_label
