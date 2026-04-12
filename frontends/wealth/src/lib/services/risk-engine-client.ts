@@ -27,6 +27,8 @@ export interface RiskTimeseries {
 	instrumentId: string;
 	ticker: string | null;
 	drawdown: TVPoint[];
+	/** Institutional label for GARCH-filtered volatility. Client key
+	 * kept stable for chart callers; wire key is `conditional_volatility`. */
 	volatilityGarch: TVPoint[];
 	regimeProb: RegimeTVPoint[];
 }
@@ -37,7 +39,7 @@ interface RawPoint {
 }
 
 interface RawRegimePoint extends RawPoint {
-	regime: string;
+	regime: string; // sanitised label: Expansion / Cautious / Stress
 }
 
 interface RawResponse {
@@ -46,7 +48,9 @@ interface RawResponse {
 	from_date: string;
 	to_date: string;
 	drawdown: RawPoint[];
-	volatility_garch: RawPoint[];
+	// Backend emits `conditional_volatility` as of Phase 2 Session C
+	// commit 2 — the previous `volatility_garch` key is gone.
+	conditional_volatility: RawPoint[];
 	regime_prob: RawRegimePoint[];
 }
 
@@ -100,7 +104,7 @@ export async function fetchRiskTimeseries(
 		instrumentId: data.instrument_id,
 		ticker: data.ticker,
 		drawdown: mapPoints(data.drawdown),
-		volatilityGarch: mapPoints(data.volatility_garch),
+		volatilityGarch: mapPoints(data.conditional_volatility),
 		regimeProb: mapRegimePoints(data.regime_prob),
 	};
 }

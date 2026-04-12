@@ -34,12 +34,15 @@ router = APIRouter(prefix="/risk", tags=["risk"])
 @router.get(
     "/timeseries/{instrument_id}",
     response_model=RiskTimeseriesOut,
+    response_model_by_alias=True,
     summary="Risk timeseries for TradingView overlay",
     description=(
-        "Returns drawdown, GARCH volatility, and macro regime probability "
+        "Returns drawdown, conditional volatility, and macro regime probability "
         "series for a given instrument_id, indexed by date. All series are "
         "pre-computed from TimescaleDB hypertables — zero in-request "
-        "computation."
+        "computation. Sanitised through sanitized.py: the volatility field "
+        "is emitted as ``conditional_volatility`` and regime codes are "
+        "rewritten to Expansion / Cautious / Stress phrasing."
     ),
 )
 @route_cache(ttl=300, key_prefix="risk:timeseries")
