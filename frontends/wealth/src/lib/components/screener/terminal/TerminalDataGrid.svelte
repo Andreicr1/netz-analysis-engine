@@ -40,7 +40,6 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { formatNumber } from "@investintell/ui";
-	import { sandboxBasket } from "$lib/stores/sandbox.svelte";
 	import { focusTrigger } from "$lib/components/terminal/focus-mode/focus-trigger";
 	import { createClientApiClient } from "$lib/api/client";
 
@@ -61,6 +60,8 @@
 		highlightedIndex: number;
 		onSelect: (asset: ScreenerAsset) => void;
 		onHighlight: (index: number) => void;
+		onApprove: (asset: ScreenerAsset) => Promise<void>;
+		onQueueDD: (asset: ScreenerAsset) => Promise<void>;
 	}
 
 	let {
@@ -72,7 +73,13 @@
 		highlightedIndex,
 		onSelect,
 		onHighlight,
+		onApprove,
+		onQueueDD,
 	}: Props = $props();
+
+	// ── Action column state ────────────────────────────
+	const LIQUID_UNIVERSES = new Set(["registered_us", "etf", "ucits_eu", "money_market"]);
+	let actionPending = $state(new Set<string>());
 
 	// ── Virtual scroll state ───────────────────────────
 	let scrollContainer: HTMLDivElement | undefined = $state();
@@ -331,17 +338,33 @@
 							{/if}
 						</span>
 						<span class="dg-td dg-col-action dg-center">
-							<button
-								class="sandbox-add-btn"
-								onclick={(e) => {
-									e.stopPropagation();
-									if (!sandboxBasket.some((a) => a.instrument_id === asset.id)) {
-										sandboxBasket.push({ instrument_id: asset.id, ticker: asset.ticker ?? asset.id });
-									}
-								}}
-							>
-								[ + SANDBOX ]
-							</button>
+							{#if asset.inUniverse}
+								<span class="dg-action-label dg-action-approved">IN UNIVERSE</span>
+							{:else if asset.approvalStatus === "pending" || actionPending.has(asset.id)}
+								<span class="dg-action-label dg-action-pending">PENDING</span>
+							{:else if LIQUID_UNIVERSES.has(asset.universe ?? asset.fundType)}
+								<button
+									class="dg-action-btn dg-action-approve"
+									onclick={async (e) => {
+										e.stopPropagation();
+										actionPending = new Set([...actionPending, asset.id]);
+										await onApprove(asset);
+									}}
+								>
+									{"\u2192"} UNIVERSE
+								</button>
+							{:else}
+								<button
+									class="dg-action-btn dg-action-dd"
+									onclick={async (e) => {
+										e.stopPropagation();
+										actionPending = new Set([...actionPending, asset.id]);
+										await onQueueDD(asset);
+									}}
+								>
+									+ DD
+								</button>
+							{/if}
 						</span>
 					</div>
 				{/each}
@@ -553,11 +576,9 @@
 		vertical-align: middle;
 	}
 
-	/* ── Sandbox add button ───────────────────────────── */
-	.sandbox-add-btn {
+	/* ── Action column ────────────────────────────────── */
+	.dg-action-btn {
 		background: transparent;
-		border: 1px solid rgba(45, 126, 247, 0.25);
-		color: #2d7ef7;
 		font-family: "JetBrains Mono", monospace;
 		font-size: 9px;
 		font-weight: 700;
@@ -565,10 +586,36 @@
 		padding: 2px 6px;
 		cursor: pointer;
 		transition: all 80ms ease;
+		text-transform: uppercase;
 	}
-	.sandbox-add-btn:hover {
+	.dg-action-approve {
+		border: 1px solid rgba(245, 158, 11, 0.35);
+		color: #f59e0b;
+	}
+	.dg-action-approve:hover {
+		background: rgba(245, 158, 11, 0.08);
+		color: #fbbf24;
+	}
+	.dg-action-dd {
+		border: 1px solid rgba(45, 126, 247, 0.25);
+		color: #2d7ef7;
+	}
+	.dg-action-dd:hover {
 		background: rgba(45, 126, 247, 0.08);
 		color: #93bbfc;
+	}
+	.dg-action-label {
+		font-family: "JetBrains Mono", monospace;
+		font-size: 8px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+	.dg-action-approved {
+		color: #22c55e;
+	}
+	.dg-action-pending {
+		color: #5a6577;
 	}
 
 	/* ── Footer ───────────────────────────────────────── */

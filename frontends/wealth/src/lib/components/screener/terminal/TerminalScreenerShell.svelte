@@ -73,6 +73,7 @@
 		avg_annual_return_10y: number | null;
 		elite_flag: boolean | null;
 		in_universe: boolean;
+		approval_status?: string | null;
 		disclosure?: { nav_status?: string | null };
 	}
 
@@ -107,6 +108,8 @@
 			navStatus: raw.disclosure?.nav_status ?? null,
 			eliteFlag: raw.elite_flag === true,
 			inUniverse: raw.in_universe === true,
+			approvalStatus: raw.approval_status ?? null,
+			universe: raw.universe,
 		};
 	}
 
@@ -186,6 +189,59 @@
 	function handleHighlight(index: number) {
 		highlightedIndex = index;
 	}
+
+	// ── Action handlers (approve / DD queue) ────────────
+	let toastMessage = $state<{ text: string; type: "success" | "warn" | "info" } | null>(null);
+	let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function showToast(text: string, type: "success" | "warn" | "info") {
+		toastMessage = { text, type };
+		if (toastTimer) clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => { toastMessage = null; }, 3000);
+	}
+
+	async function handleApprove(asset: ScreenerAsset) {
+		if (!asset.instrumentId) {
+			showToast("Fund not yet in instruments universe", "warn");
+			return;
+		}
+		try {
+			const resp = await api.post<{ approved: string[]; rejected_dd_required: string[] }>(
+				"/universe/fast-approve",
+				{ instrument_ids: [asset.instrumentId] },
+			);
+			if (resp.rejected_dd_required.length > 0) {
+				showToast("DD report required for this fund type", "warn");
+				return;
+			}
+			showToast("Fund approved to universe", "success");
+			// Update locally
+			const idx = assets.findIndex((a) => a.id === asset.id);
+			if (idx >= 0) {
+				assets[idx] = { ...assets[idx], inUniverse: true } as ScreenerAsset;
+			}
+		} catch {
+			showToast("Failed to approve fund", "warn");
+		}
+	}
+
+	async function handleQueueDD(asset: ScreenerAsset) {
+		if (!asset.instrumentId) {
+			showToast("Fund not yet in instruments universe", "warn");
+			return;
+		}
+		try {
+			await api.post("/dd-reports/funds/" + asset.instrumentId);
+			showToast("DD report queued", "info");
+			// Update locally
+			const idx = assets.findIndex((a) => a.id === asset.id);
+			if (idx >= 0) {
+				assets[idx] = { ...assets[idx], approvalStatus: "pending" } as ScreenerAsset;
+			}
+		} catch {
+			showToast("Failed to queue DD report", "warn");
+		}
+	}
 </script>
 
 <div class="ts-root">
@@ -202,11 +258,17 @@
 			{highlightedIndex}
 			onSelect={handleSelect}
 			onHighlight={handleHighlight}
+			onApprove={handleApprove}
+			onQueueDD={handleQueueDD}
 		/>
 	</div>
 	<div class="ts-zone ts-stats" aria-label="Quick stats">
 		<TerminalScreenerQuickStats asset={selectedAsset} />
 	</div>
+
+	{#if toastMessage}
+		<div class="ts-toast ts-toast--{toastMessage.type}">{toastMessage.text}</div>
+	{/if}
 </div>
 
 <style>
@@ -232,4 +294,23 @@
 	.ts-filters { grid-area: filters; }
 	.ts-datagrid { grid-area: datagrid; }
 	.ts-stats { grid-area: stats; }
+
+	/* ── Toast ────────────────────────────────────────── */
+	.ts-toast {
+		position: absolute;
+		bottom: 16px;
+		left: 50%;
+		transform: translateX(-50%);
+		padding: 6px 16px;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		background: #0d1220;
+		z-index: 10;
+	}
+	.ts-toast--success { color: #22c55e; border-color: rgba(34, 197, 94, 0.3); }
+	.ts-toast--warn { color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
+	.ts-toast--info { color: #2d7ef7; border-color: rgba(45, 126, 247, 0.3); }
 </style>
