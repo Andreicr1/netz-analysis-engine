@@ -30,11 +30,7 @@
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
 
-	interface Props {
-		onOpenWarRoom?: (fundId: string) => void;
-	}
-
-	let { onOpenWarRoom }: Props = $props();
+	let {}: {} = $props();
 
 	// ── Universe labels ─────────────────────────────────
 	const FUND_TYPE_LABELS: Record<string, string> = {
@@ -195,7 +191,6 @@
 			{errorMessage}
 			{selectedId}
 			onSelect={handleSelect}
-			{onOpenWarRoom}
 		/>
 	</div>
 	<div class="ts-zone ts-stats" aria-label="Quick stats">

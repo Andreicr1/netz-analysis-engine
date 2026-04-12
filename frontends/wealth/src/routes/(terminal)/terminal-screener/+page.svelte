@@ -1,28 +1,42 @@
 <!--
   Screener — Terminal OS high-density asset screening surface.
 
-  Owns the War Room modal state: clicking a fund row inside the
-  TerminalDataGrid invokes FundWarRoomModal with the fund's
-  external_id. ESC or backdrop click dismisses the modal and
-  clears the active id, returning focus to the screener grid.
+  Row clicks dispatch a "focustrigger" CustomEvent (via the use:focusTrigger
+  action on each <tr>). This page listens for the bubbled event and mounts
+  FundFocusMode with the fund's identity. ESC or backdrop click dismisses
+  FocusMode and clears the active entity.
 -->
 <script lang="ts">
 	import TerminalScreenerShell from "$lib/components/screener/terminal/TerminalScreenerShell.svelte";
-	import FundWarRoomModal from "$lib/components/terminal/FundWarRoomModal.svelte";
+	import FundFocusMode from "$lib/components/terminal/focus-mode/fund/FundFocusMode.svelte";
+	import type { FocusTriggerOptions } from "$lib/components/terminal/focus-mode/focus-trigger";
 
-	let activeFundId = $state<string | null>(null);
+	let focusEntity = $state<FocusTriggerOptions | null>(null);
+	let containerEl: HTMLDivElement | undefined = $state();
 
-	function openWarRoom(fundId: string) {
-		activeFundId = fundId;
-	}
+	$effect(() => {
+		if (!containerEl) return;
+		const handler = (event: Event) => {
+			const detail = (event as CustomEvent<FocusTriggerOptions>).detail;
+			focusEntity = detail;
+		};
+		containerEl.addEventListener("focustrigger", handler);
+		return () => containerEl?.removeEventListener("focustrigger", handler);
+	});
 
-	function closeWarRoom() {
-		activeFundId = null;
+	function closeFocusMode() {
+		focusEntity = null;
 	}
 </script>
 
-<TerminalScreenerShell onOpenWarRoom={openWarRoom} />
+<div bind:this={containerEl}>
+	<TerminalScreenerShell />
+</div>
 
-{#if activeFundId}
-	<FundWarRoomModal id={activeFundId} onClose={closeWarRoom} />
+{#if focusEntity}
+	<FundFocusMode
+		fundId={focusEntity.entityId}
+		fundLabel={focusEntity.entityLabel ?? ""}
+		onClose={closeFocusMode}
+	/>
 {/if}

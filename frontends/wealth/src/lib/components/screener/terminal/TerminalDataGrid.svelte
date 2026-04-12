@@ -36,6 +36,7 @@
 <script lang="ts">
 	import { formatNumber } from "@investintell/ui";
 	import { sandboxBasket } from "$lib/stores/sandbox.svelte";
+	import { focusTrigger } from "$lib/components/terminal/focus-mode/focus-trigger";
 
 	interface Props {
 		assets: ScreenerAsset[];
@@ -44,7 +45,6 @@
 		errorMessage: string | null;
 		selectedId: string | null;
 		onSelect: (asset: ScreenerAsset) => void;
-		onOpenWarRoom?: (fundId: string) => void;
 	}
 
 	let {
@@ -54,7 +54,6 @@
 		errorMessage,
 		selectedId,
 		onSelect,
-		onOpenWarRoom,
 	}: Props = $props();
 
 	function fmtPct(v: number | null, decimals: number = 2): string {
@@ -106,10 +105,8 @@
 						class="dg-row"
 						class:selected={selectedId === asset.id}
 						class:zebra={i % 2 === 1}
-						onclick={() => {
-							onSelect(asset);
-							onOpenWarRoom?.(asset.id);
-						}}
+						use:focusTrigger={{ entityKind: "fund", entityId: asset.id, entityLabel: asset.name }}
+						onclick={() => onSelect(asset)}
 					>
 						<td class="dg-td dg-left dg-ticker" title={asset.ticker ?? asset.isin ?? ""}>
 							{asset.ticker ?? asset.isin ?? "—"}
