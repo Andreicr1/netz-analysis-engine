@@ -304,6 +304,82 @@ async def get_elite_catalog(
     return EliteCatalogPage(items=items, total=len(items), limit=limit)
 
 
+# ── Phase 3 Session A commit 3: batch sparkline endpoint ─────────
+
+
+class SparklinePoint(BaseModel):
+    """Single monthly data point for inline grid sparklines."""
+
+    month: str  # ISO date string (YYYY-MM-DD)
+    nav_close: float
+    return_1m: float | None = None
+
+
+class SparklineRequest(BaseModel):
+    """Request body for batch sparkline endpoint."""
+
+    instrument_ids: list[uuid.UUID]
+    months: int = 60  # 5 years of monthly data
+
+
+@router.post(
+    "/sparklines",
+    summary="Batch sparkline data for grid inline charts",
+)
+async def get_screener_sparklines(
+    body: SparklineRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> dict[str, list[SparklinePoint]]:
+    """Return monthly NAV data for a batch of instruments.
+
+    Reads from ``nav_monthly_returns_agg`` CAGG. Returns at most
+    ``months`` data points per instrument, ordered chronologically.
+    Instruments with no data are omitted from the response dict.
+    Capped at 100 instrument IDs per request (frontend sends visible
+    rows only, ~40 from virtualization).
+    """
+    if len(body.instrument_ids) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximum 100 instrument IDs per request",
+        )
+    if not body.instrument_ids:
+        return {}
+
+    ids = [str(iid) for iid in body.instrument_ids]
+    months = min(max(body.months, 1), 120)  # clamp to 1-120
+
+    result = await db.execute(
+        text(
+            """
+            SELECT
+                instrument_id::text AS instrument_id,
+                month,
+                nav_close,
+                (nav_close / NULLIF(nav_open, 0)) - 1 AS return_1m
+            FROM nav_monthly_returns_agg
+            WHERE instrument_id = ANY(:ids)
+              AND month >= NOW() - make_interval(months => :months)
+            ORDER BY instrument_id, month ASC
+            """,
+        ),
+        {"ids": ids, "months": months},
+    )
+    rows = result.mappings().all()
+
+    out: dict[str, list[SparklinePoint]] = {}
+    for r in rows:
+        iid = str(r["instrument_id"])
+        point = SparklinePoint(
+            month=r["month"].isoformat() if hasattr(r["month"], "isoformat") else str(r["month"]),
+            nav_close=float(r["nav_close"]) if r["nav_close"] is not None else 0.0,
+            return_1m=float(r["return_1m"]) if r["return_1m"] is not None else None,
+        )
+        out.setdefault(iid, []).append(point)
+
+    return out
+
+
 @router.post(
     "/run",
     response_model=ScreeningRunResponse,
