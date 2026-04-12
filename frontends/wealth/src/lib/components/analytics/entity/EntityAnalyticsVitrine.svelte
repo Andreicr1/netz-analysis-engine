@@ -2,6 +2,7 @@
 	import { onMount } from "svelte";
 	import { formatNumber } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
+	import ScoreCompositionPanel from "./ScoreCompositionPanel.svelte";
 
 	interface Props {
 		id: string;
@@ -193,7 +194,10 @@
 		<div class="status-box text-red-500">ERR: {error}</div>
 	{:else}
 		<main class="grid-layout">
-			
+
+			<!-- 0. Score Composition (first module — answers "is this fund good and WHY") -->
+			<ScoreCompositionPanel {id} />
+
 			<!-- 1. Risk Statistics Table -->
 			<section class="module">
 				<h2 class="module-title">RISK STATISTICS</h2>
