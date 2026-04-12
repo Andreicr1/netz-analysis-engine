@@ -127,8 +127,8 @@
 			page: "1",
 			page_size: "200",
 			sort: "aum_desc",
+			in_universe: "true", // Always filter to NAV-populated funds — non-negotiable data-quality gate
 		};
-		if (f.onlyWithNav) q.in_universe = "true";
 		if (f.eliteOnly) q.elite_only = "true";
 		if (f.fundUniverse.size > 0) q.fund_universe = [...f.fundUniverse].join(",");
 		if (f.strategies.size > 0) q.strategy_label = [...f.strategies].join(",");
