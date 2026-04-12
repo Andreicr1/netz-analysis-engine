@@ -1,13 +1,13 @@
 <!--
-  TerminalScreenerShell — 3-column high-density screener grid.
+  TerminalScreenerShell — 2-column high-density screener grid.
 
   Grid topology:
-    ┌──────────┬──���───────────────────┬─────────────┐
-    │          │                      │             │
-    │ FILTERS  │      DATA GRID       │ QUICK STATS │
-    │ (280px)  │       (1fr)          │   (320px)   │
-    │          │                      │             │
-    └────���─────┴──────────────────��───┴──────────��──┘
+    ┌──────────┬─────────────────────────────────────┐
+    │          │                                     │
+    │ FILTERS  │            DATA GRID                │
+    │ (280px)  │             (1fr)                   │
+    │          │                                     │
+    └──────────┴─────────────────────────────────────┘
 
   Data source: `/screener/catalog` (materialized view mv_unified_funds
   over SEC N-CEN/XBRL, ESMA Fund Register, and hedge/private fund
@@ -24,7 +24,6 @@
 		type FilterState,
 	} from "./TerminalScreenerFilters.svelte";
 	import TerminalDataGrid, { type ScreenerAsset } from "./TerminalDataGrid.svelte";
-	import TerminalScreenerQuickStats from "./TerminalScreenerQuickStats.svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
@@ -121,9 +120,6 @@
 	let selectedId = $state<string | null>(null);
 	let highlightedIndex = $state(-1);
 
-	const selectedAsset = $derived<ScreenerAsset | null>(
-		assets.find((a) => a.id === selectedId) ?? null,
-	);
 
 	// ── Query builder ──────────────���────────────────────
 	function buildQuery(f: FilterState): Record<string, string> {
@@ -345,9 +341,6 @@
 			onQueueDD={handleQueueDD}
 		/>
 	</div>
-	<div class="ts-zone ts-stats" aria-label="Quick stats">
-		<TerminalScreenerQuickStats asset={selectedAsset} />
-	</div>
 
 	{#if toastMessage}
 		<div class="ts-toast ts-toast--{toastMessage.type}">{toastMessage.text}</div>
@@ -357,8 +350,8 @@
 <style>
 	.ts-root {
 		display: grid;
-		grid-template-areas: "filters datagrid stats";
-		grid-template-columns: 280px 1fr 320px;
+		grid-template-areas: "filters datagrid";
+		grid-template-columns: 280px 1fr;
 		grid-template-rows: 100%;
 		gap: 2px;
 		width: 100%;
@@ -376,7 +369,6 @@
 
 	.ts-filters { grid-area: filters; }
 	.ts-datagrid { grid-area: datagrid; }
-	.ts-stats { grid-area: stats; }
 
 	/* ── Toast ────────────────────────────────────────── */
 	.ts-toast {
