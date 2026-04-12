@@ -142,10 +142,17 @@
 	// ── Debounced reactive fetch ────────────────────────
 	let debounceHandle: ReturnType<typeof setTimeout> | null = null;
 	let currentFetchId = 0;
+	let retryTrigger = $state(0);
+
+	function retryFetch() {
+		errorMessage = null;
+		retryTrigger++;
+	}
 
 	$effect(() => {
-		// Track filters to trigger re-runs on any change
+		// Track filters + retryTrigger to trigger re-runs
 		const snapshot = buildQuery(filters);
+		void retryTrigger; // reactive dependency for retry
 
 		if (debounceHandle) clearTimeout(debounceHandle);
 		debounceHandle = setTimeout(async () => {
@@ -167,7 +174,10 @@
 				if (fetchId !== currentFetchId) return;
 				assets = [];
 				total = 0;
-				errorMessage = err instanceof Error ? err.message : "Failed to load catalog";
+				const raw = err instanceof Error ? err.message : "Failed to load catalog";
+				// Truncate verbose backend tracebacks to first meaningful line
+				const firstLine = raw.split("\n")[0] ?? raw;
+				errorMessage = firstLine.length > 200 ? firstLine.slice(0, 200) + "..." : firstLine;
 			} finally {
 				if (fetchId === currentFetchId) loading = false;
 			}
@@ -327,19 +337,54 @@
 		<TerminalScreenerFilters {filters} {onFiltersChange} />
 	</div>
 	<div class="ts-zone ts-datagrid" aria-label="Instrument data grid">
-		<TerminalDataGrid
-			bind:this={dataGridRef}
-			{assets}
-			{total}
-			{loading}
-			{errorMessage}
-			{selectedId}
-			{highlightedIndex}
-			onSelect={handleSelect}
-			onHighlight={handleHighlight}
-			onApprove={handleApprove}
-			onQueueDD={handleQueueDD}
-		/>
+		{#if errorMessage}
+			<div class="sep-panel">
+				<div class="sep-header">
+					<span class="sep-code">[ ERR ]</span>
+					<span class="sep-title">SCREENER DATA ERROR</span>
+				</div>
+				<div class="sep-body">
+					<p class="sep-message">{errorMessage}</p>
+					<p class="sep-hint">The screener encountered a data error. This may be caused by a backend timeout, a malformed response, or a network issue.</p>
+				</div>
+				<div class="sep-actions">
+					<button class="sep-btn" onclick={retryFetch}>[ RETRY ]</button>
+					<button class="sep-btn sep-btn--reload" onclick={() => location.reload()}>[ RELOAD PAGE ]</button>
+				</div>
+			</div>
+		{:else}
+			<svelte:boundary>
+				<TerminalDataGrid
+					bind:this={dataGridRef}
+					{assets}
+					{total}
+					{loading}
+					errorMessage={null}
+					{selectedId}
+					{highlightedIndex}
+					onSelect={handleSelect}
+					onHighlight={handleHighlight}
+					onApprove={handleApprove}
+					onQueueDD={handleQueueDD}
+				/>
+				{#snippet failed(error, reset)}
+					<div class="sep-panel">
+						<div class="sep-header">
+							<span class="sep-code">[ ERR ]</span>
+							<span class="sep-title">SCREENER RENDER ERROR</span>
+						</div>
+						<div class="sep-body">
+							<p class="sep-message">{(error as Error)?.message ?? "An unexpected rendering error occurred"}</p>
+							<p class="sep-hint">The screener grid encountered a rendering crash. Try retrying or reloading the page.</p>
+						</div>
+						<div class="sep-actions">
+							<button class="sep-btn" onclick={reset}>[ RETRY ]</button>
+							<button class="sep-btn sep-btn--reload" onclick={() => location.reload()}>[ RELOAD PAGE ]</button>
+						</div>
+					</div>
+				{/snippet}
+			</svelte:boundary>
+		{/if}
 	</div>
 
 	{#if toastMessage}
@@ -369,6 +414,81 @@
 
 	.ts-filters { grid-area: filters; }
 	.ts-datagrid { grid-area: datagrid; }
+
+	/* ── Error panel ─────────────────────────────────── */
+	.sep-panel {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		height: 100%;
+		gap: var(--terminal-space-6, 24px);
+		padding: var(--terminal-space-6, 24px);
+		font-family: var(--terminal-font-mono, "JetBrains Mono", monospace);
+		color: var(--terminal-status-error, #ef4444);
+	}
+
+	.sep-header {
+		display: flex;
+		align-items: baseline;
+		gap: var(--terminal-space-3, 12px);
+	}
+
+	.sep-code {
+		font-size: var(--terminal-text-20, 20px);
+		font-weight: 700;
+		letter-spacing: var(--terminal-tracking-caps, 0.06em);
+	}
+
+	.sep-title {
+		font-size: var(--terminal-text-14, 14px);
+		letter-spacing: var(--terminal-tracking-caps, 0.06em);
+		color: var(--terminal-fg-secondary, #8a94a6);
+	}
+
+	.sep-body {
+		text-align: center;
+		max-width: 480px;
+	}
+
+	.sep-message {
+		font-size: var(--terminal-text-11, 11px);
+		color: var(--terminal-fg-primary, #e2e8f0);
+		margin: 0 0 var(--terminal-space-2, 8px);
+	}
+
+	.sep-hint {
+		font-size: var(--terminal-text-11, 11px);
+		color: var(--terminal-fg-tertiary, #5a6577);
+		margin: 0;
+	}
+
+	.sep-actions {
+		display: flex;
+		gap: var(--terminal-space-4, 16px);
+	}
+
+	.sep-btn {
+		background: transparent;
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		border-radius: 0;
+		color: var(--terminal-fg-primary, #e2e8f0);
+		font-family: var(--terminal-font-mono, "JetBrains Mono", monospace);
+		font-size: var(--terminal-text-11, 11px);
+		letter-spacing: var(--terminal-tracking-caps, 0.06em);
+		padding: var(--terminal-space-2, 8px) var(--terminal-space-4, 16px);
+		cursor: pointer;
+	}
+
+	.sep-btn:hover {
+		border-color: #f59e0b;
+		color: #f59e0b;
+	}
+
+	.sep-btn--reload:hover {
+		border-color: var(--terminal-status-warn, #f59e0b);
+		color: var(--terminal-status-warn, #f59e0b);
+	}
 
 	/* ── Toast ────────────────────────────────────────── */
 	.ts-toast {
