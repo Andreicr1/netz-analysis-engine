@@ -133,6 +133,98 @@ def compute_yield_proxy(monthly_returns: np.ndarray) -> float | None:  # type: i
     return float(np.mean(positive) * 12)
 
 
+def compute_fi_analytics(
+    fund_dated_returns: list[tuple],
+    treasury_yield_changes: list[tuple],
+    credit_spread_changes: list[tuple],
+    max_drawdown_1y: float | None,
+    config: FIRegressionConfig | None = None,
+) -> FIAnalyticsResult:
+    """Compute all FI analytics from dated returns and macro yield changes.
+
+    Aligns fund returns with macro series by date (inner join), then runs
+    empirical duration, credit beta, yield proxy, and duration-adjusted
+    drawdown regressions.
+
+    Args:
+        fund_dated_returns: list of (date, return) tuples from _batch_fetch_dated_returns.
+        treasury_yield_changes: list of (date, delta_yield) tuples for DGS10.
+        credit_spread_changes: list of (date, delta_spread) tuples for BAA10Y.
+        max_drawdown_1y: max drawdown over 1 year (negative number).
+        config: regression configuration.
+    """
+    cfg = config or FIRegressionConfig()
+
+    # Build date-keyed dicts for alignment
+    fund_by_date = {d: r for d, r in fund_dated_returns}
+    treasury_by_date = {d: r for d, r in treasury_yield_changes}
+    spread_by_date = {d: r for d, r in credit_spread_changes}
+
+    # Align fund returns with treasury yields (inner join on dates)
+    treasury_dates = sorted(set(fund_by_date.keys()) & set(treasury_by_date.keys()))
+    if len(treasury_dates) >= cfg.min_observations:
+        # Take latest regression_window_days observations
+        treasury_dates = treasury_dates[-cfg.regression_window_days:]
+        fund_ret_aligned = np.array([fund_by_date[d] for d in treasury_dates])
+        tsy_aligned = np.array([treasury_by_date[d] for d in treasury_dates])
+        emp_dur, dur_r2 = compute_empirical_duration(fund_ret_aligned, tsy_aligned, cfg)
+    else:
+        emp_dur, dur_r2 = None, None
+
+    # Align fund returns with credit spreads
+    spread_dates = sorted(set(fund_by_date.keys()) & set(spread_by_date.keys()))
+    if len(spread_dates) >= cfg.min_observations:
+        spread_dates = spread_dates[-cfg.regression_window_days:]
+        fund_ret_spread = np.array([fund_by_date[d] for d in spread_dates])
+        sprd_aligned = np.array([spread_by_date[d] for d in spread_dates])
+        cb, cb_r2 = compute_credit_beta(fund_ret_spread, sprd_aligned, cfg)
+    else:
+        cb, cb_r2 = None, None
+
+    # Yield proxy: need monthly returns (approximate from daily)
+    # Group daily returns by (year, month) and compound
+    monthly_returns = _daily_to_monthly_returns(fund_dated_returns)
+    yp = compute_yield_proxy(np.array(monthly_returns)) if len(monthly_returns) >= 12 else None
+
+    # Duration-adjusted drawdown
+    dad = compute_duration_adjusted_drawdown(max_drawdown_1y, emp_dur) if max_drawdown_1y is not None else None
+
+    return FIAnalyticsResult(
+        empirical_duration=emp_dur,
+        duration_r_squared=dur_r2,
+        credit_beta=cb,
+        credit_beta_r_squared=cb_r2,
+        yield_proxy_12m=yp,
+        duration_adj_drawdown=dad,
+    )
+
+
+def _daily_to_monthly_returns(dated_returns: list[tuple]) -> list[float]:
+    """Compound daily returns into monthly returns.
+
+    Groups by (year, month) and compounds: (1+r1)*(1+r2)*...-1
+    """
+    if not dated_returns:
+        return []
+
+    from collections import defaultdict
+
+    by_month: dict[tuple[int, int], list[float]] = defaultdict(list)
+    for d, r in dated_returns:
+        by_month[(d.year, d.month)].append(r)
+
+    # Sort by (year, month) and compound
+    monthly = []
+    for key in sorted(by_month.keys()):
+        daily = by_month[key]
+        compounded = 1.0
+        for r in daily:
+            compounded *= (1.0 + r)
+        monthly.append(compounded - 1.0)
+
+    return monthly
+
+
 def compute_duration_adjusted_drawdown(
     max_drawdown_1y: float,
     empirical_duration: float | None,

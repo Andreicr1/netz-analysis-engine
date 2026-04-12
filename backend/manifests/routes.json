@@ -21,6 +21,11 @@
   },
   {
     "method": "DELETE",
+    "path": "/api/v1/jobs/{job_id}",
+    "name": "cancel_job"
+  },
+  {
+    "method": "DELETE",
     "path": "/api/v1/library/pins/{pin_id}",
     "name": "delete_pin"
   },
@@ -546,6 +551,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/dd-reports/queue",
+    "name": "get_dd_reports_queue"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/dd-reports/{report_id}",
     "name": "get_dd_report"
   },
@@ -976,6 +986,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/construction/runs/{run_id}/diff",
+    "name": "get_construction_run_diff"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/model-portfolios/{portfolio_id}/drift",
     "name": "get_drift_report"
   },
@@ -1191,6 +1206,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/screener/catalog/elite",
+    "name": "get_elite_catalog"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/screener/catalog/facets",
     "name": "get_catalog_facets"
   },
@@ -1218,6 +1238,11 @@
     "method": "GET",
     "path": "/api/v1/screener/funds/{external_id}/classes",
     "name": "get_fund_classes"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/screener/managers",
+    "name": "get_screener_managers"
   },
   {
     "method": "GET",
@@ -2141,8 +2166,18 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/screener/sparklines",
+    "name": "get_screener_sparklines"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/test/sse/{job_id}/emit",
     "name": "test_emit_event"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/universe/fast-approve",
+    "name": "fast_approve"
   },
   {
     "method": "POST",

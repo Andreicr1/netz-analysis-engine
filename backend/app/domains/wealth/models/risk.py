@@ -87,6 +87,15 @@ class FundRiskMetrics(Base):
     # DTW drift signal (derivative DTW vs block benchmark, length-normalized)
     dtw_drift_score: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
 
+    # Fixed income analytics (pre-computed by risk_calc FI analytics pass)
+    empirical_duration: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
+    empirical_duration_r2: Mapped[Decimal | None] = mapped_column(Numeric(6, 4), nullable=True)
+    credit_beta: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
+    credit_beta_r2: Mapped[Decimal | None] = mapped_column(Numeric(6, 4), nullable=True)
+    yield_proxy_12m: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    duration_adj_drawdown_1y: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    scoring_model: Mapped[str | None] = mapped_column(String(20), server_default="equity", nullable=True)
+
     # Audit & data quality flags
     data_quality_flags: Mapped[dict | None] = mapped_column(JSONB, server_default=text("'{}'::jsonb"), nullable=True)
 
