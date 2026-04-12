@@ -225,6 +225,87 @@
 		}
 	}
 
+	// ── DataGrid ref for scrollToIndex ──────────────────
+	let dataGridRef: TerminalDataGrid | undefined = $state();
+	let filtersEl: HTMLDivElement | undefined = $state();
+	let rootEl: HTMLDivElement | undefined = $state();
+
+	// ── Keyboard shortcuts ──────────────────────────────
+	function handleKeydown(e: KeyboardEvent) {
+		// Don't fire when typing in inputs
+		const target = e.target as HTMLElement;
+		if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT") {
+			if (e.key === "Escape") {
+				target.blur();
+				e.preventDefault();
+			}
+			return;
+		}
+
+		switch (e.key) {
+			case "/": {
+				e.preventDefault();
+				// Focus first interactive element in filter panel
+				const input = filtersEl?.querySelector("input, button");
+				if (input instanceof HTMLElement) input.focus();
+				break;
+			}
+			case "ArrowDown": {
+				e.preventDefault();
+				const next = Math.min(highlightedIndex + 1, assets.length - 1);
+				highlightedIndex = next;
+				dataGridRef?.scrollToIndex(next);
+				break;
+			}
+			case "ArrowUp": {
+				e.preventDefault();
+				const prev = Math.max(highlightedIndex - 1, 0);
+				highlightedIndex = prev;
+				dataGridRef?.scrollToIndex(prev);
+				break;
+			}
+			case "Enter": {
+				if (highlightedIndex >= 0 && highlightedIndex < assets.length) {
+					const asset = assets[highlightedIndex];
+					if (asset) {
+						selectedId = asset.id;
+						// Dispatch focustrigger event for FocusMode (bubbles to page)
+						rootEl?.dispatchEvent(
+							new CustomEvent("focustrigger", {
+								bubbles: true,
+								detail: { entityKind: "fund", entityId: asset.id, entityLabel: asset.name },
+							}),
+						);
+					}
+				}
+				break;
+			}
+			case "u": {
+				if (highlightedIndex >= 0 && highlightedIndex < assets.length) {
+					const asset = assets[highlightedIndex];
+					if (asset && !asset.inUniverse && asset.approvalStatus !== "pending") {
+						handleApprove(asset);
+					}
+				}
+				break;
+			}
+			case "d": {
+				if (highlightedIndex >= 0 && highlightedIndex < assets.length) {
+					const asset = assets[highlightedIndex];
+					if (asset && !asset.inUniverse && asset.approvalStatus !== "pending") {
+						handleQueueDD(asset);
+					}
+				}
+				break;
+			}
+			case "e": {
+				e.preventDefault();
+				onFiltersChange({ ...filters, eliteOnly: !filters.eliteOnly });
+				break;
+			}
+		}
+	}
+
 	async function handleQueueDD(asset: ScreenerAsset) {
 		if (!asset.instrumentId) {
 			showToast("Fund not yet in instruments universe", "warn");
@@ -244,12 +325,14 @@
 	}
 </script>
 
-<div class="ts-root">
-	<div class="ts-zone ts-filters" aria-label="Screener filters">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="ts-root" onkeydown={handleKeydown} bind:this={rootEl}>
+	<div class="ts-zone ts-filters" aria-label="Screener filters" bind:this={filtersEl}>
 		<TerminalScreenerFilters {filters} {onFiltersChange} />
 	</div>
 	<div class="ts-zone ts-datagrid" aria-label="Instrument data grid">
 		<TerminalDataGrid
+			bind:this={dataGridRef}
 			{assets}
 			{total}
 			{loading}
