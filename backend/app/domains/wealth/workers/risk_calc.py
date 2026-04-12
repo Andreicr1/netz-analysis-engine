@@ -30,6 +30,7 @@ from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.risk import FundRiskMetrics
 from quant_engine.cvar_service import compute_cvar_from_returns
 from quant_engine.drift_service import DtwDriftResult, DtwDriftStatus, compute_dtw_drift_batch
+from quant_engine.fixed_income_analytics_service import FIRegressionConfig, compute_fi_analytics
 from quant_engine.garch_service import fit_garch
 from quant_engine.return_statistics_service import (
     compute_sharpe_ratio,
@@ -370,6 +371,61 @@ async def _batch_fetch_dated_returns(
         )
 
     return raw_by_fund
+
+
+async def _batch_fetch_macro_yield_changes(
+    db: AsyncSession,
+    start_date: date,
+    as_of_date: date,
+) -> dict[str, list[tuple[date, float]]]:
+    """Fetch daily changes in Treasury yields and credit spreads from macro_data.
+
+    Returns dict mapping series_id -> list of (obs_date, daily_change).
+    Series: DGS10 (duration regression), BAA10Y (credit beta regression).
+
+    FRED yields are in percent (e.g. 4.25). We convert to decimal changes
+    (0.0425) before returning for regression use.
+    """
+    series_ids = ["DGS10", "BAA10Y"]
+
+    stmt = (
+        select(MacroData.series_id, MacroData.obs_date, MacroData.value)
+        .where(
+            MacroData.series_id.in_(series_ids),
+            MacroData.obs_date >= start_date,
+            MacroData.obs_date <= as_of_date,
+            MacroData.value.is_not(None),
+        )
+        .order_by(MacroData.series_id, MacroData.obs_date)
+    )
+    result = await db.execute(stmt)
+
+    # Group raw levels by series
+    raw_by_series: dict[str, list[tuple[date, float]]] = {}
+    for sid, obs_date, value in result.all():
+        raw_by_series.setdefault(sid, []).append((obs_date, float(value)))
+
+    # Compute daily changes: delta_Y(t) = Y(t) - Y(t-1)
+    # Convert from percent to decimal (4.25 -> 0.0425) then diff
+    changes_by_series: dict[str, list[tuple[date, float]]] = {}
+    for sid, observations in raw_by_series.items():
+        changes: list[tuple[date, float]] = []
+        for i in range(1, len(observations)):
+            prev_date, prev_val = observations[i - 1]
+            curr_date, curr_val = observations[i]
+            # Forward-fill gap guard: skip if gap > 5 business days
+            if (curr_date - prev_date).days > 7:
+                continue
+            # Convert percent to decimal change
+            delta = (curr_val - prev_val) / 100.0
+            changes.append((curr_date, delta))
+        changes_by_series[sid] = changes
+
+    for sid in series_ids:
+        count = len(changes_by_series.get(sid, []))
+        logger.info("macro_yield_changes_fetched", series_id=sid, n_changes=count)
+
+    return changes_by_series
 
 
 async def _batch_fetch_nav_prices(
@@ -824,15 +880,21 @@ def _score_metrics(
     metrics: dict,
     scoring_config: dict | None = None,
     expense_ratio_pct: float | None = None,
+    asset_class: str = "equity",
 ) -> None:
     """Compute manager_score and score_components from base metrics in-place."""
     adapter = _MetricsAdapter(metrics)
     flows = float(metrics.get("blended_momentum_score") or 50.0)
+
+    fi_adapter = _MetricsAdapter(metrics) if asset_class == "fixed_income" else None
+
     score_val, components = compute_fund_score(
         adapter,
         flows_momentum_score=flows,
         config=scoring_config,
         expense_ratio_pct=expense_ratio_pct,
+        asset_class=asset_class,
+        fi_metrics=fi_adapter,
     )
     metrics["manager_score"] = round(score_val, 2)
     metrics["score_components"] = components
@@ -965,13 +1027,51 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                 for _, metrics in computed:
                     metrics["cvar_95_conditional"] = None
 
-            # Pass 1.7: compute manager_score from base metrics + momentum + config
+            # Pass 1.7: FI analytics (empirical duration, credit beta) for fixed_income funds
+            fi_fund_ids = {str(f.instrument_id) for f, _ in computed if f.asset_class == "fixed_income"}
+            if fi_fund_ids:
+                fi_config = FIRegressionConfig()
+                yield_changes = await _batch_fetch_macro_yield_changes(db, start_date, eval_date)
+                # Reuse dated_returns if already fetched for CVaR, else fetch now
+                if not stress_dates:
+                    dated_returns_by_fund = await _batch_fetch_dated_returns(
+                        db, all_fund_ids, return_type_by_fund, start_date, eval_date,
+                    )
+                for fund, metrics in computed:
+                    fid_str = str(fund.instrument_id)
+                    if fid_str not in fi_fund_ids:
+                        metrics["scoring_model"] = "equity"
+                        continue
+                    metrics["scoring_model"] = "fixed_income"
+                    fund_dated_returns = dated_returns_by_fund.get(fid_str, [])
+                    if not fund_dated_returns:
+                        continue
+                    fi_result = compute_fi_analytics(
+                        fund_dated_returns=fund_dated_returns,
+                        treasury_yield_changes=yield_changes.get("DGS10", []),
+                        credit_spread_changes=yield_changes.get("BAA10Y", []),
+                        max_drawdown_1y=metrics.get("max_drawdown_1y"),
+                        config=fi_config,
+                    )
+                    metrics["empirical_duration"] = round(fi_result.empirical_duration, 4) if fi_result.empirical_duration is not None else None
+                    metrics["empirical_duration_r2"] = round(fi_result.duration_r_squared, 4) if fi_result.duration_r_squared is not None else None
+                    metrics["credit_beta"] = round(fi_result.credit_beta, 4) if fi_result.credit_beta is not None else None
+                    metrics["credit_beta_r2"] = round(fi_result.credit_beta_r_squared, 4) if fi_result.credit_beta_r_squared is not None else None
+                    metrics["yield_proxy_12m"] = round(fi_result.yield_proxy_12m, 6) if fi_result.yield_proxy_12m is not None else None
+                    metrics["duration_adj_drawdown_1y"] = round(fi_result.duration_adj_drawdown, 6) if fi_result.duration_adj_drawdown is not None else None
+                logger.info("fi_analytics_computed", fi_funds=len(fi_fund_ids))
+            else:
+                for _, metrics in computed:
+                    metrics["scoring_model"] = "equity"
+
+            # Pass 1.8: compute manager_score from base metrics + momentum + config
             for fund, metrics in computed:
                 er = (fund.attributes or {}).get("expense_ratio_pct")
                 _score_metrics(
                     metrics,
                     scoring_config=scoring_config,
                     expense_ratio_pct=float(er) if er is not None else None,
+                    asset_class=fund.asset_class or "equity",
                 )
 
             # Pass 2: compute DTW drift scores per block (reuses DB session, no extra query per fund)
@@ -1146,7 +1246,44 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
                     for _, metrics in computed:
                         metrics["cvar_95_conditional"] = None
 
-                # Pass 1.7: compute manager_score from base metrics + momentum + expense ratio
+                # Pass 1.7: FI analytics for fixed_income funds in this batch
+                fi_fund_ids = {str(f.instrument_id) for f, _ in computed if f.asset_class == "fixed_income"}
+                if fi_fund_ids:
+                    fi_config = FIRegressionConfig()
+                    yield_changes = await _batch_fetch_macro_yield_changes(db, start_date, eval_date)
+                    # Reuse dated_returns if already fetched for CVaR, else fetch now
+                    if not stress_dates:
+                        dated_returns_by_fund = await _batch_fetch_dated_returns(
+                            db, batch_ids, return_type_by_fund, start_date, eval_date,
+                        )
+                    for fund, metrics in computed:
+                        fid_str = str(fund.instrument_id)
+                        if fid_str not in fi_fund_ids:
+                            metrics["scoring_model"] = "equity"
+                            continue
+                        metrics["scoring_model"] = "fixed_income"
+                        fund_dated_returns = dated_returns_by_fund.get(fid_str, [])
+                        if not fund_dated_returns:
+                            continue
+                        fi_result = compute_fi_analytics(
+                            fund_dated_returns=fund_dated_returns,
+                            treasury_yield_changes=yield_changes.get("DGS10", []),
+                            credit_spread_changes=yield_changes.get("BAA10Y", []),
+                            max_drawdown_1y=metrics.get("max_drawdown_1y"),
+                            config=fi_config,
+                        )
+                        metrics["empirical_duration"] = round(fi_result.empirical_duration, 4) if fi_result.empirical_duration is not None else None
+                        metrics["empirical_duration_r2"] = round(fi_result.duration_r_squared, 4) if fi_result.duration_r_squared is not None else None
+                        metrics["credit_beta"] = round(fi_result.credit_beta, 4) if fi_result.credit_beta is not None else None
+                        metrics["credit_beta_r2"] = round(fi_result.credit_beta_r_squared, 4) if fi_result.credit_beta_r_squared is not None else None
+                        metrics["yield_proxy_12m"] = round(fi_result.yield_proxy_12m, 6) if fi_result.yield_proxy_12m is not None else None
+                        metrics["duration_adj_drawdown_1y"] = round(fi_result.duration_adj_drawdown, 6) if fi_result.duration_adj_drawdown is not None else None
+                    logger.info("fi_analytics_computed", fi_funds=len(fi_fund_ids), batch_start=batch_start)
+                else:
+                    for _, metrics in computed:
+                        metrics["scoring_model"] = "equity"
+
+                # Pass 1.8: compute manager_score from base metrics + momentum + expense ratio
                 # Batch-fetch expense ratios from mv_unified_funds via ticker
                 batch_tickers = [f.ticker for f in batch if f.ticker]
                 er_map: dict[str, float] = {}
@@ -1163,7 +1300,11 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
 
                 for fund, metrics in computed:
                     er = er_map.get(fund.ticker) if fund.ticker else None
-                    _score_metrics(metrics, expense_ratio_pct=er)
+                    _score_metrics(
+                        metrics,
+                        expense_ratio_pct=er,
+                        asset_class=fund.asset_class or "equity",
+                    )
 
                 # Upsert batch — no DTW drift, no org_id
                 try:
