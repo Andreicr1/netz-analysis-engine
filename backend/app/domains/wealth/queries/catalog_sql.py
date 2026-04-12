@@ -102,6 +102,43 @@ sec_money_market_funds = Table(
     Column("net_assets", Numeric),
 )
 
+# Phase 3 — reflected views for screener fast path
+mv_fund_risk_latest = Table(
+    "mv_fund_risk_latest",
+    _meta,
+    Column("instrument_id", Text, primary_key=True),
+    Column("calc_date", Date),
+    Column("manager_score", Numeric),
+    Column("sharpe_1y", Numeric),
+    Column("sortino_1y", Numeric),
+    Column("volatility_1y", Numeric),
+    Column("volatility_garch", Numeric),
+    Column("cvar_95_12m", Numeric),
+    Column("cvar_95_conditional", Numeric),
+    Column("max_drawdown_1y", Numeric),
+    Column("return_1y", Numeric),
+    Column("blended_momentum_score", Numeric),
+    Column("peer_strategy_label", Text),
+    Column("peer_sharpe_pctl", Numeric),
+    Column("peer_sortino_pctl", Numeric),
+    Column("peer_return_pctl", Numeric),
+    Column("peer_drawdown_pctl", Numeric),
+    Column("peer_count", Integer),
+    Column("elite_flag", Boolean),
+    Column("elite_rank_within_strategy", Integer),
+    Column("elite_target_count_per_strategy", Integer),
+)
+
+v_screener_org_membership = Table(
+    "v_screener_org_membership",
+    _meta,
+    Column("instrument_id", Text, primary_key=True),
+    Column("organization_id", Text),
+    Column("block_id", Text),
+    Column("approval_status", Text),
+    Column("selected_at", Date),
+)
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  Text search escaping
 # ═══════════════════════════════════════════════════════════════════════════
@@ -195,10 +232,51 @@ _SORT_MAP = {
 }
 
 
-def _build_base_stmt(f: CatalogFilters) -> Select[Any]:
-    """Build the base select with all filters applied to the view."""
-    stmt = select(mv_unified_funds)
-    
+def _build_base_stmt(f: CatalogFilters, *, include_risk_membership: bool = False) -> Select[Any]:
+    """Build the base select with all filters applied to the view.
+
+    When ``include_risk_membership`` is True, LEFT JOINs
+    ``instruments_universe`` (bridge), ``mv_fund_risk_latest`` and
+    ``v_screener_org_membership`` so the catalog response includes
+    ELITE flag, risk metrics, and org-membership data in a single
+    query. The bridge join uses ``(ticker OR isin)`` to resolve the
+    UUID ``instrument_id`` that the two Phase 2 views key on.
+    """
+    if include_risk_membership:
+        # Bridge: mv_unified_funds → instruments_universe → risk MV + membership view
+        stmt = (
+            select(
+                mv_unified_funds,
+                instruments_universe.c.instrument_id.label("iu_instrument_id"),
+                mv_fund_risk_latest.c.elite_flag,
+                mv_fund_risk_latest.c.elite_rank_within_strategy,
+                mv_fund_risk_latest.c.manager_score,
+                mv_fund_risk_latest.c.sharpe_1y,
+                mv_fund_risk_latest.c.max_drawdown_1y,
+                mv_fund_risk_latest.c.return_1y,
+                mv_fund_risk_latest.c.blended_momentum_score,
+                v_screener_org_membership.c.approval_status.label("org_approval_status"),
+                v_screener_org_membership.c.block_id.label("org_block_id"),
+            )
+            .outerjoin(
+                instruments_universe,
+                or_(
+                    instruments_universe.c.ticker == mv_unified_funds.c.ticker,
+                    instruments_universe.c.isin == mv_unified_funds.c.isin,
+                ),
+            )
+            .outerjoin(
+                mv_fund_risk_latest,
+                mv_fund_risk_latest.c.instrument_id == instruments_universe.c.instrument_id,
+            )
+            .outerjoin(
+                v_screener_org_membership,
+                v_screener_org_membership.c.instrument_id == instruments_universe.c.instrument_id,
+            )
+        )
+    else:
+        stmt = select(mv_unified_funds)
+
     conditions: list[ColumnElement[bool]] = []
 
     # 0. Exact external_id match (for detail lookups — bypasses text search)
@@ -327,12 +405,16 @@ def _build_base_stmt(f: CatalogFilters) -> Select[Any]:
 def build_catalog_query(filters: CatalogFilters) -> Select[Any] | None:
     """Build paginated query from mv_unified_funds.
 
+    Joins mv_fund_risk_latest + v_screener_org_membership via the
+    instruments_universe bridge table so the response includes ELITE
+    flag, risk metrics, and org-membership data in a single round-trip.
+
     Series dedup: for registered_us funds with a ``series_id``, only the
     share class with the lowest ``expense_ratio_pct`` is returned.  A
     ``class_count`` window column tells the frontend how many share classes
     exist for that series.
     """
-    base = _build_base_stmt(filters)
+    base = _build_base_stmt(filters, include_risk_membership=True)
 
     # ── Series dedup via ROW_NUMBER ──
     # Partition key: series_id when present, else external_id (1:1 for
