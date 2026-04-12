@@ -99,6 +99,7 @@ def _fit_markov_regime(vix_series: list[float]) -> list[float] | None:
     """
     try:
         import warnings
+
         from statsmodels.tsa.regime_switching.markov_regression import MarkovRegression
     except ImportError:
         logger.error(

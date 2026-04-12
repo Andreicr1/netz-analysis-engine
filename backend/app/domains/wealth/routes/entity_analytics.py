@@ -565,7 +565,10 @@ async def get_entity_analytics(
 
                     summary_raw = await db.run_sync(fetch_insider_summary)
                     if summary_raw:
-                        from app.domains.wealth.schemas.entity_analytics import InsiderData, InsiderSummary
+                        from app.domains.wealth.schemas.entity_analytics import (
+                            InsiderData,
+                            InsiderSummary,
+                        )
                         insider_data = InsiderData(
                             insider_sentiment_score=summary_raw.get("score"),
                             insider_summary=InsiderSummary(
