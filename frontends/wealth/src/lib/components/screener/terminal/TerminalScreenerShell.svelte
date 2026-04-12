@@ -73,6 +73,7 @@
 		avg_annual_return_10y: number | null;
 		elite_flag: boolean | null;
 		in_universe: boolean;
+		approval_status?: string | null;
 		disclosure?: { nav_status?: string | null };
 	}
 
@@ -107,6 +108,8 @@
 			navStatus: raw.disclosure?.nav_status ?? null,
 			eliteFlag: raw.elite_flag === true,
 			inUniverse: raw.in_universe === true,
+			approvalStatus: raw.approval_status ?? null,
+			universe: raw.universe,
 		};
 	}
 
@@ -116,6 +119,7 @@
 	let loading = $state(false);
 	let errorMessage = $state<string | null>(null);
 	let selectedId = $state<string | null>(null);
+	let highlightedIndex = $state(-1);
 
 	const selectedAsset = $derived<ScreenerAsset | null>(
 		assets.find((a) => a.id === selectedId) ?? null,
@@ -181,25 +185,173 @@
 	function handleSelect(asset: ScreenerAsset) {
 		selectedId = asset.id;
 	}
+
+	function handleHighlight(index: number) {
+		highlightedIndex = index;
+	}
+
+	// ── Action handlers (approve / DD queue) ────────────
+	let toastMessage = $state<{ text: string; type: "success" | "warn" | "info" } | null>(null);
+	let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function showToast(text: string, type: "success" | "warn" | "info") {
+		toastMessage = { text, type };
+		if (toastTimer) clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => { toastMessage = null; }, 3000);
+	}
+
+	async function handleApprove(asset: ScreenerAsset) {
+		if (!asset.instrumentId) {
+			showToast("Fund not yet in instruments universe", "warn");
+			return;
+		}
+		try {
+			const resp = await api.post<{ approved: string[]; rejected_dd_required: string[] }>(
+				"/universe/fast-approve",
+				{ instrument_ids: [asset.instrumentId] },
+			);
+			if (resp.rejected_dd_required.length > 0) {
+				showToast("DD report required for this fund type", "warn");
+				return;
+			}
+			showToast("Fund approved to universe", "success");
+			// Update locally
+			const idx = assets.findIndex((a) => a.id === asset.id);
+			if (idx >= 0) {
+				assets[idx] = { ...assets[idx], inUniverse: true } as ScreenerAsset;
+			}
+		} catch {
+			showToast("Failed to approve fund", "warn");
+		}
+	}
+
+	// ── DataGrid ref for scrollToIndex ──────────────────
+	let dataGridRef: TerminalDataGrid | undefined = $state();
+	let filtersEl: HTMLDivElement | undefined = $state();
+	let rootEl: HTMLDivElement | undefined = $state();
+
+	// ── Keyboard shortcuts ──────────────────────────────
+	function handleKeydown(e: KeyboardEvent) {
+		// Don't fire when typing in inputs
+		const target = e.target as HTMLElement;
+		if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT") {
+			if (e.key === "Escape") {
+				target.blur();
+				e.preventDefault();
+			}
+			return;
+		}
+
+		switch (e.key) {
+			case "/": {
+				e.preventDefault();
+				// Focus first interactive element in filter panel
+				const input = filtersEl?.querySelector("input, button");
+				if (input instanceof HTMLElement) input.focus();
+				break;
+			}
+			case "ArrowDown": {
+				e.preventDefault();
+				const next = Math.min(highlightedIndex + 1, assets.length - 1);
+				highlightedIndex = next;
+				dataGridRef?.scrollToIndex(next);
+				break;
+			}
+			case "ArrowUp": {
+				e.preventDefault();
+				const prev = Math.max(highlightedIndex - 1, 0);
+				highlightedIndex = prev;
+				dataGridRef?.scrollToIndex(prev);
+				break;
+			}
+			case "Enter": {
+				if (highlightedIndex >= 0 && highlightedIndex < assets.length) {
+					const asset = assets[highlightedIndex];
+					if (asset) {
+						selectedId = asset.id;
+						// Dispatch focustrigger event for FocusMode (bubbles to page)
+						rootEl?.dispatchEvent(
+							new CustomEvent("focustrigger", {
+								bubbles: true,
+								detail: { entityKind: "fund", entityId: asset.id, entityLabel: asset.name },
+							}),
+						);
+					}
+				}
+				break;
+			}
+			case "u": {
+				if (highlightedIndex >= 0 && highlightedIndex < assets.length) {
+					const asset = assets[highlightedIndex];
+					if (asset && !asset.inUniverse && asset.approvalStatus !== "pending") {
+						handleApprove(asset);
+					}
+				}
+				break;
+			}
+			case "d": {
+				if (highlightedIndex >= 0 && highlightedIndex < assets.length) {
+					const asset = assets[highlightedIndex];
+					if (asset && !asset.inUniverse && asset.approvalStatus !== "pending") {
+						handleQueueDD(asset);
+					}
+				}
+				break;
+			}
+			case "e": {
+				e.preventDefault();
+				onFiltersChange({ ...filters, eliteOnly: !filters.eliteOnly });
+				break;
+			}
+		}
+	}
+
+	async function handleQueueDD(asset: ScreenerAsset) {
+		if (!asset.instrumentId) {
+			showToast("Fund not yet in instruments universe", "warn");
+			return;
+		}
+		try {
+			await api.post("/dd-reports/funds/" + asset.instrumentId);
+			showToast("DD report queued", "info");
+			// Update locally
+			const idx = assets.findIndex((a) => a.id === asset.id);
+			if (idx >= 0) {
+				assets[idx] = { ...assets[idx], approvalStatus: "pending" } as ScreenerAsset;
+			}
+		} catch {
+			showToast("Failed to queue DD report", "warn");
+		}
+	}
 </script>
 
-<div class="ts-root">
-	<div class="ts-zone ts-filters" aria-label="Screener filters">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="ts-root" onkeydown={handleKeydown} bind:this={rootEl}>
+	<div class="ts-zone ts-filters" aria-label="Screener filters" bind:this={filtersEl}>
 		<TerminalScreenerFilters {filters} {onFiltersChange} />
 	</div>
 	<div class="ts-zone ts-datagrid" aria-label="Instrument data grid">
 		<TerminalDataGrid
+			bind:this={dataGridRef}
 			{assets}
 			{total}
 			{loading}
 			{errorMessage}
 			{selectedId}
+			{highlightedIndex}
 			onSelect={handleSelect}
+			onHighlight={handleHighlight}
+			onApprove={handleApprove}
+			onQueueDD={handleQueueDD}
 		/>
 	</div>
 	<div class="ts-zone ts-stats" aria-label="Quick stats">
 		<TerminalScreenerQuickStats asset={selectedAsset} />
 	</div>
+
+	{#if toastMessage}
+		<div class="ts-toast ts-toast--{toastMessage.type}">{toastMessage.text}</div>
+	{/if}
 </div>
 
 <style>
@@ -225,4 +377,23 @@
 	.ts-filters { grid-area: filters; }
 	.ts-datagrid { grid-area: datagrid; }
 	.ts-stats { grid-area: stats; }
+
+	/* ── Toast ────────────────────────────────────────── */
+	.ts-toast {
+		position: absolute;
+		bottom: 16px;
+		left: 50%;
+		transform: translateX(-50%);
+		padding: 6px 16px;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		background: #0d1220;
+		z-index: 10;
+	}
+	.ts-toast--success { color: #22c55e; border-color: rgba(34, 197, 94, 0.3); }
+	.ts-toast--warn { color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
+	.ts-toast--info { color: #2d7ef7; border-color: rgba(45, 126, 247, 0.3); }
 </style>
