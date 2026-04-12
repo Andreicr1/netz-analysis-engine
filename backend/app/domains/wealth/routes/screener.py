@@ -1672,7 +1672,13 @@ async def get_catalog(
                 investor_count=r.investor_count,
                 vintage_year=getattr(r, "vintage_year", None),
                 expense_ratio_pct=float(r.expense_ratio_pct) if getattr(r, "expense_ratio_pct", None) is not None else None,
-                avg_annual_return_1y=float(r.avg_annual_return_1y) if getattr(r, "avg_annual_return_1y", None) is not None else None,
+                # 1Y return: prefer mv_fund_risk_latest.return_1y (computed, 96% coverage)
+                # over mv_unified_funds.avg_annual_return_1y (XBRL prospectus, currently all NULL).
+                avg_annual_return_1y=(
+                    float(r.return_1y) if getattr(r, "return_1y", None) is not None
+                    else float(r.avg_annual_return_1y) if getattr(r, "avg_annual_return_1y", None) is not None
+                    else None
+                ),
                 avg_annual_return_10y=float(r.avg_annual_return_10y) if getattr(r, "avg_annual_return_10y", None) is not None else None,
                 class_count=int(r.class_count) if getattr(r, "class_count", None) is not None else 1,
                 is_index=bool(r.is_index) if getattr(r, "is_index", None) is not None else None,
@@ -1683,6 +1689,7 @@ async def get_catalog(
                 # Phase 3: ELITE ranking from mv_fund_risk_latest
                 elite_flag=bool(r.elite_flag) if getattr(r, "elite_flag", None) is not None else None,
                 elite_rank_within_strategy=getattr(r, "elite_rank_within_strategy", None),
+                manager_score=float(r.manager_score) if getattr(r, "manager_score", None) is not None else None,
                 # Phase 3: org membership from v_screener_org_membership
                 in_universe=(org_approval == "approved"),
                 approval_status=org_approval,

@@ -71,6 +71,7 @@
 		avg_annual_return_1y: number | null;
 		avg_annual_return_10y: number | null;
 		elite_flag: boolean | null;
+		manager_score: number | null;
 		in_universe: boolean;
 		approval_status?: string | null;
 		disclosure?: { nav_status?: string | null };
@@ -100,9 +101,10 @@
 			managerName: raw.manager_name,
 			managerId: raw.manager_id,
 			aum: raw.aum,
-			expenseRatioPct: raw.expense_ratio_pct,
-			ret1y: raw.avg_annual_return_1y,
-			ret10y: raw.avg_annual_return_10y,
+			expenseRatioPct: raw.expense_ratio_pct != null ? raw.expense_ratio_pct * 100 : null,
+			ret1y: raw.avg_annual_return_1y != null ? raw.avg_annual_return_1y * 100 : null,
+			ret10y: raw.avg_annual_return_10y != null ? raw.avg_annual_return_10y * 100 : null,
+			managerScore: raw.manager_score,
 			inceptionDate: raw.inception_date,
 			isin: raw.isin,
 			navStatus: raw.disclosure?.nav_status ?? null,

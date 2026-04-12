@@ -24,9 +24,10 @@
 		managerName: string | null;
 		managerId: string | null;
 		aum: number | null;
-		expenseRatioPct: number | null;
-		ret1y: number | null;
-		ret10y: number | null;
+		expenseRatioPct: number | null;  // Already in human % (0.85 = 0.85%)
+		ret1y: number | null;            // Already in human % (5.0 = 5%)
+		ret10y: number | null;           // Already in human % (8.0 = 8%)
+		managerScore: number | null;     // Composite score 0-100
 		inceptionDate: string | null;
 		isin: string | null;
 		navStatus: string | null;   // available | pending_import | unavailable | null
@@ -261,46 +262,9 @@
 		};
 	}
 
-	// Fetch sparklines for visible rows (debounced 150ms)
-	$effect(() => {
-		const ids = visibleAssets
-			.map((a) => a.instrumentId)
-			.filter((id): id is string => id != null);
-
-		// Deduplicate against already-cached IDs
-		const uncachedIds = ids.filter((id) => !sparklineCache.has(id));
-		const key = uncachedIds.sort().join(",");
-		if (!key || key === lastFetchedIds) return;
-
-		if (sparklineDebounce) clearTimeout(sparklineDebounce);
-		sparklineDebounce = setTimeout(async () => {
-			lastFetchedIds = key;
-			try {
-				const resp = await api.post<Record<string, SparklinePoint[]>>(
-					"/screener/sparklines",
-					{ instrument_ids: uncachedIds },
-				);
-				const next = new Map(sparklineCache);
-				for (const [id, points] of Object.entries(resp)) {
-					next.set(id, points.map((p) => p.nav_close));
-				}
-				sparklineCache = next;
-			} catch {
-				// Silently ignore — sparklines are non-critical
-			}
-		}, 150);
-
-		return () => {
-			if (sparklineDebounce) clearTimeout(sparklineDebounce);
-		};
-	});
-
-	// Clear sparkline cache on filter change (generation reset), not on append
-	$effect(() => {
-		void fetchGeneration;
-		sparklineCache = new Map();
-		lastFetchedIds = "";
-	});
+	// Sparkline batch fetch removed from DataGrid — SCORE column replaced
+	// sparkline rendering. The drawSparkline() function and sparklineAction()
+	// are kept for other consumers (FocusMode vitrine, portfolio workbench).
 </script>
 
 <div class="dg-root">
@@ -315,7 +279,7 @@
 		<span class="dg-th dg-col-ret dg-right">1Y Ret</span>
 		<span class="dg-th dg-col-ret dg-right">10Y Ret</span>
 		<span class="dg-th dg-col-er dg-right">ER%</span>
-		<span class="dg-th dg-col-spark">Trend</span>
+		<span class="dg-th dg-col-score dg-right">Score</span>
 		<span class="dg-th dg-col-action dg-center">Action</span>
 	</div>
 
@@ -364,18 +328,13 @@
 						<span class="dg-td dg-col-aum dg-right dg-num">{fmtAum(asset.aum)}</span>
 						<span class="dg-td dg-col-ret dg-right dg-num {retClass(asset.ret1y)}">{fmtPct(asset.ret1y)}</span>
 						<span class="dg-td dg-col-ret dg-right dg-num {retClass(asset.ret10y)}">{fmtPct(asset.ret10y)}</span>
-						<span class="dg-td dg-col-er dg-right dg-num">{fmtNum(asset.expenseRatioPct)}</span>
-						<span class="dg-td dg-col-spark">
-							{#if asset.instrumentId && sparklineCache.has(asset.instrumentId)}
-								<canvas
-									class="dg-sparkline"
-									width={SPARKLINE_W}
-									height={SPARKLINE_H}
-									use:sparklineAction={asset.instrumentId}
-								></canvas>
-							{:else}
-								<span class="dg-spark-empty">{"\u2014"}</span>
-							{/if}
+						<span class="dg-td dg-col-er dg-right dg-num">{fmtPct(asset.expenseRatioPct)}</span>
+						<span class="dg-td dg-col-score dg-right dg-num"
+							class:score-high={asset.managerScore != null && asset.managerScore >= 70}
+							class:score-mid={asset.managerScore != null && asset.managerScore >= 40 && asset.managerScore < 70}
+							class:score-low={asset.managerScore != null && asset.managerScore < 40}
+						>
+							{asset.managerScore != null ? fmtNum(asset.managerScore, 1) : "\u2014"}
 						</span>
 						<span class="dg-td dg-col-action dg-center">
 							{#if asset.inUniverse}
@@ -473,7 +432,7 @@
 			60px                  /* 1y ret — right-aligned */
 			60px                  /* 10y ret — right-aligned */
 			48px                  /* er% — right-aligned */
-			50px                  /* sparkline — 48px canvas + border */
+			56px                  /* score — right-aligned numeral */
 			72px;                 /* action — APPROVE/+DD button */
 		column-gap: 2px;
 		align-items: center;
@@ -615,6 +574,11 @@
 
 	.pos { color: #22c55e; }
 	.neg { color: #ef4444; }
+
+	/* Score color coding */
+	.score-high { color: #22c55e; }
+	.score-mid { color: #f59e0b; }
+	.score-low { color: #ef4444; }
 
 	.dg-empty {
 		padding: 32px;
