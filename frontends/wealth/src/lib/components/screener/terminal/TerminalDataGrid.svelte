@@ -38,12 +38,19 @@
 </script>
 
 <script lang="ts">
+	import { getContext } from "svelte";
 	import { formatNumber } from "@investintell/ui";
 	import { sandboxBasket } from "$lib/stores/sandbox.svelte";
 	import { focusTrigger } from "$lib/components/terminal/focus-mode/focus-trigger";
+	import { createClientApiClient } from "$lib/api/client";
 
 	const ROW_HEIGHT = 32;
 	const OVERSCAN = 5;
+	const SPARKLINE_W = 48;
+	const SPARKLINE_H = 16;
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const api = createClientApiClient(getToken);
 
 	interface Props {
 		assets: ScreenerAsset[];
@@ -148,6 +155,108 @@
 		if (v < 0) return "neg";
 		return "";
 	}
+
+	// ── Sparkline rendering ────────────────────────────
+	interface SparklinePoint {
+		month: string;
+		nav_close: number;
+	}
+
+	let sparklineCache = $state(new Map<string, number[]>());
+	let sparklineDebounce: ReturnType<typeof setTimeout> | null = null;
+	let lastFetchedIds = "";
+
+	function drawSparkline(canvas: HTMLCanvasElement, values: number[]) {
+		const ctx = canvas.getContext("2d");
+		if (!ctx || values.length < 2) return;
+
+		const dpr = window.devicePixelRatio || 1;
+		canvas.width = SPARKLINE_W * dpr;
+		canvas.height = SPARKLINE_H * dpr;
+		ctx.scale(dpr, dpr);
+		ctx.clearRect(0, 0, SPARKLINE_W, SPARKLINE_H);
+
+		const min = Math.min(...values);
+		const max = Math.max(...values);
+		const range = max - min || 1;
+		const step = SPARKLINE_W / (values.length - 1);
+
+		// Color: green if positive trend, red if negative
+		const last = values[values.length - 1] ?? 0;
+		const first = values[0] ?? 0;
+		const delta = last - first;
+		ctx.strokeStyle = delta > 0 ? "#22c55e" : delta < 0 ? "#ef4444" : "#5a6577";
+		ctx.lineWidth = 1;
+		ctx.beginPath();
+		for (let i = 0; i < values.length; i++) {
+			const x = Math.round(i * step);
+			const v = values[i] ?? 0;
+			const y = Math.round(SPARKLINE_H - ((v - min) / range) * (SPARKLINE_H - 2) - 1);
+			if (i === 0) ctx.moveTo(x, y);
+			else ctx.lineTo(x, y);
+		}
+		ctx.stroke();
+	}
+
+	// Sparkline use:action for canvas elements
+	function sparklineAction(canvas: HTMLCanvasElement, instrumentId: string | null) {
+		function render() {
+			if (!instrumentId) return;
+			const values = sparklineCache.get(instrumentId);
+			if (values && values.length >= 2) {
+				drawSparkline(canvas, values);
+			}
+		}
+		render();
+		return {
+			update(newId: string | null) {
+				instrumentId = newId;
+				render();
+			},
+			destroy() {},
+		};
+	}
+
+	// Fetch sparklines for visible rows (debounced 150ms)
+	$effect(() => {
+		const ids = visibleAssets
+			.map((a) => a.instrumentId)
+			.filter((id): id is string => id != null);
+
+		// Deduplicate against already-cached IDs
+		const uncachedIds = ids.filter((id) => !sparklineCache.has(id));
+		const key = uncachedIds.sort().join(",");
+		if (!key || key === lastFetchedIds) return;
+
+		if (sparklineDebounce) clearTimeout(sparklineDebounce);
+		sparklineDebounce = setTimeout(async () => {
+			lastFetchedIds = key;
+			try {
+				const resp = await api.post<Record<string, SparklinePoint[]>>(
+					"/screener/sparklines",
+					{ instrument_ids: uncachedIds },
+				);
+				const next = new Map(sparklineCache);
+				for (const [id, points] of Object.entries(resp)) {
+					next.set(id, points.map((p) => p.nav_close));
+				}
+				sparklineCache = next;
+			} catch {
+				// Silently ignore — sparklines are non-critical
+			}
+		}, 150);
+
+		return () => {
+			if (sparklineDebounce) clearTimeout(sparklineDebounce);
+		};
+	});
+
+	// Clear sparkline cache on filter change (assets reference changes)
+	$effect(() => {
+		void assets;
+		sparklineCache = new Map();
+		lastFetchedIds = "";
+	});
 </script>
 
 <div class="dg-root">
@@ -210,7 +319,16 @@
 						<span class="dg-td dg-col-ret dg-right dg-num {retClass(asset.ret10y)}">{fmtPct(asset.ret10y)}</span>
 						<span class="dg-td dg-col-er dg-right dg-num">{fmtNum(asset.expenseRatioPct)}</span>
 						<span class="dg-td dg-col-spark">
-							<!-- Sparkline canvas placeholder — wired in commit 2 -->
+							{#if asset.instrumentId && sparklineCache.has(asset.instrumentId)}
+								<canvas
+									class="dg-sparkline"
+									width={SPARKLINE_W}
+									height={SPARKLINE_H}
+									use:sparklineAction={asset.instrumentId}
+								></canvas>
+							{:else}
+								<span class="dg-spark-empty">{"\u2014"}</span>
+							{/if}
 						</span>
 						<span class="dg-td dg-col-action dg-center">
 							<button
@@ -400,6 +518,18 @@
 		color: #5a6577;
 		font-size: 11px;
 		font-style: italic;
+	}
+
+	/* ── Sparkline ───────────────────────────────────── */
+	.dg-sparkline {
+		display: block;
+		width: 48px;
+		height: 16px;
+	}
+
+	.dg-spark-empty {
+		color: #5a6577;
+		font-size: 10px;
 	}
 
 	/* ── Badges ──────────────────────────────────────── */
