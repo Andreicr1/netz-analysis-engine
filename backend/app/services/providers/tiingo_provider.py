@@ -18,6 +18,7 @@ Both endpoints are bounded by the institutional plan rate limit (10k req/h).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date, datetime, timezone
 from typing import Any
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 TIINGO_BASE_URL = "https://api.tiingo.com"
 DEFAULT_TIMEOUT = 10.0
+BATCH_CONCURRENCY = 100
 
 
 class TiingoProvider:
@@ -41,10 +43,15 @@ class TiingoProvider:
     auth failures).
     """
 
-    def __init__(self, api_key: str | None = None, timeout: float = DEFAULT_TIMEOUT) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        timeout: float = DEFAULT_TIMEOUT,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
         self._api_key = api_key or settings.tiingo_api_key
         self._timeout = timeout
-        self._client = httpx.AsyncClient(
+        self._client = http_client or httpx.AsyncClient(
             timeout=self._timeout,
             limits=httpx.Limits(max_keepalive_connections=20, max_connections=100)
         )
@@ -193,6 +200,49 @@ class TiingoProvider:
             return []
 
         return [self._normalize_bar(item) for item in payload]
+
+    async def fetch_historical_daily_batch(
+        self,
+        tickers: list[str],
+        start_date: date | None = None,
+        end_date: date | None = None,
+        concurrency: int = BATCH_CONCURRENCY,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Fetch EOD history for many tickers in parallel.
+
+        Tiingo Premium has no hard rate limit, but unbounded fan-out still
+        exhausts local sockets and httpx keepalive pools. A Semaphore bounds
+        concurrent in-flight requests. Each call goes through
+        ``fetch_historical_daily``, so 401/404 still degrade to empty list
+        per ticker instead of raising.
+
+        Returns a dict mapping ticker (upper-case) -> normalized bar list.
+        Tickers with no data are omitted — callers must handle missing keys.
+        """
+        if not tickers:
+            return {}
+
+        sem = asyncio.Semaphore(max(1, concurrency))
+
+        async def _one(ticker: str) -> tuple[str, list[dict[str, Any]]]:
+            async with sem:
+                bars = await self.fetch_historical_daily(ticker, start_date, end_date)
+                return ticker.strip().upper(), bars
+
+        results = await asyncio.gather(
+            *(_one(t) for t in tickers if t and t.strip()),
+            return_exceptions=True,
+        )
+
+        out: dict[str, list[dict[str, Any]]] = {}
+        for item in results:
+            if isinstance(item, BaseException):
+                logger.warning("tiingo_batch_task_failed error=%s", item)
+                continue
+            ticker_key, bars = item
+            if bars:
+                out[ticker_key] = bars
+        return out
 
     async def fetch_historical_intraday(
         self,
