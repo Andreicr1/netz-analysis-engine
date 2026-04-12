@@ -28,7 +28,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import structlog
-from sqlalchemy import func, text
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -169,7 +169,17 @@ async def _cleanup_legacy_source_types(db: AsyncSession) -> None:
 
 
 async def _batch_upsert(db: AsyncSession, rows: list[dict]) -> None:
-    """Upsert into wealth_vector_chunks with ON CONFLICT DO UPDATE."""
+    """Upsert into wealth_vector_chunks via DELETE-BY-ID + INSERT.
+
+    wealth_vector_chunks is a TimescaleDB hypertable partitioned on
+    ``updated_at`` (migration 0114). TimescaleDB forbids unique
+    indexes that do not include the partitioning column, so the
+    table no longer has a unique constraint on ``id`` and
+    ``ON CONFLICT (id) DO UPDATE`` is not usable. The logical
+    ``one row per id`` invariant is preserved by deleting any
+    existing row(s) with matching ids before inserting fresh ones,
+    all inside a single transaction for atomicity.
+    """
     # Deduplicate by id within the batch (last wins) to prevent
     # CardinalityViolationError from JOINs that multiply rows.
     seen: dict[str, int] = {}
@@ -180,17 +190,15 @@ async def _batch_upsert(db: AsyncSession, rows: list[dict]) -> None:
 
     for i in range(0, len(rows), UPSERT_BATCH_SIZE):
         chunk = rows[i : i + UPSERT_BATCH_SIZE]
-        stmt = pg_insert(WealthVectorChunk.__table__).values(chunk)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["id"],
-            set_={
-                "content": stmt.excluded.content,
-                "embedding": stmt.excluded.embedding,
-                "embedding_model": stmt.excluded.embedding_model,
-                "embedded_at": stmt.excluded.embedded_at,
-                "updated_at": func.now(),
-            },
+        for row in chunk:
+            row.setdefault("updated_at", datetime.now(tz=timezone.utc))
+
+        ids = [row["id"] for row in chunk]
+        await db.execute(
+            text("DELETE FROM wealth_vector_chunks WHERE id = ANY(:ids)"),
+            {"ids": ids},
         )
+        stmt = pg_insert(WealthVectorChunk.__table__).values(chunk)
         await db.execute(stmt)
     await db.commit()
 
