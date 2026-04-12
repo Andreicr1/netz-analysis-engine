@@ -82,6 +82,7 @@
 		page: number;
 		page_size: number;
 		has_next: boolean;
+		next_cursor: string | null;
 	}
 
 	function toAsset(raw: UnifiedFundItem): ScreenerAsset {
@@ -119,6 +120,12 @@
 	let errorMessage = $state<string | null>(null);
 	let selectedId = $state<string | null>(null);
 	let highlightedIndex = $state(-1);
+
+	// ── Infinite scroll state ────────────────────────────
+	let nextCursor = $state<string | null>(null);
+	let isLoadingMore = $state(false);
+	/** Generation counter — increments on every fresh fetch (filter change). */
+	let fetchGeneration = $state(0);
 
 
 	// ── Query builder ──────────────���────────────────────
@@ -159,12 +166,17 @@
 			const fetchId = ++currentFetchId;
 			loading = true;
 			errorMessage = null;
+			// Reset infinite scroll state on fresh fetch
+			nextCursor = null;
+			isLoadingMore = false;
+			fetchGeneration++;
 
 			try {
 				const page = await api.get<UnifiedCatalogPage>("/screener/catalog", snapshot);
 				if (fetchId !== currentFetchId) return; // stale
 				assets = page.items.map(toAsset);
 				total = page.total;
+				nextCursor = page.next_cursor;
 
 				// Drop selection if it fell out of the current result set
 				if (selectedId && !assets.some((a) => a.id === selectedId)) {
@@ -174,6 +186,7 @@
 				if (fetchId !== currentFetchId) return;
 				assets = [];
 				total = 0;
+				nextCursor = null;
 				const raw = err instanceof Error ? err.message : "Failed to load catalog";
 				// Truncate verbose backend tracebacks to first meaningful line
 				const firstLine = raw.split("\n")[0] ?? raw;
@@ -187,6 +200,27 @@
 			if (debounceHandle) clearTimeout(debounceHandle);
 		};
 	});
+
+	// ── Infinite scroll: load next page ─────────────────
+	async function loadMore() {
+		if (!nextCursor || isLoadingMore || loading) return;
+		isLoadingMore = true;
+		try {
+			const snapshot = buildQuery(filters);
+			snapshot.cursor = nextCursor;
+			delete snapshot.page; // keyset mode — no offset
+			const page = await api.get<UnifiedCatalogPage>("/screener/catalog", snapshot);
+			const newAssets = page.items.map(toAsset);
+			assets = [...assets, ...newAssets];
+			// Keep the initial total (page 1) — keyset cursor changes the
+			// windowed count on subsequent pages due to WHERE clause shift.
+			nextCursor = page.next_cursor;
+		} catch {
+			// Non-fatal: user can keep scrolling to retry
+		} finally {
+			isLoadingMore = false;
+		}
+	}
 
 	function handleSelect(asset: ScreenerAsset) {
 		selectedId = asset.id;
@@ -362,10 +396,14 @@
 					errorMessage={null}
 					{selectedId}
 					{highlightedIndex}
+					{isLoadingMore}
+					hasMore={nextCursor !== null}
+					{fetchGeneration}
 					onSelect={handleSelect}
 					onHighlight={handleHighlight}
 					onApprove={handleApprove}
 					onQueueDD={handleQueueDD}
+					onLoadMore={loadMore}
 				/>
 				{#snippet failed(error, reset)}
 					<div class="sep-panel">

@@ -58,10 +58,14 @@
 		errorMessage: string | null;
 		selectedId: string | null;
 		highlightedIndex: number;
+		isLoadingMore: boolean;
+		hasMore: boolean;
+		fetchGeneration: number;
 		onSelect: (asset: ScreenerAsset) => void;
 		onHighlight: (index: number) => void;
 		onApprove: (asset: ScreenerAsset) => Promise<void>;
 		onQueueDD: (asset: ScreenerAsset) => Promise<void>;
+		onLoadMore: () => void;
 	}
 
 	let {
@@ -71,10 +75,14 @@
 		errorMessage,
 		selectedId,
 		highlightedIndex,
+		isLoadingMore,
+		hasMore,
+		fetchGeneration,
 		onSelect,
 		onHighlight,
 		onApprove,
 		onQueueDD,
+		onLoadMore,
 	}: Props = $props();
 
 	// ── Type badge map ────────────────────────────────
@@ -115,9 +123,19 @@
 	const visibleAssets = $derived(assets.slice(startIndex, endIndex));
 	const offsetY = $derived(startIndex * ROW_HEIGHT);
 
+	let loadMoreDebounce: ReturnType<typeof setTimeout> | null = null;
+
 	function handleScroll() {
 		if (!scrollContainer) return;
 		scrollTop = scrollContainer.scrollTop;
+
+		// Infinite scroll: load more when within 5 rows of the data boundary
+		const distanceFromBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
+		const threshold = ROW_HEIGHT * 5;
+		if (distanceFromBottom < threshold && hasMore && !isLoadingMore) {
+			if (loadMoreDebounce) clearTimeout(loadMoreDebounce);
+			loadMoreDebounce = setTimeout(() => onLoadMore(), 100);
+		}
 	}
 
 	// Measure viewport height on mount and resize
@@ -147,10 +165,9 @@
 		}
 	}
 
-	// Reset scroll when assets change (new filter/sort)
+	// Reset scroll only on filter change (new generation), NOT on append
 	$effect(() => {
-		// track assets reference
-		void assets.length;
+		void fetchGeneration;
 		if (scrollContainer) {
 			scrollContainer.scrollTop = 0;
 			scrollTop = 0;
@@ -278,9 +295,9 @@
 		};
 	});
 
-	// Clear sparkline cache on filter change (assets reference changes)
+	// Clear sparkline cache on filter change (generation reset), not on append
 	$effect(() => {
-		void assets;
+		void fetchGeneration;
 		sparklineCache = new Map();
 		lastFetchedIds = "";
 	});
@@ -312,8 +329,8 @@
 		onscroll={handleScroll}
 		tabindex={0}
 	>
-		<!-- Spacer for total scroll height -->
-		<div class="dg-spacer" style="height: {totalHeight}px;">
+		<!-- Spacer for total scroll height + indicator -->
+		<div class="dg-spacer" style="height: {totalHeight + (assets.length > 0 ? 24 : 0)}px;">
 			<!-- Positioned visible rows -->
 			<div class="dg-rows" style="transform: translateY({offsetY}px);">
 				{#each visibleAssets as asset, vi (asset.id)}
@@ -398,6 +415,18 @@
 					</div>
 				{/if}
 			</div>
+
+			{#if isLoadingMore}
+				<div class="dg-loading-more" style="top: {totalHeight}px;">
+					LOADING PAGE {Math.ceil(assets.length / 200) + 1}...
+				</div>
+			{/if}
+
+			{#if !hasMore && assets.length > 0 && !loading}
+				<div class="dg-end-of-catalog" style="top: {totalHeight}px;">
+					END OF CATALOG — {formatNumber(assets.length, 0)} instruments loaded
+				</div>
+			{/if}
 		</div>
 	</div>
 
@@ -406,9 +435,13 @@
 			<span class="dg-footer-err">{errorMessage}</span>
 		{:else if loading}
 			<span>Loading&hellip;</span>
+		{:else if isLoadingMore}
+			<span>Showing {formatNumber(assets.length, 0)} of {formatNumber(total, 0)} instruments — loading...</span>
+		{:else if !hasMore && assets.length > 0}
+			<span>Showing {formatNumber(assets.length, 0)} of {formatNumber(total, 0)} instruments — complete</span>
 		{:else}
 			<span>
-				Showing {assets.length} of {formatNumber(total, 0)} instruments
+				Showing {formatNumber(assets.length, 0)} of {formatNumber(total, 0)} instruments
 			</span>
 		{/if}
 	</div>
@@ -645,6 +678,41 @@
 	}
 	.dg-action-pending {
 		color: #5a6577;
+	}
+
+	/* ── Infinite scroll indicators ───────────────────── */
+	.dg-loading-more {
+		position: absolute;
+		left: 0;
+		right: 0;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 10px;
+		letter-spacing: 0.06em;
+		color: #5a6577;
+		animation: dg-pulse 1.2s ease-in-out infinite;
+	}
+
+	.dg-end-of-catalog {
+		position: absolute;
+		left: 0;
+		right: 0;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 10px;
+		letter-spacing: 0.06em;
+		color: #3d4a5c;
+	}
+
+	@keyframes dg-pulse {
+		0%, 100% { opacity: 0.5; }
+		50% { opacity: 1; }
 	}
 
 	/* ── Footer ───────────────────────────────────────── */
