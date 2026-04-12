@@ -60,7 +60,12 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.jobs.tracker import publish_event, publish_terminal_event
+from app.core.jobs.tracker import (
+    clear_cancellation_flag,
+    is_cancellation_requested,
+    publish_event,
+    publish_terminal_event,
+)
 from app.domains.wealth.models.model_portfolio import (
     ModelPortfolio,
     PortfolioCalibration,
@@ -97,6 +102,20 @@ LOCK_ID: int = 900_101
 CONSTRUCTION_TIMEOUT_SECONDS: float = 120.0
 
 
+class RunCancelledError(Exception):
+    """Raised internally when a cooperative cancellation flag is observed.
+
+    Bubbles out of ``_execute_inner`` to the top-level exception handler
+    in ``execute_construction_run``, which marks the run as ``cancelled``
+    and emits the terminal event. Not part of the public surface — the
+    runner catches it before returning to the caller.
+    """
+
+    def __init__(self, phase: str) -> None:
+        super().__init__(f"construction cancelled at phase {phase}")
+        self.phase = phase
+
+
 # ── Helpers ────────────────────────────────────────────────────
 
 
@@ -127,6 +146,20 @@ def compute_cache_key(
 def _portfolio_lock_key(portfolio_id: uuid.UUID | str) -> int:
     """Derive a stable 32-bit lock partition key for a portfolio UUID."""
     return zlib.crc32(str(portfolio_id).encode("utf-8")) & 0x7FFFFFFF
+
+
+async def _check_cancellation(job_id: str | None, phase: str) -> None:
+    """Raise ``RunCancelledError`` if the cooperative cancel flag is set.
+
+    Called at phase boundaries inside ``_execute_inner``. When no
+    ``job_id`` is attached (synchronous caller path), cancellation is
+    unsupported and this is a no-op — only async/SSE runs can be
+    cancelled.
+    """
+    if not job_id:
+        return
+    if await is_cancellation_requested(job_id):
+        raise RunCancelledError(phase)
 
 
 async def _publish_event_sanitized(
@@ -586,6 +619,34 @@ async def execute_construction_run(
             extra={"run_id": str(run_id), "portfolio_id": str(portfolio_id)},
         )
         return run
+    except RunCancelledError as cancel_exc:
+        run.status = "cancelled"
+        run.failure_reason = f"cancelled at phase {cancel_exc.phase}"
+        run.completed_at = datetime.now(tz=timezone.utc)
+        run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
+        await db.flush()
+        await _publish_terminal_event_sanitized(
+            db,
+            run_id=run_id,
+            job_id=job_id,
+            raw_type="run_cancelled",
+            raw_payload={
+                "run_id": str(run_id),
+                "phase": cancel_exc.phase,
+                "reason": "cancellation_requested",
+            },
+        )
+        if job_id:
+            await clear_cancellation_flag(job_id)
+        logger.info(
+            "construction_run_cancelled",
+            extra={
+                "run_id": str(run_id),
+                "portfolio_id": str(portfolio_id),
+                "phase": cancel_exc.phase,
+            },
+        )
+        return run
     except Exception as exc:  # noqa: BLE001
         run.status = "failed"
         run.failure_reason = f"{type(exc).__name__}: {exc}"
@@ -661,6 +722,7 @@ async def _execute_inner(
     profile = portfolio.profile
     organization_id = portfolio.organization_id
 
+    await _check_cancellation(job_id, "pre_optimizer")
     await _publish_event_sanitized(
         db,
         run_id=run.id,
@@ -700,6 +762,7 @@ async def _execute_inner(
     factor_exposure = optimization.get("factor_exposures") or {}
 
     # ── 5. Stress suite (sequence: after optimizer, before advisor) ──
+    await _check_cancellation(job_id, "pre_stress")
     await _publish_event_sanitized(
         db,
         run_id=run.id,
@@ -736,6 +799,7 @@ async def _execute_inner(
     # ── 6. Advisor fold-in (Task 3.3) — only if enabled ──
     advisor_result: dict[str, Any] | None = None
     if calibration_snapshot.get("advisor_enabled"):
+        await _check_cancellation(job_id, "pre_advisor")
         await _publish_event_sanitized(
             db,
             run_id=run.id,
@@ -755,6 +819,7 @@ async def _execute_inner(
             advisor_result = {"error": f"{type(exc).__name__}: {exc}"}
 
     # ── 7. Validation gate (15 checks, no fail-fast) ──
+    await _check_cancellation(job_id, "pre_validation")
     await _publish_event_sanitized(
         db,
         run_id=run.id,
@@ -782,6 +847,7 @@ async def _execute_inner(
     validation_jsonb = to_jsonb(validation_result)
 
     # ── 8. Narrative templater (pure Jinja2, no LLM) ──
+    await _check_cancellation(job_id, "pre_narrative")
     await _publish_event_sanitized(
         db,
         run_id=run.id,

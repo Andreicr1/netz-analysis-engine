@@ -126,6 +126,57 @@ async def clear_job_owner(
         await r.aclose()
 
 
+async def request_cancellation(
+    job_id: str, ttl_seconds: int = 3600,
+) -> None:
+    """Mark a job for cooperative cancellation.
+
+    Writes ``job:cancel:{job_id}`` = "1" with a 1h TTL (long enough
+    for any reasonable construction run). The worker polls via
+    :func:`is_cancellation_requested` at phase boundaries and exits
+    gracefully when the flag is set. There is no forced termination
+    path — runners must cooperate.
+
+    Idempotent: calling this twice simply refreshes the TTL.
+    """
+    pool = get_redis_pool()
+    r = aioredis.Redis(connection_pool=pool)
+    try:
+        await r.set(f"job:cancel:{job_id}", "1", ex=ttl_seconds)
+    finally:
+        await r.aclose()
+
+
+async def is_cancellation_requested(job_id: str) -> bool:
+    """Non-blocking check for a pending cancellation request.
+
+    Returns True if ``job:cancel:{job_id}`` exists. Designed to be
+    called from tight loops or between phases of long-running jobs
+    — never cached on the worker side; always re-reads Redis.
+    """
+    pool = get_redis_pool()
+    r = aioredis.Redis(connection_pool=pool)
+    try:
+        return (await r.get(f"job:cancel:{job_id}")) is not None
+    finally:
+        await r.aclose()
+
+
+async def clear_cancellation_flag(job_id: str) -> None:
+    """Remove the cancel flag after the worker has acknowledged it.
+
+    Called by the worker once the graceful exit path has run so a
+    subsequent re-dispatch of the same job id (should it ever be
+    reused) starts with a clean slate.
+    """
+    pool = get_redis_pool()
+    r = aioredis.Redis(connection_pool=pool)
+    try:
+        await r.delete(f"job:cancel:{job_id}")
+    finally:
+        await r.aclose()
+
+
 async def verify_job_owner(job_id: str, organization_id: str) -> bool:
     """Check if job belongs to the given organization.
 
