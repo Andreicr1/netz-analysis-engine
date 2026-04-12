@@ -28,7 +28,7 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from sqlalchemy import Float, Select, String, case, literal, select, union_all
+from sqlalchemy import Float, Select, String, case, literal, select, text, union_all
 from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -133,6 +133,175 @@ def _require_investment_role(actor: Actor) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Investment Team or Admin role required",
         )
+
+
+# ── Phase 2 Session C commit 6: ELITE fast-path catalog ─────────
+
+
+class EliteCatalogItem(BaseModel):
+    """One row in the ELITE catalog response."""
+
+    instrument_id: uuid.UUID
+    name: str
+    ticker: str | None
+    asset_class: str
+    sharpe_1y: float | None
+    manager_score: float | None
+    cvar_95_12m: float | None
+    max_drawdown_1y: float | None
+    elite_rank_within_strategy: int | None
+
+
+class EliteCatalogPage(BaseModel):
+    """Response body for ``GET /screener/catalog/elite``."""
+
+    items: list[EliteCatalogItem]
+    total: int
+    limit: int
+
+
+@router.get(
+    "/catalog/elite",
+    response_model=EliteCatalogPage,
+    summary="ELITE fund fast-path catalog (Phase 3 Screener hot path)",
+)
+async def get_elite_catalog(
+    asset_class: str | None = Query(
+        None,
+        description=(
+            "Comma-separated asset_class filter "
+            "(equity | fixed_income | alternatives | cash | fund)"
+        ),
+    ),
+    limit: int = Query(50, ge=1, le=500),
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> EliteCatalogPage:
+    """Fast-path ELITE catalog — reads directly from ``mv_fund_risk_latest``.
+
+    This is the Phase 3 Screener Fast Path hot query and the
+    gate that Session C commit 6's load test exercises. The query
+    is hand-shaped to FORCE the planner to use the partial index
+    ``idx_mv_fund_risk_latest_elite`` via a ``MATERIALIZED`` CTE:
+
+    1. The CTE materialises the ~300 ELITE-flagged rows via the
+       partial index (indexed by ``instrument_id``, covering only
+       ``WHERE elite_flag = true``).
+    2. The outer query joins on ``instruments_universe`` for
+       display metadata and sorts the small materialised set by
+       ``sharpe_1y DESC``.
+
+    A plain ``WHERE elite_flag = true ORDER BY sharpe_1y ...`` lets
+    the planner walk the sharpe btree and filter out non-elite rows
+    on the fly — still fast but does not exercise the partial
+    index. The ``MATERIALIZED`` hint removes that ambiguity and is
+    what the commit 6 ``verify_p95.py`` EXPLAIN check asserts on.
+
+    Parameters
+    ----------
+    asset_class
+        Optional comma-separated list of ``instruments_universe.asset_class``
+        values. When None, every ELITE fund is returned regardless
+        of asset class.
+    limit
+        Max rows in the response. Capped at 500.
+    """
+    asset_classes: list[str] = []
+    if asset_class:
+        asset_classes = [s.strip() for s in asset_class.split(",") if s.strip()]
+
+    if asset_classes:
+        stmt = text(
+            """
+            WITH elite_set AS MATERIALIZED (
+                SELECT
+                    instrument_id,
+                    sharpe_1y,
+                    manager_score,
+                    cvar_95_12m,
+                    max_drawdown_1y,
+                    elite_rank_within_strategy
+                FROM mv_fund_risk_latest
+                WHERE elite_flag = true
+            )
+            SELECT
+                es.instrument_id,
+                iu.name,
+                iu.ticker,
+                iu.asset_class,
+                es.sharpe_1y,
+                es.manager_score,
+                es.cvar_95_12m,
+                es.max_drawdown_1y,
+                es.elite_rank_within_strategy
+            FROM elite_set es
+            JOIN instruments_universe iu
+              ON iu.instrument_id = es.instrument_id
+            WHERE iu.asset_class = ANY(:asset_classes)
+            ORDER BY es.sharpe_1y DESC NULLS LAST
+            LIMIT :limit_rows
+            """,
+        )
+        rows = (
+            await db.execute(
+                stmt, {"asset_classes": asset_classes, "limit_rows": limit},
+            )
+        ).mappings().all()
+    else:
+        stmt = text(
+            """
+            WITH elite_set AS MATERIALIZED (
+                SELECT
+                    instrument_id,
+                    sharpe_1y,
+                    manager_score,
+                    cvar_95_12m,
+                    max_drawdown_1y,
+                    elite_rank_within_strategy
+                FROM mv_fund_risk_latest
+                WHERE elite_flag = true
+            )
+            SELECT
+                es.instrument_id,
+                iu.name,
+                iu.ticker,
+                iu.asset_class,
+                es.sharpe_1y,
+                es.manager_score,
+                es.cvar_95_12m,
+                es.max_drawdown_1y,
+                es.elite_rank_within_strategy
+            FROM elite_set es
+            JOIN instruments_universe iu
+              ON iu.instrument_id = es.instrument_id
+            ORDER BY es.sharpe_1y DESC NULLS LAST
+            LIMIT :limit_rows
+            """,
+        )
+        rows = (await db.execute(stmt, {"limit_rows": limit})).mappings().all()
+
+    items = [
+        EliteCatalogItem(
+            instrument_id=row["instrument_id"],
+            name=row["name"],
+            ticker=row["ticker"],
+            asset_class=row["asset_class"],
+            sharpe_1y=float(row["sharpe_1y"]) if row["sharpe_1y"] is not None else None,
+            manager_score=(
+                float(row["manager_score"]) if row["manager_score"] is not None else None
+            ),
+            cvar_95_12m=(
+                float(row["cvar_95_12m"]) if row["cvar_95_12m"] is not None else None
+            ),
+            max_drawdown_1y=(
+                float(row["max_drawdown_1y"])
+                if row["max_drawdown_1y"] is not None
+                else None
+            ),
+            elite_rank_within_strategy=row["elite_rank_within_strategy"],
+        )
+        for row in rows
+    ]
+    return EliteCatalogPage(items=items, total=len(items), limit=limit)
 
 
 @router.post(

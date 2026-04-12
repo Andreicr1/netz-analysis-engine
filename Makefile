@@ -1,7 +1,7 @@
 .PHONY: check test lint typecheck architecture serve migrate migration help pipeline \
        dev-ui build-ui dev-credit build-credit dev-wealth build-wealth \
        dev-all build-all lint-frontend check-all types coverage-runtime \
-       tokens-sync
+       tokens-sync loadtest
 
 # ── Unified gate ──────────────────────────────────────────
 check: lint architecture typecheck tokens-sync test
@@ -43,6 +43,28 @@ architecture:
 # ── Serve (dev) ───────────────────────────────────────────
 serve:
 	cd backend && uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+# ── Load test — screener ELITE fast path ─────────────────
+# Proves the Phase 3 Screener hot path stays under 300ms p95
+# and that the mv_fund_risk_latest partial index is actually
+# used by the query planner. Must be green before every ship.
+#
+# Expects a backend already running on the port specified by
+# NETZ_LOADTEST_BASE_URL (default http://127.0.0.1:8765). Start
+# the backend with RATE_LIMIT_ENABLED=false so the throughput
+# phase is not gated by the production per-org rate cap. Example:
+#
+#   RATE_LIMIT_ENABLED=false ENV=development \
+#       uvicorn app.main:app --port 8765 --log-level warning &
+#   make loadtest
+#
+# Env vars:
+#   NETZ_LOADTEST_BASE_URL (default http://127.0.0.1:8765)
+#   NETZ_LOADTEST_P95_MS   (default 300 — DO NOT raise)
+#   NETZ_LOADTEST_DURATION (default 30 seconds)
+#   NETZ_LOADTEST_CONCURRENCY (default 20 workers)
+loadtest:
+	cd backend && python -m tests.loadtest.screener_elite
 
 # ── Database ──────────────────────────────────────────────
 migrate:
@@ -115,3 +137,6 @@ help:
 	@echo "make lint-frontend - ESLint all frontend packages"
 	@echo "make check-all   - Lint + check all frontend packages"
 	@echo "make types       - Generate TS types from OpenAPI schema"
+	@echo ""
+	@echo "── Performance ────────────────────────────────────"
+	@echo "make loadtest    - Screener ELITE p95 gate (must be <300ms)"
