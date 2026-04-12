@@ -1458,6 +1458,7 @@ async def get_catalog(
     max_expense_ratio: float | None = Query(None, ge=0, le=10, description="Max expense ratio %"),
     min_return_1y: float | None = Query(None, description="Min avg annual return 1Y %"),
     min_return_10y: float | None = Query(None, description="Min avg annual return 10Y %"),
+    elite_only: bool | None = Query(None, description="Only ELITE-flagged funds (top 300 per strategy)"),
     db: AsyncSession = Depends(get_db_with_rls),
 ) -> UnifiedCatalogPage:
     filters = CatalogFilters(
@@ -1480,6 +1481,7 @@ async def get_catalog(
         max_expense_ratio=max_expense_ratio,
         min_return_1y=min_return_1y,
         min_return_10y=min_return_10y,
+        elite_only=elite_only,
     )
 
     stmt = build_catalog_query(filters)
@@ -1550,7 +1552,11 @@ async def get_catalog(
                 is_fund_of_fund=bool(r.is_fund_of_fund) if getattr(r, "is_fund_of_fund", None) is not None else None,
                 # Phase 3: instrument_id from bridge JOIN
                 instrument_id=resolved_id,
+                # Phase 3: ELITE ranking from mv_fund_risk_latest
+                elite_flag=bool(r.elite_flag) if getattr(r, "elite_flag", None) is not None else None,
+                elite_rank_within_strategy=getattr(r, "elite_rank_within_strategy", None),
                 # Phase 3: org membership from v_screener_org_membership
+                in_universe=(org_approval == "approved"),
                 approval_status=org_approval,
                 disclosure=_build_disclosure(
                     universe=r.universe,

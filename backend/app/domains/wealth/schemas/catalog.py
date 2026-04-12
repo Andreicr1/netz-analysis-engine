@@ -92,6 +92,13 @@ class UnifiedFundItem(BaseModel):
     screening_score: float | None = None
     approval_status: str | None = None
 
+    # ELITE ranking (from mv_fund_risk_latest — global, no jargon risk)
+    elite_flag: bool | None = None
+    elite_rank_within_strategy: int | None = None
+
+    # Org membership (from v_screener_org_membership)
+    in_universe: bool = False
+
     # Disclosure — drives frontend rendering
     disclosure: DisclosureMatrix
 

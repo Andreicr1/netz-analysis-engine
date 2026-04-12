@@ -176,6 +176,9 @@ class CatalogFilters:
 
     in_universe: bool | None = None        # True = only funds present in instruments_universe (have real NAV data)
 
+    # Phase 3: ELITE filter — True = only funds with elite_flag=true
+    elite_only: bool | None = None
+
     # Prospectus-based filters (applied to registered_us + etf branches)
     # User provides human percent (0.50 = 0.50%), DB stores fraction (0.005)
     max_expense_ratio: float | None = None      # e.g. 0.50 → ER ≤ 0.50%
@@ -371,6 +374,10 @@ def _build_base_stmt(f: CatalogFilters, *, include_risk_membership: bool = False
                 )
             )
         )
+
+    # 8c. ELITE filter (requires include_risk_membership JOIN)
+    if f.elite_only is True and include_risk_membership:
+        conditions.append(mv_fund_risk_latest.c.elite_flag.is_(True))
 
     # 9. Domicile
     if f.domicile:
