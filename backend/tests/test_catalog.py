@@ -151,7 +151,7 @@ class TestDisclosureMatrix:
             has_13f_overlay=True,
             has_peer_analysis=True,
             holdings_source="nport",
-            nav_source="yfinance",
+            nav_source="tiingo",
             aum_source="nport",
         )
         assert d.has_holdings is True
@@ -172,8 +172,8 @@ class TestDisclosureMatrix:
             has_nav_history=True,
             has_quant_metrics=True,
             has_peer_analysis=True,
-            nav_source="yfinance",
-            aum_source="yfinance",
+            nav_source="tiingo",
+            aum_source="tiingo",
         )
         assert d.has_holdings is False
         assert d.has_nav_history is True
@@ -217,7 +217,7 @@ class TestUnifiedFundItem:
                 has_13f_overlay=True,
                 has_peer_analysis=True,
                 holdings_source="nport",
-                nav_source="yfinance",
+                nav_source="tiingo",
                 aum_source="nport",
             ),
         )
@@ -261,8 +261,8 @@ class TestUnifiedFundItem:
                 has_nav_history=True,
                 has_quant_metrics=True,
                 has_peer_analysis=True,
-                nav_source="yfinance",
-                aum_source="yfinance",
+                nav_source="tiingo",
+                aum_source="tiingo",
             ),
         )
         defaults.update(overrides)

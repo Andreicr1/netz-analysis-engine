@@ -24,7 +24,8 @@ from datetime import datetime
 from pathlib import Path
 
 import asyncpg
-import yfinance as yf
+
+from app.services.providers.tiingo_instrument_provider import TiingoInstrumentProvider
 
 DB = os.environ.get(
     "DATABASE_URL_SYNC",
@@ -58,28 +59,14 @@ def save_checkpoint(done: set[str]) -> None:
 
 # ── Download ─────────────────────────────────────────────────────────────────
 
+_provider = TiingoInstrumentProvider()
+
+
 def _fetch_batch(tickers: list[str], period: str) -> dict:
     try:
-        df = yf.download(
-            tickers,
-            period=period,
-            group_by="ticker",
-            threads=True,
-            progress=False,
-        )
-        if df.empty:
-            return {}
-        if len(tickers) == 1:
-            return {tickers[0]: df}
-        result = {}
-        for t in tickers:
-            if t in df.columns.get_level_values(0):
-                tdf = df[t].dropna(how="all")
-                if not tdf.empty:
-                    result[t] = tdf
-        return result
+        return _provider.fetch_batch_history(tickers, period=period)
     except Exception as e:
-        print(f"  [WARN] yf.download falhou: {e}")
+        print(f"  [WARN] Tiingo fetch failed: {e}")
         return {}
 
 
@@ -156,7 +143,7 @@ async def process_batch(
                 "return_1d": round(ret, 8) if ret is not None else None,
                 "return_type": "log",
                 "currency": currency,
-                "source": "yahoo",
+                "source": "tiingo",
             })
         ok.append(ticker)
 
@@ -266,7 +253,7 @@ async def main(batch_size: int, lookback: int, sleep_s: float, reset: bool) -> N
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch-size", type=int, default=100,
-                        help="Tickers por batch Yahoo (default: 100)")
+                        help="Tickers por batch Tiingo (default: 100)")
     parser.add_argument("--lookback", type=int, default=3650,
                         help="Dias de historico (default: 3650 = 10y)")
     parser.add_argument("--sleep", type=float, default=3.0,
