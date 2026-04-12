@@ -67,6 +67,8 @@
 		expense_ratio_pct: number | null;
 		avg_annual_return_1y: number | null;
 		avg_annual_return_10y: number | null;
+		elite_flag: boolean | null;
+		in_universe: boolean;
 		disclosure?: { nav_status?: string | null };
 	}
 
@@ -99,6 +101,8 @@
 			inceptionDate: raw.inception_date,
 			isin: raw.isin,
 			navStatus: raw.disclosure?.nav_status ?? null,
+			eliteFlag: raw.elite_flag === true,
+			inUniverse: raw.in_universe === true,
 		};
 	}
 
@@ -122,6 +126,7 @@
 			sort: "aum_desc",
 		};
 		if (f.onlyWithNav) q.in_universe = "true";
+		if (f.eliteOnly) q.elite_only = "true";
 		if (f.fundUniverse.size > 0) q.fund_universe = [...f.fundUniverse].join(",");
 		if (f.strategies.size > 0) q.strategy_label = [...f.strategies].join(",");
 		if (f.geographies.size > 0) q.investment_geography = [...f.geographies].join(",");
