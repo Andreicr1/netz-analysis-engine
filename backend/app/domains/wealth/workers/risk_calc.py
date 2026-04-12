@@ -11,6 +11,7 @@ import asyncio
 import json
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 import numpy as np
@@ -45,6 +46,24 @@ from quant_engine.talib_momentum_service import (
 )
 
 logger = structlog.get_logger()
+
+
+@dataclass(frozen=True, slots=True)
+class _FundSnapshot:
+    """Scalar snapshot of an Instrument row — immune to ORM expire/rollback.
+
+    SQLAlchemy rollback() expires ALL identity-map objects regardless of
+    expire_on_commit.  If a batch upsert fails and triggers rollback,
+    subsequent access to ORM attributes would attempt an async reload
+    outside the greenlet context (MissingGreenlet).  By extracting scalars
+    immediately after the query, the batch loop operates on plain data.
+    """
+
+    instrument_id: uuid.UUID
+    ticker: str | None
+    asset_class: str
+    attributes: dict
+
 
 RISK_CALC_LOCK_ID = 900_007
 TRADING_DAYS_PER_YEAR = 252
@@ -520,7 +539,7 @@ def _compute_momentum_from_nav(
 
 
 def _compute_metrics_from_returns(
-    fund: Instrument,
+    fund: "Instrument | _FundSnapshot",
     returns_raw: list[float],
     as_of_date: date,
     risk_free_rate: float = 0.04,
@@ -1463,7 +1482,22 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
                 )
             )
             result = await db.execute(stmt)
-            all_funds = result.scalars().all()
+            all_funds_raw = result.scalars().all()
+            # Extract scalars from ORM objects BEFORE the batch loop.
+            # rollback() expires ALL identity-map objects regardless of
+            # expire_on_commit — accessing ORM attrs after a failed batch
+            # upsert would trigger MissingGreenlet.  Frozen snapshots are
+            # immune to session state changes.
+            all_funds: list[_FundSnapshot] = [
+                _FundSnapshot(
+                    instrument_id=f.instrument_id,
+                    ticker=f.ticker,
+                    asset_class=f.asset_class or "equity",
+                    attributes=dict(f.attributes) if f.attributes else {},
+                )
+                for f in all_funds_raw
+            ]
+            del all_funds_raw  # release ORM objects from identity map
             logger.info("global_risk_metrics.funds_found", count=len(all_funds))
 
             # Process in batches to avoid memory pressure

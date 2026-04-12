@@ -8,6 +8,7 @@ Phase 2: SEC Mutual Fund series — canonical share class (~4,794 series)
 Phase 3: SEC Registered Funds with direct ticker (~363, supplements Phase 2)
 Phase 3b: SEC BDCs (27 with ticker resolved via cusip_ticker_map)
 Phase 4: ESMA UCITS funds with yahoo_ticker (~2,929)
+Phase 5: SEC Money Market Funds — via sec_fund_classes ticker JOIN (~373)
 
 Advisory lock: 900_070 (global)
 Frequency: weekly (alongside sec_bulk_ingestion)
@@ -100,6 +101,7 @@ async def run_universe_sync() -> dict[str, Any]:
             stats["sec_registered"] = await _sync_sec_registered(db)
             stats["sec_bdcs"] = await _sync_sec_bdcs(db)
             stats["esma_funds"] = await _sync_esma_funds(db)
+            stats["sec_mmfs"] = await _sync_sec_mmfs(db)
             stats["deactivated"] = await _deactivate_no_nav(db)
 
             total = sum(v.get("upserted", 0) for v in stats.values() if isinstance(v, dict))
@@ -461,6 +463,80 @@ async def _sync_esma_funds(db: AsyncSession) -> dict[str, Any]:
     await db.commit()
     count = result.rowcount
     logger.info("universe_sync.esma_funds", upserted=count)
+    return {"upserted": count}
+
+
+# ── Phase 5: SEC Money Market Funds ─────────────────────────────────
+
+
+async def _sync_sec_mmfs(db: AsyncSession) -> dict[str, Any]:
+    """Upsert SEC Money Market Funds into instruments_universe.
+
+    These are the actual MMFs from sec_money_market_funds (373 funds),
+    distinct from ETFs/MFs that happen to have cash-like strategy_labels.
+
+    sec_money_market_funds has no ticker column — we resolve tickers by
+    joining sec_fund_classes on (cik, series_id).  The series_id stored
+    in attributes enables _batch_fetch_mmf_data() in risk_calc to JOIN
+    against sec_money_market_funds + sec_mmf_metrics for 7-day yield,
+    WAM, weekly liquidity, and NAV stability data.
+    """
+    result = cast(CursorResult[Any], await db.execute(text("""
+        WITH mmf_with_ticker AS (
+            SELECT DISTINCT ON (m.series_id)
+                m.series_id,
+                m.cik,
+                m.fund_name,
+                m.mmf_category,
+                m.crd_number,
+                m.net_assets,
+                m.investment_adviser,
+                fc.ticker
+            FROM sec_money_market_funds m
+            JOIN sec_fund_classes fc
+              ON fc.cik = m.cik AND fc.series_id = m.series_id
+            WHERE fc.ticker IS NOT NULL
+              AND fc.ticker NOT LIKE '%%XX'
+            ORDER BY m.series_id, fc.ticker
+        )
+        INSERT INTO instruments_universe (
+            instrument_id, instrument_type, name, isin, ticker,
+            asset_class, geography, currency, is_active, attributes
+        )
+        SELECT
+            gen_random_uuid(),
+            'fund',
+            t.fund_name,
+            t.series_id,
+            t.ticker,
+            'cash',
+            'north_america',
+            'USD',
+            true,
+            jsonb_build_object(
+                'series_id', t.series_id,
+                'sec_cik', t.cik,
+                'sec_crd', t.crd_number,
+                'fund_subtype', 'mmf',
+                'sec_universe', 'money_market',
+                'strategy_label', 'Money Market',
+                'mmf_category', t.mmf_category,
+                'expense_ratio_pct', NULL,
+                'aum_usd', t.net_assets,
+                'manager_name', COALESCE(t.investment_adviser, t.fund_name),
+                'inception_date', NULL,
+                'source', 'universe_sync'
+            )
+        FROM mmf_with_ticker t
+        ON CONFLICT (ticker) DO UPDATE SET
+            name = EXCLUDED.name,
+            asset_class = 'cash',
+            attributes = instruments_universe.attributes || EXCLUDED.attributes,
+            updated_at = now()
+    """)))
+    await db.commit()
+    count = result.rowcount
+    logger.info("universe_sync.sec_mmfs", upserted=count)
     return {"upserted": count}
 
 
