@@ -1510,6 +1510,34 @@ async def get_securities_facets(
 
 
 @router.get(
+    "/managers",
+    response_model=list[str],
+    summary="Manager name typeahead — distinct manager names matching a prefix",
+)
+@route_cache(ttl=300, key_prefix="screener:managers", global_key=True)
+async def get_screener_managers(
+    q: str = Query("", description="Prefix to match against manager names"),
+    limit: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> list[str]:
+    from sqlalchemy import distinct
+
+    from app.domains.wealth.queries.catalog_sql import mv_unified_funds
+
+    escaped = q.replace("%", "\\%").replace("_", "\\_") if q else ""
+    stmt = (
+        select(distinct(mv_unified_funds.c.manager_name))
+        .where(mv_unified_funds.c.manager_name.isnot(None))
+    )
+    if escaped:
+        stmt = stmt.where(mv_unified_funds.c.manager_name.ilike(f"{escaped}%"))
+    stmt = stmt.order_by(mv_unified_funds.c.manager_name).limit(limit)
+
+    result = await db.execute(stmt)
+    return [row[0] for row in result.fetchall()]
+
+
+@router.get(
     "/catalog",
     response_model=UnifiedCatalogPage,
     summary="Unified fund catalog across US registered, US private, and EU UCITS",
@@ -1537,8 +1565,10 @@ async def get_catalog(
     min_return_10y: float | None = Query(None, description="Min avg annual return 10Y %"),
     elite_only: bool | None = Query(None, description="Only ELITE-flagged funds (top 300 per strategy)"),
     cursor: str | None = Query(None, description="Keyset cursor from previous page (base64). When present, replaces offset-based pagination."),
+    manager_names: str | None = Query(None, description="Comma-separated exact manager names for multi-select filter"),
     db: AsyncSession = Depends(get_db_with_rls),
 ) -> UnifiedCatalogPage:
+    parsed_manager_names = [n.strip() for n in manager_names.split(",") if n.strip()] if manager_names else None
     filters = CatalogFilters(
         q=q,
         region=region,
@@ -1561,6 +1591,7 @@ async def get_catalog(
         min_return_10y=min_return_10y,
         elite_only=elite_only,
         cursor=cursor,
+        manager_names=parsed_manager_names,
     )
 
     stmt = build_catalog_query(filters)

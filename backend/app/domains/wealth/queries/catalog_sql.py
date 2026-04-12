@@ -181,6 +181,9 @@ class CatalogFilters:
     # Phase 3: ELITE filter — True = only funds with elite_flag=true
     elite_only: bool | None = None
 
+    # Phase 3: multi-select manager filter (exact match, distinct from ILIKE `manager`)
+    manager_names: list[str] | None = None
+
     # Phase 3: keyset cursor (base64 encoded, replaces offset when present)
     cursor: str | None = None
 
@@ -400,6 +403,10 @@ def _build_base_stmt(f: CatalogFilters, *, include_risk_membership: bool = False
     # 10b. Manager ID (exact CRD match)
     if f.manager_id:
         conditions.append(mv_unified_funds.c.manager_id == f.manager_id)
+
+    # 10c. Multi-select manager names (exact match, for typeahead chips)
+    if f.manager_names:
+        conditions.append(mv_unified_funds.c.manager_name.in_(f.manager_names))
         
     # 11. Prospectus filters
     if f.max_expense_ratio is not None:
