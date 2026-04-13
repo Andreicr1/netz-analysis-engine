@@ -677,24 +677,29 @@ async def get_latest_macro_values(
     return result
 
 
-async def _compute_ff_delta_6m(db: AsyncSession) -> float | None:
+async def _compute_ff_delta_6m(
+    db: AsyncSession, *, as_of_date: date | None = None,
+) -> float | None:
     """Compute 6-month change in Fed Funds Rate from macro_data.
 
     Returns positive delta for tightening (stress), negative for easing (calm).
     None if insufficient data.
     """
     try:
-        result = await db.execute(
+        from datetime import timedelta
+
+        stmt = (
             select(MacroData.value, MacroData.obs_date)
             .where(MacroData.series_id == "DFF")
-            .order_by(MacroData.obs_date.desc())
-            .limit(1),
         )
+        if as_of_date is not None:
+            stmt = stmt.where(MacroData.obs_date <= as_of_date)
+        stmt = stmt.order_by(MacroData.obs_date.desc()).limit(1)
+
+        result = await db.execute(stmt)
         latest = result.first()
         if not latest:
             return None
-
-        from datetime import timedelta
 
         target_date = latest.obs_date - timedelta(days=180)
         result_6m = await db.execute(
@@ -718,18 +723,22 @@ async def _compute_ff_delta_6m(db: AsyncSession) -> float | None:
 
 async def _compute_series_zscore(
     db: AsyncSession, series_id: str, lookback_days: int = 252,
+    *, as_of_date: date | None = None,
 ) -> float | None:
     """Compute Z-score of any macro series vs its rolling mean.
 
     Positive z = above-average (stress for supply shocks like oil).
     """
     try:
-        result = await db.execute(
+        stmt = (
             select(MacroData.value)
             .where(MacroData.series_id == series_id)
-            .order_by(MacroData.obs_date.desc())
-            .limit(lookback_days),
         )
+        if as_of_date is not None:
+            stmt = stmt.where(MacroData.obs_date <= as_of_date)
+        stmt = stmt.order_by(MacroData.obs_date.desc()).limit(lookback_days)
+
+        result = await db.execute(stmt)
         values = [float(r[0]) for r in result.all()]
         if len(values) < 60:
             return None
@@ -748,6 +757,7 @@ async def _compute_series_zscore(
 
 async def _compute_series_roc(
     db: AsyncSession, series_id: str, months: int = 3,
+    *, as_of_date: date | None = None,
 ) -> float | None:
     """Compute rate-of-change (%) for any macro series over N months.
 
@@ -755,17 +765,20 @@ async def _compute_series_roc(
     Positive = increase (stress for commodities, calm for INDPRO).
     """
     try:
-        result = await db.execute(
+        from datetime import timedelta
+
+        stmt = (
             select(MacroData.value, MacroData.obs_date)
             .where(MacroData.series_id == series_id)
-            .order_by(MacroData.obs_date.desc())
-            .limit(1),
         )
+        if as_of_date is not None:
+            stmt = stmt.where(MacroData.obs_date <= as_of_date)
+        stmt = stmt.order_by(MacroData.obs_date.desc()).limit(1)
+
+        result = await db.execute(stmt)
         latest = result.first()
         if not latest:
             return None
-
-        from datetime import timedelta
 
         target_date = latest.obs_date - timedelta(days=months * 30)
         result_past = await db.execute(
@@ -787,9 +800,124 @@ async def _compute_series_roc(
         return None
 
 
-async def _compute_dxy_zscore(db: AsyncSession) -> float | None:
+async def _compute_dxy_zscore(
+    db: AsyncSession, *, as_of_date: date | None = None,
+) -> float | None:
     """Compute Z-score of Trade-Weighted Dollar Index vs 1Y rolling mean."""
-    return await _compute_series_zscore(db, "DTWEXBGS", lookback_days=252)
+    return await _compute_series_zscore(
+        db, "DTWEXBGS", lookback_days=252, as_of_date=as_of_date,
+    )
+
+
+REGIME_SERIES_STALENESS: dict[str, int] = {
+    "VIXCLS": STALENESS_DAILY,
+    "DGS10": STALENESS_DAILY,
+    "DGS2": STALENESS_DAILY,
+    "CPIAUCSL": STALENESS_MONTHLY,
+    "SAHMREALTIME": STALENESS_MONTHLY,
+    "BAMLH0A0HYM2": STALENESS_DAILY,
+    "BAA10Y": STALENESS_DAILY,
+    "DFF": STALENESS_DAILY,
+    "DTWEXBGS": STALENESS_DAILY,
+    "DCOILWTICO": STALENESS_DAILY,
+    "CFNAI": 75,
+}
+
+
+async def build_regime_inputs(
+    db: AsyncSession, as_of_date: date | None = None,
+) -> dict[str, float | None]:
+    """Build the full 10-signal input dict for classify_regime_multi_signal.
+
+    Single authoritative signal builder. Both get_current_regime() and
+    risk_calc TAA use this — no duplicated logic.
+    """
+    from datetime import timedelta
+
+    effective_date = as_of_date if as_of_date is not None else date.today()
+    today = date.today()
+
+    # ── Bulk-fetch latest values for all raw series ──
+    stmt = (
+        select(MacroData.series_id, MacroData.value, MacroData.obs_date)
+        .where(MacroData.series_id.in_(REGIME_SERIES_STALENESS.keys()))
+        .where(MacroData.obs_date <= effective_date)
+        .where(MacroData.value.is_not(None))
+        .distinct(MacroData.series_id)
+        .order_by(MacroData.series_id, MacroData.obs_date.desc())
+    )
+    rows = (await db.execute(stmt)).all()
+
+    latest: dict[str, float] = {}
+    for series_id, value, obs_date in rows:
+        max_stale = REGIME_SERIES_STALENESS.get(series_id, STALENESS_DAILY)
+        days_stale = (today - obs_date).days
+        if days_stale > max_stale:
+            logger.warning(
+                "regime_signal_stale",
+                series=series_id,
+                last_date=str(obs_date),
+                days_stale=days_stale,
+                threshold=max_stale,
+            )
+        else:
+            latest[series_id] = float(value)
+
+    # ── Yield curve spread = DGS10 - DGS2 ──
+    dgs10 = latest.get("DGS10")
+    dgs2 = latest.get("DGS2")
+    yield_spread = (dgs10 - dgs2) if dgs10 is not None and dgs2 is not None else None
+
+    # ── CPI YoY ──
+    cpi_yoy: float | None = None
+    cpi_current = latest.get("CPIAUCSL")
+    if cpi_current is not None:
+        cpi_12m_stmt = (
+            select(MacroData.value)
+            .where(MacroData.series_id == "CPIAUCSL")
+            .where(MacroData.obs_date <= effective_date - timedelta(days=380))
+            .where(MacroData.value.is_not(None))
+            .order_by(MacroData.obs_date.desc())
+            .limit(1)
+        )
+        cpi_12m = (await db.execute(cpi_12m_stmt)).scalar_one_or_none()
+        if cpi_12m is not None:
+            cpi_yoy = ((cpi_current / float(cpi_12m)) - 1.0) * 100.0
+
+    # ── Fed Funds delta 6m ──
+    fed_delta = await _compute_ff_delta_6m(db, as_of_date=effective_date)
+
+    # ── DXY Z-score ──
+    dxy_z = await _compute_dxy_zscore(db, as_of_date=effective_date)
+
+    # ── Energy Shock Composite ──
+    crude_z = await _compute_series_zscore(
+        db, "DCOILWTICO", lookback_days=252, as_of_date=effective_date,
+    )
+    crude_roc = await _compute_series_roc(
+        db, "DCOILWTICO", months=3, as_of_date=effective_date,
+    )
+    energy_shock: float | None = None
+    if crude_z is not None or crude_roc is not None:
+        z_score = _ramp(crude_z, calm=0.5, panic=3.0) if crude_z is not None else 0.0
+        roc_score = _ramp(crude_roc, calm=0.0, panic=50.0) if crude_roc is not None else 0.0
+        energy_shock = max(z_score, roc_score)
+
+    # ── CFNAI ──
+    cfnai_val = latest.get("CFNAI")
+
+    return {
+        "vix": latest.get("VIXCLS"),
+        "yield_curve_spread": yield_spread,
+        "cpi_yoy": cpi_yoy,
+        "sahm_rule": latest.get("SAHMREALTIME"),
+        "hy_oas": latest.get("BAMLH0A0HYM2"),
+        "baa_spread": latest.get("BAA10Y"),
+        "fed_funds_delta_6m": fed_delta,
+        "dxy_zscore": dxy_z,
+        "energy_shock": energy_shock,
+        "cfnai": cfnai_val,
+    }
 
 
 async def get_current_regime(
@@ -808,50 +936,36 @@ async def get_current_regime(
             - Credit: uses stress_severity level or defaults to "RISK_ON"
 
     """
-    macro = await get_latest_macro_values(db)
-
-    vix_val = macro.get("VIXCLS", (None, None))[0]
-    yield_val = macro.get("YIELD_CURVE_10Y2Y", (None, None))[0]
-    cpi_val = macro.get("CPI_YOY", (None, None))[0]
-    sahm_val = macro.get("SAHMREALTIME", (None, None))[0]
-    hy_oas_val = macro.get("BAMLH0A0HYM2", (None, None))[0]
-    baa_val = macro.get("BAA10Y", (None, None))[0]
-
-    # Derived signals — rate-of-change and Z-scores
-    ff_delta = await _compute_ff_delta_6m(db)
-    dxy_z = await _compute_dxy_zscore(db)
-
-    # Energy Shock Composite: fuse WTI Z-score + WTI RoC via max()
-    # Avoids multicollinearity — both spike together during supply shocks
-    crude_z = await _compute_series_zscore(db, "DCOILWTICO", lookback_days=252)
-    crude_roc = await _compute_series_roc(db, "DCOILWTICO", months=3)
-    energy_shock: float | None = None
-    if crude_z is not None or crude_roc is not None:
-        z_score = _ramp(crude_z, calm=0.5, panic=3.0) if crude_z is not None else 0.0
-        roc_score = _ramp(crude_roc, calm=0.0, panic=50.0) if crude_roc is not None else 0.0
-        energy_shock = max(z_score, roc_score)
-
-    # CFNAI — Chicago Fed National Activity Index (composite of 85 indicators)
-    cfnai_val = macro.get("CFNAI", (None, None))[0]
+    inputs = await build_regime_inputs(db)
 
     # Need at least VIX or HY OAS or energy data to classify
-    if vix_val is not None or hy_oas_val is not None or energy_shock is not None:
+    if inputs.get("vix") is not None or inputs.get("hy_oas") is not None or inputs.get("energy_shock") is not None:
         regime, reasons = classify_regime_multi_signal(
-            vix_val, yield_val, cpi_val,
-            sahm_rule=sahm_val, config=config,
-            hy_oas=hy_oas_val, baa_spread=baa_val,
-            fed_funds_delta_6m=ff_delta, dxy_zscore=dxy_z,
-            energy_shock=energy_shock, cfnai=cfnai_val,
+            vix=inputs.get("vix"),
+            yield_curve_spread=inputs.get("yield_curve_spread"),
+            cpi_yoy=inputs.get("cpi_yoy"),
+            sahm_rule=inputs.get("sahm_rule"),
+            config=config,
+            hy_oas=inputs.get("hy_oas"),
+            baa_spread=inputs.get("baa_spread"),
+            fed_funds_delta_6m=inputs.get("fed_funds_delta_6m"),
+            dxy_zscore=inputs.get("dxy_zscore"),
+            energy_shock=inputs.get("energy_shock"),
+            cfnai=inputs.get("cfnai"),
         )
 
-        as_of = None
-        for _, obs_date in macro.values():
-            if obs_date is not None and (as_of is None or obs_date > as_of):
-                as_of = obs_date
+        # Determine as_of from macro_data latest obs_date
+        stmt = (
+            select(MacroData.obs_date)
+            .where(MacroData.series_id.in_(REGIME_SERIES_STALENESS.keys()))
+            .order_by(MacroData.obs_date.desc())
+            .limit(1)
+        )
+        as_of_row = (await db.execute(stmt)).scalar_one_or_none()
 
         return RegimeRead(
             regime=regime,
-            as_of_date=as_of,
+            as_of_date=as_of_row,
             reasons=reasons,
         )
 
