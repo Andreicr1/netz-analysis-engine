@@ -21,6 +21,9 @@
 	import StressTab from "$lib/components/terminal/builder/StressTab.svelte";
 	import RiskTab from "$lib/components/terminal/builder/RiskTab.svelte";
 	import AdvisorTab from "$lib/components/terminal/builder/AdvisorTab.svelte";
+	import BacktestTab from "$lib/components/terminal/builder/BacktestTab.svelte";
+	import MonteCarloTab from "$lib/components/terminal/builder/MonteCarloTab.svelte";
+	import ActivationBar from "$lib/components/terminal/builder/ActivationBar.svelte";
 	import CalibrationPanel from "$lib/components/portfolio/CalibrationPanel.svelte";
 
 	let { data }: { data: PageData } = $props();
@@ -149,13 +152,16 @@
 			{:else if activeTab === "STRESS"}
 				<StressTab />
 			{:else if activeTab === "BACKTEST"}
-				<div class="builder-stub">Historical backtest &mdash; Coming in Session 3</div>
+				<BacktestTab />
 			{:else if activeTab === "MONTE CARLO"}
-				<div class="builder-stub">Monte Carlo simulation &mdash; Coming in Session 3</div>
+				<MonteCarloTab />
 			{:else if activeTab === "ADVISOR"}
 				<AdvisorTab />
 			{/if}
 		</div>
+
+		<!-- Zone F: Activation Bar (Session 3) -->
+		<ActivationBar {allTabsVisited} />
 	</div>
 </div>
 
@@ -299,14 +305,4 @@
 		padding: var(--terminal-space-2);
 	}
 
-	.builder-stub {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		min-height: 300px;
-		color: var(--terminal-fg-muted);
-		font-size: var(--terminal-text-12);
-		text-transform: uppercase;
-		letter-spacing: var(--terminal-tracking-caps);
-	}
 </style>

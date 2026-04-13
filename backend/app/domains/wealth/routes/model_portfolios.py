@@ -3887,3 +3887,251 @@ async def list_trade_tickets(
         page_size=page_size,
         has_next=(page * page_size < total),
     )
+
+
+# ═══════════════════════════════════════════��═══════════════════════════
+# NAV HISTORY (Session 3 — Backtest Tab)
+# ═════════════════════════════════════════════��═════════════════════════
+
+
+@router.get(
+    "/{portfolio_id}/nav-history",
+    summary="NAV series with drawdown + summary metrics for charting",
+)
+async def get_nav_history(
+    portfolio_id: uuid.UUID,
+    period: str = Query("5Y", pattern="^(1Y|3Y|5Y|10Y)$"),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return historical NAV, drawdown series, and summary metrics.
+
+    Designed for the Builder BACKTEST tab (equity curve + underwater chart).
+    Period controls the lookback window: 1Y/3Y/5Y/10Y.
+    """
+    from datetime import timedelta
+
+    from app.domains.wealth.models.model_portfolio_nav import ModelPortfolioNav
+
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    # Compute lookback from period
+    today = date.today()
+    period_days = {"1Y": 365, "3Y": 365 * 3, "5Y": 365 * 5, "10Y": 365 * 10}
+    start_date = today - timedelta(days=period_days[period])
+
+    nav_stmt = (
+        select(ModelPortfolioNav)
+        .where(
+            ModelPortfolioNav.portfolio_id == portfolio_id,
+            ModelPortfolioNav.nav_date >= start_date,
+        )
+        .order_by(ModelPortfolioNav.nav_date)
+    )
+    nav_result = await db.execute(nav_stmt)
+    nav_rows = nav_result.scalars().all()
+
+    if not nav_rows:
+        return {
+            "portfolio_id": str(portfolio_id),
+            "dates": [],
+            "nav_series": [],
+            "drawdown_series": [],
+            "metrics": {"sharpe": None, "max_dd": None, "ann_return": None, "calmar": None},
+        }
+
+    dates: list[str] = []
+    nav_values: list[float] = []
+    drawdowns: list[float] = []
+    daily_returns: list[float] = []
+    running_max = 0.0
+
+    for row in nav_rows:
+        nav_val = float(row.nav)
+        dates.append(row.nav_date.isoformat())
+        nav_values.append(round(nav_val, 4))
+
+        # Drawdown: dd_t = (nav_t / running_max) - 1
+        running_max = max(running_max, nav_val)
+        dd = (nav_val / running_max) - 1 if running_max > 0 else 0.0
+        drawdowns.append(round(dd, 6))
+
+        if row.daily_return is not None:
+            daily_returns.append(float(row.daily_return))
+
+    # Summary metrics
+    metrics: dict[str, float | None] = {
+        "sharpe": None,
+        "max_dd": None,
+        "ann_return": None,
+        "calmar": None,
+    }
+
+    if daily_returns:
+        returns_arr = np.array(daily_returns)
+        mean_r = float(np.mean(returns_arr))
+        std_r = float(np.std(returns_arr, ddof=1))
+        rf_daily = 0.04 / 252
+
+        # Annualized return
+        ann_return = float((1 + mean_r) ** 252 - 1)
+        metrics["ann_return"] = round(ann_return, 6)
+
+        # Sharpe
+        if std_r > 1e-12:
+            sharpe = (mean_r - rf_daily) / std_r * np.sqrt(252)
+            metrics["sharpe"] = round(float(sharpe), 4)
+
+        # Max drawdown
+        max_dd = min(drawdowns) if drawdowns else 0.0
+        metrics["max_dd"] = round(max_dd, 6)
+
+        # Calmar
+        if metrics["max_dd"] is not None and abs(metrics["max_dd"]) > 1e-12:
+            metrics["calmar"] = round(ann_return / abs(metrics["max_dd"]), 4)
+
+    return {
+        "portfolio_id": str(portfolio_id),
+        "dates": dates,
+        "nav_series": nav_values,
+        "drawdown_series": drawdowns,
+        "metrics": metrics,
+    }
+
+
+# ══��══════════════════════��═════════════════════════════��═══════════════
+# MONTE CARLO (Session 3 — Monte Carlo Tab)
+# ══════════════════════════════════════════════���════════════════════════
+
+
+@router.post(
+    "/{portfolio_id}/monte-carlo",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Monte Carlo simulation scoped to a model portfolio",
+)
+async def trigger_monte_carlo(
+    portfolio_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> dict[str, Any]:
+    """Run block-bootstrap Monte Carlo simulation for a model portfolio.
+
+    Uses the portfolio's synthesized NAV from ``model_portfolio_nav``.
+    Results cached in Redis (1h TTL).
+    """
+    import hashlib
+    import json
+
+    _require_ic_role(actor)
+
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    # Check Redis cache
+    cache_key_input = json.dumps({
+        "portfolio_id": str(portfolio_id),
+        "date": date.today().isoformat(),
+        "statistic": "return",
+    }, sort_keys=True).encode()
+    cache_key = f"mc:portfolio:{hashlib.sha256(cache_key_input).hexdigest()[:24]}"
+
+    cached = await _get_cached_mc(cache_key)
+    if cached:
+        return cached
+
+    # Fetch NAV series
+    from app.domains.wealth.services.nav_reader import fetch_nav_series
+
+    from datetime import timedelta
+    start_date = date.today() - timedelta(days=int(1260 * 1.5))  # ~5Y buffer
+    nav_rows = await fetch_nav_series(db, portfolio_id, start_date, date.today())
+
+    if len(nav_rows) < 42:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Insufficient NAV data: {len(nav_rows)} rows (need >= 42)",
+        )
+
+    daily_returns = np.array([
+        r.daily_return if r.daily_return is not None else 0.0
+        for r in nav_rows
+    ])
+
+    from quant_engine.monte_carlo_service import run_monte_carlo
+
+    mc_result = run_monte_carlo(
+        daily_returns=daily_returns,
+        n_simulations=1000,
+        statistic="return",
+        horizons=[252, 756, 1260],
+    )
+
+    response = {
+        "portfolio_id": str(portfolio_id),
+        "n_simulations": mc_result.n_simulations,
+        "statistic": mc_result.statistic,
+        "percentiles": mc_result.percentiles,
+        "mean": mc_result.mean,
+        "median": mc_result.median,
+        "std": mc_result.std,
+        "historical_value": mc_result.historical_value,
+        "confidence_bars": mc_result.confidence_bars,
+    }
+
+    await _set_cached_mc(cache_key, response)
+    return response
+
+
+async def _get_cached_mc(cache_key: str) -> dict | None:
+    """Check Redis for cached Monte Carlo result (fail-open)."""
+    try:
+        import json
+
+        import redis.asyncio as aioredis
+
+        from app.core.jobs.tracker import get_redis_pool
+
+        r = aioredis.Redis(connection_pool=get_redis_pool())
+        try:
+            cached = await r.get(cache_key)
+            if cached:
+                return json.loads(cached)
+        finally:
+            await r.aclose()
+    except Exception:
+        logger.debug("mc_cache_miss", cache_key=cache_key)
+    return None
+
+
+async def _set_cached_mc(cache_key: str, result: dict, ttl: int = 3600) -> None:
+    """Cache Monte Carlo result in Redis (1h TTL, fail-open)."""
+    try:
+        import json
+
+        import redis.asyncio as aioredis
+
+        from app.core.jobs.tracker import get_redis_pool
+
+        r = aioredis.Redis(connection_pool=get_redis_pool())
+        try:
+            await r.set(cache_key, json.dumps(result, default=str), ex=ttl)
+        finally:
+            await r.aclose()
+    except Exception:
+        logger.debug("mc_cache_set_failed", cache_key=cache_key)
