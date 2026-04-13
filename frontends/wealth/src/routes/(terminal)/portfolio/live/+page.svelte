@@ -32,6 +32,9 @@
 	import HoldingsTable, {
 		type HoldingRow,
 	} from "$lib/components/terminal/live/HoldingsTable.svelte";
+	import NewsFeed from "$lib/components/terminal/live/NewsFeed.svelte";
+	import MacroRegimePanel from "$lib/components/terminal/live/MacroRegimePanel.svelte";
+	import TradeLog from "$lib/components/terminal/live/TradeLog.svelte";
 	import TerminalPriceChart from "$lib/components/portfolio/live/charts/TerminalPriceChart.svelte";
 	import type { BarData, LiveTick } from "$lib/components/portfolio/live/charts/TerminalPriceChart.svelte";
 
@@ -184,6 +187,14 @@
 				};
 			})
 			.filter((item): item is WatchlistItem => item !== null),
+	);
+
+	// ---- Resolved tickers for news feed ----
+
+	const resolvedTickers = $derived<string[]>(
+		targetFunds
+			.map((f) => instrumentMap.get(f.instrument_id)?.ticker)
+			.filter((t): t is string => !!t),
 	);
 
 	// ---- Holdings table rows ----
@@ -461,7 +472,7 @@
 				/>
 			</aside>
 
-			<!-- RIGHT TOP: Chart toolbar + chart -->
+			<!-- CENTER TOP: Chart toolbar + chart -->
 			<div class="lw-toolbar">
 				<ChartToolbar
 					ticker={effectiveTicker}
@@ -486,26 +497,41 @@
 				/>
 			</section>
 
-			<!-- RIGHT BOTTOM LEFT: Portfolio Summary -->
-			<div class="lw-summary">
-				<PortfolioSummary
-					status={selected?.status ?? ""}
-					state={selected?.state ?? "draft"}
-					aum={portfolioAum}
-					returnPct={marketStore.totalReturnPct}
-					driftStatus={aggregateDrift}
-					{instrumentCount}
-					{lastRebalance}
-				/>
-			</div>
+			<!-- RIGHT COLUMN: News Feed + Macro Regime stacked -->
+			<aside class="lw-right" aria-label="Market context">
+				<div class="lw-news">
+					<NewsFeed tickers={resolvedTickers} />
+				</div>
+				<div class="lw-macro">
+					<MacroRegimePanel />
+				</div>
+			</aside>
 
-			<!-- RIGHT BOTTOM RIGHT: Holdings Table -->
-			<div class="lw-holdings">
-				<HoldingsTable
-					holdings={holdingsRows}
-					selectedTicker={effectiveTicker}
-					onSelect={handleHoldingsSelect}
-				/>
+			<!-- BOTTOM ROW: Summary + Holdings + Trade Log -->
+			<div class="lw-bottom">
+				<div class="lw-summary">
+					<PortfolioSummary
+						status={selected?.status ?? ""}
+						state={selected?.state ?? "draft"}
+						aum={portfolioAum}
+						returnPct={marketStore.totalReturnPct}
+						driftStatus={aggregateDrift}
+						{instrumentCount}
+						{lastRebalance}
+					/>
+				</div>
+
+				<div class="lw-holdings">
+					<HoldingsTable
+						holdings={holdingsRows}
+						selectedTicker={effectiveTicker}
+						onSelect={handleHoldingsSelect}
+					/>
+				</div>
+
+				<div class="lw-tradelog">
+					<TradeLog portfolioId={selected?.id ?? null} />
+				</div>
 			</div>
 		</div>
 	{/if}
@@ -544,15 +570,15 @@
 		color: var(--terminal-fg-muted);
 	}
 
-	/* -- Main grid (3 columns for bottom split) -- */
+	/* -- Main grid: 3-column terminal layout -- */
 	.lw-shell {
 		display: grid;
-		grid-template-columns: 240px 240px 1fr;
-		grid-template-rows: 32px 1fr 240px;
+		grid-template-columns: 220px 1fr 280px;
+		grid-template-rows: 32px 1fr 45%;
 		grid-template-areas:
-			"watchlist toolbar  toolbar"
-			"watchlist chart    chart"
-			"watchlist summary  holdings";
+			"watchlist toolbar  right"
+			"watchlist chart    right"
+			"watchlist bottom   bottom";
 		height: calc(100vh - 88px);
 		gap: 1px;
 		background: var(--terminal-bg-void);
@@ -583,16 +609,51 @@
 		position: relative;
 	}
 
-	.lw-summary {
-		grid-area: summary;
+	/* Right column: News Feed + Macro Regime stacked (spans rows 1-2) */
+	.lw-right {
+		grid-area: right;
 		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.lw-news {
+		flex: 55;
+		min-height: 0;
+		overflow: hidden;
+		border-bottom: var(--terminal-border-hairline);
+	}
+
+	.lw-macro {
+		flex: 45;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	/* Bottom row: Summary (200px) + Holdings (1fr) + Trade Log (240px) */
+	.lw-bottom {
+		grid-area: bottom;
+		display: grid;
+		grid-template-columns: 200px 1fr 240px;
+		gap: 1px;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.lw-summary {
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
 	}
 
 	.lw-holdings {
-		grid-area: holdings;
+		min-width: 0;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.lw-tradelog {
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
