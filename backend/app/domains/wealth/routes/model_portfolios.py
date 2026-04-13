@@ -1848,14 +1848,77 @@ async def _run_construction_async(
     # ── Resolve CVaR limit from profile config ──
     cvar_limit = await _resolve_cvar_limit(db, profile)
 
-    block_constraints = [
-        BlockConstraint(
-            block_id=a.block_id,
-            min_weight=float(a.min_weight),
-            max_weight=float(a.max_weight),
+    # ── TAA: Resolve dynamic regime bands (or fallback to static IPS) ──
+    from app.domains.wealth.models.allocation import TaaRegimeState
+    from app.domains.wealth.models.block import AllocationBlock
+    from quant_engine.taa_band_service import resolve_effective_bands
+
+    # Fetch block → asset_class mapping
+    block_ids = [a.block_id for a in allocations]
+    block_ac_result = await db.execute(
+        select(AllocationBlock.block_id, AllocationBlock.asset_class)
+        .where(AllocationBlock.block_id.in_(block_ids))
+    )
+    block_asset_classes = {bid: ac for bid, ac in block_ac_result.all()}
+
+    # Read taa_enabled from calibration (default True)
+    taa_enabled = True
+    if portfolio_id is not None:
+        cal_result = await db.execute(
+            select(PortfolioCalibration.expert_overrides)
+            .where(PortfolioCalibration.portfolio_id == portfolio_id)
         )
+        expert_overrides = cal_result.scalar_one_or_none()
+        if isinstance(expert_overrides, dict):
+            taa_enabled = expert_overrides.get("taa_enabled", True)
+
+    # Fetch latest taa_regime_state for this org+profile
+    taa_state_row = None
+    if taa_enabled:
+        taa_stmt = (
+            select(TaaRegimeState)
+            .where(
+                TaaRegimeState.profile == profile,
+            )
+            .order_by(TaaRegimeState.as_of_date.desc())
+            .limit(1)
+        )
+        taa_result = await db.execute(taa_stmt)
+        taa_obj = taa_result.scalar_one_or_none()
+        if taa_obj is not None:
+            taa_state_row = {
+                "raw_regime": taa_obj.raw_regime,
+                "stress_score": float(taa_obj.stress_score) if taa_obj.stress_score is not None else None,
+                "smoothed_centers": taa_obj.smoothed_centers,
+                "effective_bands": taa_obj.effective_bands,
+            }
+
+    # Fetch TAA config from ConfigService
+    taa_config = None
+    if taa_enabled:
+        from app.core.config.config_service import ConfigService as _CS
+        _cs = _CS(db)
+        taa_cfg_result = await _cs.get("liquid_funds", "taa_bands", org_id)
+        if taa_cfg_result:
+            taa_config = taa_cfg_result.value
+
+    alloc_dicts = [
+        {
+            "block_id": a.block_id,
+            "target_weight": float(a.target_weight),
+            "min_weight": float(a.min_weight),
+            "max_weight": float(a.max_weight),
+        }
         for a in allocations
     ]
+
+    block_constraints, taa_provenance = resolve_effective_bands(
+        allocations=alloc_dicts,
+        block_asset_classes=block_asset_classes,
+        taa_regime_state=taa_state_row,
+        taa_config=taa_config,
+        taa_enabled=taa_enabled,
+    )
 
     # Resolve max_single_fund_weight from profile config
     max_single_fund = await _resolve_max_single_fund(db, profile)
@@ -2093,6 +2156,9 @@ async def _run_construction_async(
             for fw in composition.funds
         ],
     }
+
+    # Include TAA provenance for calibration_snapshot enrichment
+    result["taa"] = taa_provenance
 
     if composition.optimization:
         result["optimization"] = {

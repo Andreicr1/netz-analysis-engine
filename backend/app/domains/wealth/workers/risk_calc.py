@@ -1147,6 +1147,268 @@ def _score_metrics(
     metrics["score_components"] = components
 
 
+async def _fetch_regime_inputs(db: AsyncSession, as_of_date: date) -> dict[str, float | None]:
+    """Fetch latest macro signals for regime classification from macro_data.
+
+    Returns dict with keys matching classify_regime_multi_signal params.
+    """
+    # Series needed: VIXCLS, DGS10, DGS2 (for yield curve spread), CPIAUCSL, SAHM,
+    # BAMLH0A0HYM2 (HY OAS), BAA10Y, DFF (for fed_funds_delta)
+    series_ids = ["VIXCLS", "DGS10", "DGS2", "CPIAUCSL", "SAHMREALTIME",
+                  "BAMLH0A0HYM2", "BAA10Y", "DFF"]
+
+    stmt = text("""
+        SELECT DISTINCT ON (series_id) series_id, value, obs_date
+        FROM macro_data
+        WHERE series_id = ANY(:sids)
+          AND obs_date <= :as_of
+          AND value IS NOT NULL
+        ORDER BY series_id, obs_date DESC
+    """)
+    result = await db.execute(stmt, {"sids": series_ids, "as_of": as_of_date})
+    latest: dict[str, float] = {}
+    for sid, val, _ in result.all():
+        latest[sid] = float(val)
+
+    # Yield curve spread = DGS10 - DGS2
+    dgs10 = latest.get("DGS10")
+    dgs2 = latest.get("DGS2")
+    yield_spread = (dgs10 - dgs2) if dgs10 is not None and dgs2 is not None else None
+
+    # CPI YoY — need current and 12-month-ago value
+    cpi_yoy = None
+    cpi_current = latest.get("CPIAUCSL")
+    if cpi_current is not None:
+        cpi_12m_stmt = text("""
+            SELECT value FROM macro_data
+            WHERE series_id = 'CPIAUCSL'
+              AND obs_date <= :target_date
+              AND value IS NOT NULL
+            ORDER BY obs_date DESC LIMIT 1
+        """)
+        cpi_12m_result = await db.execute(
+            cpi_12m_stmt,
+            {"target_date": as_of_date - timedelta(days=380)},
+        )
+        cpi_12m = cpi_12m_result.scalar_one_or_none()
+        if cpi_12m is not None:
+            cpi_yoy = ((cpi_current / float(cpi_12m)) - 1.0) * 100.0
+
+    # Fed funds delta 6m
+    fed_delta = None
+    dff_current = latest.get("DFF")
+    if dff_current is not None:
+        dff_6m_stmt = text("""
+            SELECT value FROM macro_data
+            WHERE series_id = 'DFF'
+              AND obs_date <= :target_date
+              AND value IS NOT NULL
+            ORDER BY obs_date DESC LIMIT 1
+        """)
+        dff_6m_result = await db.execute(
+            dff_6m_stmt,
+            {"target_date": as_of_date - timedelta(days=185)},
+        )
+        dff_6m = dff_6m_result.scalar_one_or_none()
+        if dff_6m is not None:
+            fed_delta = dff_current - float(dff_6m)
+
+    return {
+        "vix": latest.get("VIXCLS"),
+        "yield_curve_spread": yield_spread,
+        "cpi_yoy": cpi_yoy,
+        "sahm_rule": latest.get("SAHMREALTIME"),
+        "hy_oas": latest.get("BAMLH0A0HYM2"),
+        "baa_spread": latest.get("BAA10Y"),
+        "fed_funds_delta_6m": fed_delta,
+    }
+
+
+async def _compute_and_persist_taa_state(
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    eval_date: date,
+) -> None:
+    """Compute regime detection + EMA smoothing → upsert taa_regime_state.
+
+    Called after risk metrics commit. Regime detection is done once;
+    EMA smoothing + effective band computation is per-profile because
+    each profile has different IPS bounds from StrategicAllocation.
+    """
+    from app.core.config.config_service import ConfigService
+    from app.domains.wealth.models.allocation import StrategicAllocation, TaaRegimeState
+    from app.domains.wealth.models.block import AllocationBlock
+    from quant_engine.regime_service import classify_regime_multi_signal
+    from quant_engine.taa_band_service import (
+        compute_effective_band,
+        extract_stress_score,
+        get_regime_centers_for_regime,
+        smooth_regime_centers,
+    )
+
+    # ── 1. Fetch macro inputs and classify regime (once, global) ──
+    inputs = await _fetch_regime_inputs(db, eval_date)
+    regime, reasons = classify_regime_multi_signal(
+        vix=inputs.get("vix"),
+        yield_curve_spread=inputs.get("yield_curve_spread"),
+        cpi_yoy=inputs.get("cpi_yoy"),
+        sahm_rule=inputs.get("sahm_rule"),
+        hy_oas=inputs.get("hy_oas"),
+        baa_spread=inputs.get("baa_spread"),
+        fed_funds_delta_6m=inputs.get("fed_funds_delta_6m"),
+    )
+    stress_score = extract_stress_score(reasons)
+    logger.info("taa_regime_classified", regime=regime, stress_score=stress_score)
+
+    # ── 2. Load TAA config ──
+    config_svc = ConfigService(db)
+    taa_cfg_result = await config_svc.get("liquid_funds", "taa_bands", str(org_id))
+    taa_config = taa_cfg_result.value if taa_cfg_result else None
+
+    # Get raw centers for this regime
+    raw_centers = get_regime_centers_for_regime(regime, taa_config)
+
+    # ── 3. Load transition config ──
+    transition = (taa_config or {}).get("transition", {})
+    halflife = int(transition.get("ema_halflife_days", 5))
+    max_shift = float(transition.get("max_daily_shift_pct", 0.03))
+
+    # ── 4. Find all active profiles for this org ──
+    profiles_result = await db.execute(
+        select(StrategicAllocation.profile)
+        .distinct()
+        .where(
+            StrategicAllocation.effective_from <= eval_date,
+            (StrategicAllocation.effective_to.is_(None))
+            | (StrategicAllocation.effective_to > eval_date),
+        )
+    )
+    profiles = [row[0] for row in profiles_result.all()]
+
+    if not profiles:
+        logger.info("taa_no_active_profiles — skipping regime state persistence")
+        return
+
+    # ── 5. Fetch block → asset_class mapping (once) ──
+    block_ac_result = await db.execute(
+        select(AllocationBlock.block_id, AllocationBlock.asset_class)
+    )
+    block_asset_classes = {bid: ac for bid, ac in block_ac_result.all()}
+
+    # ── 6. Per-profile: smooth + compute bands + upsert ──
+    for prof in profiles:
+        # Fetch previous smoothed state for EMA
+        prev_stmt = (
+            select(TaaRegimeState)
+            .where(
+                TaaRegimeState.profile == prof,
+                TaaRegimeState.as_of_date < eval_date,
+            )
+            .order_by(TaaRegimeState.as_of_date.desc())
+            .limit(1)
+        )
+        prev_result = await db.execute(prev_stmt)
+        prev_row = prev_result.scalar_one_or_none()
+        prev_smoothed = prev_row.smoothed_centers if prev_row else None
+
+        # EMA smooth
+        smoothed = smooth_regime_centers(
+            raw_centers, prev_smoothed,
+            halflife_days=halflife,
+            max_daily_shift=max_shift,
+        )
+
+        # Compute transition velocity
+        velocity: dict[str, float] = {}
+        if prev_smoothed and isinstance(prev_smoothed, dict):
+            for ac, current in smoothed.items():
+                prev = prev_smoothed.get(ac)
+                if prev is not None:
+                    velocity[ac] = round(current - prev, 6)
+
+        # Fetch IPS bounds for this profile
+        alloc_stmt = (
+            select(StrategicAllocation)
+            .where(
+                StrategicAllocation.profile == prof,
+                StrategicAllocation.effective_from <= eval_date,
+                (StrategicAllocation.effective_to.is_(None))
+                | (StrategicAllocation.effective_to > eval_date),
+            )
+        )
+        alloc_result = await db.execute(alloc_stmt)
+        allocs = alloc_result.scalars().all()
+
+        # Get regime half widths
+        regime_bands = (taa_config or {}).get("regime_bands", {})
+        regime_cfg = regime_bands.get(regime, regime_bands.get("RISK_ON", {}))
+        half_widths: dict[str, float] = {
+            ac: cfg.get("half_width", 0.05)
+            for ac, cfg in regime_cfg.items()
+            if isinstance(cfg, dict) and "half_width" in cfg
+        }
+
+        # Compute effective bands per block
+        effective_bands: dict[str, dict[str, float]] = {}
+        for a in allocs:
+            ac = block_asset_classes.get(a.block_id)
+            if ac is None or ac not in smoothed:
+                continue
+            # Disaggregate: compute this block's share of asset-class center
+            class_total = sum(
+                float(aa.target_weight) for aa in allocs
+                if block_asset_classes.get(aa.block_id) == ac
+            )
+            if class_total <= 0:
+                continue
+            block_ratio = float(a.target_weight) / class_total
+            block_center = smoothed[ac] * block_ratio
+            block_half = half_widths.get(ac, 0.05) * block_ratio
+
+            eff_min, eff_max = compute_effective_band(
+                float(a.min_weight), float(a.max_weight),
+                block_center, block_half,
+            )
+            effective_bands[a.block_id] = {
+                "min": round(eff_min, 6),
+                "max": round(eff_max, 6),
+                "center": round(block_center, 6),
+            }
+
+        # Upsert taa_regime_state
+        from sqlalchemy.dialects.postgresql import insert as pg_insert_fn
+        upsert = pg_insert_fn(TaaRegimeState).values(
+            organization_id=org_id,
+            profile=prof,
+            as_of_date=eval_date,
+            raw_regime=regime,
+            stress_score=stress_score,
+            smoothed_centers=smoothed,
+            effective_bands=effective_bands,
+            transition_velocity=velocity or None,
+        )
+        upsert = upsert.on_conflict_do_update(
+            constraint="uq_taa_regime_state_org_profile_date",
+            set_={
+                "raw_regime": upsert.excluded.raw_regime,
+                "stress_score": upsert.excluded.stress_score,
+                "smoothed_centers": upsert.excluded.smoothed_centers,
+                "effective_bands": upsert.excluded.effective_bands,
+                "transition_velocity": upsert.excluded.transition_velocity,
+            },
+        )
+        await db.execute(upsert)
+
+    await db.commit()
+    logger.info(
+        "taa_regime_state_persisted",
+        regime=regime,
+        stress_score=stress_score,
+        profiles=profiles,
+        eval_date=str(eval_date),
+    )
+
+
 async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> dict[str, int]:
     """Compute risk metrics for all active funds with NAV data."""
     logger.info("Starting risk calculation", as_of_date=str(as_of_date))
@@ -1436,6 +1698,12 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                 logger.info("Risk metrics batch committed", funds_staged=len(computed))
 
                 await _write_risk_cache(org_id, eval_date, computed)
+
+                # ── TAA: Compute and persist taa_regime_state ──
+                try:
+                    await _compute_and_persist_taa_state(db, org_id, eval_date)
+                except Exception:
+                    logger.exception("taa_regime_state_computation_failed — non-fatal, risk metrics already committed")
             except Exception:
                 await db.rollback()
                 logger.exception("Risk metrics batch failed — transaction rolled back")

@@ -742,6 +742,11 @@ async def _execute_inner(
         "error": base_result.get("error"),
     }
 
+    # Enrich calibration_snapshot with TAA provenance from the construction result
+    taa_provenance = base_result.get("taa")
+    if taa_provenance:
+        calibration_snapshot["taa"] = taa_provenance
+
     # Build weights_proposed from the funds list
     funds = base_result.get("funds") or []
     weights_proposed = {
