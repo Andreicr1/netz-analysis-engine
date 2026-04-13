@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
 	import { formatAUM, formatPercent, formatDate } from "@investintell/ui";
+	import LiveDot from "$lib/components/terminal/data/LiveDot.svelte";
 
 	interface Props {
 		status: string;
@@ -60,11 +61,11 @@
 		<div class="ps-row">
 			<span class="ps-key">STATUS</span>
 			<span class="ps-val ps-status">
-				<span
-					class="ps-dot"
-					class:ps-dot-live={isLive}
-					class:ps-dot-paused={isPaused}
-				></span>
+				<LiveDot
+					status={isLive ? "success" : isPaused ? "warn" : "muted"}
+					pulse={isLive}
+					label="Portfolio state: {isLive ? 'live' : isPaused ? 'paused' : state}"
+				/>
 				{isLive ? "LIVE" : isPaused ? "PAUSED" : state.toUpperCase()}
 			</span>
 		</div>
@@ -182,21 +183,6 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-	}
-
-	.ps-dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: var(--terminal-fg-muted);
-	}
-
-	.ps-dot-live {
-		background: var(--terminal-status-success);
-	}
-
-	.ps-dot-paused {
-		background: var(--terminal-accent-amber);
 	}
 
 	/* P&L colors */

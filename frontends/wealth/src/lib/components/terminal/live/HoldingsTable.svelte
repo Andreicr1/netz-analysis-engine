@@ -188,7 +188,7 @@
 		padding: var(--terminal-space-1) var(--terminal-space-2);
 		font-size: var(--terminal-text-10);
 		color: var(--terminal-fg-secondary);
-		border-bottom: 1px solid var(--terminal-fg-muted);
+		border-bottom: var(--terminal-border-hairline);
 		white-space: nowrap;
 	}
 
