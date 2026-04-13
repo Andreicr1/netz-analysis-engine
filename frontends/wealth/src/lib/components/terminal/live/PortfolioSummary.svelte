@@ -115,9 +115,13 @@
 	</div>
 
 	<div class="ps-footer">
-		<button type="button" class="ps-rebalance-btn" onclick={handleRebalance}>
-			REBALANCE
-		</button>
+		{#if driftStatus !== "aligned"}
+			<button type="button" class="ps-rebalance-btn" onclick={handleRebalance}>
+				REBALANCE
+			</button>
+		{:else}
+			<span class="ps-footer-status">Portfolio aligned</span>
+		{/if}
 	</div>
 </div>
 
@@ -237,5 +241,14 @@
 	.ps-rebalance-btn:focus-visible {
 		outline: var(--terminal-border-focus);
 		outline-offset: 1px;
+	}
+
+	.ps-footer-status {
+		font-size: var(--terminal-text-10);
+		color: var(--terminal-status-success);
+		letter-spacing: var(--terminal-tracking-caps);
+		font-weight: 600;
+		text-align: center;
+		display: block;
 	}
 </style>

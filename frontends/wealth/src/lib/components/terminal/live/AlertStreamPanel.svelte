@@ -37,9 +37,10 @@
 
 	interface Props {
 		portfolioId: string | null;
+		injectedAlerts?: UnifiedAlert[];
 	}
 
-	let { portfolioId }: Props = $props();
+	let { portfolioId, injectedAlerts = [] }: Props = $props();
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
@@ -74,7 +75,16 @@
 		return () => { cancelled = true; };
 	});
 
+	const mergedAlerts = $derived.by(() => {
+		const injected = injectedAlerts ?? [];
+		const injectedIds = new Set(injected.map((a) => a.id));
+		const apiFiltered = alerts.filter((a) => !injectedIds.has(a.id));
+		return [...injected, ...apiFiltered];
+	});
+
 	async function handleAcknowledge(alert: UnifiedAlert) {
+		// Drift alerts are computed client-side -- can't acknowledge via API
+		if (alert.source === "drift_monitor") return;
 		try {
 			await api.post(`/alerts/${alert.source}/${alert.id}/acknowledge`, {});
 			// Optimistic update
@@ -104,7 +114,7 @@
 <div class="as-root">
 	<div class="as-header">
 		<span class="as-title">ALERTS</span>
-		<span class="as-count">{alerts.filter((a) => !a.acknowledged_at).length}</span>
+		<span class="as-count">{mergedAlerts.filter((a) => !a.acknowledged_at).length}</span>
 	</div>
 
 	<div class="as-body">
@@ -112,10 +122,10 @@
 			<div class="as-empty">Loading...</div>
 		{:else if fetchError}
 			<div class="as-empty">Alert feed unavailable</div>
-		{:else if alerts.length === 0}
+		{:else if mergedAlerts.length === 0}
 			<div class="as-empty">No alerts</div>
 		{:else}
-			{#each alerts as alert (alert.id)}
+			{#each mergedAlerts as alert (alert.id)}
 				<div
 					class="as-item"
 					class:as-item--read={alert.acknowledged_at != null}
@@ -129,12 +139,15 @@
 						>
 							{severityLabel(alert.severity)}
 						</span>
+						{#if alert.source === "drift_monitor"}
+							<span class="as-drift-badge">DRIFT</span>
+						{/if}
 						<span class="as-time">{shortTime(alert.created_at)}</span>
 					</div>
 					<div class="as-item-msg">
 						{alert.title}
 					</div>
-					{#if !alert.acknowledged_at}
+					{#if !alert.acknowledged_at && alert.source !== "drift_monitor"}
 						<button
 							type="button"
 							class="as-ack-btn"
@@ -231,6 +244,14 @@
 	.as-sev--info { color: var(--terminal-accent-cyan); }
 	.as-sev--warning { color: var(--terminal-status-warn); }
 	.as-sev--critical { color: var(--terminal-status-error); }
+
+	.as-drift-badge {
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: var(--terminal-tracking-caps);
+		color: var(--terminal-accent-amber);
+		margin-left: 4px;
+	}
 
 	.as-time {
 		font-size: var(--terminal-text-10);

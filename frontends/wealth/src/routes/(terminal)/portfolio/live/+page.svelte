@@ -35,7 +35,6 @@
 	import NewsFeed from "$lib/components/terminal/live/NewsFeed.svelte";
 	import MacroRegimePanel from "$lib/components/terminal/live/MacroRegimePanel.svelte";
 	import TradeLog from "$lib/components/terminal/live/TradeLog.svelte";
-	import DriftMonitorPanel from "$lib/components/terminal/live/DriftMonitorPanel.svelte";
 	import AlertStreamPanel from "$lib/components/terminal/live/AlertStreamPanel.svelte";
 	import RebalanceFocusMode from "$lib/components/terminal/live/RebalanceFocusMode.svelte";
 	import TerminalPriceChart from "$lib/components/portfolio/live/charts/TerminalPriceChart.svelte";
@@ -468,6 +467,51 @@
 			.filter((r): r is NonNullable<typeof r> => r !== null);
 	});
 
+	// Convert drift breaches/watches to alert items for AlertStreamPanel
+	interface DriftAlert {
+		id: string;
+		source: string;
+		alert_type: string;
+		severity: "info" | "warning" | "critical";
+		title: string;
+		subtitle: string | null;
+		subject_kind: string;
+		subject_id: string;
+		subject_name: string | null;
+		created_at: string;
+		acknowledged_at: string | null;
+		acknowledged_by: string | null;
+		href: string | null;
+	}
+
+	const driftAlerts = $derived.by((): DriftAlert[] => {
+		if (isFallbackHoldings) return [];
+		return driftFunds
+			.filter((f) => Math.abs(f.actual_weight - f.target_weight) >= 0.02)
+			.map((f) => {
+				const drift = f.actual_weight - f.target_weight;
+				const absDrift = Math.abs(drift);
+				const severity: "warning" | "critical" = absDrift >= 0.03 ? "critical" : "warning";
+				const pct = (absDrift * 100).toFixed(1);
+				const direction = drift > 0 ? "over" : "under";
+				return {
+					id: `drift-${f.instrument_id}`,
+					source: "drift_monitor",
+					alert_type: "drift_breach",
+					severity,
+					title: `${f.ticker} ${direction}weight by ${pct}pp`,
+					subtitle: null,
+					subject_kind: "instrument",
+					subject_id: f.instrument_id,
+					subject_name: f.fund_name,
+					created_at: new Date().toISOString(),
+					acknowledged_at: null,
+					acknowledged_by: null,
+					href: null,
+				};
+			});
+	});
+
 	// Portfolio dropdown
 	let showDropdown = $state(false);
 
@@ -493,9 +537,9 @@
 		</div>
 	{:else}
 		<div class="lw-shell">
-			<!-- LEFT: Watchlist -->
-			<aside class="lw-watchlist" aria-label="Watchlist">
-				<!-- Portfolio selector in watchlist header -->
+			<!-- LEFT COLUMN: Watchlist + Alerts + Trade Log -->
+			<aside class="lw-left" aria-label="Watchlist and alerts">
+				<!-- Portfolio selector -->
 				<div class="lw-portfolio-selector">
 					<button
 						type="button"
@@ -535,71 +579,66 @@
 					{/if}
 				</div>
 
-				<Watchlist
-					items={watchlistItems}
-					selectedTicker={effectiveTicker}
-					onSelect={handleWatchlistSelect}
-					portfolioName={selected?.display_name ?? ""}
-				/>
-			</aside>
-
-			<!-- CENTER TOP: Chart toolbar + chart -->
-			<div class="lw-toolbar">
-				<ChartToolbar
-					ticker={effectiveTicker}
-					instrumentName={effectiveInstrumentName}
-					timeframe={chartTimeframe}
-					onTimeframeChange={handleTimeframeChange}
-					onCompare={handleCompare}
-					{compareTicker}
-					onClearCompare={handleClearCompare}
-				/>
-			</div>
-
-			<section class="lw-chart" aria-label="Price chart">
-				<TerminalPriceChart
-					ticker={effectiveTicker}
-					{historicalBars}
-					portfolioNavBars={effectiveNavBars}
-					{lastTick}
-					timeframe={chartTimeframe === "1Y" ? "3M" : chartTimeframe}
-					onTimeframeChange={handleTimeframeChange}
-					{dataStatus}
-				/>
-			</section>
-
-			<!-- RIGHT COLUMN: News Feed + Macro Regime stacked -->
-			<aside class="lw-right" aria-label="Market context">
-				<div class="lw-news">
-					<NewsFeed tickers={resolvedTickers} />
+				<div class="lw-left-watchlist">
+					<Watchlist
+						items={watchlistItems}
+						selectedTicker={effectiveTicker}
+						onSelect={handleWatchlistSelect}
+						portfolioName={selected?.display_name ?? ""}
+					/>
 				</div>
-				<div class="lw-macro">
-					<MacroRegimePanel />
+
+				<div class="lw-left-alerts">
+					<AlertStreamPanel
+						portfolioId={selected?.id ?? null}
+						injectedAlerts={driftAlerts}
+					/>
+				</div>
+
+				<div class="lw-left-tradelog">
+					{#key refreshToken}
+						<TradeLog portfolioId={selected?.id ?? null} />
+					{/key}
 				</div>
 			</aside>
 
-			<!-- BOTTOM ROW: Summary+Drift | Holdings | Alerts+TradeLog -->
-			<div class="lw-bottom">
-				<div class="lw-left-stack">
-					<div class="lw-summary">
-						<PortfolioSummary
-							status={selected?.status ?? ""}
-							state={selected?.state ?? "draft"}
-							aum={portfolioAum}
-							returnPct={marketStore.totalReturnPct}
-							driftStatus={aggregateDrift}
-							{instrumentCount}
-							{lastRebalance}
-							onRebalance={handleRebalanceOpen}
-						/>
-					</div>
-					<div class="lw-drift">
-						<DriftMonitorPanel
-							funds={driftFunds}
-							isFallback={isFallbackHoldings}
-							onRebalance={handleRebalanceOpen}
-						/>
-					</div>
+			<!-- CENTER: Toolbar + Chart + Summary + Holdings -->
+			<div class="lw-center">
+				<div class="lw-toolbar">
+					<ChartToolbar
+						ticker={effectiveTicker}
+						instrumentName={effectiveInstrumentName}
+						timeframe={chartTimeframe}
+						onTimeframeChange={handleTimeframeChange}
+						onCompare={handleCompare}
+						{compareTicker}
+						onClearCompare={handleClearCompare}
+					/>
+				</div>
+
+				<section class="lw-chart" aria-label="Price chart">
+					<TerminalPriceChart
+						ticker={effectiveTicker}
+						{historicalBars}
+						portfolioNavBars={effectiveNavBars}
+						{lastTick}
+						timeframe={chartTimeframe === "1Y" ? "3M" : chartTimeframe}
+						onTimeframeChange={handleTimeframeChange}
+						{dataStatus}
+					/>
+				</section>
+
+				<div class="lw-summary">
+					<PortfolioSummary
+						status={selected?.status ?? ""}
+						state={selected?.state ?? "draft"}
+						aum={portfolioAum}
+						returnPct={marketStore.totalReturnPct}
+						driftStatus={aggregateDrift}
+						{instrumentCount}
+						{lastRebalance}
+						onRebalance={handleRebalanceOpen}
+					/>
 				</div>
 
 				<div class="lw-holdings">
@@ -609,18 +648,17 @@
 						onSelect={handleHoldingsSelect}
 					/>
 				</div>
-
-				<div class="lw-right-stack">
-					<div class="lw-alerts-panel">
-						<AlertStreamPanel portfolioId={selected?.id ?? null} />
-					</div>
-					<div class="lw-tradelog">
-						{#key refreshToken}
-							<TradeLog portfolioId={selected?.id ?? null} />
-						{/key}
-					</div>
-				</div>
 			</div>
+
+			<!-- RIGHT COLUMN: News Feed + Market Conditions -->
+			<aside class="lw-right" aria-label="Market context">
+				<div class="lw-news">
+					<NewsFeed tickers={resolvedTickers} />
+				</div>
+				<div class="lw-macro">
+					<MacroRegimePanel />
+				</div>
+			</aside>
 		</div>
 
 		{#if showRebalance && selected}
@@ -670,23 +708,18 @@
 		color: var(--terminal-fg-muted);
 	}
 
-	/* -- Main grid: 3-column terminal layout -- */
+	/* -- Main grid: 3-column, full height -- */
 	.lw-shell {
 		display: grid;
 		grid-template-columns: 220px 1fr 280px;
-		grid-template-rows: 32px 1fr 45%;
-		grid-template-areas:
-			"watchlist toolbar  right"
-			"watchlist chart    right"
-			"watchlist bottom   bottom";
 		height: calc(100vh - 88px);
 		gap: 1px;
 		background: var(--terminal-bg-void);
 		font-family: var(--terminal-font-mono);
 	}
 
-	.lw-watchlist {
-		grid-area: watchlist;
+	/* LEFT COLUMN: stacked vertically */
+	.lw-left {
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
@@ -694,14 +727,44 @@
 		background: var(--terminal-bg-panel);
 	}
 
+	.lw-left-watchlist {
+		flex: 60;
+		min-height: 0;
+		overflow: hidden;
+		border-bottom: var(--terminal-border-hairline);
+	}
+
+	.lw-left-alerts {
+		flex: 25;
+		min-height: 0;
+		overflow: hidden;
+		border-bottom: var(--terminal-border-hairline);
+	}
+
+	.lw-left-tradelog {
+		flex: 15;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	/* CENTER COLUMN: toolbar + chart + summary + holdings */
+	.lw-center {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		min-height: 0;
+		overflow: hidden;
+	}
+
 	.lw-toolbar {
-		grid-area: toolbar;
+		flex-shrink: 0;
+		height: 32px;
 		min-width: 0;
 		overflow: hidden;
 	}
 
 	.lw-chart {
-		grid-area: chart;
+		flex: 55;
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
@@ -709,9 +772,22 @@
 		position: relative;
 	}
 
-	/* Right column: News Feed + Macro Regime stacked (spans rows 1-2) */
+	.lw-summary {
+		flex-shrink: 0;
+		overflow: hidden;
+		border-top: var(--terminal-border-hairline);
+	}
+
+	.lw-holdings {
+		flex: 45;
+		min-width: 0;
+		min-height: 0;
+		overflow: hidden;
+		border-top: var(--terminal-border-hairline);
+	}
+
+	/* RIGHT COLUMN: News + Macro stacked */
 	.lw-right {
-		grid-area: right;
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
@@ -727,66 +803,6 @@
 
 	.lw-macro {
 		flex: 45;
-		min-height: 0;
-		overflow: hidden;
-	}
-
-	/* Bottom row: Left stack (200px) + Holdings (1fr) + Right stack (260px) */
-	.lw-bottom {
-		grid-area: bottom;
-		display: grid;
-		grid-template-columns: 200px 1fr 260px;
-		gap: 1px;
-		min-height: 0;
-		overflow: hidden;
-	}
-
-	.lw-left-stack {
-		display: flex;
-		flex-direction: column;
-		min-height: 0;
-		overflow: hidden;
-		gap: 1px;
-	}
-
-	.lw-summary {
-		flex: 50;
-		min-width: 0;
-		min-height: 0;
-		overflow: hidden;
-	}
-
-	.lw-drift {
-		flex: 50;
-		min-width: 0;
-		min-height: 0;
-		overflow: hidden;
-	}
-
-	.lw-holdings {
-		min-width: 0;
-		min-height: 0;
-		overflow: hidden;
-	}
-
-	.lw-right-stack {
-		display: flex;
-		flex-direction: column;
-		min-height: 0;
-		overflow: hidden;
-		gap: 1px;
-	}
-
-	.lw-alerts-panel {
-		flex: 50;
-		min-width: 0;
-		min-height: 0;
-		overflow: hidden;
-	}
-
-	.lw-tradelog {
-		flex: 50;
-		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
 	}
