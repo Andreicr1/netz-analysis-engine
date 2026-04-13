@@ -1750,9 +1750,9 @@ export class PortfolioWorkspaceState {
 
 		try {
 			const api = this.api();
-			// POST /model-portfolios/{id}/rebalance/execute 
+			// POST /model-portfolios/{id}/execute-trades
 			await api.post(
-				`/model-portfolios/${this.portfolioId}/rebalance/execute`,
+				`/model-portfolios/${this.portfolioId}/execute-trades`,
 				payload,
 				{ timeoutMs: 30_000 },
 			);

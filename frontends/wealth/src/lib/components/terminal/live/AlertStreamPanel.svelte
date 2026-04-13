@@ -8,7 +8,7 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { createClientApiClient } from "$lib/api/client";
-	import { formatDateTime } from "@investintell/ui";
+	import { formatTime } from "@investintell/ui";
 
 	type Severity = "info" | "warning" | "critical";
 
@@ -97,8 +97,7 @@
 	}
 
 	function shortTime(iso: string): string {
-		if (iso.length < 16) return iso;
-		return iso.substring(11, 16);
+		return formatTime(iso);
 	}
 </script>
 

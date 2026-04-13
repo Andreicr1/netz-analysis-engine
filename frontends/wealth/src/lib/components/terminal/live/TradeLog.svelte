@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { formatPercent } from "@investintell/ui";
+	import { formatPercent, formatTime } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 
 	interface Props {
@@ -90,13 +90,8 @@
 		return () => { cancelled = true; };
 	});
 
-	function formatTime(iso: string): string {
-		try {
-			const d = new Date(iso);
-			return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
-		} catch {
-			return "--:--";
-		}
+	function displayTime(iso: string): string {
+		return formatTime(iso);
 	}
 
 	function resolveTicker(instrumentId: string): string {
@@ -126,7 +121,7 @@
 					<span class="tl-delta" class:tl-delta--buy={isBuy} class:tl-delta--sell={!isBuy}>
 						{isBuy ? "+" : ""}{formatPercent(t.delta_weight, 1)}
 					</span>
-					<span class="tl-time">{formatTime(t.executed_at)}</span>
+					<span class="tl-time">{displayTime(t.executed_at)}</span>
 				</div>
 			{/each}
 		{/if}

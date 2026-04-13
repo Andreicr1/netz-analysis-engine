@@ -265,12 +265,18 @@
 		let cancelled = false;
 		api.get<{
 			ticker: string;
-			price: number;
-			bars?: Array<{ time: number; value: number }>;
-		}>(`/market-data/quote/${encodeURIComponent(t)}`)
+			interval: string;
+			bars: Array<{ timestamp: string; open: number | null; high: number | null; low: number | null; close: number | null; volume: number }>;
+			source: string;
+		}>(`/market-data/historical/${encodeURIComponent(t)}`)
 			.then((res) => {
 				if (cancelled) return;
-				historicalBars = res.bars ?? [];
+				historicalBars = (res.bars ?? [])
+					.filter((b) => b.close != null)
+					.map((b) => ({
+						time: Math.floor(new Date(b.timestamp).getTime() / 1000),
+						value: b.close as number,
+					}));
 			})
 			.catch(() => {
 				if (!cancelled) historicalBars = [];
@@ -289,14 +295,18 @@
 		}
 		let cancelled = false;
 		api.get<{
-			nav_series: Array<{ date: string; nav: number }> | null;
+			portfolio_id: string;
+			dates: string[];
+			nav_series: number[];
+			drawdown_series: number[];
+			metrics: { sharpe: number | null; max_dd: number | null; ann_return: number | null; calmar: number | null };
 		}>(`/model-portfolios/${pid}/nav-history`)
 			.then((res) => {
 				if (cancelled) return;
-				if (res.nav_series) {
-					portfolioNavBars = res.nav_series.map((p) => ({
-						time: Math.floor(new Date(p.date).getTime() / 1000),
-						value: p.nav,
+				if (res.dates && res.nav_series && res.dates.length > 0) {
+					portfolioNavBars = res.dates.map((d: string, i: number) => ({
+						time: Math.floor(new Date(d).getTime() / 1000),
+						value: res.nav_series[i] ?? 0,
 					}));
 				} else {
 					portfolioNavBars = [];
@@ -333,11 +343,18 @@
 		let cancelled = false;
 		api.get<{
 			ticker: string;
-			bars?: Array<{ time: number; value: number }>;
-		}>(`/market-data/quote/${encodeURIComponent(ct)}`)
+			interval: string;
+			bars: Array<{ timestamp: string; open: number | null; high: number | null; low: number | null; close: number | null; volume: number }>;
+			source: string;
+		}>(`/market-data/historical/${encodeURIComponent(ct)}`)
 			.then((res) => {
 				if (cancelled) return;
-				compareNavBars = res.bars ?? [];
+				compareNavBars = (res.bars ?? [])
+					.filter((b) => b.close != null)
+					.map((b) => ({
+						time: Math.floor(new Date(b.timestamp).getTime() / 1000),
+						value: b.close as number,
+					}));
 			})
 			.catch(() => {
 				if (!cancelled) compareNavBars = [];

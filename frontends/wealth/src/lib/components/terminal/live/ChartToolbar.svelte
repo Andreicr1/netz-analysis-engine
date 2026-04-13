@@ -74,7 +74,7 @@
 		compareError = null;
 
 		try {
-			await api.get<{ ticker: string }>(`/market-data/quote/${encodeURIComponent(q)}`);
+			await api.get<{ ticker: string; bars: unknown[] }>(`/market-data/historical/${encodeURIComponent(q)}?start_date=${new Date(Date.now() - 86400000 * 5).toISOString().slice(0, 10)}`);
 			marketStore.subscribe([q]);
 			onCompare(q);
 			compareOpen = false;
