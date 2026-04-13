@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -30,6 +31,27 @@ class StrategicAllocation(OrganizationScopedMixin, Base):
     actor_source: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
+    )
+
+
+class MacroRegimeSnapshot(Base):
+    """Global daily regime snapshot. One row per date, no org_id, no RLS.
+
+    Computed by regime_detection worker. Read by risk_calc for TAA band
+    computation and by GET /allocation/regime for global regime display.
+    """
+
+    __tablename__ = "macro_regime_snapshot"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
+    )
+    as_of_date: Mapped[date] = mapped_column(Date, nullable=False, unique=True)
+    raw_regime: Mapped[str] = mapped_column(String(20), nullable=False)
+    stress_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 1))
+    signal_details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
 
 

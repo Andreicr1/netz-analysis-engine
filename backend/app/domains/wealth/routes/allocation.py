@@ -10,6 +10,7 @@ from app.core.db.audit import write_audit_event
 from app.core.security.clerk_auth import CurrentUser, get_current_user, require_ic_member
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.allocation import (
+    MacroRegimeSnapshot,
     StrategicAllocation,
     TaaRegimeState,
     TacticalPosition,
@@ -21,6 +22,7 @@ from app.domains.wealth.schemas.allocation import (
     EffectiveAllocationRead,
     EffectiveAllocationWithRegimeRead,
     EffectiveBandRead,
+    GlobalRegimeRead,
     RegimeBandsRead,
     SimulationResult,
     StrategicAllocationRead,
@@ -379,6 +381,39 @@ async def simulate_allocation(
         within_limit=within_limit,
         warnings=warnings,
         computed_at=datetime.now(UTC),
+    )
+
+
+@router.get(
+    "/regime",
+    response_model=GlobalRegimeRead,
+    summary="Current global market regime",
+    description="Returns the latest global regime snapshot. No org context needed — "
+    "market conditions are the same for all tenants.",
+)
+async def get_global_regime(
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> GlobalRegimeRead:
+    stmt = (
+        select(MacroRegimeSnapshot)
+        .order_by(MacroRegimeSnapshot.as_of_date.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    snapshot = result.scalar_one_or_none()
+
+    if snapshot is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No regime snapshot available. The regime_detection worker may not have run yet.",
+        )
+
+    return GlobalRegimeRead(
+        as_of_date=snapshot.as_of_date,
+        raw_regime=snapshot.raw_regime,
+        stress_score=snapshot.stress_score,
+        signal_details=snapshot.signal_details,
     )
 
 
