@@ -17,6 +17,8 @@ import structlog
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.domains.wealth.schemas.sanitized import sanitize_payload
+
 logger = structlog.get_logger()
 
 _DD_EXPIRY_MONTHS = 12
@@ -198,8 +200,12 @@ def _check_rebalance_overdue(db: Session, organization_id: str) -> list[Alert]:
 
 
 def alerts_to_json(batch: AlertBatch) -> list[dict[str, Any]]:
-    """Serialize AlertBatch to JSON-compatible list for Redis pub/sub."""
-    return [
+    """Serialize AlertBatch to JSON-compatible list for Redis pub/sub.
+
+    Payload is walked through sanitize_payload() to translate any
+    jargon in free-form detail/title strings before crossing the wire.
+    """
+    raw = [
         {
             "alert_type": a.alert_type,
             "severity": a.severity,
@@ -212,3 +218,4 @@ def alerts_to_json(batch: AlertBatch) -> list[dict[str, Any]]:
         }
         for a in batch.alerts
     ]
+    return [sanitize_payload(item) for item in raw]

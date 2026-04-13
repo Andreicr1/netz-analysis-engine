@@ -42,3 +42,14 @@ export type {
 	TerminalChartOptionsInput,
 	TerminalChartTokens,
 } from "./terminal-options.js";
+
+// Terminal lightweight-charts factory: single source of aesthetic
+// truth for every lightweight-charts instance inside (terminal)/.
+export {
+	createTerminalLightweightChartOptions,
+	terminalLWSeriesColors,
+} from "./terminal-lw-options.js";
+export type {
+	TerminalLWChartOptionsInput,
+	TerminalLWChartOptions,
+} from "./terminal-lw-options.js";

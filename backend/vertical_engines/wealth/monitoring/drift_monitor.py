@@ -17,6 +17,8 @@ from typing import Any
 import structlog
 from sqlalchemy.orm import Session
 
+from app.domains.wealth.schemas.sanitized import sanitize_payload
+
 logger = structlog.get_logger()
 
 # DTW drift threshold (from quant_engine convention)
@@ -197,8 +199,12 @@ def _check_universe_removal_impact(
 
 
 def drift_alerts_to_json(result: DriftScanResult) -> list[dict[str, Any]]:
-    """Serialize DriftScanResult to JSON-compatible list."""
-    return [
+    """Serialize DriftScanResult to JSON-compatible list.
+
+    Payload is walked through sanitize_payload() to translate any
+    jargon in free-form detail strings before crossing the wire.
+    """
+    raw = [
         {
             "instrument_id": a.instrument_id,
             "fund_name": a.fund_name,
@@ -211,3 +217,4 @@ def drift_alerts_to_json(result: DriftScanResult) -> list[dict[str, Any]]:
         }
         for a in result.alerts
     ]
+    return [sanitize_payload(item) for item in raw]
