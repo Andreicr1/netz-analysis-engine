@@ -14,7 +14,6 @@
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 	import type { PageData } from "./$types";
 
-	import RegimeContextStrip from "$lib/components/terminal/builder/RegimeContextStrip.svelte";
 	import RunControls from "$lib/components/terminal/builder/RunControls.svelte";
 	import WeightsTab from "$lib/components/terminal/builder/WeightsTab.svelte";
 	import CascadeTimeline from "$lib/components/terminal/builder/CascadeTimeline.svelte";
@@ -63,7 +62,6 @@
 	}
 
 	// Regime bands: prefer workspace (live-updated) over server-loaded initial
-	const regimeBands = $derived(workspace.regimeBands ?? data.initialRegimeBands);
 
 	// Tab state for right column
 	const TABS = ["REGIME", "WEIGHTS", "RISK", "STRESS", "BACKTEST", "MONTE CARLO", "ADVISOR"] as const;
@@ -114,9 +112,6 @@
 				{/if}
 			</select>
 		</div>
-
-		<!-- Zone A: Regime Context Strip (120px) -->
-		<RegimeContextStrip {regimeBands} />
 
 		<!-- Zone B: Calibration Controls (scrollable) -->
 		<div class="builder-calibration">
