@@ -1,0 +1,292 @@
+<!--
+  /portfolio/builder — Phase 4 Terminal Builder.
+
+  2-column command center (40% command / 60% results).
+  Left: Zone A (regime), Zone B (calibration), Zone C (run controls).
+  Right: 6-tab results panel (WEIGHTS active, rest stub).
+
+  Workspace initialization: imports the singleton, calls setGetToken
+  + selectPortfolio on mount. CalibrationPanel already reads from
+  the workspace singleton internally — no prop threading needed.
+-->
+<script lang="ts">
+	import { getContext } from "svelte";
+	import { goto } from "$app/navigation";
+	import { resolve } from "$app/paths";
+	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import type { ModelPortfolio } from "$lib/types/model-portfolio";
+	import type { PageData } from "./$types";
+
+	import RegimeContextStrip from "$lib/components/terminal/builder/RegimeContextStrip.svelte";
+	import RunControls from "$lib/components/terminal/builder/RunControls.svelte";
+	import WeightsTab from "$lib/components/terminal/builder/WeightsTab.svelte";
+	import CalibrationPanel from "$lib/components/portfolio/CalibrationPanel.svelte";
+
+	let { data }: { data: PageData } = $props();
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+
+	// Portfolio selection state
+	let selectedPortfolio = $state<ModelPortfolio | null>(null);
+	const portfolios = $derived((data.portfolios ?? []) as ModelPortfolio[]);
+
+	// Initialize workspace on mount
+	$effect(() => {
+		workspace.setGetToken(getToken);
+
+		// Auto-select first portfolio if available
+		const first = portfolios[0];
+		if (first && !selectedPortfolio) {
+			selectPortfolio(first);
+		}
+	});
+
+	function selectPortfolio(p: ModelPortfolio) {
+		selectedPortfolio = p;
+		workspace.selectPortfolio(p);
+	}
+
+	function handlePortfolioChange(e: Event) {
+		const select = e.currentTarget as HTMLSelectElement;
+		const p = portfolios.find((p) => p.id === select.value);
+		if (p) selectPortfolio(p);
+	}
+
+	// Regime bands: prefer workspace (live-updated) over server-loaded initial
+	const regimeBands = $derived(workspace.regimeBands ?? data.initialRegimeBands);
+
+	// Tab state for right column
+	const TABS = ["WEIGHTS", "RISK", "STRESS", "BACKTEST", "MONTE CARLO", "ADVISOR"] as const;
+	type TabId = (typeof TABS)[number];
+	let activeTab = $state<TabId>("WEIGHTS");
+</script>
+
+<svelte:head>
+	<title>Builder — InvestIntell</title>
+</svelte:head>
+
+<div class="builder-shell">
+	<!-- LEFT COLUMN (40%) — Command Panel -->
+	<div class="builder-left">
+		<!-- Portfolio selector -->
+		<div class="builder-portfolio-select">
+			<select
+				class="builder-select"
+				value={selectedPortfolio?.id ?? ""}
+				onchange={handlePortfolioChange}
+				aria-label="Select portfolio"
+			>
+				{#if portfolios.length === 0}
+					<option value="" disabled>No portfolios available</option>
+				{:else}
+					{#each portfolios as p (p.id)}
+						<option value={p.id}>{p.display_name}</option>
+					{/each}
+				{/if}
+			</select>
+		</div>
+
+		<!-- Zone A: Regime Context Strip (120px) -->
+		<RegimeContextStrip {regimeBands} />
+
+		<!-- Zone B: Calibration Controls (flex) -->
+		<div class="builder-calibration">
+			{#if selectedPortfolio}
+				<CalibrationPanel />
+			{:else}
+				<div class="builder-empty-zone">Select a portfolio to configure</div>
+			{/if}
+		</div>
+
+		<!-- Zone C: Run Controls (80px) -->
+		<RunControls />
+	</div>
+
+	<!-- RIGHT COLUMN (60%) — Results Panel -->
+	<div class="builder-right">
+		<!-- Tab bar -->
+		<div class="builder-tabs" role="tablist">
+			{#each TABS as tab (tab)}
+				<button
+					type="button"
+					role="tab"
+					class="builder-tab"
+					class:builder-tab--active={activeTab === tab}
+					aria-selected={activeTab === tab}
+					onclick={() => { activeTab = tab; }}
+				>
+					{tab}
+				</button>
+			{/each}
+		</div>
+
+		<!-- Tab content -->
+		<div class="builder-tab-content" role="tabpanel">
+			{#if activeTab === "WEIGHTS"}
+				<WeightsTab />
+			{:else if activeTab === "RISK"}
+				<div class="builder-stub">Risk analysis &mdash; Coming in Session 2</div>
+			{:else if activeTab === "STRESS"}
+				<div class="builder-stub">Stress scenarios &mdash; Coming in Session 2</div>
+			{:else if activeTab === "BACKTEST"}
+				<div class="builder-stub">Historical backtest &mdash; Coming in Session 3</div>
+			{:else if activeTab === "MONTE CARLO"}
+				<div class="builder-stub">Monte Carlo simulation &mdash; Coming in Session 3</div>
+			{:else if activeTab === "ADVISOR"}
+				<div class="builder-stub">Construction advisor &mdash; Coming in Session 2</div>
+			{/if}
+		</div>
+	</div>
+</div>
+
+<style>
+	.builder-shell {
+		display: grid;
+		grid-template-columns: 40% 60%;
+		height: calc(100vh - 88px);
+		background: var(--terminal-bg-void);
+		font-family: var(--terminal-font-mono);
+		color: var(--terminal-fg-secondary);
+	}
+
+	/* ── Left Column ──────────────────────────────────── */
+
+	.builder-left {
+		display: flex;
+		flex-direction: column;
+		overflow-y: auto;
+		border-right: var(--terminal-border-hairline);
+	}
+
+	.builder-portfolio-select {
+		padding: var(--terminal-space-2);
+		border-bottom: var(--terminal-border-hairline);
+	}
+
+	.builder-select {
+		width: 100%;
+		height: 28px;
+		background: var(--terminal-bg-panel-sunken);
+		color: var(--terminal-fg-primary);
+		border: var(--terminal-border-hairline);
+		border-radius: var(--terminal-radius-none);
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-11);
+		padding: 0 var(--terminal-space-2);
+		cursor: pointer;
+	}
+
+	.builder-select:focus-visible {
+		outline: var(--terminal-border-focus);
+		outline-offset: 2px;
+	}
+
+	/* Terminal overrides for CalibrationPanel */
+	.builder-calibration {
+		flex: 1;
+		overflow-y: auto;
+		border-bottom: var(--terminal-border-hairline);
+
+		/* Override @investintell/ui rounded corners */
+		--ii-radius-md: 0px;
+		--ii-radius-sm: 0px;
+		--ii-radius-lg: 0px;
+		--ii-radius-xl: 0px;
+		font-family: var(--terminal-font-mono);
+	}
+
+	/* Deep scoped overrides for CalibrationPanel child elements */
+	.builder-calibration :global(button) {
+		border-radius: var(--terminal-radius-none);
+	}
+
+	.builder-calibration :global([data-slot="tablist"]) {
+		border-radius: var(--terminal-radius-none);
+	}
+
+	.builder-calibration :global([data-slot="trigger"]) {
+		border-radius: var(--terminal-radius-none);
+		font-family: var(--terminal-font-mono);
+	}
+
+	.builder-calibration :global([data-slot="content"]) {
+		border-radius: var(--terminal-radius-none);
+	}
+
+	.builder-empty-zone {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex: 1;
+		color: var(--terminal-fg-muted);
+		font-size: var(--terminal-text-11);
+		text-transform: uppercase;
+		letter-spacing: var(--terminal-tracking-caps);
+	}
+
+	/* ── Right Column ─────────────────────────────────── */
+
+	.builder-right {
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.builder-tabs {
+		display: flex;
+		align-items: stretch;
+		height: 32px;
+		border-bottom: var(--terminal-border-hairline);
+		flex-shrink: 0;
+	}
+
+	.builder-tab {
+		display: inline-flex;
+		align-items: center;
+		padding: 0 var(--terminal-space-3);
+		background: transparent;
+		border: none;
+		border-bottom: 2px solid transparent;
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-10);
+		font-weight: 600;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		color: var(--terminal-fg-tertiary);
+		cursor: pointer;
+		transition:
+			color var(--terminal-motion-tick) var(--terminal-motion-easing-out),
+			border-color var(--terminal-motion-tick) var(--terminal-motion-easing-out);
+	}
+
+	.builder-tab:hover {
+		color: var(--terminal-accent-amber);
+	}
+
+	.builder-tab--active {
+		color: var(--terminal-accent-amber);
+		border-bottom-color: var(--terminal-accent-amber);
+	}
+
+	.builder-tab:focus-visible {
+		outline: var(--terminal-border-focus);
+		outline-offset: -2px;
+	}
+
+	.builder-tab-content {
+		flex: 1;
+		overflow-y: auto;
+		padding: var(--terminal-space-2);
+	}
+
+	.builder-stub {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 300px;
+		color: var(--terminal-fg-muted);
+		font-size: var(--terminal-text-12);
+		text-transform: uppercase;
+		letter-spacing: var(--terminal-tracking-caps);
+	}
+</style>

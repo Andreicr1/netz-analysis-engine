@@ -29,6 +29,7 @@
 	// `resolve(...)`; hardcoding the three active route literals is
 	// the only pattern its AST matcher accepts.
 	const HREF_SCREENER = resolve("/terminal-screener");
+	const HREF_BUILDER = resolve("/portfolio/builder");
 	const HREF_LIVE = resolve("/portfolio/live");
 	const HREF_RESEARCH = resolve("/research");
 
@@ -82,7 +83,7 @@
 		{ id: "macro",    label: "MACRO",    href: "/macro",             status: "pending", pendingReason: "Phase 7 — Macro Desk" },
 		{ id: "alloc",    label: "ALLOC",    href: "/allocation",        status: "pending", pendingReason: "Phase 7 — Allocation" },
 		{ id: "screener", label: "SCREENER", href: HREF_SCREENER,        status: "active" },
-		{ id: "builder",  label: "BUILDER",  href: "/portfolio/build",   status: "pending", pendingReason: "Phase 4 — Portfolio Builder" },
+		{ id: "builder",  label: "BUILDER",  href: HREF_BUILDER,         status: "active" },
 		{ id: "live",     label: "LIVE",     href: HREF_LIVE,            status: "active" },
 		{ id: "research", label: "RESEARCH", href: HREF_RESEARCH,        status: "active" },
 		{ id: "alerts",   label: "ALERTS",   href: "/alerts",            status: "pending", pendingReason: "Phase 5 — Alerts Inbox" },
@@ -92,6 +93,7 @@
 	function isHrefActive(href: string): boolean {
 		return (
 			href === HREF_SCREENER ||
+			href === HREF_BUILDER ||
 			href === HREF_LIVE ||
 			href === HREF_RESEARCH
 		);
@@ -99,6 +101,7 @@
 
 	function activePathSegment(href: string): string {
 		if (href === HREF_SCREENER) return "/terminal-screener";
+		if (href === HREF_BUILDER) return "/portfolio/builder";
 		if (href === HREF_LIVE) return "/portfolio/live";
 		if (href === HREF_RESEARCH) return "/research";
 		return href;
@@ -161,6 +164,15 @@
 						class="tn-tab tn-tab--active"
 						class:tn-tab--current={isActiveTab(tab)}
 						href={HREF_SCREENER}
+						data-sveltekit-preload-data="hover"
+					>
+						<span class="tn-tab-label">{tab.label}</span>
+					</a>
+				{:else if tab.id === "builder"}
+					<a
+						class="tn-tab tn-tab--active"
+						class:tn-tab--current={isActiveTab(tab)}
+						href={HREF_BUILDER}
 						data-sveltekit-preload-data="hover"
 					>
 						<span class="tn-tab-label">{tab.label}</span>
