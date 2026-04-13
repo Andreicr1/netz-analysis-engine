@@ -157,10 +157,10 @@ class TestHedgeFundProfile:
     def test_hedge_fund_scores_alpha_high(self) -> None:
         risk = _make_equity_metrics()
         alt = _make_alt_metrics(
-            sortino_1y=2.5,                 # Strong risk-adjusted returns
+            sortino_1y=4.0,                 # p90+ risk-adjusted returns
             downside_capture_1y=0.3,        # Excellent downside protection
             equity_correlation_252d=0.3,    # Low-moderate correlation
-            crisis_alpha_score=0.10,        # Positive crisis alpha
+            crisis_alpha_score=0.10,        # p90+ crisis alpha
         )
         score, components = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt, alt_profile="hedge",
