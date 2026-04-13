@@ -115,13 +115,91 @@
 	let viewportHeight = $state(600);
 	let scrollTop = $state(0);
 
-	const totalHeight = $derived(assets.length * ROW_HEIGHT);
+	// ── Sort state ────────────────────────────────────────
+	type SortDirection = "asc" | "desc" | null;
+	type SortableColumn =
+		| "ticker"
+		| "name"
+		| "fundType"
+		| "strategy"
+		| "geography"
+		| "aum"
+		| "ret1y"
+		| "ret10y"
+		| "expenseRatioPct"
+		| "managerScore";
+
+	let sortColumn = $state<SortableColumn | null>(null);
+	let sortDirection = $state<SortDirection>(null);
+
+	function toggleSort(col: SortableColumn) {
+		if (sortColumn !== col) {
+			sortColumn = col;
+			sortDirection = "desc";
+		} else if (sortDirection === "desc") {
+			sortDirection = "asc";
+		} else {
+			sortColumn = null;
+			sortDirection = null;
+		}
+		if (scrollContainer) {
+			scrollContainer.scrollTop = 0;
+			scrollTop = 0;
+		}
+	}
+
+	const SORTABLE_COLUMNS: Record<SortableColumn, "numeric" | "text"> = {
+		ticker: "text",
+		name: "text",
+		fundType: "text",
+		strategy: "text",
+		geography: "text",
+		aum: "numeric",
+		ret1y: "numeric",
+		ret10y: "numeric",
+		expenseRatioPct: "numeric",
+		managerScore: "numeric",
+	};
+
+	function sortCaret(col: SortableColumn): string {
+		if (sortColumn !== col) return "";
+		return sortDirection === "asc" ? " \u25B2" : " \u25BC";
+	}
+
+	// ── Sorted asset derivation ───────────────────────────
+	const sortedAssets = $derived.by(() => {
+		if (!sortColumn || !sortDirection) return assets;
+
+		const col = sortColumn;
+		const dir = sortDirection;
+		const colType = SORTABLE_COLUMNS[col];
+
+		return [...assets].sort((a, b) => {
+			const aVal = a[col];
+			const bVal = b[col];
+
+			if (aVal == null && bVal == null) return 0;
+			if (aVal == null) return 1;
+			if (bVal == null) return -1;
+
+			let cmp: number;
+			if (colType === "numeric") {
+				cmp = (aVal as number) - (bVal as number);
+			} else {
+				cmp = String(aVal).localeCompare(String(bVal), undefined, { sensitivity: "base" });
+			}
+
+			return dir === "asc" ? cmp : -cmp;
+		});
+	});
+
+	const totalHeight = $derived(sortedAssets.length * ROW_HEIGHT);
 	const visibleCount = $derived(Math.ceil(viewportHeight / ROW_HEIGHT));
 	const startIndex = $derived(Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN));
 	const endIndex = $derived(
-		Math.min(assets.length, Math.floor(scrollTop / ROW_HEIGHT) + visibleCount + OVERSCAN),
+		Math.min(sortedAssets.length, Math.floor(scrollTop / ROW_HEIGHT) + visibleCount + OVERSCAN),
 	);
-	const visibleAssets = $derived(assets.slice(startIndex, endIndex));
+	const visibleAssets = $derived(sortedAssets.slice(startIndex, endIndex));
 	const offsetY = $derived(startIndex * ROW_HEIGHT);
 
 	let loadMoreDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -154,7 +232,7 @@
 
 	// Scroll to highlighted row when it changes (keyboard navigation)
 	export function scrollToIndex(index: number) {
-		if (!scrollContainer || index < 0 || index >= assets.length) return;
+		if (!scrollContainer || index < 0 || index >= sortedAssets.length) return;
 		const rowTop = index * ROW_HEIGHT;
 		const rowBottom = rowTop + ROW_HEIGHT;
 		const viewTop = scrollContainer.scrollTop;
@@ -169,6 +247,8 @@
 	// Reset scroll only on filter change (new generation), NOT on append
 	$effect(() => {
 		void fetchGeneration;
+		sortColumn = null;
+		sortDirection = null;
 		if (scrollContainer) {
 			scrollContainer.scrollTop = 0;
 			scrollTop = 0;
@@ -271,16 +351,16 @@
 <div class="dg-root">
 	<!-- Header row (sticky, outside scroll container) -->
 	<div class="dg-header" role="row" aria-rowindex={1}>
-		<span class="dg-th dg-col-ticker">Ticker</span>
-		<span class="dg-th dg-col-name">Name</span>
-		<span class="dg-th dg-col-type">Type</span>
-		<span class="dg-th dg-col-strategy">Strategy</span>
-		<span class="dg-th dg-col-geo">Geo</span>
-		<span class="dg-th dg-col-aum dg-right">AUM</span>
-		<span class="dg-th dg-col-ret dg-right">1Y Ret</span>
-		<span class="dg-th dg-col-ret dg-right">10Y Ret</span>
-		<span class="dg-th dg-col-er dg-right">ER%</span>
-		<span class="dg-th dg-col-score dg-right">Score</span>
+		<button class="dg-th dg-th-sort dg-col-ticker" class:dg-th-active={sortColumn === "ticker"} onclick={() => toggleSort("ticker")}>Ticker{sortCaret("ticker")}</button>
+		<button class="dg-th dg-th-sort dg-col-name" class:dg-th-active={sortColumn === "name"} onclick={() => toggleSort("name")}>Name{sortCaret("name")}</button>
+		<button class="dg-th dg-th-sort dg-col-type" class:dg-th-active={sortColumn === "fundType"} onclick={() => toggleSort("fundType")}>Type{sortCaret("fundType")}</button>
+		<button class="dg-th dg-th-sort dg-col-strategy" class:dg-th-active={sortColumn === "strategy"} onclick={() => toggleSort("strategy")}>Strategy{sortCaret("strategy")}</button>
+		<button class="dg-th dg-th-sort dg-col-geo" class:dg-th-active={sortColumn === "geography"} onclick={() => toggleSort("geography")}>Geo{sortCaret("geography")}</button>
+		<button class="dg-th dg-th-sort dg-col-aum dg-right" class:dg-th-active={sortColumn === "aum"} onclick={() => toggleSort("aum")}>AUM{sortCaret("aum")}</button>
+		<button class="dg-th dg-th-sort dg-col-ret dg-right" class:dg-th-active={sortColumn === "ret1y"} onclick={() => toggleSort("ret1y")}>1Y Ret{sortCaret("ret1y")}</button>
+		<button class="dg-th dg-th-sort dg-col-ret dg-right" class:dg-th-active={sortColumn === "ret10y"} onclick={() => toggleSort("ret10y")}>10Y Ret{sortCaret("ret10y")}</button>
+		<button class="dg-th dg-th-sort dg-col-er dg-right" class:dg-th-active={sortColumn === "expenseRatioPct"} onclick={() => toggleSort("expenseRatioPct")}>ER%{sortCaret("expenseRatioPct")}</button>
+		<button class="dg-th dg-th-sort dg-col-score dg-right" class:dg-th-active={sortColumn === "managerScore"} onclick={() => toggleSort("managerScore")}>Score{sortCaret("managerScore")}</button>
 		<span class="dg-th dg-col-action dg-center">Action</span>
 	</div>
 
@@ -456,6 +536,24 @@
 		color: var(--terminal-fg-tertiary);
 		white-space: nowrap;
 		user-select: none;
+	}
+
+	/* ── Sortable headers ────────────────────────────────── */
+	.dg-th-sort {
+		background: none;
+		border: none;
+		cursor: pointer;
+		text-align: left;
+		transition: color 80ms ease;
+	}
+	.dg-th-sort:hover {
+		color: var(--terminal-fg-secondary);
+	}
+	.dg-th-sort.dg-right {
+		text-align: right;
+	}
+	.dg-th-active {
+		color: var(--terminal-accent-amber) !important;
 	}
 
 	/* ── Scroll container ─────────────────────────────── */
