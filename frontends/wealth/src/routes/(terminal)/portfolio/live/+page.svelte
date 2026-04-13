@@ -35,6 +35,8 @@
 	import NewsFeed from "$lib/components/terminal/live/NewsFeed.svelte";
 	import MacroRegimePanel from "$lib/components/terminal/live/MacroRegimePanel.svelte";
 	import TradeLog from "$lib/components/terminal/live/TradeLog.svelte";
+	import DriftMonitorPanel from "$lib/components/terminal/live/DriftMonitorPanel.svelte";
+	import AlertStreamPanel from "$lib/components/terminal/live/AlertStreamPanel.svelte";
 	import RebalanceFocusMode from "$lib/components/terminal/live/RebalanceFocusMode.svelte";
 	import TerminalPriceChart from "$lib/components/portfolio/live/charts/TerminalPriceChart.svelte";
 	import type { BarData, LiveTick } from "$lib/components/portfolio/live/charts/TerminalPriceChart.svelte";
@@ -425,6 +427,30 @@
 		return "aligned";
 	});
 
+	// ---- Drift monitor data ----
+
+	const isFallbackHoldings = $derived(
+		actualHoldingsData?.source === "target_fallback",
+	);
+
+	const driftFunds = $derived.by(() => {
+		const actual = actualHoldingsData?.holdings ?? [];
+		const actualMap = new Map(actual.map((h) => [h.instrument_id, h.weight]));
+		return targetFunds
+			.map((f) => {
+				const ticker = resolveTicker(f.instrument_id, "");
+				if (!ticker) return null;
+				return {
+					instrument_id: f.instrument_id,
+					fund_name: resolveName(f.instrument_id, f.fund_name),
+					ticker,
+					target_weight: f.weight,
+					actual_weight: actualMap.get(f.instrument_id) ?? f.weight,
+				};
+			})
+			.filter((r): r is NonNullable<typeof r> => r !== null);
+	});
+
 	// Portfolio dropdown
 	let showDropdown = $state(false);
 
@@ -535,19 +561,28 @@
 				</div>
 			</aside>
 
-			<!-- BOTTOM ROW: Summary + Holdings + Trade Log -->
+			<!-- BOTTOM ROW: Summary+Drift | Holdings | Alerts+TradeLog -->
 			<div class="lw-bottom">
-				<div class="lw-summary">
-					<PortfolioSummary
-						status={selected?.status ?? ""}
-						state={selected?.state ?? "draft"}
-						aum={portfolioAum}
-						returnPct={marketStore.totalReturnPct}
-						driftStatus={aggregateDrift}
-						{instrumentCount}
-						{lastRebalance}
-						onRebalance={handleRebalanceOpen}
-					/>
+				<div class="lw-left-stack">
+					<div class="lw-summary">
+						<PortfolioSummary
+							status={selected?.status ?? ""}
+							state={selected?.state ?? "draft"}
+							aum={portfolioAum}
+							returnPct={marketStore.totalReturnPct}
+							driftStatus={aggregateDrift}
+							{instrumentCount}
+							{lastRebalance}
+							onRebalance={handleRebalanceOpen}
+						/>
+					</div>
+					<div class="lw-drift">
+						<DriftMonitorPanel
+							funds={driftFunds}
+							isFallback={isFallbackHoldings}
+							onRebalance={handleRebalanceOpen}
+						/>
+					</div>
 				</div>
 
 				<div class="lw-holdings">
@@ -558,10 +593,15 @@
 					/>
 				</div>
 
-				<div class="lw-tradelog">
-					{#key refreshToken}
-						<TradeLog portfolioId={selected?.id ?? null} />
-					{/key}
+				<div class="lw-right-stack">
+					<div class="lw-alerts-panel">
+						<AlertStreamPanel portfolioId={selected?.id ?? null} />
+					</div>
+					<div class="lw-tradelog">
+						{#key refreshToken}
+							<TradeLog portfolioId={selected?.id ?? null} />
+						{/key}
+					</div>
 				</div>
 			</div>
 		</div>
@@ -674,17 +714,33 @@
 		overflow: hidden;
 	}
 
-	/* Bottom row: Summary (200px) + Holdings (1fr) + Trade Log (240px) */
+	/* Bottom row: Left stack (200px) + Holdings (1fr) + Right stack (260px) */
 	.lw-bottom {
 		grid-area: bottom;
 		display: grid;
-		grid-template-columns: 200px 1fr 240px;
+		grid-template-columns: 200px 1fr 260px;
 		gap: 1px;
 		min-height: 0;
 		overflow: hidden;
 	}
 
+	.lw-left-stack {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
+		gap: 1px;
+	}
+
 	.lw-summary {
+		flex: 50;
+		min-width: 0;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.lw-drift {
+		flex: 50;
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
@@ -696,7 +752,23 @@
 		overflow: hidden;
 	}
 
+	.lw-right-stack {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
+		gap: 1px;
+	}
+
+	.lw-alerts-panel {
+		flex: 50;
+		min-width: 0;
+		min-height: 0;
+		overflow: hidden;
+	}
+
 	.lw-tradelog {
+		flex: 50;
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;

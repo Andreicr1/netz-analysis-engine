@@ -32,6 +32,7 @@
 	const HREF_BUILDER = resolve("/portfolio/builder");
 	const HREF_LIVE = resolve("/portfolio/live");
 	const HREF_RESEARCH = resolve("/research");
+	const HREF_ALERTS = resolve("/alerts");
 
 	type TabStatus = "active" | "pending";
 
@@ -86,7 +87,7 @@
 		{ id: "builder",  label: "BUILDER",  href: HREF_BUILDER,         status: "active" },
 		{ id: "live",     label: "LIVE",     href: HREF_LIVE,            status: "active" },
 		{ id: "research", label: "RESEARCH", href: HREF_RESEARCH,        status: "active" },
-		{ id: "alerts",   label: "ALERTS",   href: "/alerts",            status: "pending", pendingReason: "Phase 5 — Alerts Inbox" },
+		{ id: "alerts",   label: "ALERTS",   href: HREF_ALERTS,          status: "active" },
 		{ id: "dd",       label: "DD",       href: "/dd",                status: "pending", pendingReason: "Phase 6 — DD Queue" },
 	];
 
@@ -95,7 +96,8 @@
 			href === HREF_SCREENER ||
 			href === HREF_BUILDER ||
 			href === HREF_LIVE ||
-			href === HREF_RESEARCH
+			href === HREF_RESEARCH ||
+			href === HREF_ALERTS
 		);
 	}
 
@@ -104,6 +106,7 @@
 		if (href === HREF_BUILDER) return "/portfolio/builder";
 		if (href === HREF_LIVE) return "/portfolio/live";
 		if (href === HREF_RESEARCH) return "/research";
+		if (href === HREF_ALERTS) return "/alerts";
 		return href;
 	}
 
@@ -140,8 +143,8 @@
 	}
 
 	function handleAlertClick() {
-		// Alerts route is pending (Phase 5). Intentional no-op — the
-		// ticker hover state in CSS surfaces the pending state.
+		// Navigate to the alerts inbox route.
+		window.location.href = HREF_ALERTS;
 	}
 
 	function handleSessionClick() {
@@ -191,6 +194,15 @@
 						class="tn-tab tn-tab--active"
 						class:tn-tab--current={isActiveTab(tab)}
 						href={HREF_RESEARCH}
+						data-sveltekit-preload-data="hover"
+					>
+						<span class="tn-tab-label">{tab.label}</span>
+					</a>
+				{:else if tab.id === "alerts"}
+					<a
+						class="tn-tab tn-tab--active"
+						class:tn-tab--current={isActiveTab(tab)}
+						href={HREF_ALERTS}
 						data-sveltekit-preload-data="hover"
 					>
 						<span class="tn-tab-label">{tab.label}</span>
