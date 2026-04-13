@@ -15,6 +15,10 @@
 -->
 <script lang="ts">
 	import { formatNumber } from "@investintell/ui";
+	import {
+		createTerminalLightweightChartOptions,
+		terminalLWSeriesColors,
+	} from "@investintell/ui";
 	import { getContext, onMount } from "svelte";
 	import type { UTCTimestamp } from "lightweight-charts";
 	import {
@@ -115,42 +119,17 @@
 			}
 			charts = [];
 
-			const baseLayout = {
-				background: { color: "transparent" },
-				textColor: "#5a6577",
-				fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
-				fontSize: 9,
-			};
-			const baseGrid = {
-				vertLines: { color: "rgba(255, 255, 255, 0.03)" },
-				horzLines: { color: "rgba(255, 255, 255, 0.03)" },
-			};
-			const baseTimeScale = {
-				borderColor: "rgba(255, 255, 255, 0.06)",
-				timeVisible: false,
-				secondsVisible: false,
-			};
+			const sc = terminalLWSeriesColors();
 
 			// ── Pane 1: Drawdown (baseline red) ─────────────
-			const ddChart = lc.createChart(dd, {
-				autoSize: true,
-				layout: baseLayout,
-				grid: baseGrid,
-				rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.08 } },
-				timeScale: baseTimeScale,
-				crosshair: {
-					vertLine: { color: "rgba(239, 68, 68, 0.3)" },
-					horzLine: { color: "rgba(239, 68, 68, 0.3)" },
-				},
+			const ddOpts = createTerminalLightweightChartOptions({
+				fontSize: 9,
+				crosshairColor: sc.drawdown.bottomLineColor,
 			});
+			const ddChart = lc.createChart(dd, { autoSize: true, ...ddOpts });
 			const ddSeries = ddChart.addSeries(lc.BaselineSeries, {
 				baseValue: { type: "price", price: 0 },
-				topLineColor: "rgba(34, 197, 94, 0.0)",
-				topFillColor1: "rgba(34, 197, 94, 0.00)",
-				topFillColor2: "rgba(34, 197, 94, 0.00)",
-				bottomLineColor: "#ef4444",
-				bottomFillColor1: "rgba(239, 68, 68, 0.20)",
-				bottomFillColor2: "rgba(239, 68, 68, 0.02)",
+				...sc.drawdown,
 				lineWidth: 2,
 				priceLineVisible: false,
 				lastValueVisible: true,
@@ -159,20 +138,15 @@
 			ddSeries.setData(data.drawdown.map((p) => ({ time: p.time as unknown as UTCTimestamp, value: p.value })));
 			ddChart.timeScale().fitContent();
 
-			// ── Pane 2: GARCH Volatility (purple line) ──────
-			const vlChart = lc.createChart(vl, {
-				autoSize: true,
-				layout: baseLayout,
-				grid: baseGrid,
-				rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.15, bottom: 0.1 } },
-				timeScale: baseTimeScale,
-				crosshair: {
-					vertLine: { color: "rgba(139, 92, 246, 0.3)" },
-					horzLine: { color: "rgba(139, 92, 246, 0.3)" },
-				},
+			// ── Pane 2: GARCH Volatility (violet line) ──────
+			const vlOpts = createTerminalLightweightChartOptions({
+				fontSize: 9,
+				scaleMargins: { top: 0.15, bottom: 0.1 },
+				crosshairColor: sc.volatility.color,
 			});
+			const vlChart = lc.createChart(vl, { autoSize: true, ...vlOpts });
 			const vlSeries = vlChart.addSeries(lc.LineSeries, {
-				color: "#8b5cf6",
+				...sc.volatility,
 				lineWidth: 2,
 				priceLineVisible: false,
 				lastValueVisible: true,
@@ -183,25 +157,14 @@
 			);
 			vlChart.timeScale().fitContent();
 
-			// ── Pane 3: Regime Probability (grey area) ──────
-			const rgChart = lc.createChart(rg, {
-				autoSize: true,
-				layout: baseLayout,
-				grid: baseGrid,
-				rightPriceScale: {
-					borderVisible: false,
-					scaleMargins: { top: 0.08, bottom: 0.08 },
-				},
-				timeScale: { ...baseTimeScale, timeVisible: true },
-				crosshair: {
-					vertLine: { color: "rgba(90, 101, 119, 0.4)" },
-					horzLine: { color: "rgba(90, 101, 119, 0.4)" },
-				},
+			// ── Pane 3: Regime Probability (amber area) ──────
+			const rgOpts = createTerminalLightweightChartOptions({
+				fontSize: 9,
+				timeVisible: true,
 			});
+			const rgChart = lc.createChart(rg, { autoSize: true, ...rgOpts });
 			const rgSeries = rgChart.addSeries(lc.AreaSeries, {
-				topColor: "rgba(202, 138, 4, 0.30)",
-				bottomColor: "rgba(202, 138, 4, 0.02)",
-				lineColor: "#ca8a04",
+				...sc.regime,
 				lineWidth: 1,
 				priceLineVisible: false,
 				lastValueVisible: true,
@@ -312,7 +275,7 @@
 	.rc-root {
 		width: 100%;
 		height: 100%;
-		background: #05080f;
+		background: var(--terminal-bg-panel);
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
@@ -323,7 +286,7 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 8px 12px;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		border-bottom: var(--terminal-border-hairline);
 		flex-shrink: 0;
 		height: 36px;
 	}
@@ -336,17 +299,17 @@
 	}
 
 	.rc-ticker {
-		font-family: "JetBrains Mono", "SF Mono", monospace;
-		font-size: 13px;
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-14);
 		font-weight: 800;
-		color: #e2e8f0;
+		color: var(--terminal-fg-primary);
 		letter-spacing: 0.04em;
 	}
 
 	.rc-label {
-		font-family: "Urbanist", system-ui, sans-serif;
-		font-size: 11px;
-		color: #5a6577;
+		font-family: var(--terminal-font-sans);
+		font-size: var(--terminal-text-11);
+		color: var(--terminal-fg-tertiary);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -360,9 +323,9 @@
 	}
 
 	.rc-summary {
-		font-family: "JetBrains Mono", "SF Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 9px;
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		display: inline-flex;
@@ -373,14 +336,14 @@
 	.rc-summary strong {
 		font-size: 11px;
 		font-weight: 700;
-		color: #e2e8f0;
+		color: var(--terminal-fg-primary);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.rc-tag {
-		font-family: "JetBrains Mono", "SF Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 9px;
-		color: #3a4455;
+		color: var(--terminal-fg-muted);
 		letter-spacing: 0.06em;
 	}
 
@@ -390,7 +353,7 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+		border-bottom: var(--terminal-border-hairline);
 	}
 	.rc-pane:last-child {
 		border-bottom: none;
@@ -399,11 +362,11 @@
 	.rc-pane-label {
 		flex-shrink: 0;
 		padding: 4px 10px 2px;
-		font-family: "JetBrains Mono", "SF Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 9px;
 		font-weight: 700;
 		letter-spacing: 0.08em;
-		color: #3a4455;
+		color: var(--terminal-fg-muted);
 		text-transform: uppercase;
 	}
 
@@ -428,21 +391,21 @@
 	}
 
 	.rc-placeholder-title {
-		font-family: "JetBrains Mono", "SF Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 11px;
 		font-weight: 700;
 		letter-spacing: 0.12em;
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 	}
 
 	.rc-placeholder-sub {
-		font-family: "Urbanist", system-ui, sans-serif;
+		font-family: var(--terminal-font-sans);
 		font-size: 11px;
-		color: #3a4455;
+		color: var(--terminal-fg-muted);
 		line-height: 1.5;
 	}
 
-	.neg { color: #ef4444; }
-	.purple { color: #8b5cf6; }
-	.amber { color: #ca8a04; }
+	.neg { color: var(--terminal-status-error); }
+	.purple { color: var(--terminal-accent-violet); }
+	.amber { color: var(--terminal-accent-amber); }
 </style>
