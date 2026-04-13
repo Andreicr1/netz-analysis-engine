@@ -1,6 +1,7 @@
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -15,6 +16,8 @@ from app.domains.wealth.models.allocation import (
     TaaRegimeState,
     TacticalPosition,
 )
+from app.domains.wealth.models.benchmark_nav import BenchmarkNav
+from app.domains.wealth.models.block import AllocationBlock
 from app.domains.wealth.routes.common import get_latest_snapshot
 from app.domains.wealth.routes.common import validate_profile as _validate_profile
 from app.domains.wealth.schemas.allocation import (
@@ -23,7 +26,9 @@ from app.domains.wealth.schemas.allocation import (
     EffectiveAllocationWithRegimeRead,
     EffectiveBandRead,
     GlobalRegimeRead,
+    RegimeBandRange,
     RegimeBandsRead,
+    RegimeOverlayRead,
     SimulationResult,
     StrategicAllocationRead,
     StrategicAllocationUpdate,
@@ -414,6 +419,100 @@ async def get_global_regime(
         raw_regime=snapshot.raw_regime,
         stress_score=snapshot.stress_score,
         signal_details=snapshot.signal_details,
+    )
+
+
+_PERIOD_DAYS: dict[str, int] = {
+    "1Y": 365,
+    "2Y": 730,
+    "3Y": 1095,
+    "5Y": 1825,
+}
+
+
+@router.get(
+    "/regime-overlay",
+    response_model=RegimeOverlayRead,
+    summary="Regime history overlay for charting",
+    description=(
+        "Returns S&P500 NAV + collapsed regime bands for a given period. "
+        "Global data (no org context) — used for the Builder REGIME tab chart."
+    ),
+)
+async def get_regime_overlay(
+    period: Literal["1Y", "2Y", "3Y", "5Y"] = Query(default="3Y"),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> RegimeOverlayRead:
+    start_date = date.today() - timedelta(days=_PERIOD_DAYS[period])
+
+    # Resolve SPY block_id dynamically
+    spy_block_stmt = (
+        select(AllocationBlock.block_id)
+        .where(AllocationBlock.benchmark_ticker == "SPY")
+        .limit(1)
+    )
+    spy_block_result = await db.execute(spy_block_stmt)
+    spy_block_id = spy_block_result.scalar_one_or_none()
+
+    # Fetch SPY NAV
+    dates: list[date] = []
+    spy_values: list[float] = []
+    if spy_block_id is not None:
+        nav_stmt = (
+            select(BenchmarkNav.nav_date, BenchmarkNav.nav)
+            .where(
+                BenchmarkNav.block_id == spy_block_id,
+                BenchmarkNav.nav_date >= start_date,
+            )
+            .order_by(BenchmarkNav.nav_date.asc())
+        )
+        nav_result = await db.execute(nav_stmt)
+        for row in nav_result.all():
+            dates.append(row.nav_date)
+            spy_values.append(float(row.nav))
+
+    # Fetch regime history
+    regime_stmt = (
+        select(MacroRegimeSnapshot.as_of_date, MacroRegimeSnapshot.raw_regime)
+        .where(MacroRegimeSnapshot.as_of_date >= start_date)
+        .order_by(MacroRegimeSnapshot.as_of_date.asc())
+    )
+    regime_result = await db.execute(regime_stmt)
+    regime_rows = regime_result.all()
+
+    # Collapse consecutive same-regime rows into contiguous bands
+    regime_bands: list[RegimeBandRange] = []
+    current_band: dict[str, object] | None = None
+    for row in regime_rows:
+        d = row.as_of_date
+        r = row.raw_regime
+        if current_band is None or current_band["regime"] != r:
+            if current_band is not None:
+                regime_bands.append(
+                    RegimeBandRange(
+                        start=current_band["start"],  # type: ignore[arg-type]
+                        end=current_band["end"],  # type: ignore[arg-type]
+                        regime=current_band["regime"],  # type: ignore[arg-type]
+                    )
+                )
+            current_band = {"start": d, "end": d, "regime": r}
+        else:
+            current_band["end"] = d
+    if current_band is not None:
+        regime_bands.append(
+            RegimeBandRange(
+                start=current_band["start"],  # type: ignore[arg-type]
+                end=current_band["end"],  # type: ignore[arg-type]
+                regime=current_band["regime"],  # type: ignore[arg-type]
+            )
+        )
+
+    return RegimeOverlayRead(
+        dates=dates,
+        spy_values=spy_values,
+        regime_bands=regime_bands,
+        period=period,
     )
 
 

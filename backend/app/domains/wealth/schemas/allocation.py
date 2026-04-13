@@ -194,6 +194,23 @@ class TaaHistoryRead(BaseModel):
     total: int
 
 
+class RegimeBandRange(BaseModel):
+    """Contiguous date range where the same regime was active."""
+
+    start: date
+    end: date
+    regime: str
+
+
+class RegimeOverlayRead(BaseModel):
+    """Regime history overlaid on S&P500 NAV for chart rendering."""
+
+    dates: list[date] = []
+    spy_values: list[float] = []
+    regime_bands: list[RegimeBandRange] = []
+    period: str
+
+
 class EffectiveAllocationWithRegimeRead(BaseModel):
     """Effective allocation enriched with regime-adjusted bands."""
 
