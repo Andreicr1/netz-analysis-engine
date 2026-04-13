@@ -602,7 +602,7 @@
 				</div>
 			</aside>
 
-			<!-- CENTER: Toolbar + Chart + Summary + Holdings -->
+			<!-- CENTER: Toolbar + Chart (top) + [Summary | Holdings] (bottom) -->
 			<div class="lw-center">
 				<div class="lw-toolbar">
 					<ChartToolbar
@@ -628,25 +628,27 @@
 					/>
 				</section>
 
-				<div class="lw-summary">
-					<PortfolioSummary
-						status={selected?.status ?? ""}
-						state={selected?.state ?? "draft"}
-						aum={portfolioAum}
-						returnPct={marketStore.totalReturnPct}
-						driftStatus={aggregateDrift}
-						{instrumentCount}
-						{lastRebalance}
-						onRebalance={handleRebalanceOpen}
-					/>
-				</div>
+				<div class="lw-bottom">
+					<div class="lw-summary">
+						<PortfolioSummary
+							status={selected?.status ?? ""}
+							state={selected?.state ?? "draft"}
+							aum={portfolioAum}
+							returnPct={marketStore.totalReturnPct}
+							driftStatus={aggregateDrift}
+							{instrumentCount}
+							{lastRebalance}
+							onRebalance={handleRebalanceOpen}
+						/>
+					</div>
 
-				<div class="lw-holdings">
-					<HoldingsTable
-						holdings={holdingsRows}
-						selectedTicker={effectiveTicker}
-						onSelect={handleHoldingsSelect}
-					/>
+					<div class="lw-holdings">
+						<HoldingsTable
+							holdings={holdingsRows}
+							selectedTicker={effectiveTicker}
+							onSelect={handleHoldingsSelect}
+						/>
+					</div>
 				</div>
 			</div>
 
@@ -746,7 +748,7 @@
 		overflow: hidden;
 	}
 
-	/* CENTER COLUMN: toolbar + chart + summary + holdings */
+	/* CENTER COLUMN: toolbar + chart (top) + [summary | holdings] (bottom) */
 	.lw-center {
 		display: flex;
 		flex-direction: column;
@@ -771,17 +773,24 @@
 		position: relative;
 	}
 
+	.lw-bottom {
+		flex: 45;
+		display: grid;
+		grid-template-columns: 200px 1fr;
+		min-height: 0;
+		overflow: hidden;
+		border-top: var(--terminal-border-hairline);
+	}
+
 	.lw-summary {
-		flex-shrink: 0;
+		min-height: 0;
 		overflow: hidden;
 	}
 
 	.lw-holdings {
-		flex: 45;
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
-		border-top: var(--terminal-border-hairline);
 	}
 
 	/* RIGHT COLUMN: News + Macro stacked */
