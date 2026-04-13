@@ -126,7 +126,7 @@
 		min-height: 0;
 		overflow: hidden;
 		background: var(--terminal-bg-panel);
-		font-family: var(--terminal-font-mono);
+		font-family: var(--terminal-font-mono), "JetBrains Mono", "SF Mono", monospace;
 		border-right: var(--terminal-border-hairline);
 	}
 
@@ -140,6 +140,7 @@
 	}
 
 	.ps-label {
+		font-family: var(--terminal-font-mono), "JetBrains Mono", "SF Mono", monospace;
 		font-size: var(--terminal-text-9);
 		font-weight: 700;
 		letter-spacing: var(--terminal-tracking-caps);
@@ -164,12 +165,14 @@
 	}
 
 	.ps-key {
+		font-family: var(--terminal-font-mono), "JetBrains Mono", "SF Mono", monospace;
 		font-size: var(--terminal-text-9);
 		color: var(--terminal-fg-tertiary);
 		letter-spacing: var(--terminal-tracking-caps);
 	}
 
 	.ps-val {
+		font-family: var(--terminal-font-mono), "JetBrains Mono", "SF Mono", monospace;
 		font-size: var(--terminal-text-10);
 		font-weight: 600;
 		color: var(--terminal-fg-primary);

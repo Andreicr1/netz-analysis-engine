@@ -713,7 +713,7 @@
 	/* -- Main grid: 3-column, full height -- */
 	.lw-shell {
 		display: grid;
-		grid-template-columns: 220px 1fr 280px;
+		grid-template-columns: 280px 1fr 280px;
 		height: calc(100vh - 88px);
 		background: var(--terminal-bg-void);
 		font-family: var(--terminal-font-mono);
@@ -726,6 +726,7 @@
 		min-height: 0;
 		overflow: hidden;
 		background: var(--terminal-bg-panel);
+		border-right: var(--terminal-border-hairline);
 	}
 
 	.lw-left-watchlist {
@@ -799,6 +800,7 @@
 		flex-direction: column;
 		min-height: 0;
 		overflow: hidden;
+		border-left: var(--terminal-border-hairline);
 	}
 
 	.lw-news {
