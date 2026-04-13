@@ -342,7 +342,7 @@
 
 	/* Block row */
 	.wt-block-row {
-		border-bottom: 1px solid var(--terminal-bg-panel-raised);
+		border-bottom: var(--terminal-border-hairline);
 	}
 
 	.wt-block-name {
@@ -364,7 +364,7 @@
 
 	/* Fund row */
 	.wt-fund-row {
-		border-bottom: 1px solid var(--terminal-bg-panel-raised);
+		border-bottom: var(--terminal-border-hairline);
 	}
 
 	.wt-fund-row:hover {

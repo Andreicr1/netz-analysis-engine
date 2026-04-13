@@ -5,6 +5,8 @@
   Two buttons: Save as Draft + Activate Portfolio (opens ConsequenceDialog).
 -->
 <script lang="ts">
+	import { fly } from "svelte/transition";
+	import { svelteTransitionFor } from "@investintell/ui";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import ConsequenceDialog from "./ConsequenceDialog.svelte";
 
@@ -40,7 +42,7 @@
 </script>
 
 {#if visible}
-	<div class="ab-bar">
+	<div class="ab-bar" in:fly={{ y: 12, ...svelteTransitionFor("tail", { duration: "update" }) }}>
 		<button type="button" class="ab-btn ab-btn--secondary" onclick={handleSaveDraft}>
 			Save as Draft
 		</button>

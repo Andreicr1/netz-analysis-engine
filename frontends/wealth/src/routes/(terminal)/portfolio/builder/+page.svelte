@@ -25,6 +25,11 @@
 	import MonteCarloTab from "$lib/components/terminal/builder/MonteCarloTab.svelte";
 	import ActivationBar from "$lib/components/terminal/builder/ActivationBar.svelte";
 	import CalibrationPanel from "$lib/components/portfolio/CalibrationPanel.svelte";
+	import { fly, fade } from "svelte/transition";
+	import { svelteTransitionFor } from "@investintell/ui";
+	import { resolve } from "$app/paths";
+
+	const HREF_SCREENER = resolve("/terminal-screener");
 
 	let { data }: { data: PageData } = $props();
 
@@ -86,6 +91,11 @@
 <div class="builder-shell">
 	<!-- LEFT COLUMN (40%) — Command Panel -->
 	<div class="builder-left">
+		<!-- Breadcrumb back to screener -->
+		<a href={HREF_SCREENER} class="builder-backlink" data-sveltekit-preload-data="hover">
+			&larr; SCREENER
+		</a>
+
 		<!-- Portfolio selector -->
 		<div class="builder-portfolio-select">
 			<select
@@ -138,24 +148,30 @@
 
 		<!-- Zone D: Cascade Timeline (visible during/after run) -->
 		{#if showCascade}
-			<CascadeTimeline phases={cascadePhases} />
+			<div in:fly={{ y: -8, ...svelteTransitionFor("primary", { duration: "update" }) }}>
+				<CascadeTimeline phases={cascadePhases} />
+			</div>
 		{/if}
 
 		<!-- Zone E: Tab content -->
 		<div class="builder-tab-content" role="tabpanel">
-			{#if activeTab === "WEIGHTS"}
-				<WeightsTab />
-			{:else if activeTab === "RISK"}
-				<RiskTab />
-			{:else if activeTab === "STRESS"}
-				<StressTab />
-			{:else if activeTab === "BACKTEST"}
-				<BacktestTab />
-			{:else if activeTab === "MONTE CARLO"}
-				<MonteCarloTab />
-			{:else if activeTab === "ADVISOR"}
-				<AdvisorTab />
-			{/if}
+			{#key activeTab}
+				<div in:fade={svelteTransitionFor("chrome", { duration: "tick" })}>
+					{#if activeTab === "WEIGHTS"}
+						<WeightsTab />
+					{:else if activeTab === "RISK"}
+						<RiskTab />
+					{:else if activeTab === "STRESS"}
+						<StressTab />
+					{:else if activeTab === "BACKTEST"}
+						<BacktestTab />
+					{:else if activeTab === "MONTE CARLO"}
+						<MonteCarloTab />
+					{:else if activeTab === "ADVISOR"}
+						<AdvisorTab />
+					{/if}
+				</div>
+			{/key}
 		</div>
 
 		<!-- Zone F: Activation Bar (Session 3) -->
@@ -180,6 +196,26 @@
 		flex-direction: column;
 		overflow-y: auto;
 		border-right: var(--terminal-border-hairline);
+	}
+
+	.builder-backlink {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--terminal-space-1);
+		padding: var(--terminal-space-1) var(--terminal-space-2);
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-10);
+		font-weight: 600;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		text-decoration: none;
+		color: var(--terminal-fg-tertiary);
+		border-bottom: var(--terminal-border-hairline);
+		transition: color var(--terminal-motion-tick) var(--terminal-motion-easing-out);
+	}
+
+	.builder-backlink:hover {
+		color: var(--terminal-accent-amber);
 	}
 
 	.builder-portfolio-select {

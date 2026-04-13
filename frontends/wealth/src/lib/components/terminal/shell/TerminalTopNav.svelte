@@ -22,6 +22,7 @@
 -->
 <script lang="ts">
 	import { resolve } from "$app/paths";
+	import { goto } from "$app/navigation";
 
 	// Resolved hrefs for active routes. The lint rule
 	// `svelte/no-navigation-without-resolve` rejects any href that is
@@ -144,7 +145,7 @@
 
 	function handleAlertClick() {
 		// Navigate to the alerts inbox route.
-		window.location.href = HREF_ALERTS;
+		goto(HREF_ALERTS);
 	}
 
 	function handleSessionClick() {
