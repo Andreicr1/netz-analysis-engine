@@ -1147,83 +1147,6 @@ def _score_metrics(
     metrics["score_components"] = components
 
 
-async def _fetch_regime_inputs(db: AsyncSession, as_of_date: date) -> dict[str, float | None]:
-    """Fetch latest macro signals for regime classification from macro_data.
-
-    Returns dict with keys matching classify_regime_multi_signal params.
-    """
-    # Series needed: VIXCLS, DGS10, DGS2 (for yield curve spread), CPIAUCSL, SAHM,
-    # BAMLH0A0HYM2 (HY OAS), BAA10Y, DFF (for fed_funds_delta)
-    series_ids = ["VIXCLS", "DGS10", "DGS2", "CPIAUCSL", "SAHMREALTIME",
-                  "BAMLH0A0HYM2", "BAA10Y", "DFF"]
-
-    stmt = text("""
-        SELECT DISTINCT ON (series_id) series_id, value, obs_date
-        FROM macro_data
-        WHERE series_id = ANY(:sids)
-          AND obs_date <= :as_of
-          AND value IS NOT NULL
-        ORDER BY series_id, obs_date DESC
-    """)
-    result = await db.execute(stmt, {"sids": series_ids, "as_of": as_of_date})
-    latest: dict[str, float] = {}
-    for sid, val, _ in result.all():
-        latest[sid] = float(val)
-
-    # Yield curve spread = DGS10 - DGS2
-    dgs10 = latest.get("DGS10")
-    dgs2 = latest.get("DGS2")
-    yield_spread = (dgs10 - dgs2) if dgs10 is not None and dgs2 is not None else None
-
-    # CPI YoY — need current and 12-month-ago value
-    cpi_yoy = None
-    cpi_current = latest.get("CPIAUCSL")
-    if cpi_current is not None:
-        cpi_12m_stmt = text("""
-            SELECT value FROM macro_data
-            WHERE series_id = 'CPIAUCSL'
-              AND obs_date <= :target_date
-              AND value IS NOT NULL
-            ORDER BY obs_date DESC LIMIT 1
-        """)
-        cpi_12m_result = await db.execute(
-            cpi_12m_stmt,
-            {"target_date": as_of_date - timedelta(days=380)},
-        )
-        cpi_12m = cpi_12m_result.scalar_one_or_none()
-        if cpi_12m is not None:
-            cpi_yoy = ((cpi_current / float(cpi_12m)) - 1.0) * 100.0
-
-    # Fed funds delta 6m
-    fed_delta = None
-    dff_current = latest.get("DFF")
-    if dff_current is not None:
-        dff_6m_stmt = text("""
-            SELECT value FROM macro_data
-            WHERE series_id = 'DFF'
-              AND obs_date <= :target_date
-              AND value IS NOT NULL
-            ORDER BY obs_date DESC LIMIT 1
-        """)
-        dff_6m_result = await db.execute(
-            dff_6m_stmt,
-            {"target_date": as_of_date - timedelta(days=185)},
-        )
-        dff_6m = dff_6m_result.scalar_one_or_none()
-        if dff_6m is not None:
-            fed_delta = dff_current - float(dff_6m)
-
-    return {
-        "vix": latest.get("VIXCLS"),
-        "yield_curve_spread": yield_spread,
-        "cpi_yoy": cpi_yoy,
-        "sahm_rule": latest.get("SAHMREALTIME"),
-        "hy_oas": latest.get("BAMLH0A0HYM2"),
-        "baa_spread": latest.get("BAA10Y"),
-        "fed_funds_delta_6m": fed_delta,
-    }
-
-
 async def _compute_and_persist_taa_state(
     db: AsyncSession,
     org_id: uuid.UUID,
@@ -1238,7 +1161,7 @@ async def _compute_and_persist_taa_state(
     from app.core.config.config_service import ConfigService
     from app.domains.wealth.models.allocation import StrategicAllocation, TaaRegimeState
     from app.domains.wealth.models.block import AllocationBlock
-    from quant_engine.regime_service import classify_regime_multi_signal
+    from quant_engine.regime_service import build_regime_inputs, classify_regime_multi_signal
     from quant_engine.taa_band_service import (
         compute_effective_band,
         extract_stress_score,
@@ -1247,16 +1170,8 @@ async def _compute_and_persist_taa_state(
     )
 
     # ── 1. Fetch macro inputs and classify regime (once, global) ──
-    inputs = await _fetch_regime_inputs(db, eval_date)
-    regime, reasons = classify_regime_multi_signal(
-        vix=inputs.get("vix"),
-        yield_curve_spread=inputs.get("yield_curve_spread"),
-        cpi_yoy=inputs.get("cpi_yoy"),
-        sahm_rule=inputs.get("sahm_rule"),
-        hy_oas=inputs.get("hy_oas"),
-        baa_spread=inputs.get("baa_spread"),
-        fed_funds_delta_6m=inputs.get("fed_funds_delta_6m"),
-    )
+    inputs = await build_regime_inputs(db, as_of_date=eval_date)
+    regime, reasons = classify_regime_multi_signal(**inputs)
     stress_score = extract_stress_score(reasons)
     logger.info("taa_regime_classified", regime=regime, stress_score=stress_score)
 
