@@ -23,6 +23,7 @@
 	import AdvisorTab from "$lib/components/terminal/builder/AdvisorTab.svelte";
 	import BacktestTab from "$lib/components/terminal/builder/BacktestTab.svelte";
 	import MonteCarloTab from "$lib/components/terminal/builder/MonteCarloTab.svelte";
+	import RegimeTab from "$lib/components/terminal/builder/RegimeTab.svelte";
 	import ActivationBar from "$lib/components/terminal/builder/ActivationBar.svelte";
 	import CalibrationPanel from "$lib/components/portfolio/CalibrationPanel.svelte";
 	import { fly, fade } from "svelte/transition";
@@ -65,9 +66,9 @@
 	const regimeBands = $derived(workspace.regimeBands ?? data.initialRegimeBands);
 
 	// Tab state for right column
-	const TABS = ["WEIGHTS", "RISK", "STRESS", "BACKTEST", "MONTE CARLO", "ADVISOR"] as const;
+	const TABS = ["REGIME", "WEIGHTS", "RISK", "STRESS", "BACKTEST", "MONTE CARLO", "ADVISOR"] as const;
 	type TabId = (typeof TABS)[number];
-	let activeTab = $state<TabId>("WEIGHTS");
+	let activeTab = $state<TabId>("REGIME");
 
 	// ── Tab-visit tracking gate (Session 3 activation unlock) ────
 	let visitedTabs = $state<Set<TabId>>(new Set());
@@ -76,8 +77,8 @@
 		visitedTabs.add(activeTab);
 	});
 
-	/** All 6 tabs must be visited before activation unlocks (Session 3). */
-	const allTabsVisited = $derived(visitedTabs.size === 6);
+	/** All tabs must be visited before activation unlocks (Session 3). */
+	const allTabsVisited = $derived(visitedTabs.size === TABS.length);
 
 	// Cascade timeline phases from workspace
 	const cascadePhases = $derived(workspace.optimizerPhases);
@@ -161,7 +162,9 @@
 		<div class="builder-tab-content" role="tabpanel">
 			{#key activeTab}
 				<div in:fade={svelteTransitionFor("chrome", { duration: "tick" })}>
-					{#if activeTab === "WEIGHTS"}
+					{#if activeTab === "REGIME"}
+						<RegimeTab />
+					{:else if activeTab === "WEIGHTS"}
 						<WeightsTab />
 					{:else if activeTab === "RISK"}
 						<RiskTab />
