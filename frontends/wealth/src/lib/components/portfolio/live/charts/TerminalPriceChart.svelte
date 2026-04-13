@@ -14,6 +14,10 @@
 -->
 <script lang="ts">
 	import { onMount } from "svelte";
+	import {
+		createTerminalLightweightChartOptions,
+		terminalLWSeriesColors,
+	} from "@investintell/ui";
 
 	// ── Types ─────────────────────────────────────────────────
 	export interface BarData {
@@ -71,62 +75,26 @@
 			const lc = await import("lightweight-charts");
 			if (disposed || !containerEl) return;
 
-			const c = lc.createChart(containerEl, {
-				autoSize: true,
-				layout: {
-					background: { color: "transparent" },
-					textColor: "#5a6577",
-					fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
-					fontSize: 10,
-				},
-				grid: {
-					vertLines: { color: "rgba(255, 255, 255, 0.04)" },
-					horzLines: { color: "rgba(255, 255, 255, 0.04)" },
-				},
-				crosshair: {
-					vertLine: {
-						color: "rgba(45, 126, 247, 0.3)",
-						labelBackgroundColor: "#2d7ef7",
-					},
-					horzLine: {
-						color: "rgba(45, 126, 247, 0.3)",
-						labelBackgroundColor: "#2d7ef7",
-					},
-				},
-				rightPriceScale: {
-					mode: lc.PriceScaleMode.Percentage,
-					borderVisible: false,
-					scaleMargins: { top: 0.08, bottom: 0.08 },
-				},
-				timeScale: {
-					borderColor: "rgba(255, 255, 255, 0.08)",
-					timeVisible: true,
-					secondsVisible: false,
-					rightOffset: 5,
-				},
-				handleScroll: true,
-				handleScale: true,
+			const opts = createTerminalLightweightChartOptions({
+				timeVisible: true,
+				priceScaleMode: lc.PriceScaleMode.Percentage,
 			});
+			const c = lc.createChart(containerEl, { autoSize: true, ...opts });
 
-			// Series 1: Instrument (baseline — blue/red)
+			// Series 1: Instrument (baseline — cyan/red)
+			const sc = terminalLWSeriesColors();
 			const s = c.addSeries(lc.BaselineSeries, {
 				baseValue: { type: "price", price: 0 },
-				topLineColor: "#2d7ef7",
-				topFillColor1: "rgba(45, 126, 247, 0.10)",
-				topFillColor2: "rgba(45, 126, 247, 0.01)",
-				bottomLineColor: "#e74c3c",
-				bottomFillColor1: "rgba(231, 76, 60, 0.01)",
-				bottomFillColor2: "rgba(231, 76, 60, 0.06)",
+				...sc.baseline,
 				lineWidth: 2,
 				priceLineVisible: true,
-				priceLineColor: "rgba(45, 126, 247, 0.4)",
 				lastValueVisible: true,
 				title: "",
 			});
 
-			// Series 2: Portfolio NAV (gold line)
+			// Series 2: Portfolio NAV (amber line)
 			const nav = c.addSeries(lc.LineSeries, {
-				color: "#fbbf24",
+				...sc.navOverlay,
 				lineWidth: 2,
 				title: "NAV",
 				crosshairMarkerVisible: true,
@@ -266,7 +234,7 @@
 		flex-shrink: 0;
 		height: 32px;
 		padding: 0 10px;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		border-bottom: var(--terminal-border-hairline);
 		position: relative;
 		z-index: 10;
 	}
@@ -278,29 +246,29 @@
 	}
 
 	.tpc-ticker {
-		font-family: "JetBrains Mono", "SF Mono", monospace;
-		font-size: 11px;
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-11);
 		font-weight: 700;
-		letter-spacing: 0.06em;
-		color: #c8d0dc;
+		letter-spacing: var(--terminal-tracking-caps);
+		color: var(--terminal-fg-secondary);
 	}
 
 	.tpc-status-badge {
-		font-family: "JetBrains Mono", "SF Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 8px;
 		font-weight: 800;
 		letter-spacing: 0.08em;
 		padding: 1px 5px;
 	}
 	.tpc-status-delayed {
-		color: #f59e0b;
-		background: rgba(245, 158, 11, 0.12);
-		border: 1px solid rgba(245, 158, 11, 0.25);
+		color: var(--terminal-status-warn);
+		background: color-mix(in srgb, var(--terminal-status-warn) 12%, transparent);
+		border: 1px solid color-mix(in srgb, var(--terminal-status-warn) 25%, transparent);
 	}
 	.tpc-status-offline {
-		color: #ef4444;
-		background: rgba(239, 68, 68, 0.12);
-		border: 1px solid rgba(239, 68, 68, 0.25);
+		color: var(--terminal-status-error);
+		background: color-mix(in srgb, var(--terminal-status-error) 12%, transparent);
+		border: 1px solid color-mix(in srgb, var(--terminal-status-error) 25%, transparent);
 	}
 
 	/* ── Right controls (toggle + timeframes) ────────────────── */
@@ -317,27 +285,27 @@
 		align-items: center;
 		gap: 4px;
 		padding: 3px 8px;
-		font-family: "JetBrains Mono", "SF Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 9px;
 		font-weight: 700;
 		letter-spacing: 0.04em;
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 		background: transparent;
-		border: 1px solid rgba(255, 255, 255, 0.06);
+		border: var(--terminal-border-hairline);
 		cursor: pointer;
 		transition: color 80ms, background 80ms, border-color 80ms;
 	}
 	.tpc-nav-toggle:hover {
-		color: #fbbf24;
-		border-color: rgba(251, 191, 36, 0.2);
+		color: var(--terminal-accent-amber);
+		border-color: var(--terminal-accent-amber-dim);
 	}
 	.tpc-nav-toggle--active {
-		color: #fbbf24;
-		background: rgba(251, 191, 36, 0.08);
-		border-color: rgba(251, 191, 36, 0.25);
+		color: var(--terminal-accent-amber);
+		background: color-mix(in srgb, var(--terminal-accent-amber) 8%, transparent);
+		border-color: var(--terminal-accent-amber-dim);
 	}
 	.tpc-nav-toggle:focus-visible {
-		outline: 2px solid #fbbf24;
+		outline: var(--terminal-border-focus);
 		outline-offset: 1px;
 	}
 	.tpc-nav-check {
@@ -349,7 +317,7 @@
 	/* ── Separator between toggle and timeframes ─────────────── */
 	.tpc-right-controls .tpc-timeframes {
 		padding-left: 8px;
-		border-left: 1px solid rgba(255, 255, 255, 0.06);
+		border-left: var(--terminal-border-hairline);
 	}
 
 	.tpc-timeframes {
@@ -360,27 +328,27 @@
 	.tpc-tf-btn {
 		appearance: none;
 		padding: 3px 8px;
-		font-family: "JetBrains Mono", "SF Mono", monospace;
-		font-size: 10px;
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-10);
 		font-weight: 600;
 		letter-spacing: 0.04em;
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 		background: transparent;
 		border: 1px solid transparent;
 		cursor: pointer;
 		transition: color 80ms, background 80ms, border-color 80ms;
 	}
 	.tpc-tf-btn:hover {
-		color: #c8d0dc;
-		background: rgba(255, 255, 255, 0.04);
+		color: var(--terminal-fg-secondary);
+		background: var(--terminal-bg-panel-raised);
 	}
 	.tpc-tf-active {
-		color: #2d7ef7;
-		border-color: rgba(45, 126, 247, 0.3);
-		background: rgba(45, 126, 247, 0.08);
+		color: var(--terminal-accent-cyan);
+		border-color: var(--terminal-accent-cyan-dim);
+		background: color-mix(in srgb, var(--terminal-accent-cyan) 8%, transparent);
 	}
 	.tpc-tf-btn:focus-visible {
-		outline: 2px solid #2d7ef7;
+		outline: 2px solid var(--terminal-accent-cyan);
 		outline-offset: 1px;
 	}
 
