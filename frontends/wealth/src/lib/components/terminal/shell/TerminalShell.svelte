@@ -36,9 +36,11 @@
 -->
 <script lang="ts">
 	import type { Snippet } from "svelte";
+	import { getContext } from "svelte";
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
+	import { createClientApiClient } from "$lib/api/client";
 	import TerminalTopNav from "./TerminalTopNav.svelte";
 	import TerminalStatusBar from "./TerminalStatusBar.svelte";
 	import TerminalContextRail, {
@@ -77,6 +79,26 @@
 	// Part C hardcodes "connecting" since no streams are mounted.
 	// Phase 5+ will aggregate real TerminalStream subscriptions.
 	const connectionStatus = "connecting" as const;
+
+	// ─── DD queue badge count ───────────────────────────────────
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const ddApi = createClientApiClient(getToken);
+	let ddQueueCount = $state(0);
+
+	async function fetchDDQueueCount() {
+		try {
+			const res = await ddApi.get<{ counts: Record<string, number> }>("/dd-reports/queue");
+			ddQueueCount = (res.counts.pending ?? 0) + (res.counts.in_progress ?? 0);
+		} catch {
+			// Silently ignore — badge stays at 0.
+		}
+	}
+
+	$effect(() => {
+		fetchDDQueueCount();
+		const timer = setInterval(fetchDDQueueCount, 60_000);
+		return () => clearInterval(timer);
+	});
 
 	// ─── URL-pinned entity ──────────────────────────────────────
 	const KNOWN_KINDS: ReadonlyArray<TerminalContextRailEntityKind> = [
@@ -121,6 +143,11 @@
 		await goto(target);
 	}
 
+	async function navDD() {
+		const target = resolve("/dd");
+		await goto(target);
+	}
+
 	function openPalette() {
 		paletteOpen = true;
 	}
@@ -135,7 +162,7 @@
 		a: openPalette, // Alloc — pending
 		p: openPalette, // Portfolio Builder — pending
 		n: openPalette, // Alerts (n for notifications) — pending
-		d: openPalette, // DD — pending
+		d: navDD,       // DD — active
 	};
 
 	const GO_TO_WINDOW_MS = 800;
@@ -243,6 +270,7 @@
 		<TerminalTopNav
 			activePath={page.url.pathname}
 			onOpenPalette={openPalette}
+			{ddQueueCount}
 			{userInitials}
 			{orgName}
 		/>

@@ -30,6 +30,7 @@
 	// `resolve(...)`; hardcoding the three active route literals is
 	// the only pattern its AST matcher accepts.
 	const HREF_SCREENER = resolve("/terminal-screener");
+	const HREF_DD = resolve("/dd");
 	const HREF_BUILDER = resolve("/portfolio/builder");
 	const HREF_LIVE = resolve("/portfolio/live");
 	const HREF_RESEARCH = resolve("/research");
@@ -62,6 +63,11 @@
 		 */
 		alertCount?: number;
 		/**
+		 * DD queue count (pending + in_progress). Drives a badge on
+		 * the DD tab when > 0.
+		 */
+		ddQueueCount?: number;
+		/**
 		 * User initials rendered inside the session chip. Two-char mono
 		 * expected; empty string fallback renders "—".
 		 */
@@ -77,6 +83,7 @@
 		activePath,
 		onOpenPalette,
 		alertCount = 0,
+		ddQueueCount = 0,
 		userInitials,
 		orgName,
 	}: TerminalTopNavProps = $props();
@@ -85,16 +92,17 @@
 		{ id: "macro",    label: "MACRO",    href: "/macro",             status: "pending", pendingReason: "Phase 7 — Macro Desk" },
 		{ id: "alloc",    label: "ALLOC",    href: "/allocation",        status: "pending", pendingReason: "Phase 7 — Allocation" },
 		{ id: "screener", label: "SCREENER", href: HREF_SCREENER,        status: "active" },
+		{ id: "dd",       label: "DD",       href: HREF_DD,              status: "active" },
 		{ id: "builder",  label: "BUILDER",  href: HREF_BUILDER,         status: "active" },
 		{ id: "live",     label: "LIVE",     href: HREF_LIVE,            status: "active" },
 		{ id: "research", label: "RESEARCH", href: HREF_RESEARCH,        status: "active" },
 		{ id: "alerts",   label: "ALERTS",   href: HREF_ALERTS,          status: "active" },
-		{ id: "dd",       label: "DD",       href: "/dd",                status: "pending", pendingReason: "Phase 6 — DD Queue" },
 	];
 
 	function isHrefActive(href: string): boolean {
 		return (
 			href === HREF_SCREENER ||
+			href === HREF_DD ||
 			href === HREF_BUILDER ||
 			href === HREF_LIVE ||
 			href === HREF_RESEARCH ||
@@ -104,6 +112,7 @@
 
 	function activePathSegment(href: string): string {
 		if (href === HREF_SCREENER) return "/terminal-screener";
+		if (href === HREF_DD) return "/dd";
 		if (href === HREF_BUILDER) return "/portfolio/builder";
 		if (href === HREF_LIVE) return "/portfolio/live";
 		if (href === HREF_RESEARCH) return "/research";
@@ -171,6 +180,18 @@
 						data-sveltekit-preload-data="hover"
 					>
 						<span class="tn-tab-label">{tab.label}</span>
+					</a>
+				{:else if tab.id === "dd"}
+					<a
+						class="tn-tab tn-tab--active"
+						class:tn-tab--current={isActiveTab(tab)}
+						href={HREF_DD}
+						data-sveltekit-preload-data="hover"
+					>
+						<span class="tn-tab-label">{tab.label}</span>
+						{#if ddQueueCount > 0}
+							<span class="tn-dd-badge">{ddQueueCount > 99 ? "99+" : ddQueueCount}</span>
+						{/if}
 					</a>
 				{:else if tab.id === "builder"}
 					<a
@@ -552,5 +573,20 @@
 	.tn-session:focus-visible {
 		outline: var(--terminal-border-focus);
 		outline-offset: 2px;
+	}
+
+	.tn-dd-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 14px;
+		height: 14px;
+		padding: 0 3px;
+		background: var(--terminal-accent-cyan);
+		color: var(--terminal-fg-inverted);
+		font-size: var(--terminal-text-10);
+		font-weight: 700;
+		letter-spacing: 0;
+		box-sizing: border-box;
 	}
 </style>
