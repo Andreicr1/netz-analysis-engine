@@ -259,7 +259,7 @@
 	}
 
 	.bt-metric-value {
-		font-size: 14px;
+		font-size: var(--terminal-text-14);
 		font-weight: 700;
 		color: var(--terminal-fg-primary);
 	}

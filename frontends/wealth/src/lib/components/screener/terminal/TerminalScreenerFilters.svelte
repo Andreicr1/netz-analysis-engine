@@ -769,20 +769,20 @@
 	.sf-manager-input {
 		width: 100%;
 		background: transparent;
-		border: 1px solid rgba(255, 255, 255, 0.08);
+		border: 1px solid var(--terminal-fg-disabled);
 		border-radius: 0;
-		color: #c8d0dc;
-		font-family: "JetBrains Mono", monospace;
+		color: var(--terminal-fg-primary);
+		font-family: var(--terminal-font-mono);
 		font-size: 11px;
 		padding: 5px 8px;
 		outline: none;
 		box-sizing: border-box;
 	}
 	.sf-manager-input::placeholder {
-		color: #3d4a5c;
+		color: var(--terminal-fg-muted);
 	}
 	.sf-manager-input:focus {
-		border-color: rgba(45, 126, 247, 0.4);
+		border-color: color-mix(in srgb, var(--terminal-accent-cyan) 40%, transparent);
 	}
 
 	.sf-manager-suggestions {
@@ -790,8 +790,8 @@
 		left: 0;
 		right: 0;
 		z-index: 20;
-		background: #0d1220;
-		border: 1px solid rgba(255, 255, 255, 0.08);
+		background: var(--terminal-bg-overlay);
+		border: 1px solid var(--terminal-fg-disabled);
 		border-top: none;
 		list-style: none;
 		margin: 0;
@@ -803,12 +803,12 @@
 	.sf-manager-suggestion {
 		padding: 5px 8px;
 		font-size: 11px;
-		color: #9aa3b3;
+		color: var(--terminal-fg-secondary);
 		cursor: pointer;
 	}
 	.sf-manager-suggestion:hover {
-		background: rgba(45, 126, 247, 0.08);
-		color: #e2e8f0;
+		background: color-mix(in srgb, var(--terminal-accent-cyan) 8%, transparent);
+		color: var(--terminal-fg-primary);
 	}
 
 	.sf-manager-chips {
@@ -822,10 +822,10 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		font-family: "JetBrains Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 10px;
-		color: #22d3ee;
-		border: 1px solid rgba(34, 211, 238, 0.3);
+		color: var(--terminal-accent-cyan);
+		border: 1px solid color-mix(in srgb, var(--terminal-accent-cyan) 30%, transparent);
 		padding: 2px 6px;
 		white-space: nowrap;
 		max-width: 100%;
@@ -836,12 +836,12 @@
 	.sf-manager-chip-x {
 		background: none;
 		border: none;
-		color: #22d3ee;
+		color: var(--terminal-accent-cyan);
 		font-size: 10px;
 		cursor: pointer;
 		padding: 0;
 		line-height: 1;
-		font-family: "JetBrains Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		opacity: 0.6;
 	}
 	.sf-manager-chip-x:hover {
@@ -858,12 +858,12 @@
 		justify-content: space-between;
 		align-items: center;
 		margin-bottom: 4px;
-		color: #8a94a6;
+		color: var(--terminal-fg-secondary);
 		font-size: 10px;
 	}
 
 	.sf-range-value {
-		color: #c8d0dc;
+		color: var(--terminal-fg-primary);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -872,8 +872,8 @@
 		-webkit-appearance: none;
 		appearance: none;
 		height: 3px;
-		background: #1e293b;
-		border-radius: 2px;
+		background: var(--terminal-bg-panel-raised);
+		border-radius: var(--terminal-radius-none);
 		outline: none;
 	}
 	.sf-slider::-webkit-slider-thumb {
@@ -881,16 +881,16 @@
 		appearance: none;
 		width: 10px;
 		height: 10px;
-		border-radius: 50%;
-		background: #2d7ef7;
+		border-radius: var(--terminal-radius-none);
+		background: var(--terminal-accent-cyan);
 		cursor: pointer;
 		border: none;
 	}
 	.sf-slider::-moz-range-thumb {
 		width: 10px;
 		height: 10px;
-		border-radius: 50%;
-		background: #2d7ef7;
+		border-radius: var(--terminal-radius-none);
+		background: var(--terminal-accent-cyan);
 		cursor: pointer;
 		border: none;
 	}
