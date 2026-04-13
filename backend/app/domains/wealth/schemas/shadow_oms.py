@@ -79,6 +79,10 @@ class ActualHoldingsResponse(BaseModel):
         ),
     )
     holdings: list[HoldingWeight]
+    holdings_version: int = Field(
+        1,
+        description="Optimistic lock version for execute-trades.",
+    )
     last_rebalanced_at: datetime | None = None
 
 

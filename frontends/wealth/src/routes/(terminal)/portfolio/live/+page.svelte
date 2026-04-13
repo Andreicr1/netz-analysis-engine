@@ -35,6 +35,7 @@
 	import NewsFeed from "$lib/components/terminal/live/NewsFeed.svelte";
 	import MacroRegimePanel from "$lib/components/terminal/live/MacroRegimePanel.svelte";
 	import TradeLog from "$lib/components/terminal/live/TradeLog.svelte";
+	import RebalanceFocusMode from "$lib/components/terminal/live/RebalanceFocusMode.svelte";
 	import TerminalPriceChart from "$lib/components/portfolio/live/charts/TerminalPriceChart.svelte";
 	import type { BarData, LiveTick } from "$lib/components/portfolio/live/charts/TerminalPriceChart.svelte";
 
@@ -130,6 +131,7 @@
 			block_id: string;
 			weight: number;
 		}>;
+		holdings_version: number;
 		last_rebalanced_at: string | null;
 	}
 
@@ -137,6 +139,7 @@
 
 	$effect(() => {
 		const pid = selected?.id;
+		const _refresh = refreshToken; // re-fetch when trades are executed
 		if (!pid) {
 			actualHoldingsData = null;
 			return;
@@ -375,6 +378,31 @@
 		return "offline" as const;
 	});
 
+	// ---- Refresh trigger (incremented after trade execution) ----
+
+	let refreshToken = $state(0);
+
+	// ---- Rebalance FocusMode (URL-driven) ----
+
+	const showRebalance = $derived(page.url.searchParams.get("rebalance") === "open");
+
+	function handleRebalanceOpen() {
+		const params = new URLSearchParams(page.url.searchParams);
+		params.set("rebalance", "open");
+		goto(resolve(`/portfolio/live?${params.toString()}`), { replaceState: true, noScroll: true, keepFocus: true });
+	}
+
+	function handleRebalanceClose() {
+		const params = new URLSearchParams(page.url.searchParams);
+		params.delete("rebalance");
+		goto(resolve(`/portfolio/live?${params.toString()}`), { replaceState: true, noScroll: true, keepFocus: true });
+	}
+
+	function handleRebalanceSuccess() {
+		handleRebalanceClose();
+		refreshToken++;
+	}
+
 	// ---- Portfolio summary data ----
 
 	const portfolioAum = $derived(marketStore.totalAum);
@@ -518,6 +546,7 @@
 						driftStatus={aggregateDrift}
 						{instrumentCount}
 						{lastRebalance}
+						onRebalance={handleRebalanceOpen}
 					/>
 				</div>
 
@@ -530,10 +559,24 @@
 				</div>
 
 				<div class="lw-tradelog">
-					<TradeLog portfolioId={selected?.id ?? null} />
+					{#key refreshToken}
+						<TradeLog portfolioId={selected?.id ?? null} />
+					{/key}
 				</div>
 			</div>
 		</div>
+
+		{#if showRebalance && selected}
+			<RebalanceFocusMode
+				portfolioId={selected.id}
+				portfolioName={selected.display_name ?? "Portfolio"}
+				holdings={actualHoldingsData?.holdings ?? []}
+				holdingsVersion={actualHoldingsData?.holdings_version ?? 1}
+				totalAum={portfolioAum}
+				onClose={handleRebalanceClose}
+				onSuccess={handleRebalanceSuccess}
+			/>
+		{/if}
 	{/if}
 
 	{#snippet failed(err: unknown, reset: () => void)}

@@ -3657,6 +3657,7 @@ async def get_actual_holdings(
             portfolio_id=str(portfolio_id),
             source="actual",
             holdings=holdings,
+            holdings_version=actual_row.holdings_version,
             last_rebalanced_at=actual_row.last_rebalanced_at,
         )
 
