@@ -138,6 +138,15 @@ class SimulationResult(BaseModel):
     computed_at: datetime
 
 
+class GlobalRegimeRead(BaseModel):
+    """Global regime snapshot — no org context needed."""
+
+    as_of_date: date
+    raw_regime: str
+    stress_score: Decimal | None = None
+    signal_details: dict[str, object] = {}
+
+
 # ── TAA (Tactical Asset Allocation) schemas (Sprint 3) ──────────
 
 

@@ -1147,6 +1147,62 @@ def _score_metrics(
     metrics["score_components"] = components
 
 
+REGIME_DETECTION_LOCK_ID = 900_130
+
+
+async def run_global_regime_detection(eval_date: date | None = None) -> None:
+    """Compute global regime and persist to macro_regime_snapshot.
+
+    Called AFTER macro_ingestion, BEFORE risk_calc.
+    Uses advisory lock 900_130 (convention: 900_XXX where XXX = migration number).
+    """
+    from app.domains.wealth.models.allocation import MacroRegimeSnapshot
+    from quant_engine.regime_service import build_regime_inputs, classify_regime_multi_signal
+    from quant_engine.taa_band_service import extract_stress_score
+
+    target_date = eval_date or date.today()
+
+    async with async_session() as db:
+        lock_result = await db.execute(
+            text(f"SELECT pg_try_advisory_lock({REGIME_DETECTION_LOCK_ID})"),
+        )
+        acquired = lock_result.scalar()
+        if not acquired:
+            logger.info("regime_detection_skipped", reason="another instance running")
+            return
+
+        try:
+            inputs = await build_regime_inputs(db, as_of_date=target_date)
+            regime, reasons = classify_regime_multi_signal(**inputs)
+            stress_score = extract_stress_score(reasons)
+            logger.info(
+                "global_regime_classified",
+                regime=regime,
+                stress_score=stress_score,
+                as_of_date=str(target_date),
+            )
+
+            upsert_stmt = pg_insert(MacroRegimeSnapshot).values(
+                as_of_date=target_date,
+                raw_regime=regime,
+                stress_score=stress_score,
+                signal_details=reasons,
+            )
+            upsert_stmt = upsert_stmt.on_conflict_do_update(
+                index_elements=["as_of_date"],
+                set_={
+                    "raw_regime": upsert_stmt.excluded.raw_regime,
+                    "stress_score": upsert_stmt.excluded.stress_score,
+                    "signal_details": upsert_stmt.excluded.signal_details,
+                },
+            )
+            await db.execute(upsert_stmt)
+            await db.commit()
+            logger.info("global_regime_snapshot_persisted", as_of_date=str(target_date))
+        finally:
+            await db.execute(text(f"SELECT pg_advisory_unlock({REGIME_DETECTION_LOCK_ID})"))
+
+
 async def _compute_and_persist_taa_state(
     db: AsyncSession,
     org_id: uuid.UUID,
@@ -1159,7 +1215,11 @@ async def _compute_and_persist_taa_state(
     each profile has different IPS bounds from StrategicAllocation.
     """
     from app.core.config.config_service import ConfigService
-    from app.domains.wealth.models.allocation import StrategicAllocation, TaaRegimeState
+    from app.domains.wealth.models.allocation import (
+        MacroRegimeSnapshot,
+        StrategicAllocation,
+        TaaRegimeState,
+    )
     from app.domains.wealth.models.block import AllocationBlock
     from quant_engine.regime_service import build_regime_inputs, classify_regime_multi_signal
     from quant_engine.taa_band_service import (
@@ -1169,11 +1229,35 @@ async def _compute_and_persist_taa_state(
         smooth_regime_centers,
     )
 
-    # ── 1. Fetch macro inputs and classify regime (once, global) ──
-    inputs = await build_regime_inputs(db, as_of_date=eval_date)
-    regime, reasons = classify_regime_multi_signal(**inputs)
-    stress_score = extract_stress_score(reasons)
-    logger.info("taa_regime_classified", regime=regime, stress_score=stress_score)
+    # ── 1. Read global regime snapshot (computed by regime_detection worker) ──
+    snapshot_stmt = (
+        select(MacroRegimeSnapshot)
+        .where(MacroRegimeSnapshot.as_of_date <= eval_date)
+        .order_by(MacroRegimeSnapshot.as_of_date.desc())
+        .limit(1)
+    )
+    snapshot_result = await db.execute(snapshot_stmt)
+    snapshot = snapshot_result.scalar_one_or_none()
+
+    if snapshot is None:
+        logger.warning(
+            "taa_no_regime_snapshot — regime_detection worker may not have run. "
+            "Falling back to inline classification.",
+        )
+        # Graceful fallback: compute inline (same as before)
+        inputs = await build_regime_inputs(db, as_of_date=eval_date)
+        regime, reasons = classify_regime_multi_signal(**inputs)
+        stress_score = extract_stress_score(reasons)
+    else:
+        regime = snapshot.raw_regime
+        stress_score = float(snapshot.stress_score) if snapshot.stress_score is not None else None
+        reasons = snapshot.signal_details or {}
+        logger.info(
+            "taa_using_global_snapshot",
+            regime=regime,
+            stress_score=stress_score,
+            snapshot_date=str(snapshot.as_of_date),
+        )
 
     # ── 2. Load TAA config ──
     config_svc = ConfigService(db)
