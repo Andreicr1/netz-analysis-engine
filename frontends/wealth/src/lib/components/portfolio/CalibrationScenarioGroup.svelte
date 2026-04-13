@@ -75,7 +75,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		font-family: "Urbanist", system-ui, sans-serif;
+		font-family: var(--terminal-font-mono);
 	}
 	.csg-root--disabled {
 		opacity: 0.55;
@@ -90,18 +90,18 @@
 	.csg-label {
 		font-size: 13px;
 		font-weight: 600;
-		color: var(--ii-text-primary, #ffffff);
+		color: var(--terminal-fg-primary);
 	}
 	.csg-count {
 		font-size: 11px;
 		font-weight: 700;
-		color: var(--ii-text-muted, #85a0bd);
+		color: var(--terminal-fg-muted);
 		font-variant-numeric: tabular-nums;
 	}
 	.csg-description {
 		margin: 0;
 		font-size: 11px;
-		color: var(--ii-text-muted, #85a0bd);
+		color: var(--terminal-fg-muted);
 		line-height: 1.4;
 	}
 
@@ -115,11 +115,10 @@
 		align-items: center;
 		gap: 8px;
 		padding: 8px 10px;
-		border: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.6));
-		border-radius: 8px;
+		border: var(--terminal-border-hairline);
 		background: transparent;
 		cursor: pointer;
-		color: var(--ii-text-muted, #85a0bd);
+		color: var(--terminal-fg-muted);
 		font-family: inherit;
 		font-size: 12px;
 		font-weight: 500;
@@ -127,13 +126,13 @@
 		transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 	}
 	.csg-chip:hover:not(:disabled) {
-		background: rgba(255, 255, 255, 0.03);
-		color: var(--ii-text-primary, #ffffff);
+		background: var(--terminal-bg-panel-raised);
+		color: var(--terminal-fg-primary);
 	}
 	.csg-chip--on {
-		background: rgba(1, 119, 251, 0.08);
-		border-color: var(--ii-primary, #0177fb);
-		color: var(--ii-text-primary, #ffffff);
+		background: color-mix(in srgb, var(--terminal-accent-amber) 10%, transparent);
+		border-color: var(--terminal-accent-amber);
+		color: var(--terminal-fg-primary);
 	}
 	.csg-chip-box {
 		display: inline-flex;
@@ -141,18 +140,17 @@
 		justify-content: center;
 		width: 16px;
 		height: 16px;
-		border-radius: 4px;
-		border: 1px solid rgba(255, 255, 255, 0.28);
+		border: 1px solid var(--terminal-fg-tertiary);
 		flex-shrink: 0;
 	}
 	.csg-chip--on .csg-chip-box {
-		background: var(--ii-primary, #0177fb);
-		border-color: var(--ii-primary, #0177fb);
+		background: var(--terminal-accent-amber);
+		border-color: var(--terminal-accent-amber);
 	}
 	.csg-chip-tick {
 		font-size: 11px;
 		font-weight: 700;
-		color: #ffffff;
+		color: var(--terminal-fg-inverted);
 		line-height: 1;
 	}
 	.csg-chip-label {

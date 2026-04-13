@@ -207,36 +207,10 @@
 		outline-offset: 2px;
 	}
 
-	/* Terminal overrides for CalibrationPanel */
 	.builder-calibration {
 		flex: 1;
 		overflow-y: auto;
 		border-bottom: var(--terminal-border-hairline);
-
-		/* Override @investintell/ui rounded corners */
-		--ii-radius-md: 0px;
-		--ii-radius-sm: 0px;
-		--ii-radius-lg: 0px;
-		--ii-radius-xl: 0px;
-		font-family: var(--terminal-font-mono);
-	}
-
-	/* Deep scoped overrides for CalibrationPanel child elements */
-	.builder-calibration :global(button) {
-		border-radius: var(--terminal-radius-none);
-	}
-
-	.builder-calibration :global([data-slot="tablist"]) {
-		border-radius: var(--terminal-radius-none);
-	}
-
-	.builder-calibration :global([data-slot="trigger"]) {
-		border-radius: var(--terminal-radius-none);
-		font-family: var(--terminal-font-mono);
-	}
-
-	.builder-calibration :global([data-slot="content"]) {
-		border-radius: var(--terminal-radius-none);
 	}
 
 	.builder-empty-zone {

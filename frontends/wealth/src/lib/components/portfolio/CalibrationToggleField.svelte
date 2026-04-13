@@ -53,7 +53,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-family: "Urbanist", system-ui, sans-serif;
+		font-family: var(--terminal-font-mono);
 	}
 	.ctf-root--disabled {
 		opacity: 0.55;
@@ -68,12 +68,12 @@
 	.ctf-label {
 		font-size: 13px;
 		font-weight: 600;
-		color: var(--ii-text-primary, #ffffff);
+		color: var(--terminal-fg-primary);
 	}
 	.ctf-description {
 		margin: 0;
 		font-size: 11px;
-		color: var(--ii-text-muted, #85a0bd);
+		color: var(--terminal-fg-muted);
 		line-height: 1.4;
 	}
 
@@ -93,7 +93,7 @@
 	.ctf-slider {
 		position: absolute;
 		inset: 0;
-		background: rgba(64, 66, 73, 0.7);
+		background: var(--terminal-fg-muted);
 		border-radius: 999px;
 		transition: background 140ms ease;
 	}
@@ -104,17 +104,17 @@
 		top: 2px;
 		width: 16px;
 		height: 16px;
-		background: #ffffff;
+		background: var(--terminal-fg-primary);
 		border-radius: 999px;
 		transition: transform 140ms ease;
 	}
 	.ctf-switch input:checked + .ctf-slider {
-		background: var(--ii-primary, #0177fb);
+		background: var(--terminal-accent-amber);
 	}
 	.ctf-switch input:checked + .ctf-slider::before {
 		transform: translateX(16px);
 	}
 	.ctf-switch input:focus-visible + .ctf-slider {
-		box-shadow: 0 0 0 3px rgba(1, 119, 251, 0.25);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--terminal-accent-amber) 25%, transparent);
 	}
 </style>

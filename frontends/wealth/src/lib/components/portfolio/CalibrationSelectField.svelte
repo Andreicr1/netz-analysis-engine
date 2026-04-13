@@ -8,8 +8,6 @@
   touching internal state.
 -->
 <script lang="ts">
-	import { Select } from "@investintell/ui";
-
 	interface Option {
 		value: string;
 		label: string;
@@ -46,13 +44,17 @@
 		<p class="csf-description">{description}</p>
 	{/if}
 	<div class="csf-control">
-		<Select
-			{value}
-			onValueChange={onChange}
-			options={[...options]}
-			{placeholder}
+		<select
+			{id}
+			class="csf-select"
 			{disabled}
-		/>
+			value={value}
+			onchange={(e) => onChange((e.currentTarget as HTMLSelectElement).value)}
+		>
+			{#each options as opt (opt.value)}
+				<option value={opt.value}>{opt.label}</option>
+			{/each}
+		</select>
 	</div>
 </div>
 
@@ -61,7 +63,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		font-family: "Urbanist", system-ui, sans-serif;
+		font-family: var(--terminal-font-mono);
 	}
 	.csf-root--disabled {
 		opacity: 0.55;
@@ -75,15 +77,35 @@
 	.csf-label {
 		font-size: 13px;
 		font-weight: 600;
-		color: var(--ii-text-primary, #ffffff);
+		color: var(--terminal-fg-primary);
 	}
 	.csf-description {
 		margin: 0;
 		font-size: 11px;
-		color: var(--ii-text-muted, #85a0bd);
+		color: var(--terminal-fg-muted);
 		line-height: 1.4;
 	}
 	.csf-control {
 		width: 100%;
+	}
+	.csf-select {
+		width: 100%;
+		height: 28px;
+		background: var(--terminal-bg-panel-sunken);
+		color: var(--terminal-fg-primary);
+		border: var(--terminal-border-hairline);
+		border-radius: 0;
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-11);
+		padding: 0 var(--terminal-space-2);
+		cursor: pointer;
+	}
+	.csf-select:focus-visible {
+		outline: var(--terminal-border-focus);
+		outline-offset: 2px;
+	}
+	.csf-select:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
 	}
 </style>
