@@ -536,7 +536,7 @@
 			<span class="lw-empty-sub">Activate a portfolio in the Builder to see it here.</span>
 		</div>
 	{:else}
-		<div class="lw-shell">
+		<div class="lw-shell" data-live-root>
 			<!-- LEFT COLUMN: Watchlist + Alerts + Trade Log -->
 			<aside class="lw-left" aria-label="Watchlist and alerts">
 				<!-- Portfolio selector -->
@@ -922,5 +922,13 @@
 			color: var(--terminal-fg-muted);
 			margin-top: var(--terminal-space-4);
 		}
+	}
+
+	/*
+	 * Override LayoutCage padding for the Live surface.
+	 * Full-bleed dashboard needs every pixel — zero padding.
+	 */
+	:global(.lc-cage--standard:has([data-live-root])) {
+		padding: 0 !important;
 	}
 </style>
