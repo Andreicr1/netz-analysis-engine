@@ -527,11 +527,11 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
-		background: #0c1018;
-		border-right: 1px solid rgba(255, 255, 255, 0.06);
-		font-family: "Urbanist", system-ui, sans-serif;
+		background: var(--terminal-bg-panel);
+		border-right: 1px solid var(--terminal-fg-muted);
+		font-family: var(--terminal-font-mono);
 		font-size: 11px;
-		color: #c8d0dc;
+		color: var(--terminal-fg-primary);
 	}
 
 	.sf-header {
@@ -539,7 +539,7 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 10px 12px 8px;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		border-bottom: 1px solid var(--terminal-fg-muted);
 		flex-shrink: 0;
 	}
 
@@ -547,7 +547,7 @@
 		font-size: 10px;
 		font-weight: 700;
 		letter-spacing: 0.1em;
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 		text-transform: uppercase;
 	}
 
@@ -559,22 +559,22 @@
 
 	.sf-action {
 		font-size: 9px;
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 		background: none;
 		border: none;
 		cursor: pointer;
 		padding: 0;
-		font-family: "JetBrains Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
 	}
 	.sf-action:hover {
-		color: #9aa3b3;
+		color: var(--terminal-fg-secondary);
 	}
 
 	.sf-clear {
 		font-size: 10px;
-		color: #2d7ef7;
+		color: var(--terminal-accent-cyan);
 		background: none;
 		border: none;
 		cursor: pointer;
@@ -582,36 +582,36 @@
 		font-family: inherit;
 	}
 	.sf-clear:hover {
-		color: #5a9ef7;
+		color: var(--terminal-accent-cyan);
 	}
 
 	.sf-elite-chip-row {
 		padding: 8px 12px;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		border-bottom: 1px solid var(--terminal-fg-muted);
 		flex-shrink: 0;
 	}
 
 	.sf-elite-chip {
-		font-family: "JetBrains Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 10px;
 		font-weight: 700;
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
 		padding: 4px 12px;
 		background: transparent;
-		border: 1px solid rgba(255, 255, 255, 0.12);
-		color: #8a94a6;
+		border: var(--terminal-border-hairline);
+		color: var(--terminal-fg-secondary);
 		cursor: pointer;
 		transition: all 80ms ease;
 	}
 	.sf-elite-chip:hover {
-		border-color: #f59e0b;
-		color: #f59e0b;
+		border-color: var(--terminal-accent-amber);
+		color: var(--terminal-accent-amber);
 	}
 	.sf-elite-chip--active {
-		border-color: #f59e0b;
-		color: #f59e0b;
-		background: rgba(245, 158, 11, 0.08);
+		border-color: var(--terminal-accent-amber);
+		color: var(--terminal-accent-amber);
+		background: color-mix(in srgb, var(--terminal-accent-amber) 8%, transparent);
 	}
 
 	.sf-scroll {
@@ -622,7 +622,7 @@
 	}
 
 	.sf-section {
-		border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+		border-bottom: 1px solid var(--terminal-fg-disabled);
 	}
 
 	.sf-section-toggle {
@@ -633,7 +633,7 @@
 		padding: 8px 12px;
 		background: none;
 		border: none;
-		color: #8a94a6;
+		color: var(--terminal-fg-secondary);
 		font-size: 10px;
 		font-weight: 700;
 		letter-spacing: 0.08em;
@@ -643,7 +643,7 @@
 		text-align: left;
 	}
 	.sf-section-toggle:hover {
-		color: #c8d0dc;
+		color: var(--terminal-fg-primary);
 	}
 
 	.sf-section-arrow {
@@ -661,10 +661,10 @@
 		justify-content: center;
 		min-width: 16px;
 		height: 16px;
-		border-radius: 50%;
-		background: #22d3ee;
-		color: #0b0f1a;
-		font-family: "JetBrains Mono", monospace;
+		border-radius: var(--terminal-radius-none);
+		background: var(--terminal-accent-cyan);
+		color: var(--terminal-fg-inverted);
+		font-family: var(--terminal-font-mono);
 		font-size: 9px;
 		font-weight: 700;
 		margin-left: 4px;
@@ -691,14 +691,14 @@
 	.sf-check input[type="checkbox"] {
 		width: 12px;
 		height: 12px;
-		accent-color: #2d7ef7;
+		accent-color: var(--terminal-accent-cyan);
 		margin: 0;
 		flex-shrink: 0;
 	}
 
 	.sf-check-label {
 		font-size: 11px;
-		color: #9aa3b3;
+		color: var(--terminal-fg-secondary);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -717,7 +717,7 @@
 		font-weight: 600;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 	}
 
 	.sf-metric-inputs {
@@ -731,10 +731,10 @@
 		min-width: 0;
 		width: 56px;
 		background: transparent;
-		border: 1px solid rgba(255, 255, 255, 0.08);
+		border: 1px solid var(--terminal-fg-disabled);
 		border-radius: 0;
-		color: #c8d0dc;
-		font-family: "JetBrains Mono", monospace;
+		color: var(--terminal-fg-primary);
+		font-family: var(--terminal-font-mono);
 		font-size: 11px;
 		padding: 4px 6px;
 		text-align: right;
@@ -748,15 +748,15 @@
 		margin: 0;
 	}
 	.sf-metric-input::placeholder {
-		color: #3d4a5c;
+		color: var(--terminal-fg-muted);
 		text-align: right;
 	}
 	.sf-metric-input:focus {
-		border-color: rgba(45, 126, 247, 0.4);
+		border-color: color-mix(in srgb, var(--terminal-accent-cyan) 40%, transparent);
 	}
 
 	.sf-metric-sep {
-		color: #3d4a5c;
+		color: var(--terminal-fg-muted);
 		font-size: 10px;
 		flex-shrink: 0;
 	}
