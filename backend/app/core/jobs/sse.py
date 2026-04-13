@@ -33,7 +33,7 @@ async def create_job_stream(request: Request, job_id: str) -> EventSourceRespons
                 logger.info("SSE client disconnected for job %s", job_id)
                 break
 
-            event_type = msg.pop("event", "message")
+            event_type = msg.get("event", "message")
             yield ServerSentEvent(
                 data=json.dumps(msg),
                 event=event_type,

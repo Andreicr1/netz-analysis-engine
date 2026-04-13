@@ -39,6 +39,10 @@ TERMINAL_EVENT_TYPES: frozenset[str] = frozenset({
     "memo_complete",
     "report_completed",
     "report_failed",
+    # Sanitized labels from construction_run_executor (via humanize_event_type)
+    "Construction succeeded",
+    "Construction failed",
+    "Construction cancelled",
 })
 
 # How long to keep the ownership key after terminal state (seconds).

@@ -121,22 +121,37 @@ export interface ConstructRunAccepted {
 
 /**
  * SSE event shape emitted by the ``construction_run_executor``.
- * ``event`` is the type discriminator; the remaining keys are the
- * event-specific payload.
+ * ``event`` is the sanitized type label (humanize_event_type output);
+ * the remaining keys are the event-specific payload.
  */
 export interface ConstructRunEvent {
-	event:
-		| "run_started"
-		| "optimizer_started"
-		| "stress_started"
-		| "done"
-		| "error";
+	event: string;
 	run_id?: string;
 	portfolio_id?: string;
 	status?: string;
 	wall_clock_ms?: number;
 	reason?: string;
+	// Per-phase optimizer cascade fields
+	phase?: string;
+	phase_label?: string;
+	objective_value?: number | null;
 }
+
+/** Cascade phase state for the CascadeTimeline component. */
+export interface CascadePhase {
+	key: string;
+	label: string;
+	status: "pending" | "running" | "succeeded" | "failed" | "skipped";
+	objectiveValue?: number | null;
+}
+
+const DEFAULT_CASCADE_PHASES: CascadePhase[] = [
+	{ key: "primary", label: "Primary Objective", status: "pending" },
+	{ key: "robust", label: "Robust Optimization", status: "pending" },
+	{ key: "variance_capped", label: "Variance-Capped", status: "pending" },
+	{ key: "min_variance", label: "Minimum Variance", status: "pending" },
+	{ key: "heuristic", label: "Heuristic Recovery", status: "pending" },
+];
 
 // ── Shock mapping: UI macro-shocks → per-block shocks ────────────────
 // The backend stress engine expects shocks keyed by allocation block_id.
@@ -362,6 +377,9 @@ export class PortfolioWorkspaceState {
 	runPhase = $state<"idle" | "running" | "optimizer" | "stress" | "done" | "error">("idle");
 	runError = $state<string | null>(null);
 	private _activeRunAbort: AbortController | null = null;
+
+	/** Optimizer cascade phase states for the CascadeTimeline (Session 2). */
+	optimizerPhases = $state<CascadePhase[]>(structuredClone(DEFAULT_CASCADE_PHASES));
 
 	/** Approved universe funds for DnD — loaded from API when portfolio is selected. */
 	universe = $state<UniverseFund[]>([]);
@@ -1448,6 +1466,7 @@ export class PortfolioWorkspaceState {
 
 		this.runPhase = "running";
 		this.runError = null;
+		this.optimizerPhases = structuredClone(DEFAULT_CASCADE_PHASES);
 		this.isConstructing = true;
 		this.lastError = null;
 
@@ -1526,7 +1545,13 @@ export class PortfolioWorkspaceState {
 							}
 							if (parsed) {
 								this._applyRunEvent(parsed);
-								if (parsed.event === "done" || parsed.event === "error") {
+								const ev = parsed.event;
+								if (
+									ev === "done" || ev === "error" ||
+									ev === "Construction succeeded" ||
+									ev === "Construction failed" ||
+									ev === "Construction cancelled"
+								) {
 									terminal = parsed;
 									break streamLoop;
 								}
@@ -1547,7 +1572,11 @@ export class PortfolioWorkspaceState {
 				return null;
 			}
 
-			if (terminal.event === "error") {
+			if (
+				terminal.event === "error" ||
+				terminal.event === "Construction failed" ||
+				terminal.event === "Construction cancelled"
+			) {
 				this.runPhase = "error";
 				this.runError = terminal.reason ?? "Construction failed";
 				return null;
@@ -1588,25 +1617,39 @@ export class PortfolioWorkspaceState {
 		await this.runConstructJob();
 	}
 
-	/** Apply a single SSE event to ``runPhase``. */
+	/** Apply a single SSE event to ``runPhase`` and cascade timeline. */
 	private _applyRunEvent(ev: ConstructRunEvent) {
-		switch (ev.event) {
-			case "run_started":
-				this.runPhase = "running";
-				break;
-			case "optimizer_started":
-				this.runPhase = "optimizer";
-				break;
-			case "stress_started":
-				this.runPhase = "stress";
-				break;
-			case "done":
-				this.runPhase = "done";
-				break;
-			case "error":
-				this.runPhase = "error";
-				this.runError = ev.reason ?? "Construction failed";
-				break;
+		const e = ev.event;
+
+		// Run lifecycle — match both raw and sanitized labels
+		if (e === "run_started" || e === "Construction started") {
+			this.runPhase = "running";
+		} else if (e === "optimizer_started" || e === "Optimizer started") {
+			this.runPhase = "optimizer";
+		} else if (e === "stress_started" || e === "Stress tests started") {
+			this.runPhase = "stress";
+		} else if (e === "done" || e === "Construction succeeded") {
+			this.runPhase = "done";
+		} else if (e === "error" || e === "Construction failed" || e === "Construction cancelled") {
+			this.runPhase = "error";
+			this.runError = ev.reason ?? "Construction failed";
+		}
+
+		// Per-phase optimizer cascade events → update timeline pills
+		if (
+			(e === "optimizer_phase_complete" || e === "Optimizer phase completed") &&
+			ev.phase
+		) {
+			this.optimizerPhases = this.optimizerPhases.map((p) => {
+				if (p.key === ev.phase) {
+					return {
+						...p,
+						status: (ev.status as CascadePhase["status"]) ?? "succeeded",
+						objectiveValue: ev.objective_value ?? null,
+					};
+				}
+				return p;
+			});
 		}
 	}
 

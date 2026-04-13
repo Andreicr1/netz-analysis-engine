@@ -127,6 +127,8 @@ EVENT_TYPE_LABELS: dict[str, str] = {
     "run_failed": "Construction failed",
     # Optimizer cascade
     "optimizer_started": "Optimizer started",
+    "optimizer_phase_start": "Optimizer phase started",
+    "optimizer_phase_complete": "Optimizer phase completed",
     "optimizer_phase_completed": "Optimizer phase completed",
     "optimizer_cascade_completed": "Optimizer cascade completed",
     # Stress suite
