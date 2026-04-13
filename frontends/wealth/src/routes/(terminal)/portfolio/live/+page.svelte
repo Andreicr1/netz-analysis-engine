@@ -275,7 +275,7 @@
 					.filter((b) => b.close != null)
 					.map((b) => ({
 						time: Math.floor(new Date(b.timestamp).getTime() / 1000),
-						value: b.close as number,
+						value: Number(b.close),
 					}));
 			})
 			.catch(() => {
@@ -353,7 +353,7 @@
 					.filter((b) => b.close != null)
 					.map((b) => ({
 						time: Math.floor(new Date(b.timestamp).getTime() / 1000),
-						value: b.close as number,
+						value: Number(b.close),
 					}));
 			})
 			.catch(() => {
