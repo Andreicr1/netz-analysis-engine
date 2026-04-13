@@ -16,11 +16,21 @@
 	import BuilderTable from "$lib/components/portfolio/BuilderTable.svelte";
 	import BuilderActionBar from "$lib/components/portfolio/BuilderActionBar.svelte";
 	import CalibrationPanel from "$lib/components/portfolio/CalibrationPanel.svelte";
+	import AllocationBandChart from "$lib/components/portfolio/charts/AllocationBandChart.svelte";
+	import TaaTransitionSparkline from "$lib/components/portfolio/charts/TaaTransitionSparkline.svelte";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import { portfolioDisplayName } from "$lib/constants/blocks";
+	import { taaRegimeLabel } from "$lib/types/taa";
 
-	type BuilderTab = "allocations" | "policy";
+	type BuilderTab = "allocations" | "market" | "policy";
 	let builderTab = $state<BuilderTab>("allocations");
+
+	// ── TAA state (Sprint 4) ─────────────────────────────────────
+	const regimeBands = $derived(workspace.regimeBands);
+	const taaHistory = $derived(workspace.taaHistory);
+	const effectiveWithRegime = $derived(workspace.effectiveWithRegime);
+	const hasTaaData = $derived(regimeBands !== null);
+	const regimeBadgeLabel = $derived(regimeBands ? taaRegimeLabel(regimeBands.raw_regime) : null);
 
 	function handleConstruct() {
 		workspace.openAnalyticsForPortfolio();
@@ -67,6 +77,17 @@
 				<button
 					type="button"
 					class="bc-tab"
+					class:bc-tab--active={builderTab === "market"}
+					onclick={() => (builderTab = "market")}
+				>
+					Market
+					{#if regimeBadgeLabel}
+						<span class="bc-tab-badge">{regimeBadgeLabel}</span>
+					{/if}
+				</button>
+				<button
+					type="button"
+					class="bc-tab"
 					class:bc-tab--active={builderTab === "policy"}
 					onclick={() => (builderTab = "policy")}
 				>
@@ -79,6 +100,33 @@
 		<div class="bc-body">
 			{#if builderTab === "allocations"}
 				<BuilderTable />
+			{:else if builderTab === "market"}
+				<div class="bc-market-wrap">
+					<section class="bc-market-section">
+						<h3 class="bc-market-heading">Allocation Bands</h3>
+						<p class="bc-market-desc">
+							Optimizer operates within the colored bands. Grey bars show the policy limits.
+						</p>
+						<AllocationBandChart
+							allocations={effectiveWithRegime}
+							rawRegime={regimeBands?.raw_regime}
+							loading={workspace.isLoadingEffectiveWithRegime}
+							height={260}
+						/>
+					</section>
+
+					<section class="bc-market-section">
+						<h3 class="bc-market-heading">Band Transitions</h3>
+						<p class="bc-market-desc">
+							How allocation centers have evolved over the last 60 days as conditions changed.
+						</p>
+						<TaaTransitionSparkline
+							history={taaHistory}
+							loading={workspace.isLoadingTaaHistory}
+							height={180}
+						/>
+					</section>
+				</div>
 			{:else}
 				<div class="bc-policy-wrap">
 					<CalibrationPanel />
@@ -201,6 +249,22 @@
 		background: #0177fb;
 	}
 
+	.bc-tab-badge {
+		display: inline-flex;
+		align-items: center;
+		margin-left: 6px;
+		padding: 1px 7px;
+		border-radius: 999px;
+		font-size: 0.625rem;
+		font-weight: 700;
+		background: rgba(255, 255, 255, 0.08);
+		color: inherit;
+		letter-spacing: 0.02em;
+	}
+	.bc-tab--active .bc-tab-badge {
+		background: rgba(255, 255, 255, 0.2);
+	}
+
 	/* ── Body — tab content fills remaining vertical space ──── */
 	.bc-body {
 		flex: 1;
@@ -211,6 +275,37 @@
 	.bc-policy-wrap {
 		height: 100%;
 		overflow-y: auto;
+	}
+
+	/* ── Market tab content (TAA Sprint 4) ─────────────────────── */
+	.bc-market-wrap {
+		height: 100%;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 16px;
+	}
+	.bc-market-section {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.bc-market-heading {
+		margin: 0;
+		font-size: 0.75rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--ii-text-muted, #85a0bd);
+		font-family: "Urbanist", sans-serif;
+	}
+	.bc-market-desc {
+		margin: 0;
+		font-size: 0.6875rem;
+		line-height: 1.4;
+		color: var(--ii-text-muted, #85a0bd);
+		opacity: 0.7;
 	}
 
 	/* ── Footer — action bar, always visible ─────────────────── */
