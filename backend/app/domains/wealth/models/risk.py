@@ -135,3 +135,8 @@ class FundRiskMetrics(Base):
     elite_target_count_per_strategy: Mapped[int | None] = mapped_column(
         sa.SmallInteger, nullable=True,
     )
+
+    # Per-regime ELITE flags (Sprint 2 TAA). RISK_ON uses existing elite_flag.
+    elite_risk_off: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
+    elite_inflation: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
+    elite_crisis: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)

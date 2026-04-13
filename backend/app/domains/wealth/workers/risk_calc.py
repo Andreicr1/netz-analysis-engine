@@ -1272,6 +1272,7 @@ async def _compute_and_persist_taa_state(
     transition = (taa_config or {}).get("transition", {})
     halflife = int(transition.get("ema_halflife_days", 5))
     max_shift = float(transition.get("max_daily_shift_pct", 0.03))
+    min_confidence = float(transition.get("min_confidence_to_act", 0.60))
 
     # ── 4. Find all active profiles for this org ──
     profiles_result = await db.execute(
@@ -1311,12 +1312,32 @@ async def _compute_and_persist_taa_state(
         prev_row = prev_result.scalar_one_or_none()
         prev_smoothed = prev_row.smoothed_centers if prev_row else None
 
-        # EMA smooth
-        smoothed = smooth_regime_centers(
-            raw_centers, prev_smoothed,
-            halflife_days=halflife,
-            max_daily_shift=max_shift,
-        )
+        # Confidence gating: if stress score delta is below threshold,
+        # hold previous smoothed centers (no regime shift enacted).
+        confidence_gated = False
+        if prev_row is not None and stress_score is not None:
+            prev_stress = float(prev_row.stress_score) if prev_row.stress_score is not None else None
+            if prev_stress is not None:
+                stress_delta = abs(stress_score - prev_stress)
+                if stress_delta < min_confidence:
+                    confidence_gated = True
+                    logger.info(
+                        "taa_confidence_gated",
+                        profile=prof,
+                        stress_delta=round(stress_delta, 2),
+                        threshold=min_confidence,
+                        action="holding_previous_centers",
+                    )
+
+        # EMA smooth (or hold if gated)
+        if confidence_gated and prev_smoothed is not None:
+            smoothed = dict(prev_smoothed)
+        else:
+            smoothed = smooth_regime_centers(
+                raw_centers, prev_smoothed,
+                halflife_days=halflife,
+                max_daily_shift=max_shift,
+            )
 
         # Compute transition velocity
         velocity: dict[str, float] = {}
@@ -2193,138 +2214,164 @@ ELITE_TOTAL_COUNT = 300
 #: worker logs a warning.
 ELITE_ROUNDING_TOLERANCE = 3
 
+#: Sprint 2 TAA — mapping from regime to the boolean column name on
+#: fund_risk_metrics. RISK_ON uses the existing ``elite_flag`` for
+#: backward compatibility. The 3 new columns were added in migration
+#: 0129. Keys are hardcoded constants (safe for f-string SQL).
+REGIME_ELITE_COLUMN: dict[str, str] = {
+    "RISK_ON": "elite_flag",
+    "RISK_OFF": "elite_risk_off",
+    "INFLATION": "elite_inflation",
+    "CRISIS": "elite_crisis",
+}
 
-async def _compute_elite_ranking(
+#: Per-regime target counts derived from TAA band centers (plan §5.2).
+#: Computed as round(300 * center) per asset class. These are used by
+#: the ELITE ranking pass when computing regime-specific sets.
+REGIME_ELITE_TARGETS: dict[str, dict[str, int]] = {
+    "RISK_ON":    {"equity": 156, "fixed_income": 90,  "alternatives": 36, "cash": 18},
+    "RISK_OFF":   {"equity": 114, "fixed_income": 108, "alternatives": 39, "cash": 39},
+    "INFLATION":  {"equity": 126, "fixed_income": 75,  "alternatives": 66, "cash": 33},
+    "CRISIS":     {"equity": 75,  "fixed_income": 105, "alternatives": 45, "cash": 75},
+}
+
+
+async def _compute_elite_for_regime(
     db: AsyncSession,
     calc_date: date,
-) -> tuple[int, dict[str, int]]:
-    """ELITE ranking pass.
+    column_name: str,
+    target_counts: dict[str, int],
+) -> int:
+    """Compute ELITE ranking for a single regime into the specified column.
 
-    For each asset_class bucket derived from
-    ``get_global_default_strategy_weights`` the function computes
-    ``target_count = round(300 * weight)`` and marks the top
-    ``target_count`` funds (ordered by manager_score DESC NULLS LAST)
-    with::
+    Clears the column for all global rows, then ranks by manager_score
+    within each asset_class bucket and sets the top N funds to True.
 
-        elite_flag = true
-        elite_rank_within_strategy = 1 .. target_count
-        elite_target_count_per_strategy = target_count
+    For the RISK_ON regime (column_name='elite_flag'), also updates
+    ``elite_rank_within_strategy`` and ``elite_target_count_per_strategy``
+    for screener UX compatibility.
 
-    All other funds in the same bucket have::
-
-        elite_flag = false
-        elite_rank_within_strategy = NULL
-        elite_target_count_per_strategy = target_count
-
-    The ranking is computed against the GLOBAL set of funds —
-    ``fund_risk_metrics`` rows where ``organization_id IS NULL`` and
-    ``calc_date = :calc_date`` — joined to ``instruments_universe``
-    on ``asset_class``. Per-tenant DTW overlay rows are untouched.
-
-    Runs under the same advisory lock as the global risk worker
-    (lock 900_071). Called AFTER peer percentile computation so the
-    manager_score is fresh and the ELITE cohort reflects the
-    latest scoring pass.
+    Args:
+        column_name: One of the 4 values from REGIME_ELITE_COLUMN
+            (hardcoded constants, safe for f-string SQL).
+        target_counts: Per-asset-class target counts (sum ~= 300).
 
     Returns:
-        ``(total_elite, per_strategy_targets)`` where
-        ``total_elite`` is the sum of ``elite_flag = true`` across
-        all buckets after the pass, and ``per_strategy_targets`` maps
-        each asset_class to the rounded target count that was applied.
+        Total number of funds marked True in this column.
     """
-    from vertical_engines.wealth.elite_ranking.allocation_source import (
-        compute_target_counts,
-        get_global_default_strategy_weights,
-    )
-
-    weights = await get_global_default_strategy_weights(db)
-    target_counts = compute_target_counts(weights, total_elite=ELITE_TOTAL_COUNT)
-
-    rounding_deviation = abs(sum(target_counts.values()) - ELITE_TOTAL_COUNT)
-    if rounding_deviation > ELITE_ROUNDING_TOLERANCE:
-        logger.warning(
-            "elite_ranking.rounding_deviation_exceeds_tolerance",
-            sum_targets=sum(target_counts.values()),
-            expected=ELITE_TOTAL_COUNT,
-            tolerance=ELITE_ROUNDING_TOLERANCE,
-            per_strategy=target_counts,
-        )
-
-    # Pass A — clear stale ELITE state on all global rows for
-    # this calc_date. A bucket-by-bucket UPDATE without this would
-    # leave yesterday's elite flag stuck on funds that rotated out.
-    await db.execute(
-        text(
-            """
-            UPDATE fund_risk_metrics
-            SET elite_flag = false,
-                elite_rank_within_strategy = NULL,
-                elite_target_count_per_strategy = NULL
-            WHERE calc_date = :calc_date
-              AND organization_id IS NULL
-            """,
-        ),
-        {"calc_date": calc_date},
-    )
-
-    # Pass B — per bucket, rank by manager_score and write the top N.
-    rank_query = text(
-        """
-        WITH ranked AS (
-            SELECT
-                frm.instrument_id,
-                ROW_NUMBER() OVER (
-                    ORDER BY frm.manager_score DESC NULLS LAST
-                ) AS rnk
-            FROM fund_risk_metrics frm
-            JOIN instruments_universe iu
-              ON iu.instrument_id = frm.instrument_id
-            WHERE frm.calc_date = :calc_date
-              AND frm.organization_id IS NULL
-              AND frm.manager_score IS NOT NULL
-              AND iu.is_active = true
-              AND iu.asset_class = :asset_class
-        )
-        UPDATE fund_risk_metrics frm
-        SET elite_flag = true,
-            elite_rank_within_strategy = ranked.rnk::smallint,
-            elite_target_count_per_strategy = :target_count
-        FROM ranked
-        WHERE frm.instrument_id = ranked.instrument_id
-          AND frm.calc_date = :calc_date
-          AND frm.organization_id IS NULL
-          AND ranked.rnk <= :target_count
-        """,
-    )
-
-    # Also record the bucket's target count on all funds in that
-    # bucket (whether elite or not) so the screener can show
-    # "ranked N of 300 (elite cutoff: M)" even for funds that
-    # didn't make the cut.
-    target_count_query = text(
-        """
-        UPDATE fund_risk_metrics frm
-        SET elite_target_count_per_strategy = :target_count
-        FROM instruments_universe iu
-        WHERE frm.instrument_id = iu.instrument_id
-          AND frm.calc_date = :calc_date
-          AND frm.organization_id IS NULL
-          AND iu.is_active = true
-          AND iu.asset_class = :asset_class
-          AND (frm.elite_target_count_per_strategy IS NULL
-               OR frm.elite_target_count_per_strategy <> :target_count)
-        """,
-    )
-
-    for asset_class, target_count in target_counts.items():
+    # Pass A — clear stale flags for this column
+    if column_name == "elite_flag":
+        # RISK_ON: also clear rank and target_count (screener UX columns)
         await db.execute(
-            target_count_query,
-            {
-                "calc_date": calc_date,
-                "asset_class": asset_class,
-                "target_count": target_count,
-            },
+            text(
+                """
+                UPDATE fund_risk_metrics
+                SET elite_flag = false,
+                    elite_rank_within_strategy = NULL,
+                    elite_target_count_per_strategy = NULL
+                WHERE calc_date = :calc_date
+                  AND organization_id IS NULL
+                """,
+            ),
+            {"calc_date": calc_date},
         )
+    else:
+        await db.execute(
+            text(
+                f"""
+                UPDATE fund_risk_metrics
+                SET {column_name} = false
+                WHERE calc_date = :calc_date
+                  AND organization_id IS NULL
+                """,
+            ),
+            {"calc_date": calc_date},
+        )
+
+    # Pass B — per bucket, rank by manager_score and mark top N
+    for asset_class, target_count in target_counts.items():
+        if column_name == "elite_flag":
+            # RISK_ON: also record rank + target_count for screener
+            target_count_query = text(
+                """
+                UPDATE fund_risk_metrics frm
+                SET elite_target_count_per_strategy = :target_count
+                FROM instruments_universe iu
+                WHERE frm.instrument_id = iu.instrument_id
+                  AND frm.calc_date = :calc_date
+                  AND frm.organization_id IS NULL
+                  AND iu.is_active = true
+                  AND iu.asset_class = :asset_class
+                  AND (frm.elite_target_count_per_strategy IS NULL
+                       OR frm.elite_target_count_per_strategy <> :target_count)
+                """,
+            )
+            await db.execute(
+                target_count_query,
+                {
+                    "calc_date": calc_date,
+                    "asset_class": asset_class,
+                    "target_count": target_count,
+                },
+            )
+
+            rank_query = text(
+                """
+                WITH ranked AS (
+                    SELECT
+                        frm.instrument_id,
+                        ROW_NUMBER() OVER (
+                            ORDER BY frm.manager_score DESC NULLS LAST
+                        ) AS rnk
+                    FROM fund_risk_metrics frm
+                    JOIN instruments_universe iu
+                      ON iu.instrument_id = frm.instrument_id
+                    WHERE frm.calc_date = :calc_date
+                      AND frm.organization_id IS NULL
+                      AND frm.manager_score IS NOT NULL
+                      AND iu.is_active = true
+                      AND iu.asset_class = :asset_class
+                )
+                UPDATE fund_risk_metrics frm
+                SET elite_flag = true,
+                    elite_rank_within_strategy = ranked.rnk::smallint,
+                    elite_target_count_per_strategy = :target_count
+                FROM ranked
+                WHERE frm.instrument_id = ranked.instrument_id
+                  AND frm.calc_date = :calc_date
+                  AND frm.organization_id IS NULL
+                  AND ranked.rnk <= :target_count
+                """,
+            )
+        else:
+            # Non-RISK_ON regimes: only set the boolean flag
+            rank_query = text(
+                f"""
+                WITH ranked AS (
+                    SELECT
+                        frm.instrument_id,
+                        ROW_NUMBER() OVER (
+                            ORDER BY frm.manager_score DESC NULLS LAST
+                        ) AS rnk
+                    FROM fund_risk_metrics frm
+                    JOIN instruments_universe iu
+                      ON iu.instrument_id = frm.instrument_id
+                    WHERE frm.calc_date = :calc_date
+                      AND frm.organization_id IS NULL
+                      AND frm.manager_score IS NOT NULL
+                      AND iu.is_active = true
+                      AND iu.asset_class = :asset_class
+                )
+                UPDATE fund_risk_metrics frm
+                SET {column_name} = true
+                FROM ranked
+                WHERE frm.instrument_id = ranked.instrument_id
+                  AND frm.calc_date = :calc_date
+                  AND frm.organization_id IS NULL
+                  AND ranked.rnk <= :target_count
+                """,
+            )
+
         await db.execute(
             rank_query,
             {
@@ -2335,28 +2382,89 @@ async def _compute_elite_ranking(
         )
         logger.info(
             "elite_ranking.strategy_processed",
+            regime_column=column_name,
             asset_class=asset_class,
             target_count=target_count,
         )
 
-    await db.commit()
-
-    # Observability — read back the actuals for logging.
+    # Read back actual count for this column
     total_result = await db.execute(
         text(
-            """
+            f"""
             SELECT COUNT(*)
             FROM fund_risk_metrics
             WHERE calc_date = :calc_date
               AND organization_id IS NULL
-              AND elite_flag = true
+              AND {column_name} = true
             """,
         ),
         {"calc_date": calc_date},
     )
-    total_elite = int(total_result.scalar_one() or 0)
+    return int(total_result.scalar_one() or 0)
 
-    return total_elite, target_counts
+
+async def _compute_elite_ranking(
+    db: AsyncSession,
+    calc_date: date,
+) -> tuple[int, dict[str, int]]:
+    """ELITE ranking pass — computes 4 regime-specific ELITE sets.
+
+    For each regime (RISK_ON, RISK_OFF, INFLATION, CRISIS), marks the
+    top N funds per asset_class in the corresponding boolean column:
+    - RISK_ON  → ``elite_flag`` (backward compatible, also sets rank/target)
+    - RISK_OFF → ``elite_risk_off``
+    - INFLATION → ``elite_inflation``
+    - CRISIS   → ``elite_crisis``
+
+    RISK_ON target counts come from the canonical moderate profile via
+    ``get_global_default_strategy_weights``. Other regime targets come
+    from ``REGIME_ELITE_TARGETS`` (derived from TAA band centers, plan §5.2).
+
+    Returns:
+        ``(total_risk_on_elite, risk_on_targets)`` for backward
+        compatibility with existing callers.
+    """
+    from vertical_engines.wealth.elite_ranking.allocation_source import (
+        compute_target_counts,
+        get_global_default_strategy_weights,
+    )
+
+    # RISK_ON: use canonical moderate profile (backward compatible)
+    weights = await get_global_default_strategy_weights(db)
+    risk_on_targets = compute_target_counts(weights, total_elite=ELITE_TOTAL_COUNT)
+
+    rounding_deviation = abs(sum(risk_on_targets.values()) - ELITE_TOTAL_COUNT)
+    if rounding_deviation > ELITE_ROUNDING_TOLERANCE:
+        logger.warning(
+            "elite_ranking.rounding_deviation_exceeds_tolerance",
+            sum_targets=sum(risk_on_targets.values()),
+            expected=ELITE_TOTAL_COUNT,
+            tolerance=ELITE_ROUNDING_TOLERANCE,
+            per_strategy=risk_on_targets,
+        )
+
+    per_regime_totals: dict[str, int] = {}
+
+    for regime, column_name in REGIME_ELITE_COLUMN.items():
+        if regime == "RISK_ON":
+            targets = risk_on_targets
+        else:
+            targets = REGIME_ELITE_TARGETS[regime]
+
+        total = await _compute_elite_for_regime(db, calc_date, column_name, targets)
+        per_regime_totals[regime] = total
+        logger.info(
+            "elite_ranking.regime_set_done",
+            regime=regime,
+            column=column_name,
+            total_elite=total,
+            targets=targets,
+        )
+
+    await db.commit()
+
+    # Return RISK_ON total for backward compatibility
+    return per_regime_totals.get("RISK_ON", 0), risk_on_targets
 
 
 if __name__ == "__main__":

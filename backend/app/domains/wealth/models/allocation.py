@@ -84,6 +84,9 @@ class TacticalPosition(OrganizationScopedMixin, Base):
     valid_from: Mapped[date] = mapped_column(Date, nullable=False)
     valid_to: Mapped[date | None] = mapped_column(Date)
     actor_source: Mapped[str | None] = mapped_column(String(20))
+    source: Mapped[str | None] = mapped_column(
+        String(20), server_default="ic_manual",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
     )
