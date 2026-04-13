@@ -9,7 +9,7 @@
 	import { getContext } from "svelte";
 	import { PanelErrorState } from "@investintell/ui/runtime";
 	import { createClientApiClient } from "$lib/api/client";
-	import { formatDateTime } from "@investintell/ui";
+	import { formatTime } from "@investintell/ui";
 
 	type Severity = "info" | "warning" | "critical";
 	type SeverityFilter = "all" | Severity;
@@ -120,8 +120,7 @@
 	}
 
 	function shortTime(iso: string): string {
-		if (iso.length < 16) return iso;
-		return iso.substring(11, 16);
+		return formatTime(iso);
 	}
 
 	const SEVERITY_OPTIONS: { value: SeverityFilter; label: string }[] = [

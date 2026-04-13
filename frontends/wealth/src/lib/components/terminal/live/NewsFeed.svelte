@@ -6,7 +6,8 @@
   publication time, and 2-line headline.
 -->
 <script lang="ts">
-	import { getContext, onMount } from "svelte";
+	import { getContext } from "svelte";
+	import { formatTime } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 
 	interface Props {
@@ -42,13 +43,8 @@
 		return "MARKET";
 	}
 
-	function formatTime(iso: string): string {
-		try {
-			const d = new Date(iso);
-			return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
-		} catch {
-			return "--:--";
-		}
+	function displayTime(iso: string): string {
+		return formatTime(iso);
 	}
 
 	$effect(() => {
@@ -104,7 +100,7 @@
 					rel="noopener noreferrer"
 				>
 					<div class="nf-meta">
-						<span class="nf-time">{formatTime(item.published_at)}</span>
+						<span class="nf-time">{displayTime(item.published_at)}</span>
 						<span class="nf-tag nf-tag--{tag.toLowerCase()}">{tag}</span>
 					</div>
 					<span class="nf-headline">{item.title}</span>

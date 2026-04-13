@@ -63,20 +63,23 @@
 		searchError = null;
 
 		try {
-			const quote = await api.get<{ ticker: string; price: number; name?: string }>(
-				`/market-data/quote/${encodeURIComponent(q)}`,
-			);
+			const res = await api.get<{
+				ticker: string;
+				interval: string;
+				bars: Array<{ timestamp: string; close: number | null }>;
+				source: string;
+			}>(`/market-data/historical/${encodeURIComponent(q)}?start_date=${new Date(Date.now() - 86400000 * 5).toISOString().slice(0, 10)}`);
 			adHocItems = [
 				...adHocItems,
 				{
-					ticker: quote.ticker,
-					name: quote.name ?? quote.ticker,
+					ticker: res.ticker ?? q,
+					name: q,
 					instrument_id: "",
 					weight: 0,
 				},
 			];
-			marketStore.subscribe([quote.ticker]);
-			onSelect(quote.ticker);
+			marketStore.subscribe([res.ticker ?? q]);
+			onSelect(res.ticker ?? q);
 			searchQuery = "";
 		} catch {
 			searchError = "Ticker not found";

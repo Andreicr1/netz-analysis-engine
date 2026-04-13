@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { formatPercent } from "@investintell/ui";
+	import { formatPercent, formatNumber, formatBps } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -83,8 +83,8 @@
 	function formatVal(v: number | null, suffix: string): string {
 		if (v == null) return "\u2014";
 		if (suffix === "%") return formatPercent(v / 100, 1);
-		if (suffix === "bp") return `${Math.round(v * 100)}bp`;
-		return v.toFixed(1);
+		if (suffix === "bp") return formatBps(v / 100);
+		return formatNumber(v, 1);
 	}
 
 	function changeArrow(change: number | null): string {
@@ -100,10 +100,9 @@
 
 	function formatChange(change: number | null, suffix: string): string {
 		if (change == null) return "";
-		const abs = Math.abs(change);
 		if (suffix === "bp") return `${change > 0 ? "+" : ""}${Math.round(change * 100)}`;
-		if (suffix === "%") return `${change > 0 ? "+" : ""}${abs.toFixed(1)}`;
-		return `${change > 0 ? "+" : ""}${abs.toFixed(1)}`;
+		if (suffix === "%") return `${change > 0 ? "+" : ""}${formatNumber(Math.abs(change), 1)}`;
+		return `${change > 0 ? "+" : ""}${formatNumber(Math.abs(change), 1)}`;
 	}
 </script>
 
@@ -120,7 +119,7 @@
 			<div class="mr-row">
 				<span class="mr-key">{ind.label}</span>
 				<span class="mr-val">
-					{val != null ? (ind.suffix === "%" ? val.toFixed(2) + "%" : ind.suffix === "bp" ? Math.round(val * 100) + "bp" : val.toFixed(1)) : "\u2014"}
+					{formatVal(val, ind.suffix)}
 				</span>
 				<span class="mr-change {changeClass(chg, ind.riseIsWarning)}">
 					{changeArrow(chg)} {formatChange(chg, ind.suffix)}

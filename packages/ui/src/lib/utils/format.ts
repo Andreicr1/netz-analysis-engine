@@ -243,6 +243,23 @@ export function formatDate(
 }
 
 /**
+ * Format time-only (HH:MM, 24h). Used by compact terminal panels.
+ */
+export function formatTime(date: DateInput, locale = "en-US"): string {
+	const resolvedDate = toDate(date);
+
+	if (!resolvedDate) {
+		return EM_DASH;
+	}
+
+	return getDateFormatter(locale, {
+		hour: "2-digit",
+		minute: "2-digit",
+		hour12: false,
+	}).format(resolvedDate);
+}
+
+/**
  * Format a date/time for audit surfaces.
  */
 export function formatDateTime(date: DateInput, locale = "en-US"): string {

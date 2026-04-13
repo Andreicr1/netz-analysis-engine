@@ -35,6 +35,7 @@ export {
 	formatPercent,
 	formatCompact,
 	formatDate,
+	formatTime,
 	formatDateTime,
 	formatDateRange,
 	formatRelativeDate,

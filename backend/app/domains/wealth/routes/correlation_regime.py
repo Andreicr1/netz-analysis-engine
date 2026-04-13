@@ -47,7 +47,7 @@ async def get_correlation_regime(
     # 1. Load live model portfolio
     mp_stmt = select(ModelPortfolio).where(
         ModelPortfolio.profile == profile,
-        ModelPortfolio.status == "live",
+        ModelPortfolio.state == "live",
     )
     mp_result = await db.execute(mp_stmt)
     live_portfolio = mp_result.scalar()
