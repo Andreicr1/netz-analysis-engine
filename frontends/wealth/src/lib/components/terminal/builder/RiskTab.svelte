@@ -11,7 +11,7 @@
 -->
 <script lang="ts">
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
-	import { formatNumber, readTerminalTokens } from "@investintell/ui";
+	import { formatNumber, readTerminalTokens, createTerminalChartOptions } from "@investintell/ui";
 	import TerminalChart from "$lib/components/terminal/charts/TerminalChart.svelte";
 	import type { EChartsOption } from "echarts";
 
@@ -24,9 +24,6 @@
 		PC2: "Style Factor",
 		PC3: "Sector Factor",
 	};
-
-	/** Read terminal tokens once for chart colors (avoids hex in component). */
-	const tk = $derived.by(() => readTerminalTokens());
 
 	// ── Section A: CVaR Contribution ────────────────────────
 
@@ -52,21 +49,16 @@
 
 	const cvarOption = $derived.by<EChartsOption>(() => {
 		if (!hasCvar) return {};
+		const tk = readTerminalTokens();
 		const total = cvarContributions.reduce((sum, c) => sum + c.value, 0);
 
-		return {
-			textStyle: { fontFamily: tk.fontMono, fontSize: tk.text10 },
-			grid: { left: 0, right: 0, top: 0, bottom: 0 },
-			tooltip: {
-				trigger: "item" as const,
-				backgroundColor: tk.bgPanelRaised,
-				borderColor: tk.fgMuted,
-				borderWidth: 1,
-				textStyle: { fontFamily: tk.fontMono, fontSize: tk.text11, color: tk.fgPrimary },
-			},
+		const base = createTerminalChartOptions({
+			slot: "secondary",
+			disableAnimation: true,
+			showXAxisLabels: false,
+			showYAxisLabels: false,
 			xAxis: { type: "value" as const, show: false, max: total },
 			yAxis: { type: "category" as const, show: false, data: ["Tail Loss"] },
-			animation: false,
 			series: cvarContributions.map((c, i) => ({
 				type: "bar" as const,
 				stack: "cvar",
@@ -75,7 +67,8 @@
 				name: c.name,
 				itemStyle: { color: tk.dataviz[i % tk.dataviz.length] },
 			})),
-		};
+		});
+		return { ...base, grid: { left: 0, right: 0, top: 0, bottom: 0 } };
 	});
 
 	// ── Section B: Factor Exposure ──────────────────────────
@@ -100,41 +93,28 @@
 
 	const factorOption = $derived.by<EChartsOption>(() => {
 		if (!hasFactors) return {};
+		const tk = readTerminalTokens();
 
 		const labels = factorExposures.map((e) => e.label);
 		const values = factorExposures.map((e) => Math.round(e.value * 1000) / 1000);
 
-		return {
-			textStyle: { fontFamily: tk.fontMono, fontSize: tk.text11 },
-			grid: { left: 130, right: 50, top: 12, bottom: 24 },
-			tooltip: {
-				trigger: "axis" as const,
-				axisPointer: { type: "shadow" as const },
-				backgroundColor: tk.bgPanelRaised,
-				borderColor: tk.fgMuted,
-				borderWidth: 1,
-				textStyle: { fontFamily: tk.fontMono, fontSize: tk.text11, color: tk.fgPrimary },
-			},
+		const base = createTerminalChartOptions({
+			slot: "secondary",
+			disableAnimation: true,
 			xAxis: {
 				type: "value" as const,
 				axisLabel: {
 					formatter: (v: number) => formatNumber(v, 1),
-					fontSize: tk.text10,
-					color: tk.fgSecondary,
-				},
-				splitLine: {
-					lineStyle: { type: "dashed" as const, color: tk.fgMuted },
 				},
 			},
 			yAxis: {
 				type: "category" as const,
 				data: labels,
 				inverse: true,
-				axisLabel: { fontSize: tk.text11, fontWeight: 600 as const, color: tk.fgSecondary },
+				axisLabel: { fontWeight: 600 as const },
 				axisTick: { show: false },
 				axisLine: { show: false },
 			},
-			animation: false,
 			series: [
 				{
 					type: "bar" as const,
@@ -161,7 +141,9 @@
 					},
 				},
 			],
-		};
+		});
+
+		return { ...base, grid: { left: 130, right: 50, top: 12, bottom: 24 } };
 	});
 
 	const hasData = $derived(hasCvar || hasFactors);

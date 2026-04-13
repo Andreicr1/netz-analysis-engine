@@ -24,18 +24,12 @@
 -->
 <script lang="ts">
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
-	import {
-		EmptyState,
-		Button,
-		formatNumber,
-		formatShortDate,
-	} from "@investintell/ui";
+	import { formatNumber, formatShortDate } from "@investintell/ui";
 	import {
 		taaRegimeLabel,
 		taaRegimePosture,
 		taaRegimeColor,
 	} from "$lib/types/taa";
-	import * as Tabs from "@investintell/ui/components/ui/tabs";
 	import type {
 		PortfolioCalibration,
 		PortfolioCalibrationUpdate,
@@ -273,24 +267,24 @@
 
 {#if !workspace.portfolio}
 	<div class="cp-empty">
-		<EmptyState
-			title="No portfolio selected"
-			message="Select a model portfolio on the left to edit its calibration."
-		/>
+		<div class="cp-empty-block">
+			<span class="cp-empty-title">NO PORTFOLIO SELECTED</span>
+			<span class="cp-empty-msg">Select a model portfolio on the left to edit its calibration.</span>
+		</div>
 	</div>
 {:else if loading && !draft}
 	<div class="cp-empty">
-		<EmptyState
-			title="Loading calibration…"
-			message="Fetching the 63-input surface from the backend."
-		/>
+		<div class="cp-empty-block">
+			<span class="cp-empty-title">LOADING CALIBRATION</span>
+			<span class="cp-empty-msg">Fetching the 63-input surface from the backend.</span>
+		</div>
 	</div>
 {:else if !draft}
 	<div class="cp-empty">
-		<EmptyState
-			title="Calibration unavailable"
-			message={workspace.lastError?.message ?? "Calibration could not be loaded for this portfolio."}
-		/>
+		<div class="cp-empty-block">
+			<span class="cp-empty-title">CALIBRATION UNAVAILABLE</span>
+			<span class="cp-empty-msg">{workspace.lastError?.message ?? "Calibration could not be loaded for this portfolio."}</span>
+		</div>
 	</div>
 {:else}
 	<div class="cp-root">
@@ -302,7 +296,7 @@
 					<span class="cp-regime-date">{formatShortDate(regimeBands!.as_of_date)}</span>
 				</div>
 				<div class="cp-regime-row">
-					<span class="cp-regime-badge" style="background: {regimeColor}; color: #0e0f13">
+					<span class="cp-regime-badge" style="background: {regimeColor}; color: var(--terminal-fg-inverted)">
 						{regimeLabel}
 					</span>
 					{#if stressLevel !== null}
@@ -318,16 +312,18 @@
 			</div>
 		{/if}
 
-		<Tabs.Root value={tier} onValueChange={(v) => (tier = v as typeof tier)}>
-			<Tabs.List class="cp-tabs">
-				<Tabs.Trigger value="basic">Basic</Tabs.Trigger>
-				<Tabs.Trigger value="advanced">Advanced</Tabs.Trigger>
-				<Tabs.Trigger value="expert">Expert</Tabs.Trigger>
-			</Tabs.List>
+		<div class="cp-tabs" role="tablist">
+			<button type="button" role="tab" class="cp-tab" class:cp-tab--active={tier === "basic"}
+				aria-selected={tier === "basic"} onclick={() => (tier = "basic")}>BASIC</button>
+			<button type="button" role="tab" class="cp-tab" class:cp-tab--active={tier === "advanced"}
+				aria-selected={tier === "advanced"} onclick={() => (tier = "advanced")}>ADVANCED</button>
+			<button type="button" role="tab" class="cp-tab" class:cp-tab--active={tier === "expert"}
+				aria-selected={tier === "expert"} onclick={() => (tier = "expert")}>EXPERT</button>
+		</div>
 
+		{#if tier === "basic"}
 			<!-- ── Basic tier (5 fields) ───────────────────────────── -->
-			<Tabs.Content value="basic">
-				<section class="cp-section">
+			<section class="cp-section" role="tabpanel">
 					<CalibrationSelectField
 						id="cp-mandate"
 						label="Mandate"
@@ -386,11 +382,9 @@
 						options={STRESS_OPTIONS}
 					/>
 				</section>
-			</Tabs.Content>
-
+		{:else if tier === "advanced"}
 			<!-- ── Advanced tier (10 fields) ───────────────────────── -->
-			<Tabs.Content value="advanced">
-				<section class="cp-section">
+			<section class="cp-section" role="tabpanel">
 					<CalibrationSelectField
 						id="cp-regime-override"
 						label="Regime override"
@@ -504,11 +498,9 @@
 						digits={2}
 					/>
 				</section>
-			</Tabs.Content>
-
+		{:else if tier === "expert"}
 			<!-- ── Expert tier (arbitrary JSONB overrides) ─────────── -->
-			<Tabs.Content value="expert">
-				<section class="cp-section">
+			<section class="cp-section" role="tabpanel">
 					<p class="cp-expert-hint">
 						Expert overrides are free-form key/value pairs stored in
 						<code>expert_overrides</code> JSONB. Use only for optimizer knobs
@@ -549,18 +541,17 @@
 							placeholder="value (number / true / false / text)"
 							bind:value={newExpertValue}
 						/>
-						<Button
-							variant="outline"
-							size="sm"
+						<button
+							type="button"
+							class="cp-expert-add-btn"
 							onclick={addExpertKey}
 							disabled={!newExpertKey.trim()}
 						>
-							Add
-						</Button>
+							ADD
+						</button>
 					</div>
-				</section>
-			</Tabs.Content>
-		</Tabs.Root>
+			</section>
+		{/if}
 
 		<!-- ── Preview + Apply row (DL5) ───────────────────────── -->
 		<footer class="cp-footer">
@@ -581,30 +572,15 @@
 				{/if}
 			</div>
 			<div class="cp-footer-actions">
-				<Button
-					variant="ghost"
-					size="sm"
+				<button type="button" class="cp-action cp-action--ghost"
 					disabled={!dirty || applying || isPreviewing}
-					onclick={handleReset}
-				>
-					Reset
-				</Button>
-				<Button
-					variant="outline"
-					size="sm"
+					onclick={handleReset}>RESET</button>
+				<button type="button" class="cp-action cp-action--outline"
 					disabled={!dirty || applying || isPreviewing}
-					onclick={schedulePreview}
-				>
-					Preview
-				</Button>
-				<Button
-					variant="default"
-					size="sm"
+					onclick={schedulePreview}>PREVIEW</button>
+				<button type="button" class="cp-action cp-action--primary"
 					disabled={!dirty || applying || isPreviewing}
-					onclick={handleApply}
-				>
-					Apply
-				</Button>
+					onclick={handleApply}>APPLY</button>
 			</div>
 		</footer>
 	</div>
@@ -616,14 +592,14 @@
 		flex-direction: column;
 		height: 100%;
 		min-height: 0;
-		background: #141519;
-		font-family: "Urbanist", system-ui, sans-serif;
+		background: var(--terminal-bg-panel);
+		font-family: var(--terminal-font-mono);
 	}
 
 	/* ── Market Conditions regime indicator (TAA Sprint 4) ── */
 	.cp-regime-strip {
 		padding: 12px 16px;
-		border-bottom: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.4));
+		border-bottom: var(--terminal-border-hairline);
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
@@ -635,16 +611,16 @@
 		align-items: center;
 	}
 	.cp-regime-kicker {
-		font-size: 0.625rem;
+		font-size: var(--terminal-text-10);
 		font-weight: 700;
 		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--ii-text-muted, #85a0bd);
+		letter-spacing: var(--terminal-tracking-caps);
+		color: var(--terminal-fg-muted);
 	}
 	.cp-regime-date {
-		font-size: 0.625rem;
+		font-size: var(--terminal-text-10);
 		font-weight: 500;
-		color: var(--ii-text-muted, #85a0bd);
+		color: var(--terminal-fg-muted);
 		font-variant-numeric: tabular-nums;
 	}
 	.cp-regime-row {
@@ -655,40 +631,97 @@
 	.cp-regime-badge {
 		display: inline-flex;
 		align-items: center;
-		padding: 3px 12px;
-		border-radius: 999px;
-		font-size: 0.75rem;
+		padding: 1px 6px;
+		font-size: var(--terminal-text-10);
 		font-weight: 700;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
 		white-space: nowrap;
-		letter-spacing: 0.02em;
 	}
 	.cp-stress-bar-track {
 		flex: 1;
-		height: 6px;
-		border-radius: 3px;
-		background: rgba(255, 255, 255, 0.06);
+		height: 4px;
+		background: var(--terminal-fg-muted);
 		overflow: hidden;
 	}
 	.cp-stress-bar-fill {
 		height: 100%;
-		border-radius: 3px;
-		transition: width 400ms ease;
+		transition: width var(--terminal-motion-update) var(--terminal-motion-easing-out);
 	}
 	.cp-regime-posture {
 		margin: 0;
-		font-size: 0.6875rem;
+		font-size: var(--terminal-text-11);
 		line-height: 1.4;
-		color: var(--ii-text-muted, #85a0bd);
+		color: var(--terminal-fg-muted);
 	}
 	.cp-empty {
-		padding: 24px;
-	}
-	:global(.cp-tabs) {
 		display: flex;
-		gap: 6px;
-		padding: 16px 16px 0;
-		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		padding: var(--terminal-space-6);
+		height: 100%;
+		font-family: var(--terminal-font-mono);
+		background: var(--terminal-bg-panel);
 	}
+	.cp-empty-block {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--terminal-space-2);
+	}
+	.cp-empty-title {
+		font-size: var(--terminal-text-11);
+		font-weight: 700;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		color: var(--terminal-fg-tertiary);
+	}
+	.cp-empty-msg {
+		font-size: var(--terminal-text-11);
+		color: var(--terminal-fg-muted);
+		text-align: center;
+		max-width: 280px;
+		line-height: var(--terminal-leading-normal);
+	}
+
+	.cp-tabs {
+		display: flex;
+		align-items: stretch;
+		height: 32px;
+		padding: 0;
+		flex-shrink: 0;
+		border-bottom: var(--terminal-border-hairline);
+	}
+	.cp-tab {
+		display: inline-flex;
+		align-items: center;
+		padding: 0 var(--terminal-space-3);
+		background: transparent;
+		border: none;
+		border-bottom: 2px solid transparent;
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-10);
+		font-weight: 600;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		color: var(--terminal-fg-tertiary);
+		cursor: pointer;
+		transition:
+			color var(--terminal-motion-tick) var(--terminal-motion-easing-out),
+			border-color var(--terminal-motion-tick) var(--terminal-motion-easing-out);
+	}
+	.cp-tab:hover {
+		color: var(--terminal-accent-amber);
+	}
+	.cp-tab--active {
+		color: var(--terminal-accent-amber);
+		border-bottom-color: var(--terminal-accent-amber);
+	}
+	.cp-tab:focus-visible {
+		outline: var(--terminal-border-focus);
+		outline-offset: -2px;
+	}
+
 	.cp-section {
 		display: flex;
 		flex-direction: column;
@@ -703,17 +736,16 @@
 		margin: 0;
 		font-size: 11px;
 		line-height: 1.5;
-		color: var(--ii-text-muted, #85a0bd);
+		color: var(--terminal-fg-muted);
 	}
 	.cp-expert-hint code {
-		background: rgba(255, 255, 255, 0.06);
+		background: var(--terminal-bg-panel-raised);
 		padding: 1px 5px;
-		border-radius: 4px;
 		font-size: 10px;
 	}
 	.cp-expert-empty {
 		font-size: 12px;
-		color: var(--ii-text-muted, #85a0bd);
+		color: var(--terminal-fg-muted);
 		font-style: italic;
 		margin: 0;
 	}
@@ -731,20 +763,19 @@
 		align-items: center;
 		gap: 8px;
 		padding: 6px 8px;
-		background: rgba(255, 255, 255, 0.02);
-		border-radius: 6px;
+		background: var(--terminal-bg-panel-sunken);
 	}
 	.cp-expert-key {
 		font-size: 12px;
 		font-weight: 600;
-		color: var(--ii-text-primary, #ffffff);
+		color: var(--terminal-fg-primary);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 	.cp-expert-value {
 		font-size: 12px;
-		color: var(--ii-text-muted, #85a0bd);
+		color: var(--terminal-fg-muted);
 		font-variant-numeric: tabular-nums;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -755,36 +786,55 @@
 		height: 20px;
 		border: none;
 		background: transparent;
-		color: var(--ii-text-muted, #85a0bd);
+		color: var(--terminal-fg-muted);
 		cursor: pointer;
 		font-size: 14px;
 		line-height: 1;
-		border-radius: 4px;
 	}
 	.cp-expert-remove:hover {
-		background: rgba(255, 255, 255, 0.06);
-		color: var(--ii-danger, #fc1a1a);
+		background: var(--terminal-bg-panel-raised);
+		color: var(--terminal-status-error);
 	}
 	.cp-expert-add {
 		display: grid;
 		grid-template-columns: 1fr 1fr auto;
 		gap: 8px;
 		padding-top: 8px;
-		border-top: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.4));
+		border-top: var(--terminal-border-hairline);
 	}
 	.cp-expert-input {
 		height: 30px;
 		padding: 0 8px;
 		font-size: 12px;
-		border: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.6));
-		border-radius: 6px;
+		border: var(--terminal-border-hairline);
 		background: transparent;
-		color: var(--ii-text-primary, #ffffff);
+		color: var(--terminal-fg-primary);
 		font-family: inherit;
 	}
 	.cp-expert-input:focus {
 		outline: none;
-		border-color: var(--ii-primary, #0177fb);
+		border-color: var(--terminal-accent-amber);
+	}
+	.cp-expert-add-btn {
+		height: 28px;
+		padding: 0 var(--terminal-space-3);
+		background: transparent;
+		color: var(--terminal-fg-secondary);
+		border: var(--terminal-border-hairline);
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-10);
+		font-weight: 700;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		cursor: pointer;
+	}
+	.cp-expert-add-btn:hover:not(:disabled) {
+		color: var(--terminal-accent-amber);
+		border-color: var(--terminal-accent-amber);
+	}
+	.cp-expert-add-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
 	}
 
 	/* Footer ── */
@@ -794,8 +844,8 @@
 		flex-direction: column;
 		gap: 10px;
 		padding: 12px 16px;
-		border-top: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.4));
-		background: #141519;
+		border-top: var(--terminal-border-hairline);
+		background: var(--terminal-bg-panel);
 	}
 	.cp-footer-status {
 		display: flex;
@@ -808,20 +858,66 @@
 		font-weight: 600;
 	}
 	.cp-status--clean {
-		color: var(--ii-text-muted, #85a0bd);
+		color: var(--terminal-fg-muted);
 	}
 	.cp-status--dirty {
-		color: var(--ii-warning, #f0a020);
+		color: var(--terminal-status-warn);
 	}
 	.cp-status--pending {
-		color: var(--ii-primary, #0177fb);
+		color: var(--terminal-accent-cyan);
 	}
 	.cp-status--error {
-		color: var(--ii-danger, #fc1a1a);
+		color: var(--terminal-status-error);
 	}
 	.cp-footer-actions {
 		display: flex;
 		justify-content: flex-end;
 		gap: 8px;
+	}
+	.cp-action {
+		height: 28px;
+		padding: 0 var(--terminal-space-3);
+		border: none;
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-10);
+		font-weight: 700;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		cursor: pointer;
+		transition:
+			background var(--terminal-motion-tick) var(--terminal-motion-easing-out),
+			color var(--terminal-motion-tick) var(--terminal-motion-easing-out),
+			opacity var(--terminal-motion-tick) var(--terminal-motion-easing-out);
+	}
+	.cp-action:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+	.cp-action:focus-visible {
+		outline: var(--terminal-border-focus);
+		outline-offset: 2px;
+	}
+	.cp-action--ghost {
+		background: transparent;
+		color: var(--terminal-fg-tertiary);
+	}
+	.cp-action--ghost:hover:not(:disabled) {
+		color: var(--terminal-fg-primary);
+	}
+	.cp-action--outline {
+		background: transparent;
+		color: var(--terminal-fg-secondary);
+		border: var(--terminal-border-hairline);
+	}
+	.cp-action--outline:hover:not(:disabled) {
+		color: var(--terminal-accent-amber);
+		border-color: var(--terminal-accent-amber);
+	}
+	.cp-action--primary {
+		background: var(--terminal-accent-amber);
+		color: var(--terminal-fg-inverted);
+	}
+	.cp-action--primary:hover:not(:disabled) {
+		opacity: 0.9;
 	}
 </style>
