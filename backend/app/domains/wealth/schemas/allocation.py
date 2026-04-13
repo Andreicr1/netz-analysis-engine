@@ -64,6 +64,7 @@ class TacticalPositionRead(BaseModel):
     rationale: str | None = None
     valid_from: date
     valid_to: date | None = None
+    source: str | None = "ic_manual"
     created_at: datetime
 
 
@@ -73,6 +74,7 @@ class TacticalPositionItem(BaseModel):
     conviction_score: Decimal | None = None
     signal_source: str | None = None
     rationale: str | None = Field(None, max_length=5000)
+    source: str | None = "ic_manual"
 
 
 class TacticalPositionUpdate(BaseModel):

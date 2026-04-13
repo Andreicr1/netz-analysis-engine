@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 
 from alembic import op
-from sqlalchemy import text
 
 revision = "0128_taa_config_seed"
 down_revision = "0127_taa_regime_state"
@@ -65,20 +64,51 @@ for _regime, _bands in _TAA_BANDS_CONFIG["regime_bands"].items():
 
 
 def upgrade() -> None:
+    # Expand CHECK constraint to allow 'taa_bands'
+    op.execute("ALTER TABLE vertical_config_defaults DROP CONSTRAINT IF EXISTS ck_defaults_config_type")
     op.execute(
-        text("""
+        """
+        ALTER TABLE vertical_config_defaults
+        ADD CONSTRAINT ck_defaults_config_type
+        CHECK (config_type IN (
+            'calibration', 'scoring', 'blocks', 'chapters',
+            'portfolio_profiles', 'prompts', 'model_routing', 'tone',
+            'evaluation', 'macro_intelligence', 'governance_policy',
+            'branding', 'screening_layer1', 'screening_layer2',
+            'screening_layer3', 'taa_bands'
+        ))
+        """,
+    )
+
+    config_json = json.dumps(_TAA_BANDS_CONFIG).replace("'", "''")
+    op.execute(
+        f"""
             INSERT INTO vertical_config_defaults
                 (id, vertical, config_type, config, description, created_by)
             VALUES
-                (gen_random_uuid(), 'liquid_funds', 'taa_bands', :config,
+                (gen_random_uuid(), 'liquid_funds', 'taa_bands', '{config_json}'::jsonb,
                  'Regime-to-allocation band mapping for TAA system', 'migration:0128')
             ON CONFLICT (vertical, config_type) DO NOTHING
-        """),
-        {"config": json.dumps(_TAA_BANDS_CONFIG)},
+        """,
     )
 
 
 def downgrade() -> None:
     op.execute(
         "DELETE FROM vertical_config_defaults WHERE config_type = 'taa_bands'"
+    )
+    # Restore original CHECK constraint without 'taa_bands'
+    op.execute("ALTER TABLE vertical_config_defaults DROP CONSTRAINT IF EXISTS ck_defaults_config_type")
+    op.execute(
+        """
+        ALTER TABLE vertical_config_defaults
+        ADD CONSTRAINT ck_defaults_config_type
+        CHECK (config_type IN (
+            'calibration', 'scoring', 'blocks', 'chapters',
+            'portfolio_profiles', 'prompts', 'model_routing', 'tone',
+            'evaluation', 'macro_intelligence', 'governance_policy',
+            'branding', 'screening_layer1', 'screening_layer2',
+            'screening_layer3'
+        ))
+        """,
     )

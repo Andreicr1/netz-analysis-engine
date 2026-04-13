@@ -1580,7 +1580,15 @@ async def get_live_drift(
         )
     )
     tact_result = await db.execute(tact_stmt)
-    tactical = {t.block_id: float(t.overweight) for t in tact_result.scalars().all()}
+    # ic_manual overrides regime_auto for same block
+    tactical: dict[str, float] = {}
+    _tact_sources: dict[str, str] = {}
+    for t in tact_result.scalars().all():
+        t_source = t.source or "ic_manual"
+        existing_source = _tact_sources.get(t.block_id)
+        if existing_source is None or (t_source == "ic_manual" and existing_source != "ic_manual"):
+            tactical[t.block_id] = float(t.overweight)
+            _tact_sources[t.block_id] = t_source
 
     target_weights: dict[str, float] = {}
     for block_id in set(strategic.keys()) | set(tactical.keys()):
@@ -1798,6 +1806,7 @@ async def _run_construction_async(
     5. Build PortfolioComposition from optimizer output
     6. Fallback to block-level heuristic if fund-level optimization fails
     """
+    from app.domains.wealth.models.allocation import TaaRegimeState as _TaaRS
     from app.domains.wealth.services.quant_queries import compute_fund_level_inputs
     from quant_engine.optimizer_service import (
         BlockConstraint,
@@ -1811,12 +1820,22 @@ async def _run_construction_async(
         construct_from_optimizer,
     )
 
-    # ── 1. Load approved universe ──
-    universe_funds = await _load_universe_funds(db, org_id)
+    # ── 1. Determine current regime for ELITE filtering ──
+    _regime_stmt = (
+        select(_TaaRS.raw_regime)
+        .where(_TaaRS.profile == profile)
+        .order_by(_TaaRS.as_of_date.desc())
+        .limit(1)
+    )
+    _regime_result = await db.execute(_regime_stmt)
+    current_regime = _regime_result.scalar_one_or_none() or "RISK_ON"
+
+    # ── 2. Load approved universe (filtered by regime ELITE set) ──
+    universe_funds = await _load_universe_funds(db, org_id, regime=current_regime)
     if not universe_funds:
         return {"funds": [], "profile": profile, "error": "No approved funds in universe"}
 
-    # ── 2. Query strategic allocation for this profile ──
+    # ── 3. Query strategic allocation for this profile ──
     today = date.today()
     alloc_stmt = (
         select(StrategicAllocation)
@@ -2249,14 +2268,43 @@ async def _compute_factor_exposures(
 async def _load_universe_funds(
     db: AsyncSession,
     org_id: str,
+    regime: str = "RISK_ON",
 ) -> list[dict[str, Any]]:
-    """Load approved universe instruments with manager_score from risk metrics."""
+    """Load approved universe instruments with manager_score from risk metrics.
+
+    Filters to funds that are in the regime-appropriate ELITE set:
+    - RISK_ON  → elite_flag = true
+    - RISK_OFF → elite_risk_off = true
+    - INFLATION → elite_inflation = true
+    - CRISIS   → elite_crisis = true
+
+    Funds that are approved in the org universe but NOT in the current
+    regime's ELITE set are excluded from construction (they scored
+    outside the top 300 for this regime's asset-class distribution).
+    """
     from app.domains.wealth.models.instrument import Instrument
     from app.domains.wealth.models.instrument_org import InstrumentOrg
     from app.domains.wealth.models.risk import FundRiskMetrics
     from app.domains.wealth.models.universe_approval import UniverseApproval
+    from app.domains.wealth.workers.risk_calc import REGIME_ELITE_COLUMN
+
+    # Resolve the ELITE column for this regime
+    elite_col_name = REGIME_ELITE_COLUMN.get(regime, "elite_flag")
+    elite_col = getattr(FundRiskMetrics, elite_col_name, FundRiskMetrics.elite_flag)
 
     # Approved universe assets — block_id comes from InstrumentOrg (org-scoped)
+    # Subquery: latest risk metrics row per instrument (for ELITE filter)
+    from sqlalchemy import func as sa_func
+    latest_risk = (
+        select(
+            FundRiskMetrics.instrument_id,
+            sa_func.max(FundRiskMetrics.calc_date).label("max_date"),
+        )
+        .where(FundRiskMetrics.organization_id.is_(None))
+        .group_by(FundRiskMetrics.instrument_id)
+        .subquery("latest_risk")
+    )
+
     stmt = (
         select(
             Instrument.instrument_id,
@@ -2270,7 +2318,21 @@ async def _load_universe_funds(
             & (UniverseApproval.is_current == True)
             & (UniverseApproval.decision == "approved"),
         )
-        .where(Instrument.is_active == True, InstrumentOrg.block_id.isnot(None))
+        .join(
+            FundRiskMetrics,
+            (FundRiskMetrics.instrument_id == Instrument.instrument_id)
+            & (FundRiskMetrics.organization_id.is_(None)),
+        )
+        .join(
+            latest_risk,
+            (latest_risk.c.instrument_id == FundRiskMetrics.instrument_id)
+            & (latest_risk.c.max_date == FundRiskMetrics.calc_date),
+        )
+        .where(
+            Instrument.is_active == True,
+            InstrumentOrg.block_id.isnot(None),
+            elite_col == True,
+        )
     )
     funds_result = await db.execute(stmt)
     funds_rows = funds_result.all()

@@ -162,6 +162,7 @@ async def update_tactical(
             signal_source=item.signal_source,
             rationale=item.rationale,
             valid_from=today,
+            source=getattr(item, "source", None) or "ic_manual",
         )
         db.add(row)
         new_rows.append(row)
@@ -198,16 +199,29 @@ async def get_effective(
         row.block_id: row for row in strategic_result.scalars().all()
     }
 
-    # Get tactical positions
+    # Get tactical positions — ic_manual overrides regime_auto for same block.
+    # If an ic_manual position is expired (valid_to < today), regime_auto resumes.
     tactical_stmt = select(TacticalPosition).where(
         TacticalPosition.profile == profile,
         TacticalPosition.valid_from <= today,
         (TacticalPosition.valid_to.is_(None)) | (TacticalPosition.valid_to >= today),
     )
     tactical_result = await db.execute(tactical_stmt)
-    tactical_map: dict[str, TacticalPosition] = {
-        row.block_id: row for row in tactical_result.scalars().all()
-    }
+    tactical_map: dict[str, TacticalPosition] = {}
+    for row in tactical_result.scalars().all():
+        existing = tactical_map.get(row.block_id)
+        if existing is None:
+            tactical_map[row.block_id] = row
+        else:
+            # ic_manual always wins over regime_auto / model_signal
+            row_source = row.source or "ic_manual"
+            existing_source = existing.source or "ic_manual"
+            if row_source == "ic_manual" and existing_source != "ic_manual":
+                tactical_map[row.block_id] = row
+            elif existing_source == "ic_manual":
+                pass  # keep ic_manual
+            elif row.created_at > existing.created_at:
+                tactical_map[row.block_id] = row  # latest non-manual wins
 
     all_blocks = set(strategic_map.keys()) | set(tactical_map.keys())
     effective: list[EffectiveAllocationRead] = []
