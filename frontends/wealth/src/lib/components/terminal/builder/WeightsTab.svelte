@@ -108,6 +108,24 @@
 
 	const hasRun = $derived(workspace.constructionRun !== null);
 
+	// ── Run diff data for Previous column (Session 3) ──
+	// Fetch diff when a construction run completes
+	$effect(() => {
+		const run = workspace.constructionRun;
+		if (run?.run_id && !workspace.runDiff && !workspace.isLoadingDiff) {
+			workspace.fetchRunDiff(run.run_id);
+		}
+	});
+
+	const diffData = $derived(workspace.runDiff?.weight_delta ?? null);
+
+	function previousWeight(instrumentId: string, currentWeight: number): string {
+		if (!diffData) return "\u2014";
+		const entry = diffData[instrumentId];
+		if (!entry) return "\u2014";
+		return formatWeight(entry.from);
+	}
+
 	// ── Collapse state ──
 	let collapsedGroup = $state<Record<string, boolean>>({});
 
@@ -200,7 +218,7 @@
 									</td>
 									<td class="wt-fund-num">{formatScore(fund.score)}</td>
 									<td class="wt-fund-num">{formatWeight(fund.weight)}</td>
-									<td class="wt-fund-num wt-fund-ghost">&mdash;</td>
+									<td class="wt-fund-num wt-fund-ghost">{previousWeight(fund.instrument_id, fund.weight)}</td>
 									<td class="wt-fund-num">
 										<span class="wt-delta" style="color: {deltaColor(fund.weight)}">
 											{formatDelta(fund.weight)}

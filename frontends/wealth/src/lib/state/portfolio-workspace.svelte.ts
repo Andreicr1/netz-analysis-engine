@@ -137,6 +137,57 @@ export interface ConstructRunEvent {
 	objective_value?: number | null;
 }
 
+/** Session 3 — NAV history response for Backtest tab. */
+export interface BacktestNavHistory {
+	portfolio_id: string;
+	dates: string[];
+	nav_series: number[];
+	drawdown_series: number[];
+	metrics: {
+		sharpe: number | null;
+		max_dd: number | null;
+		ann_return: number | null;
+		calmar: number | null;
+	};
+}
+
+/** Session 3 — Monte Carlo confidence bar entry. */
+export interface MonteCarloConfidenceBar {
+	horizon: string;
+	horizon_days: number;
+	pct_5: number;
+	pct_10: number;
+	pct_25: number;
+	pct_50: number;
+	pct_75: number;
+	pct_90: number;
+	pct_95: number;
+	mean: number;
+}
+
+/** Session 3 — Monte Carlo portfolio-scoped response. */
+export interface MonteCarloPortfolioResult {
+	portfolio_id: string;
+	n_simulations: number;
+	statistic: string;
+	percentiles: Record<string, number>;
+	mean: number;
+	median: number;
+	std: number;
+	historical_value: number;
+	confidence_bars: MonteCarloConfidenceBar[];
+}
+
+/** Session 3 — Construction run diff for WeightsTab ghost columns. */
+export interface ConstructionRunDiff {
+	portfolio_id: string;
+	run_id: string;
+	previous_run_id: string | null;
+	weight_delta: Record<string, { from: number; to: number; delta: number }>;
+	metrics_delta: Record<string, { from: number | null; to: number | null; delta: number | null }>;
+	status_delta_text: string;
+}
+
 /** Cascade phase state for the CascadeTimeline component. */
 export interface CascadePhase {
 	key: string;
@@ -381,6 +432,15 @@ export class PortfolioWorkspaceState {
 	/** Optimizer cascade phase states for the CascadeTimeline (Session 2). */
 	optimizerPhases = $state<CascadePhase[]>(structuredClone(DEFAULT_CASCADE_PHASES));
 
+	// ── Session 3: Backtest + Monte Carlo state ──────────────────────
+	backtestData = $state.raw<BacktestNavHistory | null>(null);
+	isLoadingBacktest = $state(false);
+	monteCarloData = $state.raw<MonteCarloPortfolioResult | null>(null);
+	isLoadingMonteCarlo = $state(false);
+	/** Diff data for WeightsTab ghost columns. */
+	runDiff = $state.raw<ConstructionRunDiff | null>(null);
+	isLoadingDiff = $state(false);
+
 	/** Approved universe funds for DnD — loaded from API when portfolio is selected. */
 	universe = $state<UniverseFund[]>([]);
 
@@ -527,6 +587,10 @@ export class PortfolioWorkspaceState {
 		this.constructionRun = null;
 		this.runPhase = "idle";
 		this.runError = null;
+		// Session 3 — reset backtest + monte carlo + diff state
+		this.backtestData = null;
+		this.monteCarloData = null;
+		this.runDiff = null;
 		// TAA Sprint 4 — reset regime visualization state
 		this.regimeBands = null;
 		this.taaHistory = null;
@@ -1705,6 +1769,89 @@ export class PortfolioWorkspaceState {
 	}
 
 	// ── Parametric Stress Test (real API) ─────────────────────────────
+
+	// ── Session 3: Backtest NAV History ──────────────────────────────
+
+	async fetchBacktestData(period: string = "5Y") {
+		if (!this._getToken || !this.portfolioId) return;
+		const gen = this._generation;
+		this.isLoadingBacktest = true;
+
+		try {
+			const api = this.api();
+			const result = await api.get<BacktestNavHistory>(
+				`/model-portfolios/${this.portfolioId}/nav-history?period=${period}`,
+			);
+			if (gen !== this._generation) return;
+			this.backtestData = result;
+		} catch (err) {
+			if (gen !== this._generation) return;
+			this.lastError = {
+				action: "backtest",
+				message: err instanceof Error ? err.message : "Failed to load backtest data",
+				timestamp: Date.now(),
+			};
+		} finally {
+			if (gen === this._generation) {
+				this.isLoadingBacktest = false;
+			}
+		}
+	}
+
+	// ── Session 3: Monte Carlo ───────────────────────────────────────
+
+	async fetchMonteCarlo() {
+		if (!this._getToken || !this.portfolioId) return;
+		const gen = this._generation;
+		this.isLoadingMonteCarlo = true;
+
+		try {
+			const api = this.api();
+			const result = await api.post<MonteCarloPortfolioResult>(
+				`/model-portfolios/${this.portfolioId}/monte-carlo`,
+				{},
+				{ timeoutMs: 60_000 },
+			);
+			if (gen !== this._generation) return;
+			this.monteCarloData = result;
+		} catch (err) {
+			if (gen !== this._generation) return;
+			this.lastError = {
+				action: "monte-carlo",
+				message: err instanceof Error ? err.message : "Failed to run Monte Carlo simulation",
+				timestamp: Date.now(),
+			};
+		} finally {
+			if (gen === this._generation) {
+				this.isLoadingMonteCarlo = false;
+			}
+		}
+	}
+
+	// ── Session 3: Construction Run Diff ─────────────────────────────
+
+	async fetchRunDiff(runId: string) {
+		if (!this._getToken || !this.portfolioId) return;
+		const gen = this._generation;
+		this.isLoadingDiff = true;
+
+		try {
+			const api = this.api();
+			const result = await api.get<ConstructionRunDiff>(
+				`/model-portfolios/${this.portfolioId}/construction/runs/${runId}/diff`,
+			);
+			if (gen !== this._generation) return;
+			this.runDiff = result;
+		} catch {
+			if (gen !== this._generation) return;
+			// Graceful fallback — diff may not exist for first run
+			this.runDiff = null;
+		} finally {
+			if (gen === this._generation) {
+				this.isLoadingDiff = false;
+			}
+		}
+	}
 
 	async runStressTest(shocks: { equity: number; rates: number; credit: number }) {
 		if (!this.portfolioId) return;
