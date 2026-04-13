@@ -3,16 +3,13 @@
 
   2-column command center (40% command / 60% results).
   Left: Zone A (regime), Zone B (calibration), Zone C (run controls).
-  Right: 6-tab results panel (WEIGHTS active, rest stub).
+  Right: Zone D (cascade timeline), Zone E (6-tab results panel).
 
-  Workspace initialization: imports the singleton, calls setGetToken
-  + selectPortfolio on mount. CalibrationPanel already reads from
-  the workspace singleton internally — no prop threading needed.
+  Session 2: CascadeTimeline, SSE wiring, STRESS/RISK/ADVISOR tabs,
+  tab-visit tracking gate for Session 3 activation unlock.
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { goto } from "$app/navigation";
-	import { resolve } from "$app/paths";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 	import type { PageData } from "./$types";
@@ -20,6 +17,10 @@
 	import RegimeContextStrip from "$lib/components/terminal/builder/RegimeContextStrip.svelte";
 	import RunControls from "$lib/components/terminal/builder/RunControls.svelte";
 	import WeightsTab from "$lib/components/terminal/builder/WeightsTab.svelte";
+	import CascadeTimeline from "$lib/components/terminal/builder/CascadeTimeline.svelte";
+	import StressTab from "$lib/components/terminal/builder/StressTab.svelte";
+	import RiskTab from "$lib/components/terminal/builder/RiskTab.svelte";
+	import AdvisorTab from "$lib/components/terminal/builder/AdvisorTab.svelte";
 	import CalibrationPanel from "$lib/components/portfolio/CalibrationPanel.svelte";
 
 	let { data }: { data: PageData } = $props();
@@ -59,6 +60,20 @@
 	const TABS = ["WEIGHTS", "RISK", "STRESS", "BACKTEST", "MONTE CARLO", "ADVISOR"] as const;
 	type TabId = (typeof TABS)[number];
 	let activeTab = $state<TabId>("WEIGHTS");
+
+	// ── Tab-visit tracking gate (Session 3 activation unlock) ────
+	let visitedTabs = $state<Set<TabId>>(new Set());
+
+	$effect(() => {
+		visitedTabs.add(activeTab);
+	});
+
+	/** All 6 tabs must be visited before activation unlocks (Session 3). */
+	const allTabsVisited = $derived(visitedTabs.size === 6);
+
+	// Cascade timeline phases from workspace
+	const cascadePhases = $derived(workspace.optimizerPhases);
+	const showCascade = $derived(workspace.runPhase !== "idle");
 </script>
 
 <svelte:head>
@@ -120,20 +135,25 @@
 			{/each}
 		</div>
 
-		<!-- Tab content -->
+		<!-- Zone D: Cascade Timeline (visible during/after run) -->
+		{#if showCascade}
+			<CascadeTimeline phases={cascadePhases} />
+		{/if}
+
+		<!-- Zone E: Tab content -->
 		<div class="builder-tab-content" role="tabpanel">
 			{#if activeTab === "WEIGHTS"}
 				<WeightsTab />
 			{:else if activeTab === "RISK"}
-				<div class="builder-stub">Risk analysis &mdash; Coming in Session 2</div>
+				<RiskTab />
 			{:else if activeTab === "STRESS"}
-				<div class="builder-stub">Stress scenarios &mdash; Coming in Session 2</div>
+				<StressTab />
 			{:else if activeTab === "BACKTEST"}
 				<div class="builder-stub">Historical backtest &mdash; Coming in Session 3</div>
 			{:else if activeTab === "MONTE CARLO"}
 				<div class="builder-stub">Monte Carlo simulation &mdash; Coming in Session 3</div>
 			{:else if activeTab === "ADVISOR"}
-				<div class="builder-stub">Construction advisor &mdash; Coming in Session 2</div>
+				<AdvisorTab />
 			{/if}
 		</div>
 	</div>

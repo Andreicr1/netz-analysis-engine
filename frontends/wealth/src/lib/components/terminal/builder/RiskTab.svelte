@@ -1,0 +1,248 @@
+<!--
+  RiskTab — Zone E RISK tab of the Builder results panel.
+
+  Two sections:
+    A) CVaR contribution — 48px horizontal stacked bar
+    B) Factor exposure — horizontal bar chart
+
+  Uses TerminalChart with raw EChartsOption (the stacked bar and
+  horizontal bar layouts need custom grid/tooltip not covered by
+  createTerminalChartOptions).
+-->
+<script lang="ts">
+	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { formatNumber, readTerminalTokens } from "@investintell/ui";
+	import TerminalChart from "$lib/components/terminal/charts/TerminalChart.svelte";
+	import type { EChartsOption } from "echarts";
+
+	const run = $derived(workspace.constructionRun);
+	const funds = $derived(workspace.funds);
+
+	/** Sanitized factor category labels (PC1/PC2/PC3 → Market/Style/Sector). */
+	const FACTOR_LABELS: Record<string, string> = {
+		PC1: "Market Factor",
+		PC2: "Style Factor",
+		PC3: "Sector Factor",
+	};
+
+	/** Read terminal tokens once for chart colors (avoids hex in component). */
+	const tk = $derived.by(() => readTerminalTokens());
+
+	// ── Section A: CVaR Contribution ────────────────────────
+
+	const cvarContributions = $derived.by<Array<{ name: string; value: number }>>(() => {
+		if (!run?.ex_ante_metrics || !run.weights_proposed) return [];
+		const totalCvar = run.ex_ante_metrics.cvar_95;
+		if (totalCvar == null || totalCvar === 0) return [];
+
+		const entries: Array<{ name: string; value: number }> = [];
+		for (const fund of funds) {
+			const w = run.weights_proposed[fund.instrument_id] ?? 0;
+			if (w > 0.001) {
+				entries.push({
+					name: fund.fund_name || fund.instrument_id,
+					value: Math.abs(w * totalCvar),
+				});
+			}
+		}
+		return entries.sort((a, b) => b.value - a.value);
+	});
+
+	const hasCvar = $derived(cvarContributions.length > 0);
+
+	const cvarOption = $derived.by<EChartsOption>(() => {
+		if (!hasCvar) return {};
+		const total = cvarContributions.reduce((sum, c) => sum + c.value, 0);
+
+		return {
+			textStyle: { fontFamily: tk.fontMono, fontSize: tk.text10 },
+			grid: { left: 0, right: 0, top: 0, bottom: 0 },
+			tooltip: {
+				trigger: "item" as const,
+				backgroundColor: tk.bgPanelRaised,
+				borderColor: tk.fgMuted,
+				borderWidth: 1,
+				textStyle: { fontFamily: tk.fontMono, fontSize: tk.text11, color: tk.fgPrimary },
+			},
+			xAxis: { type: "value" as const, show: false, max: total },
+			yAxis: { type: "category" as const, show: false, data: ["CVaR"] },
+			animation: false,
+			series: cvarContributions.map((c, i) => ({
+				type: "bar" as const,
+				stack: "cvar",
+				barWidth: "100%",
+				data: [c.value],
+				name: c.name,
+				itemStyle: { color: tk.dataviz[i % tk.dataviz.length] },
+			})),
+		};
+	});
+
+	// ── Section B: Factor Exposure ──────────────────────────
+
+	const factorExposures = $derived.by<Array<{ label: string; value: number }>>(() => {
+		const fe = run?.factor_exposure;
+		if (!fe || typeof fe !== "object") return [];
+
+		const inner = (fe as Record<string, unknown>).exposures ?? fe;
+		if (!inner || typeof inner !== "object") return [];
+
+		return Object.entries(inner as Record<string, unknown>)
+			.filter(([, v]) => typeof v === "number")
+			.map(([key, v]) => ({
+				label: FACTOR_LABELS[key] ?? key,
+				value: v as number,
+			}))
+			.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+	});
+
+	const hasFactors = $derived(factorExposures.length > 0);
+
+	const factorOption = $derived.by<EChartsOption>(() => {
+		if (!hasFactors) return {};
+
+		const labels = factorExposures.map((e) => e.label);
+		const values = factorExposures.map((e) => Math.round(e.value * 1000) / 1000);
+
+		return {
+			textStyle: { fontFamily: tk.fontMono, fontSize: tk.text11 },
+			grid: { left: 130, right: 50, top: 12, bottom: 24 },
+			tooltip: {
+				trigger: "axis" as const,
+				axisPointer: { type: "shadow" as const },
+				backgroundColor: tk.bgPanelRaised,
+				borderColor: tk.fgMuted,
+				borderWidth: 1,
+				textStyle: { fontFamily: tk.fontMono, fontSize: tk.text11, color: tk.fgPrimary },
+			},
+			xAxis: {
+				type: "value" as const,
+				axisLabel: {
+					formatter: (v: number) => formatNumber(v, 1),
+					fontSize: tk.text10,
+					color: tk.fgSecondary,
+				},
+				splitLine: {
+					lineStyle: { type: "dashed" as const, color: tk.fgMuted },
+				},
+			},
+			yAxis: {
+				type: "category" as const,
+				data: labels,
+				inverse: true,
+				axisLabel: { fontSize: tk.text11, fontWeight: 600 as const, color: tk.fgSecondary },
+				axisTick: { show: false },
+				axisLine: { show: false },
+			},
+			animation: false,
+			series: [
+				{
+					type: "bar" as const,
+					barWidth: "55%",
+					data: values.map((v) => ({
+						value: v,
+						itemStyle: {
+							color: v >= 0 ? tk.accentCyan : tk.accentAmber,
+						},
+					})),
+					label: {
+						show: true,
+						position: "right" as const,
+						fontSize: tk.text10,
+						fontWeight: 600 as const,
+						color: tk.fgPrimary,
+					},
+					markLine: {
+						silent: true,
+						symbol: "none" as const,
+						data: [{ xAxis: 0 }],
+						lineStyle: { color: tk.fgTertiary, type: "solid" as const, width: 1 },
+						label: { show: false },
+					},
+				},
+			],
+		};
+	});
+
+	const hasData = $derived(hasCvar || hasFactors);
+</script>
+
+<svelte:boundary>
+	<div class="rt-root">
+		{#if !run}
+			<div class="rt-empty">Run construction to see risk analysis</div>
+		{:else if !hasData}
+			<div class="rt-empty">No risk data in this construction run</div>
+		{:else}
+			{#if hasCvar}
+				<section class="rt-section">
+					<header class="rt-section-header">
+						<span class="rt-kicker">Risk Contribution</span>
+						<span class="rt-subtitle">Tail Loss (95% confidence) by position</span>
+					</header>
+					<TerminalChart option={cvarOption} height={48} ariaLabel="CVaR contribution stacked bar" />
+				</section>
+			{/if}
+
+			{#if hasFactors}
+				<section class="rt-section">
+					<header class="rt-section-header">
+						<span class="rt-kicker">Factor Decomposition</span>
+						<span class="rt-subtitle">Portfolio factor exposures</span>
+					</header>
+					<TerminalChart option={factorOption} height={200} ariaLabel="Factor exposure horizontal bar" />
+				</section>
+			{/if}
+		{/if}
+	</div>
+
+	{#snippet failed(err: unknown)}
+		<div class="rt-empty">Risk panel failed to render</div>
+	{/snippet}
+</svelte:boundary>
+
+<style>
+	.rt-root {
+		display: flex;
+		flex-direction: column;
+		gap: var(--terminal-space-4);
+		font-family: var(--terminal-font-mono);
+		color: var(--terminal-fg-secondary);
+	}
+
+	.rt-empty {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 200px;
+		color: var(--terminal-fg-muted);
+		font-size: var(--terminal-text-11);
+		text-transform: uppercase;
+		letter-spacing: var(--terminal-tracking-caps);
+	}
+
+	.rt-section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--terminal-space-2);
+	}
+
+	.rt-section-header {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.rt-kicker {
+		font-size: var(--terminal-text-10);
+		font-weight: 700;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		color: var(--terminal-fg-tertiary);
+	}
+
+	.rt-subtitle {
+		font-size: var(--terminal-text-11);
+		color: var(--terminal-fg-muted);
+	}
+</style>

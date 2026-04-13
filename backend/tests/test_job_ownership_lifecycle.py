@@ -245,7 +245,9 @@ async def test_reconnect_after_terminal_grace_expired_fails(fake_redis: FakeRedi
 def test_terminal_event_types_include_all_known_terminals():
     """All known terminal event types are in the constant."""
     expected = {"done", "error", "ingestion_complete", "memo_complete",
-                "report_completed", "report_failed"}
+                "report_completed", "report_failed",
+                "Construction succeeded", "Construction failed",
+                "Construction cancelled"}
     assert expected == TERMINAL_EVENT_TYPES
 
 

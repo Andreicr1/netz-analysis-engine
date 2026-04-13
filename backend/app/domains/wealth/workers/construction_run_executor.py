@@ -288,6 +288,77 @@ async def _publish_terminal_event_sanitized(
     return event
 
 
+# ── Per-phase cascade events ─────────────────────────────────────
+
+# Ordered cascade phases with sanitized labels per Appendix D.
+_CASCADE_PHASES: list[tuple[str, str]] = [
+    ("primary", "Primary Objective"),
+    ("robust", "Robust Optimization"),
+    ("variance_capped", "Variance-Capped"),
+    ("min_variance", "Minimum Variance"),
+    ("heuristic", "Heuristic Recovery"),
+]
+
+# Map optimizer result status → index of the winning phase (0-based).
+# Phases before the winner failed; phases after were skipped.
+_STATUS_TO_WINNING_PHASE: dict[str, int] = {
+    "optimal": 0,                          # Phase 1 succeeded
+    "optimal:robust": 1,                   # Phase 1.5 succeeded
+    "optimal:cvar_constrained": 2,         # Phase 2 succeeded
+    "optimal:min_variance_fallback": 3,    # Phase 3 succeeded
+    "optimal:cvar_violated": 4,            # All formal phases failed → heuristic
+}
+
+
+async def _emit_cascade_phase_events(
+    db: AsyncSession,
+    *,
+    run_id: uuid.UUID,
+    job_id: str | None,
+    optimizer_status: str,
+    objective_value: float | None,
+) -> None:
+    """Emit retrospective per-phase optimizer events for the cascade timeline.
+
+    The optimizer runs as a single synchronous call (~200ms), so we infer
+    the cascade path from the result ``status`` and emit a burst of events
+    that the frontend CascadeTimeline can animate in sequence.
+    """
+    winning_idx = _STATUS_TO_WINNING_PHASE.get(optimizer_status)
+    # If status is unrecognised (e.g. "empty", "solver_failed"),
+    # treat as total failure — all phases failed, no winner.
+    total_failure = winning_idx is None
+
+    for idx, (phase_key, phase_label) in enumerate(_CASCADE_PHASES):
+        # Determine phase outcome
+        if total_failure:
+            status = "failed"
+        elif idx < (winning_idx or 0):
+            status = "failed"
+        elif idx == winning_idx:
+            status = "succeeded"
+        else:
+            status = "skipped"
+
+        # Phase 1.5 (robust) is currently not enabled — mark as skipped
+        # unless it was the actual winner (future-proofing).
+        if phase_key == "robust" and winning_idx != 1:
+            status = "skipped"
+
+        await _publish_event_sanitized(
+            db,
+            run_id=run_id,
+            job_id=job_id,
+            raw_type="optimizer_phase_complete",
+            raw_payload={
+                "phase": phase_key,
+                "phase_label": phase_label,
+                "status": status,
+                "objective_value": objective_value if status == "succeeded" else None,
+            },
+        )
+
+
 async def _acquire_advisory_lock(
     db: AsyncSession, portfolio_id: uuid.UUID | str,
 ) -> bool:
@@ -765,6 +836,18 @@ async def _execute_inner(
     }
 
     factor_exposure = optimization.get("factor_exposures") or {}
+
+    # ── 4b. Retrospective per-phase cascade events ──
+    # The optimizer runs as a single call — we infer the cascade path
+    # from the result status and emit events so the frontend timeline
+    # can reconstruct the progression.
+    await _emit_cascade_phase_events(
+        db,
+        run_id=run.id,
+        job_id=job_id,
+        optimizer_status=optimizer_trace.get("status") or "",
+        objective_value=optimization.get("expected_return"),
+    )
 
     # ── 5. Stress suite (sequence: after optimizer, before advisor) ──
     await _check_cancellation(job_id, "pre_stress")
