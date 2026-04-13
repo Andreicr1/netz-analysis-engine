@@ -31,6 +31,11 @@ import type {
 	PortfolioAlertCount,
 	UnifiedAlertInbox,
 } from "$lib/types/alerts";
+import type {
+	RegimeBands,
+	TaaHistory,
+	EffectiveAllocationWithRegime,
+} from "$lib/types/taa";
 
 /**
  * Phase 3 Run Construct response payload — flat dict returned from
@@ -323,6 +328,17 @@ export class PortfolioWorkspaceState {
 	isLoadingCalibration = $state(false);
 	isApplyingCalibration = $state(false);
 
+	// ── TAA (Tactical Asset Allocation) — Sprint 4 regime visualization ──
+	/** Current regime bands for the portfolio's profile. */
+	regimeBands = $state.raw<RegimeBands | null>(null);
+	isLoadingRegimeBands = $state(false);
+	/** 60-day TAA history for transition sparklines. */
+	taaHistory = $state.raw<TaaHistory | null>(null);
+	isLoadingTaaHistory = $state(false);
+	/** Effective allocation enriched with regime-adjusted bands per block. */
+	effectiveWithRegime = $state.raw<EffectiveAllocationWithRegime[] | null>(null);
+	isLoadingEffectiveWithRegime = $state(false);
+
 	/**
 	 * Phase 3 construct run payload for the current portfolio — loaded
 	 * either after a successful ``runConstructJob`` (via the SSE stream
@@ -493,6 +509,10 @@ export class PortfolioWorkspaceState {
 		this.constructionRun = null;
 		this.runPhase = "idle";
 		this.runError = null;
+		// TAA Sprint 4 — reset regime visualization state
+		this.regimeBands = null;
+		this.taaHistory = null;
+		this.effectiveWithRegime = null;
 		// Switching models is a hard reset of the analytics context —
 		// the 3rd column closes and the PM starts fresh in Estado B.
 		this.analyticsMode = null;
@@ -506,6 +526,10 @@ export class PortfolioWorkspaceState {
 		if (p.profile) {
 			this.loadFactorAnalysis(p.profile);
 			this.loadAttribution(p.profile);
+			// TAA Sprint 4 — load regime bands + history for allocation visualization
+			this.loadRegimeBands(p.profile);
+			this.loadTaaHistory(p.profile);
+			this.loadEffectiveWithRegime(p.profile);
 			// Correlation regime requires constructed portfolio with fund data
 			if (p.fund_selection_schema?.funds?.length) {
 				this.loadCorrelationRegime(p.profile);
@@ -894,6 +918,69 @@ export class PortfolioWorkspaceState {
 			return null;
 		} finally {
 			this.isApplyingCalibration = false;
+		}
+	}
+
+	// ── TAA Sprint 4 — Regime visualization loaders ─────────────────
+
+	/** Load current regime bands for the portfolio's profile. Fails gracefully (no TAA data = null). */
+	async loadRegimeBands(profile: string) {
+		if (!this._getToken) return;
+		const gen = this._generation;
+		this.isLoadingRegimeBands = true;
+		try {
+			const api = this.api();
+			const result = await api.get<RegimeBands>(
+				`/allocation/${profile}/regime-bands`,
+			);
+			if (gen !== this._generation) return;
+			this.regimeBands = result;
+		} catch {
+			if (gen !== this._generation) return;
+			// 404 = worker hasn't run yet — graceful null, not an error
+			this.regimeBands = null;
+		} finally {
+			if (gen === this._generation) this.isLoadingRegimeBands = false;
+		}
+	}
+
+	/** Load 60-day TAA history for transition sparklines. */
+	async loadTaaHistory(profile: string, limit = 60) {
+		if (!this._getToken) return;
+		const gen = this._generation;
+		this.isLoadingTaaHistory = true;
+		try {
+			const api = this.api();
+			const result = await api.get<TaaHistory>(
+				`/allocation/${profile}/taa-history?limit=${limit}`,
+			);
+			if (gen !== this._generation) return;
+			this.taaHistory = result;
+		} catch {
+			if (gen !== this._generation) return;
+			this.taaHistory = null;
+		} finally {
+			if (gen === this._generation) this.isLoadingTaaHistory = false;
+		}
+	}
+
+	/** Load effective allocation with regime bands per block. */
+	async loadEffectiveWithRegime(profile: string) {
+		if (!this._getToken) return;
+		const gen = this._generation;
+		this.isLoadingEffectiveWithRegime = true;
+		try {
+			const api = this.api();
+			const result = await api.get<EffectiveAllocationWithRegime[]>(
+				`/allocation/${profile}/effective-with-regime`,
+			);
+			if (gen !== this._generation) return;
+			this.effectiveWithRegime = result;
+		} catch {
+			if (gen !== this._generation) return;
+			this.effectiveWithRegime = null;
+		} finally {
+			if (gen === this._generation) this.isLoadingEffectiveWithRegime = false;
 		}
 	}
 
@@ -1470,6 +1557,13 @@ export class PortfolioWorkspaceState {
 			const runId = terminal.run_id ?? accepted.run_id;
 			await this.loadConstructionRun(runId);
 			this.runPhase = "done";
+			// ── 4. Refresh TAA data (construction may update regime state) ──
+			const profile = this.portfolio?.profile;
+			if (profile) {
+				this.loadRegimeBands(profile);
+				this.loadTaaHistory(profile);
+				this.loadEffectiveWithRegime(profile);
+			}
 			return this.constructionRun;
 		} catch (err) {
 			if ((err as { name?: string } | null)?.name === "AbortError") {

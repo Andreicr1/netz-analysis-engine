@@ -30,6 +30,11 @@
 		formatNumber,
 		formatShortDate,
 	} from "@investintell/ui";
+	import {
+		taaRegimeLabel,
+		taaRegimePosture,
+		taaRegimeColor,
+	} from "$lib/types/taa";
 	import * as Tabs from "@investintell/ui/components/ui/tabs";
 	import type {
 		PortfolioCalibration,
@@ -52,6 +57,15 @@
 	const calibration = $derived(workspace.calibration);
 	const loading = $derived(workspace.isLoadingCalibration);
 	const applying = $derived(workspace.isApplyingCalibration);
+
+	// ── TAA regime indicator state (Sprint 4) ────────────────────
+	const regimeBands = $derived(workspace.regimeBands);
+	const hasRegimeData = $derived(regimeBands !== null && regimeBands.taa_enabled);
+	const regimeLabel = $derived(regimeBands ? taaRegimeLabel(regimeBands.raw_regime) : null);
+	const regimePosture = $derived(regimeBands ? taaRegimePosture(regimeBands.raw_regime) : null);
+	const regimeColor = $derived(regimeBands ? taaRegimeColor(regimeBands.raw_regime) : null);
+	/** Stress level normalized to 0-100 for the visual bar. */
+	const stressLevel = $derived(regimeBands?.stress_score != null ? Number(regimeBands.stress_score) : null);
 
 	// Local working copy of the calibration — cloned on load + on portfolio switch.
 	let draft = $state<PortfolioCalibration | null>(null);
@@ -280,6 +294,30 @@
 	</div>
 {:else}
 	<div class="cp-root">
+		<!-- ── Market Conditions indicator (TAA Sprint 4) ──────── -->
+		{#if hasRegimeData}
+			<div class="cp-regime-strip">
+				<div class="cp-regime-header">
+					<span class="cp-regime-kicker">MARKET CONDITIONS</span>
+					<span class="cp-regime-date">{formatShortDate(regimeBands!.as_of_date)}</span>
+				</div>
+				<div class="cp-regime-row">
+					<span class="cp-regime-badge" style="background: {regimeColor}; color: #0e0f13">
+						{regimeLabel}
+					</span>
+					{#if stressLevel !== null}
+						<div class="cp-stress-bar-track">
+							<div
+								class="cp-stress-bar-fill"
+								style="width: {Math.min(stressLevel, 100)}%; background: {regimeColor}"
+							></div>
+						</div>
+					{/if}
+				</div>
+				<p class="cp-regime-posture">{regimePosture}</p>
+			</div>
+		{/if}
+
 		<Tabs.Root value={tier} onValueChange={(v) => (tier = v as typeof tier)}>
 			<Tabs.List class="cp-tabs">
 				<Tabs.Trigger value="basic">Basic</Tabs.Trigger>
@@ -580,6 +618,67 @@
 		min-height: 0;
 		background: #141519;
 		font-family: "Urbanist", system-ui, sans-serif;
+	}
+
+	/* ── Market Conditions regime indicator (TAA Sprint 4) ── */
+	.cp-regime-strip {
+		padding: 12px 16px;
+		border-bottom: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.4));
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		flex-shrink: 0;
+	}
+	.cp-regime-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+	.cp-regime-kicker {
+		font-size: 0.625rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--ii-text-muted, #85a0bd);
+	}
+	.cp-regime-date {
+		font-size: 0.625rem;
+		font-weight: 500;
+		color: var(--ii-text-muted, #85a0bd);
+		font-variant-numeric: tabular-nums;
+	}
+	.cp-regime-row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+	.cp-regime-badge {
+		display: inline-flex;
+		align-items: center;
+		padding: 3px 12px;
+		border-radius: 999px;
+		font-size: 0.75rem;
+		font-weight: 700;
+		white-space: nowrap;
+		letter-spacing: 0.02em;
+	}
+	.cp-stress-bar-track {
+		flex: 1;
+		height: 6px;
+		border-radius: 3px;
+		background: rgba(255, 255, 255, 0.06);
+		overflow: hidden;
+	}
+	.cp-stress-bar-fill {
+		height: 100%;
+		border-radius: 3px;
+		transition: width 400ms ease;
+	}
+	.cp-regime-posture {
+		margin: 0;
+		font-size: 0.6875rem;
+		line-height: 1.4;
+		color: var(--ii-text-muted, #85a0bd);
 	}
 	.cp-empty {
 		padding: 24px;
