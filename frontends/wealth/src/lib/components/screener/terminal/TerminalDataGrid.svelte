@@ -40,7 +40,7 @@
 
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { formatNumber } from "@investintell/ui";
+	import { formatNumber, readTerminalTokens } from "@investintell/ui";
 	import { focusTrigger } from "$lib/components/terminal/focus-mode/focus-trigger";
 	import { createClientApiClient } from "$lib/api/client";
 
@@ -230,7 +230,8 @@
 		const last = values[values.length - 1] ?? 0;
 		const first = values[0] ?? 0;
 		const delta = last - first;
-		ctx.strokeStyle = delta > 0 ? "#22c55e" : delta < 0 ? "#ef4444" : "#5a6577";
+		const tk = readTerminalTokens();
+		ctx.strokeStyle = delta > 0 ? tk.statusSuccess : delta < 0 ? tk.statusError : tk.fgTertiary;
 		ctx.lineWidth = 1;
 		ctx.beginPath();
 		for (let i = 0; i < values.length; i++) {
@@ -412,10 +413,10 @@
 		flex-direction: column;
 		height: 100%;
 		overflow: hidden;
-		background: #0b0f1a;
-		font-family: "Urbanist", system-ui, sans-serif;
+		background: var(--terminal-bg-void);
+		font-family: var(--terminal-font-mono);
 		font-size: 11px;
-		color: #c8d0dc;
+		color: var(--terminal-fg-primary);
 	}
 
 	/* ── Grid column template (shared by header + rows) ── */
@@ -442,8 +443,8 @@
 	.dg-header {
 		flex-shrink: 0;
 		z-index: 2;
-		background: #0d1220;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		background: var(--terminal-bg-panel-sunken);
+		border-bottom: 1px solid var(--terminal-fg-disabled);
 	}
 
 	.dg-th {
@@ -452,7 +453,7 @@
 		font-weight: 700;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 		white-space: nowrap;
 		user-select: none;
 	}
@@ -484,27 +485,27 @@
 		transition: background 80ms ease;
 	}
 	.dg-row:hover {
-		background: rgba(45, 126, 247, 0.06);
+		background: color-mix(in srgb, var(--terminal-accent-cyan) 6%, transparent);
 	}
 	.dg-row.selected {
-		background: rgba(45, 126, 247, 0.10);
+		background: color-mix(in srgb, var(--terminal-accent-cyan) 10%, transparent);
 	}
 	.dg-row.highlighted {
-		background: rgba(45, 126, 247, 0.14);
-		outline: 1px solid rgba(45, 126, 247, 0.30);
+		background: color-mix(in srgb, var(--terminal-accent-cyan) 14%, transparent);
+		outline: 1px solid color-mix(in srgb, var(--terminal-accent-cyan) 30%, transparent);
 		outline-offset: -1px;
 	}
 	.dg-row.zebra {
-		background: rgba(255, 255, 255, 0.012);
+		background: color-mix(in srgb, var(--terminal-fg-primary) 1.2%, transparent);
 	}
 	.dg-row.zebra:hover {
-		background: rgba(45, 126, 247, 0.06);
+		background: color-mix(in srgb, var(--terminal-accent-cyan) 6%, transparent);
 	}
 	.dg-row.zebra.selected {
-		background: rgba(45, 126, 247, 0.10);
+		background: color-mix(in srgb, var(--terminal-accent-cyan) 10%, transparent);
 	}
 	.dg-row.zebra.highlighted {
-		background: rgba(45, 126, 247, 0.14);
+		background: color-mix(in srgb, var(--terminal-accent-cyan) 14%, transparent);
 	}
 
 	/* ── Cells ────────────────────────────────────────── */
@@ -520,11 +521,11 @@
 
 	.dg-ticker {
 		font-weight: 700;
-		color: #e2e8f0;
+		color: var(--terminal-fg-primary);
 	}
 
 	.dg-name {
-		color: #9aa3b3;
+		color: var(--terminal-fg-secondary);
 	}
 
 	/* ── Type badges ────────────────────────────────── */
@@ -535,7 +536,7 @@
 	}
 
 	.dg-type-badge {
-		font-family: "JetBrains Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 9px;
 		font-weight: 600;
 		letter-spacing: 0.04em;
@@ -547,7 +548,7 @@
 	}
 
 	.dg-elite-inline {
-		font-family: "JetBrains Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 8px;
 		font-weight: 700;
 		letter-spacing: 0.06em;
@@ -558,12 +559,12 @@
 	}
 
 	.dg-strategy {
-		color: #8a94a6;
+		color: var(--terminal-fg-secondary);
 		font-size: 10px;
 	}
 
 	.dg-geo {
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 		font-size: 10px;
 	}
 
@@ -572,18 +573,18 @@
 		font-weight: 500;
 	}
 
-	.pos { color: #22c55e; }
-	.neg { color: #ef4444; }
+	.pos { color: var(--terminal-status-success); }
+	.neg { color: var(--terminal-status-error); }
 
 	/* Score color coding */
-	.score-high { color: #22c55e; }
-	.score-mid { color: #f59e0b; }
-	.score-low { color: #ef4444; }
+	.score-high { color: var(--terminal-status-success); }
+	.score-mid { color: var(--terminal-accent-amber); }
+	.score-low { color: var(--terminal-status-error); }
 
 	.dg-empty {
 		padding: 32px;
 		text-align: center;
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 		font-size: 11px;
 		font-style: italic;
 	}
@@ -596,7 +597,7 @@
 	}
 
 	.dg-spark-empty {
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 		font-size: 10px;
 	}
 
@@ -605,7 +606,7 @@
 	/* ── Action column ────────────────────────────────── */
 	.dg-action-btn {
 		background: transparent;
-		font-family: "JetBrains Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 9px;
 		font-weight: 700;
 		letter-spacing: 0.04em;
@@ -615,33 +616,33 @@
 		text-transform: uppercase;
 	}
 	.dg-action-approve {
-		border: 1px solid rgba(245, 158, 11, 0.35);
-		color: #f59e0b;
+		border: 1px solid color-mix(in srgb, var(--terminal-accent-amber) 35%, transparent);
+		color: var(--terminal-accent-amber);
 	}
 	.dg-action-approve:hover {
-		background: rgba(245, 158, 11, 0.08);
-		color: #fbbf24;
+		background: color-mix(in srgb, var(--terminal-accent-amber) 8%, transparent);
+		color: var(--terminal-accent-amber);
 	}
 	.dg-action-dd {
-		border: 1px solid rgba(45, 126, 247, 0.25);
-		color: #2d7ef7;
+		border: 1px solid color-mix(in srgb, var(--terminal-accent-cyan) 25%, transparent);
+		color: var(--terminal-accent-cyan);
 	}
 	.dg-action-dd:hover {
-		background: rgba(45, 126, 247, 0.08);
-		color: #93bbfc;
+		background: color-mix(in srgb, var(--terminal-accent-cyan) 8%, transparent);
+		color: var(--terminal-accent-cyan);
 	}
 	.dg-action-label {
-		font-family: "JetBrains Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 8px;
 		font-weight: 600;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
 	}
 	.dg-action-approved {
-		color: #22c55e;
+		color: var(--terminal-status-success);
 	}
 	.dg-action-pending {
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 	}
 
 	/* ── Infinite scroll indicators ───────────────────── */
@@ -653,10 +654,10 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-family: "JetBrains Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 10px;
 		letter-spacing: 0.06em;
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 		animation: dg-pulse 1.2s ease-in-out infinite;
 	}
 
@@ -668,10 +669,10 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-family: "JetBrains Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 10px;
 		letter-spacing: 0.06em;
-		color: #3d4a5c;
+		color: var(--terminal-fg-muted);
 	}
 
 	@keyframes dg-pulse {
@@ -684,11 +685,11 @@
 		flex-shrink: 0;
 		padding: 4px 10px;
 		font-size: 10px;
-		color: #5a6577;
-		border-top: 1px solid rgba(255, 255, 255, 0.06);
-		background: #0d1220;
+		color: var(--terminal-fg-tertiary);
+		border-top: 1px solid var(--terminal-fg-muted);
+		background: var(--terminal-bg-panel-sunken);
 	}
 	.dg-footer-err {
-		color: #ef4444;
+		color: var(--terminal-status-error);
 	}
 </style>

@@ -6,7 +6,7 @@
   Data sourced from workspace.monteCarloData.
 -->
 <script lang="ts">
-	import { formatPercent, createTerminalChartOptions, readTerminalTokens } from "@investintell/ui";
+	import { formatNumber, formatPercent, createTerminalChartOptions, readTerminalTokens } from "@investintell/ui";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import TerminalChart from "$lib/components/terminal/charts/TerminalChart.svelte";
 	import type { EChartsOption } from "echarts";
@@ -153,7 +153,7 @@
 			<span class="mc-title">
 				Monte Carlo Simulation
 				{#if data}
-					({data.n_simulations.toLocaleString()} paths)
+					({formatNumber(data.n_simulations, 0)} paths)
 				{/if}
 			</span>
 		</div>

@@ -459,8 +459,8 @@
 		width: 100%;
 		height: 100%;
 		overflow: hidden;
-		background: #000000;
-		font-family: "Urbanist", system-ui, sans-serif;
+		background: var(--terminal-bg-void);
+		font-family: var(--terminal-font-mono);
 	}
 
 	.ts-zone {
@@ -527,7 +527,7 @@
 
 	.sep-btn {
 		background: transparent;
-		border: 1px solid rgba(255, 255, 255, 0.12);
+		border: var(--terminal-border-hairline);
 		border-radius: 0;
 		color: var(--terminal-fg-primary, #e2e8f0);
 		font-family: var(--terminal-font-mono, "JetBrains Mono", monospace);
@@ -538,8 +538,8 @@
 	}
 
 	.sep-btn:hover {
-		border-color: #f59e0b;
-		color: #f59e0b;
+		border-color: var(--terminal-accent-amber);
+		color: var(--terminal-accent-amber);
 	}
 
 	.sep-btn--reload:hover {
@@ -554,15 +554,15 @@
 		left: 50%;
 		transform: translateX(-50%);
 		padding: 6px 16px;
-		font-family: "JetBrains Mono", monospace;
+		font-family: var(--terminal-font-mono);
 		font-size: 11px;
 		font-weight: 600;
 		letter-spacing: 0.02em;
-		border: 1px solid rgba(255, 255, 255, 0.12);
-		background: #0d1220;
+		border: var(--terminal-border-hairline);
+		background: var(--terminal-bg-overlay);
 		z-index: 10;
 	}
-	.ts-toast--success { color: #22c55e; border-color: rgba(34, 197, 94, 0.3); }
-	.ts-toast--warn { color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
-	.ts-toast--info { color: #2d7ef7; border-color: rgba(45, 126, 247, 0.3); }
+	.ts-toast--success { color: var(--terminal-status-success); border-color: color-mix(in srgb, var(--terminal-status-success) 30%, transparent); }
+	.ts-toast--warn { color: var(--terminal-accent-amber); border-color: color-mix(in srgb, var(--terminal-accent-amber) 30%, transparent); }
+	.ts-toast--info { color: var(--terminal-accent-cyan); border-color: color-mix(in srgb, var(--terminal-accent-cyan) 30%, transparent); }
 </style>

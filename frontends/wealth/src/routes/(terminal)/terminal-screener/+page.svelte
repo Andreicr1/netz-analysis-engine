@@ -10,7 +10,7 @@
   FundFocusMode. ESC or backdrop click dismisses FocusMode.
 -->
 <script lang="ts">
-	import { page } from "$app/stores";
+	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
 	import TerminalScreenerShell from "$lib/components/screener/terminal/TerminalScreenerShell.svelte";
 	import FundFocusMode from "$lib/components/terminal/focus-mode/fund/FundFocusMode.svelte";
@@ -46,11 +46,11 @@
 		};
 	}
 
-	const currentFilters = $derived(parseFiltersFromURL($page.url.searchParams));
+	const currentFilters = $derived(parseFiltersFromURL(page.url.searchParams));
 
 	// ── FilterState → URL ───────────────────────────────
 	function handleFiltersChange(next: FilterState) {
-		const url = new URL($page.url);
+		const url = new URL(page.url);
 		const p = url.searchParams;
 
 		// Clear all filter params first, then set non-default values
