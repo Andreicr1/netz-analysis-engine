@@ -15,6 +15,7 @@
 		driftStatus: "aligned" | "watch" | "breach";
 		instrumentCount: number;
 		lastRebalance: string | null;
+		onRebalance?: () => void;
 	}
 
 	let {
@@ -25,6 +26,7 @@
 		driftStatus,
 		instrumentCount,
 		lastRebalance,
+		onRebalance,
 	}: Props = $props();
 
 	const isLive = $derived(state === "live");
@@ -44,7 +46,7 @@
 	});
 
 	function handleRebalance() {
-		alert("Rebalance mode coming in Session B");
+		onRebalance?.();
 	}
 </script>
 
