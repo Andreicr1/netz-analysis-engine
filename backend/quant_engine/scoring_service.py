@@ -384,11 +384,12 @@ def _compute_alternatives_score(
     components: dict[str, float] = {}
 
     # diversification_value: 1 - abs(equity_correlation_252d)
-    # Lower equity correlation = higher diversification. Score 100 at corr=0.
+    # Empirical p50 div_value = 0.23 (median alt corr = 0.77).
+    # Range [0.0, 0.50] so p50 → score ~47, truly uncorrelated funds hit 100.
     eq_corr = float(alt.equity_correlation_252d) if alt.equity_correlation_252d is not None else None
     if eq_corr is not None:
         div_value = 1.0 - abs(eq_corr)
-        components["diversification_value"] = _normalize(div_value, 0.0, 1.0, pm.get("diversification_value"))
+        components["diversification_value"] = _normalize(div_value, 0.0, 0.50, pm.get("diversification_value"))
     else:
         components["diversification_value"] = pm.get("diversification_value", 45.0) - 5.0
 
@@ -401,33 +402,37 @@ def _compute_alternatives_score(
     else:
         components["downside_protection"] = pm.get("downside_protection", 45.0) - 5.0
 
-    # crisis_alpha: excess return vs benchmark during drawdown periods
-    # Range: -0.20 to 0.30. Score 100 = outperforms by 30% in crises.
+    # crisis_alpha: excess return vs benchmark during drawdown periods.
+    # Empirical p10=-0.034, p50=+0.009, p90=+0.050.
+    # Range [-0.06, 0.08] so p50 → score ~49.
     ca = float(alt.crisis_alpha_score) if alt.crisis_alpha_score is not None else None
-    components["crisis_alpha"] = _normalize(ca, -0.20, 0.30, pm.get("crisis_alpha"))
+    components["crisis_alpha"] = _normalize(ca, -0.06, 0.08, pm.get("crisis_alpha"))
 
-    # inflation_hedge: inflation beta (regression of returns vs CPI changes)
-    # Range: -2.0 to 4.0. Score 100 at beta=4, score 50 at beta=1.
+    # inflation_hedge: inflation beta (regression of returns vs CPI changes).
+    # Empirical p10=-11.03, p50=-5.84, p90=-1.82 (all negative).
+    # Range [-12.0, 0.0] so p50 → score ~51.
     ib = float(alt.inflation_beta) if alt.inflation_beta is not None else None
-    components["inflation_hedge"] = _normalize(ib, -2.0, 4.0, pm.get("inflation_hedge"))
+    components["inflation_hedge"] = _normalize(ib, -12.0, 0.0, pm.get("inflation_hedge"))
 
     # income_generation: yield_proxy_12m (reused from FI for REITs)
     # Range: 0% to 10%.
     yp = float(alt.yield_proxy_12m) if alt.yield_proxy_12m is not None else None
     components["income_generation"] = _normalize(yp, 0.0, 0.10, pm.get("income_generation"))
 
-    # alpha_generation: sortino_1y (not Sharpe -- Sharpe penalizes upside vol)
-    # Range: -1.0 to 3.0. Sortino isolates downside risk.
+    # alpha_generation: sortino_1y (not Sharpe -- Sharpe penalizes upside vol).
+    # Empirical p10=0.34, p50=2.53, p90=3.48.
+    # Range [0.0, 5.0] so p50 → score ~51.
     sortino = float(alt.sortino_1y) if alt.sortino_1y is not None else None
-    components["alpha_generation"] = _normalize(sortino, -1.0, 3.0, pm.get("alpha_generation"))
+    components["alpha_generation"] = _normalize(sortino, 0.0, 5.0, pm.get("alpha_generation"))
 
-    # risk_adjusted_return: calmar_ratio_3y (return / max drawdown)
-    # Range: 0 to 2.0. Score 100 at Calmar 2.0.
+    # risk_adjusted_return: calmar_ratio_3y (return / max drawdown).
+    # Empirical p10=0.32, p50=0.75, p90=1.35.
+    # Range [0.0, 1.5] so p50 → score 50.
     calmar = float(alt.calmar_ratio_3y) if alt.calmar_ratio_3y is not None else None
-    components["risk_adjusted_return"] = _normalize(calmar, 0.0, 2.0, pm.get("risk_adjusted_return"))
+    components["risk_adjusted_return"] = _normalize(calmar, 0.0, 1.5, pm.get("risk_adjusted_return"))
 
-    # drawdown_control: calmar_ratio_3y (same metric, different normalization for commodity profile)
-    components["drawdown_control"] = _normalize(calmar, 0.0, 2.0, pm.get("drawdown_control"))
+    # drawdown_control: calmar_ratio_3y (same metric, commodity profile)
+    components["drawdown_control"] = _normalize(calmar, 0.0, 1.5, pm.get("drawdown_control"))
 
     # tracking_efficiency: lower tracking error = better (for gold passive exposure)
     # Range: 0 to 5% TE. Score 100 at TE=0, score 0 at TE >= 5%.
