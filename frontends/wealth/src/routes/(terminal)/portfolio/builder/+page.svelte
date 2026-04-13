@@ -117,15 +117,19 @@
 		<!-- Zone A: Regime Context Strip (120px) -->
 		<RegimeContextStrip {regimeBands} />
 
-		<!-- Zone B: Calibration Controls + Run Controls (flex) -->
+		<!-- Zone B: Calibration Controls (scrollable) -->
 		<div class="builder-calibration">
 			{#if selectedPortfolio}
 				<CalibrationPanel />
-				<RunControls />
 			{:else}
 				<div class="builder-empty-zone">Select a portfolio to configure</div>
 			{/if}
 		</div>
+
+		<!-- Zone C: Run Controls (pinned to bottom) -->
+		{#if selectedPortfolio}
+			<RunControls />
+		{/if}
 	</div>
 
 	<!-- RIGHT COLUMN (60%) — Results Panel -->
@@ -194,7 +198,7 @@
 	.builder-left {
 		display: flex;
 		flex-direction: column;
-		overflow-y: auto;
+		overflow: hidden;
 		border-right: var(--terminal-border-hairline);
 	}
 
