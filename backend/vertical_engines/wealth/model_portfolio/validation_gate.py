@@ -1,8 +1,8 @@
-"""Validation gate with 15 checks for construction runs.
+"""Validation gate with 16 checks for construction runs.
 
 Phase 3 Task 3.1 of `docs/superpowers/plans/2026-04-08-portfolio-enterprise-workbench.md`.
 
-Runs 15 independent checks against a construction run payload.
+Runs 16 independent checks against a construction run payload.
 **No fail-fast** — every check is evaluated so the UI can render a
 complete health panel, not just the first failure. Aggregation is
 ``passed = not any(block failures)``.
@@ -23,9 +23,9 @@ Public surface
 - :class:`ValidationResult` — aggregate result
 - :class:`ValidationDbContext` — pre-fetched DB rows needed by the
   checks (keeps the gate synchronous and testable)
-- :func:`validate_construction` — run all 15 and aggregate
+- :func:`validate_construction` — run all 16 and aggregate
 
-The 15 checks
+The 16 checks
 -------------
 1. weights-sum-to-one
 2. no-stale-nav
@@ -42,6 +42,7 @@ The 15 checks
 13. bl-views-consistent-with-prior
 14. garch-convergence-rate
 15. factor-model-r-squared
+16. taa-bands-within-ips
 """
 
 from __future__ import annotations
@@ -74,13 +75,13 @@ class ValidationCheck:
 
 @dataclass(frozen=True, slots=True)
 class ValidationResult:
-    """Aggregate of the 15 checks."""
+    """Aggregate of the 16 checks."""
 
     passed: bool
     """True if no block-severity check failed."""
 
     checks: list[ValidationCheck]
-    """All 15 checks in stable order."""
+    """All 16 checks in stable order."""
 
     warnings: list[ValidationCheck] = field(default_factory=list)
     """Subset of ``checks`` where ``severity='warn'`` and ``passed=False``."""
@@ -647,6 +648,74 @@ def _check_factor_model_r_squared(
     )
 
 
+def _check_taa_bands_within_ips(
+    run_payload: dict[str, Any],
+    db: ValidationDbContext,
+) -> ValidationCheck:
+    """Check #16: TAA regime bands must be a subset of IPS bounds.
+
+    When TAA is enabled, the effective bands produced by
+    ``resolve_effective_bands()`` must never exceed the IPS
+    min/max from ``StrategicAllocation``. This is a defense-in-depth
+    check — the clamping logic should guarantee this, but we verify
+    at the gate to catch any regression.
+    """
+    calibration = run_payload.get("calibration_snapshot") or {}
+    taa = calibration.get("taa") or {}
+
+    if not taa.get("enabled"):
+        return ValidationCheck(
+            id="taa_bands_within_ips",
+            label="TAA bands within IPS",
+            severity="block",
+            passed=True,
+            value=None,
+            threshold=None,
+            explanation="TAA disabled — check skipped.",
+        )
+
+    effective_bands: dict[str, dict[str, float]] = taa.get("effective_bands") or {}
+    if not effective_bands:
+        return ValidationCheck(
+            id="taa_bands_within_ips",
+            label="TAA bands within IPS",
+            severity="block",
+            passed=True,
+            value=0,
+            threshold=0,
+            explanation="No effective bands in TAA provenance — check skipped.",
+        )
+
+    violations: list[str] = []
+    for block_id, band in effective_bands.items():
+        ips_bounds = db.block_constraints.get(block_id)
+        if ips_bounds is None:
+            continue
+        ips_min, ips_max = ips_bounds
+        eff_min = band.get("min", 0.0)
+        eff_max = band.get("max", 0.0)
+        if eff_min < ips_min - _BLOCK_WEIGHT_TOLERANCE:
+            violations.append(f"{block_id} eff_min={eff_min:.4%} < IPS_min={ips_min:.4%}")
+        if eff_max > ips_max + _BLOCK_WEIGHT_TOLERANCE:
+            violations.append(f"{block_id} eff_max={eff_max:.4%} > IPS_max={ips_max:.4%}")
+
+    passed = len(violations) == 0
+    return ValidationCheck(
+        id="taa_bands_within_ips",
+        label="TAA bands within IPS",
+        severity="block",
+        passed=passed,
+        value=len(violations),
+        threshold=0,
+        explanation=(
+            f"{len(violations)} TAA band violation(s): "
+            + "; ".join(violations[:3])
+            if violations
+            else "All TAA effective bands are within IPS constraints."
+        ),
+    )
+
+
 # ── Check registry — stable order for JSONB serialization ─────────
 
 
@@ -666,6 +735,7 @@ CHECKS: Final[list[tuple[str, Callable[[dict[str, Any], ValidationDbContext], Va
     ("bl_views_consistent_with_prior",  _check_bl_views_consistent),
     ("garch_convergence_rate",          _check_garch_convergence),
     ("factor_model_r_squared",          _check_factor_model_r_squared),
+    ("taa_bands_within_ips",            _check_taa_bands_within_ips),
 ]
 
 
@@ -673,7 +743,7 @@ def validate_construction(
     run_payload: dict[str, Any],
     db_context: ValidationDbContext | None = None,
 ) -> ValidationResult:
-    """Run all 15 checks against the construction run payload.
+    """Run all 16 checks against the construction run payload.
 
     **No fail-fast.** Every check is evaluated so the UI can show
     the full health panel. Aggregation rule:

@@ -2280,12 +2280,13 @@ async def _load_universe_funds(
     by default when imported to the org. Only private_us and bdc require
     manual DD-gated approval via UniverseApproval.
     """
+    from sqlalchemy import func as sa_func
+
     from app.domains.wealth.models.instrument import Instrument
     from app.domains.wealth.models.instrument_org import InstrumentOrg
     from app.domains.wealth.models.risk import FundRiskMetrics
 
     # Subquery: latest risk metrics row per instrument (for manager_score)
-    from sqlalchemy import func as sa_func
     latest_risk = (
         select(
             FundRiskMetrics.instrument_id,

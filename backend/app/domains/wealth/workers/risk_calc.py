@@ -1420,6 +1420,33 @@ async def _compute_and_persist_taa_state(
         )
         await db.execute(upsert)
 
+        # ── Audit: log TAA state transitions ──
+        prev_regime = prev_row.raw_regime if prev_row else None
+        regime_changed = prev_regime is not None and prev_regime != regime
+        if regime_changed or prev_row is None:
+            from app.core.db.audit import write_audit_event
+
+            await write_audit_event(
+                db,
+                action="taa_regime_transition" if regime_changed else "taa_regime_initialized",
+                entity_type="TaaRegimeState",
+                entity_id=f"{prof}:{eval_date}",
+                organization_id=org_id,
+                before={
+                    "raw_regime": prev_regime,
+                    "stress_score": float(prev_row.stress_score) if prev_row and prev_row.stress_score else None,
+                    "smoothed_centers": dict(prev_row.smoothed_centers) if prev_row and prev_row.smoothed_centers else None,
+                } if prev_row else None,
+                after={
+                    "raw_regime": regime,
+                    "stress_score": stress_score,
+                    "smoothed_centers": smoothed,
+                    "effective_bands": effective_bands,
+                    "transition_velocity": velocity or None,
+                    "confidence_gated": confidence_gated,
+                },
+            )
+
     await db.commit()
     logger.info(
         "taa_regime_state_persisted",

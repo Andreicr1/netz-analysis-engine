@@ -63,7 +63,7 @@ def _base_payload() -> dict[str, Any]:
 
 def test_happy_path_shape():
     out = render_narrative(_base_payload())
-    assert out["schema_version"] == 1
+    assert out["schema_version"] == 2
     assert set(out.keys()) == {"schema_version", "technical", "client_safe"}
     for section in ("technical", "client_safe"):
         assert set(out[section].keys()) == {
@@ -71,6 +71,7 @@ def test_happy_path_shape():
             "key_points",
             "constraint_story",
             "holding_changes",
+            "taa_summary",
         }
     assert isinstance(out["technical"]["headline"], str)
     assert len(out["technical"]["headline"]) > 0
@@ -154,7 +155,7 @@ def test_determinism_same_input_same_output():
 
 def test_empty_payload_degrades_gracefully():
     out = render_narrative({})
-    assert out["schema_version"] == 1
+    assert out["schema_version"] == 2
     # Sections still present
     assert "technical" in out
     assert "client_safe" in out

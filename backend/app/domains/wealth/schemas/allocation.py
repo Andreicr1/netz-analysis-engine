@@ -136,3 +136,65 @@ class SimulationResult(BaseModel):
     within_limit: bool
     warnings: list[str] = []
     computed_at: datetime
+
+
+# ── TAA (Tactical Asset Allocation) schemas (Sprint 3) ──────────
+
+
+class EffectiveBandRead(BaseModel):
+    """A single block's effective band (regime-adjusted, IPS-clamped)."""
+
+    min: float
+    max: float
+    center: float | None = None
+
+
+class RegimeBandsRead(BaseModel):
+    """Current smoothed regime centers + effective bands for a profile."""
+
+    profile: str
+    as_of_date: date
+    raw_regime: str
+    stress_score: Decimal | None = None
+    smoothed_centers: dict[str, float]
+    effective_bands: dict[str, EffectiveBandRead]
+    transition_velocity: dict[str, float] | None = None
+    ips_clamps_applied: list[str] = []
+    taa_enabled: bool = True
+
+
+class TaaHistoryRow(BaseModel):
+    """Single row in the TAA regime state history."""
+
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
+
+    as_of_date: date
+    raw_regime: str
+    stress_score: Decimal | None = None
+    smoothed_centers: dict[str, float]
+    effective_bands: dict[str, dict[str, float]]
+    transition_velocity: dict[str, float] | None = None
+    created_at: datetime
+
+
+class TaaHistoryRead(BaseModel):
+    """Paginated TAA regime state history for audit."""
+
+    profile: str
+    rows: list[TaaHistoryRow]
+    total: int
+
+
+class EffectiveAllocationWithRegimeRead(BaseModel):
+    """Effective allocation enriched with regime-adjusted bands."""
+
+    profile: str
+    block_id: str
+    strategic_weight: Decimal | None = None
+    tactical_overweight: Decimal | None = None
+    effective_weight: Decimal | None = None
+    min_weight: Decimal | None = None
+    max_weight: Decimal | None = None
+    regime_min: float | None = None
+    regime_max: float | None = None
+    regime_center: float | None = None
