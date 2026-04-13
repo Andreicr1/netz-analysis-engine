@@ -1,11 +1,11 @@
 <!--
-  PortfolioSummary -- aggregate stats panel (bottom-left of right column).
+  PortfolioSummary -- compact horizontal KPI strip between chart and holdings.
 
-  Shows: status badge, AUM, return (1Y), drift status,
-  instrument count, last rebalance date, rebalance button (stub).
+  Single-row layout: STATUS | AUM | RETURN | DRIFT | INSTRUMENTS | REBALANCE
+  Height: 32px. Terminal-native styling.
 -->
 <script lang="ts">
-	import { formatAUM, formatPercent, formatDate } from "@investintell/ui";
+	import { formatAUM, formatPercent } from "@investintell/ui";
 	import LiveDot from "$lib/components/terminal/data/LiveDot.svelte";
 
 	interface Props {
@@ -51,145 +51,128 @@
 	}
 </script>
 
-<div class="ps-root">
-	<div class="ps-header">
-		<span class="ps-label">PORTFOLIO</span>
+<div class="ps-strip">
+	<!-- Status -->
+	<div class="ps-cell">
+		<span class="ps-key">STATUS</span>
+		<span class="ps-val ps-status">
+			<LiveDot
+				status={isLive ? "success" : isPaused ? "warn" : "muted"}
+				pulse={isLive}
+				label="Portfolio state"
+			/>
+			{isLive ? "LIVE" : isPaused ? "PAUSED" : state.toUpperCase()}
+		</span>
 	</div>
 
-	<div class="ps-body">
-		<!-- Status -->
-		<div class="ps-row">
-			<span class="ps-key">STATUS</span>
-			<span class="ps-val ps-status">
-				<LiveDot
-					status={isLive ? "success" : isPaused ? "warn" : "muted"}
-					pulse={isLive}
-					label="Portfolio state: {isLive ? 'live' : isPaused ? 'paused' : state}"
-				/>
-				{isLive ? "LIVE" : isPaused ? "PAUSED" : state.toUpperCase()}
-			</span>
-		</div>
+	<span class="ps-sep" aria-hidden="true"></span>
 
-		<!-- AUM -->
-		<div class="ps-row">
-			<span class="ps-key">AUM</span>
-			<span class="ps-val">{formatAUM(aum)}</span>
-		</div>
-
-		<!-- Return -->
-		<div class="ps-row">
-			<span class="ps-key">RETURN (1Y)</span>
-			<span
-				class="ps-val"
-				class:ps-up={returnPct != null && returnPct >= 0}
-				class:ps-down={returnPct != null && returnPct < 0}
-			>
-				{returnPct != null ? formatPercent(returnPct, 1, "en-US", true) : "\u2014"}
-			</span>
-		</div>
-
-		<!-- Drift Status -->
-		<div class="ps-row">
-			<span class="ps-key">DRIFT STATUS</span>
-			<span
-				class="ps-val"
-				class:ps-drift-aligned={driftStatus === "aligned"}
-				class:ps-drift-watch={driftStatus === "watch"}
-				class:ps-drift-breach={driftStatus === "breach"}
-			>
-				{driftLabel}
-			</span>
-		</div>
-
-		<!-- Instruments -->
-		<div class="ps-row">
-			<span class="ps-key">INSTRUMENTS</span>
-			<span class="ps-val">{instrumentCount}</span>
-		</div>
-
-		<!-- Last Rebalance -->
-		<div class="ps-row">
-			<span class="ps-key">LAST REBALANCE</span>
-			<span class="ps-val">{lastRebalance ? formatDate(lastRebalance, "short") : "\u2014"}</span>
-		</div>
+	<!-- AUM -->
+	<div class="ps-cell">
+		<span class="ps-key">AUM</span>
+		<span class="ps-val">{formatAUM(aum)}</span>
 	</div>
 
-	<div class="ps-footer">
-		{#if driftStatus !== "aligned"}
-			<button type="button" class="ps-rebalance-btn" onclick={handleRebalance}>
-				REBALANCE
-			</button>
-		{:else}
-			<span class="ps-footer-status">Portfolio aligned</span>
-		{/if}
+	<span class="ps-sep" aria-hidden="true"></span>
+
+	<!-- Return -->
+	<div class="ps-cell">
+		<span class="ps-key">RETURN</span>
+		<span
+			class="ps-val"
+			class:ps-up={returnPct != null && returnPct >= 0}
+			class:ps-down={returnPct != null && returnPct < 0}
+		>
+			{returnPct != null ? formatPercent(returnPct, 1, "en-US", true) : "\u2014"}
+		</span>
 	</div>
+
+	<span class="ps-sep" aria-hidden="true"></span>
+
+	<!-- Drift -->
+	<div class="ps-cell">
+		<span class="ps-key">DRIFT</span>
+		<span
+			class="ps-val"
+			class:ps-drift-aligned={driftStatus === "aligned"}
+			class:ps-drift-watch={driftStatus === "watch"}
+			class:ps-drift-breach={driftStatus === "breach"}
+		>
+			{driftLabel}
+		</span>
+	</div>
+
+	<span class="ps-sep" aria-hidden="true"></span>
+
+	<!-- Instruments -->
+	<div class="ps-cell">
+		<span class="ps-key">INSTRUMENTS</span>
+		<span class="ps-val">{instrumentCount}</span>
+	</div>
+
+	<!-- Spacer pushes rebalance to far right -->
+	<div class="ps-spacer"></div>
+
+	<!-- Rebalance button (only when drift is not aligned) -->
+	{#if driftStatus !== "aligned"}
+		<button type="button" class="ps-rebalance-btn" onclick={handleRebalance}>
+			REBALANCE
+		</button>
+	{/if}
 </div>
 
 <style>
-	.ps-root {
+	.ps-strip {
 		display: flex;
-		flex-direction: column;
-		width: 100%;
-		height: 100%;
-		min-height: 0;
-		overflow: hidden;
+		align-items: center;
+		height: 32px;
+		padding: 0 var(--terminal-space-2);
+		gap: var(--terminal-space-3);
 		background: var(--terminal-bg-panel);
 		font-family: var(--terminal-font-mono);
-	}
-
-	.ps-header {
-		display: flex;
-		align-items: center;
-		flex-shrink: 0;
-		height: 28px;
-		padding: 0 var(--terminal-space-3);
+		border-top: var(--terminal-border-hairline);
 		border-bottom: var(--terminal-border-hairline);
+		flex-shrink: 0;
 	}
 
-	.ps-label {
-		font-size: var(--terminal-text-10);
-		font-weight: 700;
-		letter-spacing: var(--terminal-tracking-caps);
-		color: var(--terminal-fg-tertiary);
-		text-transform: uppercase;
-	}
-
-	.ps-body {
-		flex: 1;
-		min-height: 0;
-		padding: var(--terminal-space-3);
-		display: flex;
-		flex-direction: column;
-		gap: var(--terminal-space-2);
-	}
-
-	.ps-row {
+	.ps-cell {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
+		gap: var(--terminal-space-1);
+		white-space: nowrap;
 	}
 
 	.ps-key {
-		font-size: var(--terminal-text-10);
+		font-size: var(--terminal-text-9);
 		color: var(--terminal-fg-tertiary);
 		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
 	}
 
 	.ps-val {
-		font-size: var(--terminal-text-11);
+		font-size: var(--terminal-text-10);
 		font-weight: 600;
 		color: var(--terminal-fg-primary);
 		font-variant-numeric: tabular-nums;
 	}
 
-	/* Status dot */
 	.ps-status {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: 4px;
 	}
 
-	/* P&L colors */
+	.ps-sep {
+		width: 1px;
+		height: 14px;
+		background: var(--terminal-fg-muted);
+		flex-shrink: 0;
+	}
+
+	.ps-spacer {
+		flex: 1;
+	}
+
 	.ps-up {
 		color: var(--terminal-status-success);
 	}
@@ -198,7 +181,6 @@
 		color: var(--terminal-status-error);
 	}
 
-	/* Drift colors */
 	.ps-drift-aligned {
 		color: var(--terminal-status-success);
 	}
@@ -211,44 +193,28 @@
 		color: var(--terminal-status-error);
 	}
 
-	/* Footer */
-	.ps-footer {
-		flex-shrink: 0;
-		padding: var(--terminal-space-2) var(--terminal-space-3);
-		border-top: var(--terminal-border-hairline);
-	}
-
 	.ps-rebalance-btn {
-		appearance: none;
-		width: 100%;
-		height: 28px;
+		height: 22px;
+		padding: 0 var(--terminal-space-2);
+		background: var(--terminal-accent-amber);
+		color: var(--terminal-bg-void);
+		border: none;
+		border-radius: var(--terminal-radius-none);
 		font-family: var(--terminal-font-mono);
-		font-size: var(--terminal-text-10);
+		font-size: var(--terminal-text-9);
 		font-weight: 700;
 		letter-spacing: var(--terminal-tracking-caps);
-		color: var(--terminal-accent-amber);
-		background: transparent;
-		border: 1px solid var(--terminal-accent-amber-dim);
+		text-transform: uppercase;
 		cursor: pointer;
-		transition: background var(--terminal-motion-tick), border-color var(--terminal-motion-tick);
+		flex-shrink: 0;
 	}
 
 	.ps-rebalance-btn:hover {
-		background: var(--terminal-bg-panel-raised);
-		border-color: var(--terminal-accent-amber);
+		opacity: 0.9;
 	}
 
 	.ps-rebalance-btn:focus-visible {
 		outline: var(--terminal-border-focus);
-		outline-offset: 1px;
-	}
-
-	.ps-footer-status {
-		font-size: var(--terminal-text-10);
-		color: var(--terminal-status-success);
-		letter-spacing: var(--terminal-tracking-caps);
-		font-weight: 600;
-		text-align: center;
-		display: block;
+		outline-offset: 2px;
 	}
 </style>

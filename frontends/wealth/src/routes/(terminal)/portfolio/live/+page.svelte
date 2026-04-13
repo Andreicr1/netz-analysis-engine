@@ -713,7 +713,6 @@
 		display: grid;
 		grid-template-columns: 220px 1fr 280px;
 		height: calc(100vh - 88px);
-		gap: 1px;
 		background: var(--terminal-bg-void);
 		font-family: var(--terminal-font-mono);
 	}
@@ -775,7 +774,6 @@
 	.lw-summary {
 		flex-shrink: 0;
 		overflow: hidden;
-		border-top: var(--terminal-border-hairline);
 	}
 
 	.lw-holdings {
