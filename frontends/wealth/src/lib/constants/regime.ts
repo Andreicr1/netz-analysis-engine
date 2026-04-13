@@ -1,10 +1,10 @@
 /** Regime display labels, colors, and CVaR multipliers — shared across dashboard and components. */
 
 export const regimeLabels: Record<string, string> = {
-	RISK_ON: "Risk On",
-	RISK_OFF: "Risk Off",
+	RISK_ON: "Expansion",
+	RISK_OFF: "Defensive",
 	INFLATION: "Inflation",
-	CRISIS: "Crisis",
+	CRISIS: "Stress",
 };
 
 export const regimeColors: Record<string, string> = {
@@ -25,5 +25,5 @@ export function regimeMultiplierLabel(regime: string): string {
 	const m = REGIME_CVAR_MULTIPLIER[regime];
 	if (!m || m === 1.0) return "";
 	const pct = Math.round((1 - m) * 100);
-	return `CVaR tightened by ${pct}%`;
+	return `Risk budget tightened by ${pct}%`;
 }

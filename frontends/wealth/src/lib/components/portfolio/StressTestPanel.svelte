@@ -202,7 +202,7 @@
 					</div>
 					{#if workspace.localStress!.cvarStressed != null}
 						<div class="stress-kpi">
-							<span class="stress-kpi-label">CVaR Stressed</span>
+							<span class="stress-kpi-label">Stressed Tail Loss</span>
 							<span class="stress-kpi-value stress-kpi-value--bad tabular-nums">
 								{formatPercent(workspace.localStress!.cvarStressed)}
 							</span>

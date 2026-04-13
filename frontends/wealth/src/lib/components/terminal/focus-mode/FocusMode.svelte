@@ -79,7 +79,7 @@
 			case "sector":
 				return "SECTOR";
 			case "regime":
-				return "REGIME";
+				return "ENVIRONMENT";
 		}
 	}
 

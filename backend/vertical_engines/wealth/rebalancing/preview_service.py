@@ -15,6 +15,8 @@ from typing import Any
 
 import structlog
 
+from app.domains.wealth.schemas.sanitized import sanitize_payload
+
 logger = structlog.get_logger()
 
 # Universal cash instrument ID — same constant on frontend
@@ -202,7 +204,7 @@ def compute_rebalance_preview(
         cash_neutral=True,
     )
 
-    return {
+    result = {
         "portfolio_id": str(portfolio_id),
         "portfolio_name": portfolio_name,
         "profile": profile,
@@ -213,6 +215,7 @@ def compute_rebalance_preview(
         "trades": trades,
         "weight_comparison": weight_comparison,
     }
+    return sanitize_payload(result)
 
 
 def _apply_cash_sweep(trades: list[dict[str, Any]]) -> None:
@@ -278,7 +281,7 @@ def _empty_response(
     cash_available: float,
 ) -> dict[str, Any]:
     """Return empty response when AUM is zero or negative."""
-    return {
+    return sanitize_payload({
         "portfolio_id": str(portfolio_id),
         "portfolio_name": portfolio_name,
         "profile": profile,
@@ -288,4 +291,4 @@ def _empty_response(
         "estimated_turnover_pct": 0.0,
         "trades": [],
         "weight_comparison": [],
-    }
+    })

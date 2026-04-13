@@ -35,7 +35,7 @@
 	);
 </script>
 
-<div class="ct-root" role="group" aria-label="Optimizer cascade timeline">
+<div class="ct-root" role="group" aria-label="Construction phase timeline">
 	<!-- Connector rail -->
 	<div class="ct-rail">
 		<div class="ct-rail-bg"></div>

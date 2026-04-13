@@ -65,7 +65,7 @@
 				textStyle: { fontFamily: tk.fontMono, fontSize: tk.text11, color: tk.fgPrimary },
 			},
 			xAxis: { type: "value" as const, show: false, max: total },
-			yAxis: { type: "category" as const, show: false, data: ["CVaR"] },
+			yAxis: { type: "category" as const, show: false, data: ["Tail Loss"] },
 			animation: false,
 			series: cvarContributions.map((c, i) => ({
 				type: "bar" as const,
@@ -180,7 +180,7 @@
 						<span class="rt-kicker">Risk Contribution</span>
 						<span class="rt-subtitle">Tail Loss (95% confidence) by position</span>
 					</header>
-					<TerminalChart option={cvarOption} height={48} ariaLabel="CVaR contribution stacked bar" />
+					<TerminalChart option={cvarOption} height={48} ariaLabel="Tail loss contribution stacked bar" />
 				</section>
 			{/if}
 

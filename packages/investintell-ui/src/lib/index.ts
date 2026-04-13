@@ -113,6 +113,8 @@ export {
 	svelteTransitionFor,
 	createTerminalChartOptions,
 	readTerminalTokens,
+	createTerminalLightweightChartOptions,
+	terminalLWSeriesColors,
 } from "./charts/index.js";
 export type {
 	ChoreoSlot,
@@ -122,6 +124,8 @@ export type {
 	SvelteTransitionOptions,
 	TerminalChartOptionsInput,
 	TerminalChartTokens,
+	TerminalLWChartOptionsInput,
+	TerminalLWChartOptions,
 } from "./charts/index.js";
 
 // ── Utilities ────────────────────────────────────────────────

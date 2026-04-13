@@ -201,7 +201,7 @@ const DEFAULT_CASCADE_PHASES: CascadePhase[] = [
 	{ key: "robust", label: "Robust Optimization", status: "pending" },
 	{ key: "variance_capped", label: "Variance-Capped", status: "pending" },
 	{ key: "min_variance", label: "Minimum Variance", status: "pending" },
-	{ key: "heuristic", label: "Heuristic Recovery", status: "pending" },
+	{ key: "heuristic", label: "Recovery", status: "pending" },
 ];
 
 // ── Shock mapping: UI macro-shocks → per-block shocks ────────────────
