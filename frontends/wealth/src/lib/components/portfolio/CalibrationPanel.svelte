@@ -331,7 +331,7 @@
 					<CalibrationSelectField
 						id="cp-mandate"
 						label="Mandate"
-						description="Risk profile archetype — drives downstream defaults for CVaR, diversification, and turnover."
+						description="Risk profile archetype — drives downstream defaults for tail loss budget, diversification, and turnover."
 						value={draft.mandate}
 						onChange={(v) => update({ mandate: v as CalibrationMandate })}
 						options={MANDATE_OPTIONS}
@@ -340,7 +340,7 @@
 					<CalibrationSliderField
 						id="cp-cvar-limit"
 						label="Tail loss budget"
-						description="Maximum CVaR the optimizer may allow at the 95% level."
+						description="Maximum tail loss (95% confidence) the portfolio may carry."
 						value={draft.cvar_limit}
 						onChange={(v) => update({ cvar_limit: v })}
 						min={0.02}
@@ -407,7 +407,7 @@
 
 					<CalibrationToggleField
 						id="cp-bl-enabled"
-						label="Black-Litterman blending"
+						label="Expected return blending"
 						description="Enable the Bayesian blend of the prior with IC views. Off = equilibrium prior only."
 						value={draft.bl_enabled}
 						onChange={(v) => update({ bl_enabled: v })}
@@ -429,8 +429,8 @@
 
 					<CalibrationToggleField
 						id="cp-garch-enabled"
-						label="GARCH forward volatility"
-						description="Use GARCH(1,1) conditional volatility instead of realized vol."
+						label="Forward-looking volatility"
+						description="Use forward-looking conditional volatility instead of realized vol."
 						value={draft.garch_enabled}
 						onChange={(v) => update({ garch_enabled: v })}
 					/>
@@ -464,14 +464,14 @@
 					<CalibrationToggleField
 						id="cp-advisor-enabled"
 						label="Construction advisor"
-						description="Enable the credit-side advisor that recommends fund additions to close CVaR gaps."
+						description="Enable the credit-side advisor that recommends fund additions to close risk budget gaps."
 						value={draft.advisor_enabled}
 						onChange={(v) => update({ advisor_enabled: v })}
 					/>
 
 					<CalibrationSelectField
 						id="cp-cvar-level"
-						label="CVaR confidence level"
+						label="Tail loss confidence level"
 						description="Confidence level used for the tail loss budget."
 						value={draft.cvar_level.toString()}
 						onChange={(v) => update({ cvar_level: Number.parseFloat(v) })}
@@ -480,7 +480,7 @@
 
 					<CalibrationSliderField
 						id="cp-risk-aversion"
-						label="Risk aversion (λ)"
+						label="Risk aversion"
 						description="Coefficient on variance in the utility — higher = more conservative."
 						value={draft.lambda_risk_aversion ?? LAMBDA_RISK_AVERSION_SENTINEL}
 						onChange={(v) => update({ lambda_risk_aversion: v })}
@@ -494,7 +494,7 @@
 					<CalibrationSliderField
 						id="cp-shrinkage"
 						label="Shrinkage intensity override"
-						description="Manual Ledoit-Wolf shrinkage (0..1). Leave at default for auto-selection."
+						description="Covariance shrinkage override (0..1). Leave at default for auto-selection."
 						value={draft.shrinkage_intensity_override ?? SHRINKAGE_SENTINEL}
 						onChange={(v) => update({ shrinkage_intensity_override: v })}
 						min={0}

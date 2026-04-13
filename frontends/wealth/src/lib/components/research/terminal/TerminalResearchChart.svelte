@@ -268,7 +268,7 @@
 					<strong class="neg">{summary.maxDd != null ? formatNumber(summary.maxDd, 2) + "%" : "—"}</strong>
 				</span>
 				<span class="rc-summary">
-					GARCH VOL
+					FORWARD VOL
 					<strong class="purple">{summary.lastVol != null ? formatNumber(summary.lastVol, 2) + "%" : "—"}</strong>
 				</span>
 				<span class="rc-summary">
@@ -284,7 +284,7 @@
 			<div class="rc-placeholder-title">SELECT AN INSTRUMENT</div>
 			<div class="rc-placeholder-sub">
 				Pick a fund from the asset browser to render<br />
-				drawdown, GARCH volatility and macro regime overlays.
+				drawdown, conditional volatility and regime overlays.
 			</div>
 		</div>
 	{:else if errorMessage}
@@ -298,7 +298,7 @@
 			<div class="rc-pane-chart" bind:this={drawdownEl}></div>
 		</div>
 		<div class="rc-pane">
-			<div class="rc-pane-label">GARCH VOLATILITY</div>
+			<div class="rc-pane-label">CONDITIONAL VOLATILITY</div>
 			<div class="rc-pane-chart" bind:this={volEl}></div>
 		</div>
 		<div class="rc-pane">

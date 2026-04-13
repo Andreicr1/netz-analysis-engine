@@ -76,7 +76,7 @@
 				<span class="scs-value">{formatPercent(result.portfolioDrop / 100, 2)}</span>
 			</div>
 			<div class="scs-result-row">
-				<span class="scs-label">Stressed CVaR</span>
+				<span class="scs-label">Stressed Tail Loss</span>
 				<span class="scs-value">
 					{result.cvarStressed === null ? "—" : formatPercent(result.cvarStressed, 2)}
 				</span>

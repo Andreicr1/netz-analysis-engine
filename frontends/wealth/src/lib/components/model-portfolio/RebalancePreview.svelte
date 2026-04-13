@@ -80,9 +80,9 @@
 					<div class="mb-4 rounded-[12px] border border-[#f59e0b]/30 bg-[#f59e0b]/10 px-4 py-3 flex items-start gap-3">
 						<span class="text-[#f59e0b] text-[18px] leading-none mt-0.5">⚠</span>
 						<div>
-							<span class="text-[13px] font-semibold text-[#f59e0b] block">CVaR Limit Warning</span>
+							<span class="text-[13px] font-semibold text-[#f59e0b] block">Risk Limit Warning</span>
 							<span class="text-[12px] text-[#85a0bd]">
-								Projected CVaR₉₅ ({formatPercent((preview.cvar_95_projected ?? 0) * 100)}) is approaching
+								Projected tail loss ({formatPercent((preview.cvar_95_projected ?? 0) * 100)}) is approaching
 								{#if preview.cvar_limit != null}
 									the limit ({formatPercent(preview.cvar_limit * 100)}).
 								{:else}

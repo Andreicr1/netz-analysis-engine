@@ -49,7 +49,7 @@
 			case "running":
 				return "Starting construction run…";
 			case "optimizer":
-				return "Running CLARABEL optimizer cascade…";
+				return "Optimizing portfolio allocation…";
 			case "stress":
 				return "Running stress scenarios…";
 			case "done":

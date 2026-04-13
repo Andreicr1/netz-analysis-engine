@@ -235,7 +235,7 @@
 		</button>
 
 		<span class="tn-regime" aria-live="polite">
-			<span class="tn-regime-label">REGIME</span>
+			<span class="tn-regime-label">MARKET</span>
 			<span class="tn-regime-value">STANDBY</span>
 		</span>
 

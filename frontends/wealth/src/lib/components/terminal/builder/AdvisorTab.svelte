@@ -51,6 +51,21 @@
 		if (typeof value === "string") return value;
 		return String(value);
 	}
+
+	/** Map raw backend keys to institutional display labels. */
+	const ADVISOR_KEY_LABELS: Record<string, string> = {
+		portfolio_id: "Portfolio",
+		profile: "Profile",
+		current_cvar_95: "Current Tail Loss (95%)",
+		cvar_limit: "Tail Loss Limit",
+		cvar_gap: "Risk Budget Gap",
+		detail_endpoint: "Detail Endpoint",
+		note: "Note",
+	};
+
+	function advisorKeyLabel(key: string): string {
+		return ADVISOR_KEY_LABELS[key] ?? key.replace(/_/g, " ");
+	}
 </script>
 
 <svelte:boundary>
@@ -143,7 +158,7 @@
 					<dl class="at-advisor-grid">
 						{#each advisorEntries as [key, value] (key)}
 							<div class="at-advisor-item">
-								<dt class="at-advisor-key">{key.replace(/_/g, " ")}</dt>
+								<dt class="at-advisor-key">{advisorKeyLabel(key)}</dt>
 								<dd class="at-advisor-value">{formatAdvisorValue(key, value)}</dd>
 							</div>
 						{/each}

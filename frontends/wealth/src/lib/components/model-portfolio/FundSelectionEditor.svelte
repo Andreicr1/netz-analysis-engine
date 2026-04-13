@@ -326,7 +326,7 @@
 <ConsequenceDialog
 	bind:open={showConfirm}
 	title="Re-construct Portfolio"
-	impactSummary="Fund selection will be updated and the 4-phase CLARABEL cascade optimizer will re-run. This may take 5-10 seconds."
+	impactSummary="Fund selection will be updated and the portfolio will be re-optimized. This may take 5-10 seconds."
 	scopeText="{addedFunds.length} fund{addedFunds.length !== 1 ? 's' : ''} added, {removedFunds.length} fund{removedFunds.length !== 1 ? 's' : ''} excluded"
 	confirmLabel={applying ? "Applying\u2026" : "Apply & Re-construct"}
 	metadata={[

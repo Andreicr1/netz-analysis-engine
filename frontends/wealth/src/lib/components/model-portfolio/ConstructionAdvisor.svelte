@@ -263,7 +263,7 @@
 			<div class="ca-header-left">
 				<h3 class="ca-title">Construction Advisor</h3>
 				<span class="ca-subtitle">
-					{advice.profile} — CVaR {formatPercent(advice.current_cvar_95)} (limit {formatPercent(advice.cvar_limit)})
+					{advice.profile} — Tail Loss {formatPercent(advice.current_cvar_95)} (limit {formatPercent(advice.cvar_limit)})
 				</span>
 			</div>
 			{#if advice.projected_cvar_is_heuristic}
@@ -315,7 +315,7 @@
 												<th class="ca-th-num">Vol 1Y</th>
 												<th class="ca-th-num">Corr</th>
 												<th class="ca-th-num">Overlap</th>
-												<th class="ca-th-num">Proj CVaR</th>
+												<th class="ca-th-num">Proj Risk</th>
 												<th class="ca-th-num">Improv.</th>
 												<th class="ca-th-action"></th>
 											</tr>
@@ -384,7 +384,7 @@
 					{#each passing as alt (alt.profile)}
 						<span class="ca-alt-option">
 							Switch to <strong style:color={profileColor(alt.profile)}>{alt.profile}</strong>
-							(CVaR limit {formatPercent(alt.cvar_limit)}) — current portfolio would pass.
+							(risk limit {formatPercent(alt.cvar_limit)}) — current portfolio would pass.
 						</span>
 					{/each}
 				</div>
@@ -396,7 +396,7 @@
 			<div class="ca-sticky-footer">
 				<div class="ca-mvs-info">
 					<span class="ca-mvs-label">Quick Path:</span>
-					Add {mvsNames.join(" + ")} → projected CVaR: {formatPercent(advice.minimum_viable_set.projected_cvar_95)}
+					Add {mvsNames.join(" + ")} → projected tail loss: {formatPercent(advice.minimum_viable_set.projected_cvar_95)}
 					{#if advice.minimum_viable_set.projected_within_limit}
 						<span class="ca-mvs-pass">✓ within limit</span>
 					{/if}
@@ -431,7 +431,7 @@
 	confirmLabel={batchAdding ? "Adding…" : "Add All & Re-construct"}
 	metadata={[
 		{ label: "Funds", value: mvsNames.join(", "), emphasis: true },
-		{ label: "Projected CVaR", value: advice?.minimum_viable_set ? formatPercent(advice.minimum_viable_set.projected_cvar_95) : "—" },
+		{ label: "Projected Tail Loss", value: advice?.minimum_viable_set ? formatPercent(advice.minimum_viable_set.projected_cvar_95) : "—" },
 		{ label: "Within limit", value: advice?.minimum_viable_set?.projected_within_limit ? "Yes" : "No" },
 	]}
 	onConfirm={batchAddAndReconstruct}

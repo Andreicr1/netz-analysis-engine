@@ -108,7 +108,7 @@
 
 <div class="mr-root">
 	<div class="mr-header">
-		<span class="mr-label">MACRO REGIME</span>
+		<span class="mr-label">MARKET CONDITIONS</span>
 	</div>
 
 	<div class="mr-body">

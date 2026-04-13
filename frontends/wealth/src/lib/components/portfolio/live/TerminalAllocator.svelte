@@ -103,7 +103,7 @@
 		{/if}
 		
 		<button class="al-opt-btn" onclick={goToOptimizer}>
-			USE CLARABEL OPTIMIZER &rarr;
+			OPTIMIZE ALLOCATION &rarr;
 		</button>
 	</div>
 </div>
