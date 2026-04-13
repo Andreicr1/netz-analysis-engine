@@ -1,16 +1,16 @@
-"""Unit tests for the 15-check construction validation gate.
+"""Unit tests for the 16-check construction validation gate.
 
 Phase 3 Task 3.1 of `docs/superpowers/plans/2026-04-08-portfolio-enterprise-workbench.md`.
 
 Covers:
-- Happy path: a well-formed payload passes all 15 checks.
+- Happy path: a well-formed payload passes all 16 checks.
 - Per-check failure: each block-severity check fails in isolation
   and the aggregate ``ValidationResult.passed`` flips to False.
 - Aggregation semantics: a payload that fails 3 blocks and 2 warns
   reports ``passed=False`` + ``len(blocks)==3`` + ``len(warnings)==2``.
 - Fail-soft guarantee: a check that raises is caught and converted
   to a warn-level failure without stranding activation.
-- No fail-fast: ALL 15 checks run even if the first one fails.
+- No fail-fast: ALL 16 checks run even if the first one fails.
 - JSONB serialization shape is stable.
 """
 
@@ -32,7 +32,7 @@ from vertical_engines.wealth.model_portfolio.validation_gate import (
 
 
 def _base_payload() -> dict[str, Any]:
-    """A known-good construction run payload that passes all 15 checks."""
+    """A known-good construction run payload that passes all 16 checks."""
     return {
         "as_of_date": "2026-04-08",
         "weights_proposed": {
@@ -113,18 +113,18 @@ def _base_db_context() -> ValidationDbContext:
 def test_happy_path_passes_all_15_checks():
     result = validate_construction(_base_payload(), _base_db_context())
     assert result.passed is True
-    assert len(result.checks) == 15
+    assert len(result.checks) == 16
     assert result.blocks == []
     failed_ids = [c.id for c in result.checks if not c.passed]
     assert failed_ids == [], (
-        f"happy path should pass all 15 checks; failed: {failed_ids}"
+        f"happy path should pass all 16 checks; failed: {failed_ids}"
     )
 
 
 def test_all_15_checks_run_even_with_empty_payload():
-    """No fail-fast: empty payload still runs all 15 checks."""
+    """No fail-fast: empty payload still runs all 16 checks."""
     result = validate_construction({}, ValidationDbContext())
-    assert len(result.checks) == 15
+    assert len(result.checks) == 16
     ids = [c.id for c in result.checks]
     # Order must match the CHECKS registry exactly
     expected_ids = [check_id for check_id, _ in CHECKS]
@@ -338,8 +338,8 @@ def test_no_fail_fast_all_15_checks_run():
     """Even a payload that fails the first check must run all 15."""
     payload = {}  # everything missing
     result = validate_construction(payload, ValidationDbContext())
-    assert len(result.checks) == 15, (
-        "no fail-fast: all 15 checks must always run"
+    assert len(result.checks) == 16, (
+        "no fail-fast: all 16 checks must always run"
     )
 
 
@@ -353,7 +353,7 @@ def test_check_that_raises_is_caught_as_warn():
     payload = _base_payload()
     payload["weights_proposed"] = None  # likely to raise in multiple checks
     result = validate_construction(payload, _base_db_context())
-    assert len(result.checks) == 15  # all 15 still run
+    assert len(result.checks) == 16  # all 15 still run
     # None of the raised ones are block severity (they were caught
     # and converted to warn).
     for c in result.checks:
@@ -369,9 +369,9 @@ def test_to_jsonb_shape():
     j = to_jsonb(result)
     assert set(j.keys()) == {"passed", "checks", "summary"}
     assert j["passed"] is True
-    assert len(j["checks"]) == 15
-    assert j["summary"]["total"] == 15
-    assert j["summary"]["passed"] == 15
+    assert len(j["checks"]) == 16
+    assert j["summary"]["total"] == 16
+    assert j["summary"]["passed"] == 16
     assert j["summary"]["blocks_failed"] == 0
     assert j["summary"]["warnings_failed"] == 0
 

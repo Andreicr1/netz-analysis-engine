@@ -2,21 +2,31 @@ import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db.audit import write_audit_event
 from app.core.security.clerk_auth import CurrentUser, get_current_user, require_ic_member
 from app.core.tenancy.middleware import get_db_with_rls
-from app.domains.wealth.models.allocation import StrategicAllocation, TacticalPosition
+from app.domains.wealth.models.allocation import (
+    StrategicAllocation,
+    TaaRegimeState,
+    TacticalPosition,
+)
 from app.domains.wealth.routes.common import get_latest_snapshot
 from app.domains.wealth.routes.common import validate_profile as _validate_profile
 from app.domains.wealth.schemas.allocation import (
     AllocationProposal,
     EffectiveAllocationRead,
+    EffectiveAllocationWithRegimeRead,
+    EffectiveBandRead,
+    RegimeBandsRead,
     SimulationResult,
     StrategicAllocationRead,
     StrategicAllocationUpdate,
+    TaaHistoryRead,
+    TaaHistoryRow,
     TacticalPositionRead,
     TacticalPositionUpdate,
 )
@@ -370,3 +380,219 @@ async def simulate_allocation(
         warnings=warnings,
         computed_at=datetime.now(UTC),
     )
+
+
+# ── TAA routes (Sprint 3) ───────────────────────────────────────
+
+
+@router.get(
+    "/{profile}/regime-bands",
+    response_model=RegimeBandsRead,
+    summary="Current regime bands",
+    description=(
+        "Returns the current smoothed regime centers and effective "
+        "optimizer bands for a profile. Includes IPS clamps and "
+        "transition velocity for audit."
+    ),
+)
+async def get_regime_bands(
+    profile: str,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> RegimeBandsRead:
+    _validate_profile(profile)
+
+    # Fetch latest taa_regime_state row
+    stmt = (
+        select(TaaRegimeState)
+        .where(TaaRegimeState.profile == profile)
+        .order_by(TaaRegimeState.as_of_date.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    taa = result.scalar_one_or_none()
+
+    if taa is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No TAA regime state found for profile '{profile}'. "
+            "The risk_calc worker may not have run yet.",
+        )
+
+    effective_bands_raw: dict[str, dict[str, float]] = taa.effective_bands or {}
+    effective_bands = {
+        bid: EffectiveBandRead(**band_data)
+        for bid, band_data in effective_bands_raw.items()
+    }
+
+    # Determine IPS clamps by comparing with strategic allocation
+    ips_clamps: list[str] = []
+    strategic_stmt = select(StrategicAllocation).where(
+        StrategicAllocation.profile == profile,
+        StrategicAllocation.effective_from <= taa.as_of_date,
+        (StrategicAllocation.effective_to.is_(None))
+        | (StrategicAllocation.effective_to > taa.as_of_date),
+    )
+    strategic_result = await db.execute(strategic_stmt)
+    for sa in strategic_result.scalars().all():
+        band = effective_bands_raw.get(sa.block_id)
+        if band is None:
+            continue
+        if band.get("min", 0) > float(sa.min_weight) + 1e-6:
+            ips_clamps.append(f"{sa.block_id}_min_raised")
+        if band.get("max", 1) < float(sa.max_weight) - 1e-6:
+            ips_clamps.append(f"{sa.block_id}_max_lowered")
+
+    return RegimeBandsRead(
+        profile=profile,
+        as_of_date=taa.as_of_date,
+        raw_regime=taa.raw_regime,
+        stress_score=taa.stress_score,
+        smoothed_centers=taa.smoothed_centers or {},
+        effective_bands=effective_bands,
+        transition_velocity=taa.transition_velocity,
+        ips_clamps_applied=ips_clamps,
+    )
+
+
+@router.get(
+    "/{profile}/taa-history",
+    response_model=TaaHistoryRead,
+    summary="TAA regime state history",
+    description=(
+        "Returns the time series of TAA regime states for a profile. "
+        "Ordered newest-first. Supports pagination via limit/offset."
+    ),
+)
+async def get_taa_history(
+    profile: str,
+    limit: int = Query(default=30, ge=1, le=365),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> TaaHistoryRead:
+    _validate_profile(profile)
+
+    # Total count
+    count_stmt = (
+        select(func.count())
+        .select_from(TaaRegimeState)
+        .where(TaaRegimeState.profile == profile)
+    )
+    total = (await db.execute(count_stmt)).scalar() or 0
+
+    # Rows
+    stmt = (
+        select(TaaRegimeState)
+        .where(TaaRegimeState.profile == profile)
+        .order_by(TaaRegimeState.as_of_date.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    rows = [TaaHistoryRow.model_validate(row) for row in result.scalars().all()]
+
+    return TaaHistoryRead(profile=profile, rows=rows, total=total)
+
+
+@router.get(
+    "/{profile}/effective-with-regime",
+    response_model=list[EffectiveAllocationWithRegimeRead],
+    summary="Effective allocation with regime bands",
+    description=(
+        "Computed effective allocation enriched with current regime-adjusted "
+        "bands. Combines strategic + tactical + TAA regime data."
+    ),
+)
+async def get_effective_with_regime(
+    profile: str,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> list[EffectiveAllocationWithRegimeRead]:
+    _validate_profile(profile)
+    today = date.today()
+
+    # Get strategic allocations
+    strategic_stmt = select(StrategicAllocation).where(
+        StrategicAllocation.profile == profile,
+        StrategicAllocation.effective_from <= today,
+        (StrategicAllocation.effective_to.is_(None))
+        | (StrategicAllocation.effective_to > today),
+    )
+    strategic_result = await db.execute(strategic_stmt)
+    strategic_map: dict[str, StrategicAllocation] = {
+        row.block_id: row for row in strategic_result.scalars().all()
+    }
+
+    # Get tactical positions (ic_manual > regime_auto)
+    tactical_stmt = select(TacticalPosition).where(
+        TacticalPosition.profile == profile,
+        TacticalPosition.valid_from <= today,
+        (TacticalPosition.valid_to.is_(None)) | (TacticalPosition.valid_to >= today),
+    )
+    tactical_result = await db.execute(tactical_stmt)
+    tactical_map: dict[str, TacticalPosition] = {}
+    for row in tactical_result.scalars().all():
+        existing = tactical_map.get(row.block_id)
+        if existing is None:
+            tactical_map[row.block_id] = row
+        else:
+            row_source = row.source or "ic_manual"
+            existing_source = existing.source or "ic_manual"
+            if row_source == "ic_manual" and existing_source != "ic_manual":
+                tactical_map[row.block_id] = row
+            elif existing_source == "ic_manual":
+                pass
+            elif row.created_at > existing.created_at:
+                tactical_map[row.block_id] = row
+
+    # Get latest TAA regime state
+    taa_stmt = (
+        select(TaaRegimeState)
+        .where(TaaRegimeState.profile == profile)
+        .order_by(TaaRegimeState.as_of_date.desc())
+        .limit(1)
+    )
+    taa_result = await db.execute(taa_stmt)
+    taa = taa_result.scalar_one_or_none()
+    regime_bands: dict[str, dict[str, float]] = (taa.effective_bands or {}) if taa else {}
+
+    all_blocks = set(strategic_map.keys()) | set(tactical_map.keys())
+    effective: list[EffectiveAllocationWithRegimeRead] = []
+    for block_id in sorted(all_blocks):
+        s = strategic_map.get(block_id)
+        t = tactical_map.get(block_id)
+        s_weight = s.target_weight if s else Decimal(0)
+        t_weight = t.overweight if t else Decimal(0)
+        band = regime_bands.get(block_id)
+        effective.append(
+            EffectiveAllocationWithRegimeRead(
+                profile=profile,
+                block_id=block_id,
+                strategic_weight=s.target_weight if s else None,
+                tactical_overweight=t.overweight if t else None,
+                effective_weight=s_weight + t_weight,
+                min_weight=s.min_weight if s else None,
+                max_weight=s.max_weight if s else None,
+                regime_min=band.get("min") if band else None,
+                regime_max=band.get("max") if band else None,
+                regime_center=band.get("center") if band else None,
+            ),
+        )
+
+    # Audit: log TAA state access for institutional compliance
+    if taa is not None:
+        await write_audit_event(
+            db,
+            actor_id=user.actor_id,
+            action="taa_state_viewed",
+            entity_type="TaaRegimeState",
+            entity_id=str(taa.id),
+            after={
+                "profile": profile,
+                "raw_regime": taa.raw_regime,
+                "as_of_date": taa.as_of_date.isoformat(),
+            },
+        )
+
+    return effective

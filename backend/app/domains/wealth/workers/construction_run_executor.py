@@ -861,10 +861,18 @@ async def _execute_inner(
         raw_payload={},
     )
 
+    # Resolve regime from TAA provenance if available, else from calibration override
+    taa_section = calibration_snapshot.get("taa") or {}
+    resolved_regime = (
+        taa_section.get("raw_regime")
+        or calibration_snapshot.get("regime_override")
+        or "NORMAL"
+    )
+
     narrative_payload: dict[str, Any] = {
         **validation_payload,
         "binding_constraints": [],  # optimizer doesn't currently export — future work
-        "regime_context": {"regime": calibration_snapshot.get("regime_override") or "NORMAL"},
+        "regime_context": {"regime": resolved_regime},
     }
     narrative = render_narrative(narrative_payload)
 

@@ -31,6 +31,12 @@ The client_safe template applies the OD-22 regime label translation
 and the Phase 10 jargon table. CVaR → "Tail loss", Sharpe → omitted,
 regime labels translated per the locked mapping.
 
+TAA (Tactical Asset Allocation) section
+----------------------------------------
+Added in Sprint 3 (TAA). When ``calibration_snapshot.taa.enabled`` is
+true, both technical and client_safe narratives include a TAA summary
+describing the regime-adjusted allocation bands and transition state.
+
 Public surface
 --------------
 - :func:`render_narrative` — pure sync function. No I/O. Returns
@@ -146,6 +152,51 @@ _HOLDING_CHANGES_TEMPLATE: Final[str] = """
 """.strip()
 
 
+# ── TAA (Tactical Asset Allocation) narrative templates ──────────
+
+_TAA_TECHNICAL_TEMPLATE: Final[str] = """
+{%- if not taa_enabled -%}
+Tactical Asset Allocation was disabled for this construction run — static IPS bounds applied.
+{%- else -%}
+Portfolio constructed under {{ raw_regime }} market regime (composite stress score: {{ stress_score }}/100). \
+Regime-adjusted allocation bands applied via 5-day EMA smoothing.
+{%- if smoothed_centers %}
+Smoothed asset-class centers: \
+{%- for ac, val in smoothed_centers.items() %} {{ ac }}={{ (val * 100)|round(1) }}%{{ ", " if not loop.last else "." }}{% endfor %}
+{%- endif %}
+{%- if ips_clamps_applied %}
+IPS clamps triggered on {{ ips_clamps_applied|length }} bound(s): {{ ips_clamps_applied|join(', ') }}.
+{%- endif %}
+{%- if ic_overrides_active %}
+IC committee overrides active: {{ ic_overrides_active|join(', ') }}.
+{%- endif %}
+{%- if transition_velocity %}
+Transition velocity (daily delta): \
+{%- for ac, vel in transition_velocity.items() %} {{ ac }}={{ (vel * 100)|round(2) }}pp{{ ", " if not loop.last else "." }}{% endfor %}
+{%- endif %}
+All regime-adjusted bands remain within Investment Policy Statement constraints.
+{%- endif -%}
+""".strip()
+
+
+_TAA_CLIENT_SAFE_TEMPLATE: Final[str] = """
+{%- if not taa_enabled -%}
+The portfolio follows the standard allocation policy.
+{%- else -%}
+The portfolio was positioned for {{ regime_label_client_safe|lower }} market conditions. \
+Allocation bands were adjusted gradually to reflect the current outlook, \
+{%- if smoothed_centers %}
+ with target allocations of \
+{%- for ac, val in smoothed_centers.items() %} {{ ac|replace('_', ' ') }} at {{ (val * 100)|round(0)|int }}%{{ ", " if not loop.last else "." }}{% endfor %}
+{%- endif %}
+{%- if ips_clamps_applied %}
+ Some adjustments were limited to stay within the agreed policy bounds.
+{%- endif %}
+All allocations remain within the agreed investment policy.
+{%- endif -%}
+""".strip()
+
+
 # ── Sandboxed environment (module-level, reusable) ──────────────
 
 
@@ -199,24 +250,31 @@ def render_narrative(run_payload: dict[str, Any]) -> dict[str, Any]:
     A JSON-shaped dict::
 
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "technical": {
                 "headline": str,
                 "key_points": list[str],
                 "constraint_story": str,
                 "holding_changes": list[{...}],
+                "taa_summary": str | None,
             },
             "client_safe": {
                 "headline": str,
                 "key_points": list[str],
                 "constraint_story": str,
                 "holding_changes": list[{...}],
+                "taa_summary": str | None,
             },
         }
 
     The ``technical`` section uses full quant language. The
     ``client_safe`` section applies the OD-22 regime label
     translation table and the Phase 10 jargon table.
+
+    The ``taa_summary`` is present when the calibration_snapshot
+    includes a ``taa`` dict with ``enabled: true``. Technical
+    uses full regime labels + quant metrics; client_safe uses
+    OD-22 translated labels with no jargon.
     """
     import json
 
@@ -288,20 +346,43 @@ def render_narrative(run_payload: dict[str, Any]) -> dict[str, Any]:
     client_headline = _render(_CLIENT_SAFE_HEADLINE_TEMPLATE, **ctx_client_safe)
     constraint_story = _render(_CONSTRAINT_STORY_TEMPLATE, **ctx_technical)
 
+    # ── TAA narrative section (Sprint 3) ──
+    taa = calibration.get("taa") or {}
+    taa_enabled = taa.get("enabled", False)
+    taa_raw_regime = taa.get("raw_regime") or regime_raw
+    taa_regime_label = REGIME_CLIENT_SAFE_LABEL.get(
+        taa_raw_regime, taa_raw_regime.capitalize(),
+    )
+    taa_stress = taa.get("stress_score")
+    taa_ctx = {
+        "taa_enabled": taa_enabled,
+        "raw_regime": taa_raw_regime,
+        "stress_score": f"{taa_stress:.1f}" if taa_stress is not None else "N/A",
+        "smoothed_centers": taa.get("smoothed_centers") or {},
+        "effective_bands": taa.get("effective_bands") or {},
+        "ips_clamps_applied": taa.get("ips_clamps_applied") or [],
+        "ic_overrides_active": taa.get("ic_overrides_active") or [],
+        "transition_velocity": taa.get("transition_velocity") or {},
+        "regime_label_client_safe": taa_regime_label,
+    }
+
+    taa_technical = _render(_TAA_TECHNICAL_TEMPLATE, **taa_ctx) or None
+    taa_client_safe = _render(_TAA_CLIENT_SAFE_TEMPLATE, **taa_ctx) or None
+
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "technical": {
             "headline": technical_headline,
             "key_points": technical_key_points,
             "constraint_story": constraint_story,
             "holding_changes": holding_changes,
+            "taa_summary": taa_technical,
         },
         "client_safe": {
             "headline": client_headline,
             "key_points": client_key_points,
-            # Client-safe constraint story strips the quant specifics —
-            # reuses the same template since it has no jargon.
             "constraint_story": constraint_story,
             "holding_changes": holding_changes,
+            "taa_summary": taa_client_safe,
         },
     }

@@ -356,8 +356,23 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/allocation/{profile}/effective-with-regime",
+    "name": "get_effective_with_regime"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/allocation/{profile}/regime-bands",
+    "name": "get_regime_bands"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/allocation/{profile}/strategic",
     "name": "get_strategic"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/allocation/{profile}/taa-history",
+    "name": "get_taa_history"
   },
   {
     "method": "GET",

@@ -2272,29 +2272,21 @@ async def _load_universe_funds(
 ) -> list[dict[str, Any]]:
     """Load approved universe instruments with manager_score from risk metrics.
 
-    Filters to funds that are in the regime-appropriate ELITE set:
-    - RISK_ON  → elite_flag = true
-    - RISK_OFF → elite_risk_off = true
-    - INFLATION → elite_inflation = true
-    - CRISIS   → elite_crisis = true
+    The optimizer works over the FULL approved universe — not just ELITE.
+    ELITE is a screener UX badge for analyst navigation, not a construction
+    constraint. More candidates = more degrees of freedom = better portfolio.
 
-    Funds that are approved in the org universe but NOT in the current
-    regime's ELITE set are excluded from construction (they scored
-    outside the top 300 for this regime's asset-class distribution).
+    Liquid funds (registered_us, etf, ucits_eu, money_market) are approved
+    by default when imported to the org. Only private_us and bdc require
+    manual DD-gated approval via UniverseApproval.
     """
+    from sqlalchemy import func as sa_func
+
     from app.domains.wealth.models.instrument import Instrument
     from app.domains.wealth.models.instrument_org import InstrumentOrg
     from app.domains.wealth.models.risk import FundRiskMetrics
-    from app.domains.wealth.models.universe_approval import UniverseApproval
-    from app.domains.wealth.workers.risk_calc import REGIME_ELITE_COLUMN
 
-    # Resolve the ELITE column for this regime
-    elite_col_name = REGIME_ELITE_COLUMN.get(regime, "elite_flag")
-    elite_col = getattr(FundRiskMetrics, elite_col_name, FundRiskMetrics.elite_flag)
-
-    # Approved universe assets — block_id comes from InstrumentOrg (org-scoped)
-    # Subquery: latest risk metrics row per instrument (for ELITE filter)
-    from sqlalchemy import func as sa_func
+    # Subquery: latest risk metrics row per instrument (for manager_score)
     latest_risk = (
         select(
             FundRiskMetrics.instrument_id,
@@ -2313,12 +2305,6 @@ async def _load_universe_funds(
         )
         .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
         .join(
-            UniverseApproval,
-            (UniverseApproval.instrument_id == Instrument.instrument_id)
-            & (UniverseApproval.is_current == True)
-            & (UniverseApproval.decision == "approved"),
-        )
-        .join(
             FundRiskMetrics,
             (FundRiskMetrics.instrument_id == Instrument.instrument_id)
             & (FundRiskMetrics.organization_id.is_(None)),
@@ -2331,7 +2317,11 @@ async def _load_universe_funds(
         .where(
             Instrument.is_active == True,
             InstrumentOrg.block_id.isnot(None),
-            elite_col == True,
+            # All funds imported to the org (instruments_org with block_id)
+            # are eligible for construction. Liquid funds (MF/ETF/MMF/UCITS)
+            # are approved by default at import time. Private/BDC funds
+            # require DD-gated approval before instruments_org import.
+            # The gate is at IMPORT time, not at construction time.
         )
     )
     funds_result = await db.execute(stmt)
