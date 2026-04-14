@@ -1,130 +1,132 @@
 <script lang="ts">
     import { formatNumber } from "@investintell/ui";
-    interface ScoreComponent {
-        name: string;
-        weight: number;
-        score: number;
-    }
 
-    interface ScoreData {
-        totalScore: number;
-        penaltyApplied: boolean;
-        missingData: string[];
-        components: ScoreComponent[];
+    const COMPONENT_LABELS: Record<string, string> = {
+        return_consistency: "Return Consistency",
+        risk_adjusted_return: "Risk-Adjusted Return",
+        drawdown_control: "Drawdown Control",
+        information_ratio: "Information Ratio",
+        flows_momentum: "Flows Momentum",
+        fee_efficiency: "Fee Efficiency",
+    };
+
+    function humanLabel(key: string): string {
+        return COMPONENT_LABELS[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
     }
 
     interface Props {
-        scoreData: ScoreData;
+        scoreComponents: Record<string, number> | null;
+        managerScore: number | null;
     }
 
-    let { scoreData }: Props = $props();
+    let { scoreComponents, managerScore }: Props = $props();
+
+    const entries = $derived(
+        scoreComponents
+            ? Object.entries(scoreComponents).map(([key, value]) => ({
+                label: humanLabel(key),
+                value,
+            }))
+            : []
+    );
 </script>
 
 <div class="popover-root">
     <div class="popover-header">QUANTITATIVE ENGINE</div>
-    
-    <table class="popover-table">
-        <thead>
-            <tr>
-                <th class="text-left">COMPONENT</th>
-                <th class="text-right">WEIGHT</th>
-                <th class="text-right">SCORE</th>
-            </tr>
-        </thead>
-        <tbody>
-            {#each scoreData.components as comp}
-                <tr>
-                    <td class="text-left comp-name">{comp.name}</td>
-                    <td class="text-right comp-weight">{formatNumber(comp.weight * 100, 0)}%</td>
-                    <td class="text-right comp-score">{formatNumber(comp.score, 1)}</td>
-                </tr>
-            {/each}
-        </tbody>
-    </table>
 
-    {#if scoreData.penaltyApplied && scoreData.missingData.length > 0}
-        <div class="popover-footer penalty">
-            * PENALTY APPLIED: MISSING {scoreData.missingData.join(', ').toUpperCase()} (PEER MEDIAN - 5PTS).
-        </div>
+    {#if entries.length > 0}
+        <table class="popover-table">
+            <thead>
+                <tr>
+                    <th class="text-left">COMPONENT</th>
+                    <th class="text-right">SCORE</th>
+                </tr>
+            </thead>
+            <tbody>
+                {#each entries as comp}
+                    <tr>
+                        <td class="text-left comp-name">{comp.label}</td>
+                        <td class="text-right comp-score">{formatNumber(comp.value, 1)}</td>
+                    </tr>
+                {/each}
+            </tbody>
+        </table>
+
+        {#if managerScore != null}
+            <div class="popover-footer">
+                COMPOSITE: {formatNumber(managerScore, 0)}/100
+            </div>
+        {/if}
+    {:else}
+        <div class="popover-empty">No score components available</div>
     {/if}
 </div>
 
 <style>
     .popover-root {
-        background: #0e1320;
-        border: 1px solid #1e293b;
+        background: var(--terminal-bg-panel-raised);
+        border: var(--terminal-border-hairline);
         width: 280px;
         display: flex;
         flex-direction: column;
-        font-family: "Urbanist", system-ui, sans-serif;
+        font-family: var(--terminal-font-mono);
     }
 
     .popover-header {
-        font-size: 10px;
+        font-size: var(--terminal-text-10);
         font-weight: 700;
         letter-spacing: 0.05em;
-        color: #94a3b8;
+        color: var(--terminal-fg-secondary);
         padding: 8px 12px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-        background: #0b0f1a;
+        border-bottom: var(--terminal-border-hairline);
+        background: var(--terminal-bg-panel);
     }
 
     .popover-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 11px;
+        font-size: var(--terminal-text-11);
     }
 
     .popover-table th {
         font-size: 9px;
-        color: #64748b;
+        color: var(--terminal-fg-tertiary);
         font-weight: 600;
         padding: 6px 12px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-        background: rgba(255, 255, 255, 0.01);
+        border-bottom: var(--terminal-border-hairline);
+        background: var(--terminal-bg-panel);
     }
 
     .popover-table td {
         padding: 6px 12px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+        border-bottom: 1px solid var(--terminal-fg-disabled);
     }
 
     .text-left { text-align: left; }
     .text-right { text-align: right; }
 
     .comp-name {
-        color: #cbd5e1;
-    }
-
-    .comp-weight {
-        color: #64748b;
-        font-variant-numeric: tabular-nums;
-        font-family: monospace;
+        color: var(--terminal-fg-secondary);
     }
 
     .comp-score {
-        color: #ffffff;
+        color: var(--terminal-fg-primary);
         font-weight: 600;
         font-variant-numeric: tabular-nums;
-        font-family: monospace;
     }
 
     .popover-footer {
         padding: 10px 12px;
-        font-size: 10px;
+        font-size: var(--terminal-text-10);
         font-weight: 700;
-        font-family: monospace;
+        color: var(--terminal-accent-cyan);
+        border-top: var(--terminal-border-hairline);
     }
 
-    .penalty {
-        color: #ef4444;
-        background: rgba(239, 68, 68, 0.05);
-        border-top: 1px solid rgba(239, 68, 68, 0.1);
-        animation: subtlePulse 2s infinite alternate;
-    }
-
-    @keyframes subtlePulse {
-        0% { opacity: 0.8; }
-        100% { opacity: 1; }
+    .popover-empty {
+        padding: 16px 12px;
+        font-size: var(--terminal-text-11);
+        color: var(--terminal-fg-muted);
+        text-align: center;
     }
 </style>

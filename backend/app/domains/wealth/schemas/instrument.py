@@ -71,6 +71,26 @@ class InstrumentRiskMetricsRead(BaseModel):
     max_drawdown_1y: float | None = None
     cvar_95_1m: float | None = None
 
+    # Return metrics
+    return_1y: float | None = None
+    return_3y_ann: float | None = None
+
+    # Risk metrics (additional)
+    sortino_1y: float | None = None
+    max_drawdown_3y: float | None = None
+
+    # Relative metrics
+    alpha_1y: float | None = None
+    beta_1y: float | None = None
+    information_ratio_1y: float | None = None
+    tracking_error_1y: float | None = None
+
+    # Momentum
+    blended_momentum_score: float | None = None
+
+    # GARCH
+    volatility_garch: float | None = None
+
 
 class InstrumentImportYahoo(BaseModel):
     """Request to import instruments via Yahoo Finance ticker(s)."""
