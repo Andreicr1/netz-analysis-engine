@@ -69,6 +69,7 @@ STRATEGY_LABELS: frozenset[str] = frozenset(
         # Private / Alts
         "Private Credit", "Private Equity", "Venture Capital",
         "Real Estate", "Infrastructure", "Commodities", "Precious Metals",
+        "Structured Credit",
         # Hedge
         "Long/Short Equity", "Global Macro", "Multi-Strategy",
         "Event-Driven", "Volatility Arbitrage", "Convertible Arbitrage",
@@ -188,6 +189,17 @@ def _classify_from_description(
         if re.search(pattern, text):
             return ("Commodities", f"desc:commodities:{pattern[:40]}")
 
+    # ── Structured Credit / CLO (specific — runs BEFORE Private Credit) ─
+    if re.search(
+        r"\bcollateralized\s+loan\s+obligation|"
+        r"\bclos?\b|"
+        r"\bcdos?\b|"
+        r"securitized\s+credit|"
+        r"structured\s+credit",
+        text,
+    ):
+        return ("Structured Credit", "desc:clo")
+
     # ── Private Credit / Direct Lending ─────────────────────────────
     private_credit_patterns = (
         r"\bdirect\s+lending",
@@ -202,9 +214,18 @@ def _classify_from_description(
     # ── Fixed Income (specificity descending) ───────────────────────
     if re.search(r"\bhigh[- ]yield\s+bonds?|\bjunk\s+bonds?|\bnon[- ]investment\s+grade", text):
         return ("High Yield Bond", "desc:high_yield")
-    if re.search(r"\bmunicipal\s+bonds?|\bmuni\s+(?:bonds?|debt)|\btax[- ]exempt", text):
+    if re.search(
+        r"\bmunicipal\s+bonds?|\bmuni\s+(?:bonds?|debt)|"
+        r"\btax[- ](?:exempt|free)",
+        text,
+    ):
         return ("Municipal Bond", "desc:municipal")
-    if re.search(r"\btreasury\s+(?:bonds?|notes?|securities)|\bgovernment\s+bonds?", text):
+    if re.search(
+        r"\btreasury\s+(?:bonds?|notes?|securities)|"
+        r"\bgovernment\s+(?:bonds?|securities|obligations|debt)|"
+        r"\bus\s+government\b|\bu\.s\.\s+government\b",
+        text,
+    ):
         return ("Government Bond", "desc:government_bond")
     if re.search(r"\binvestment[- ]grade\s+(?:bonds?|credit|debt)|\bcorporate\s+bonds?", text):
         return ("Investment Grade Bond", "desc:ig_bond")
@@ -303,6 +324,11 @@ def _classify_from_name(
             if sub is not None:
                 return (sub[0], f"name:short:{sub[1]}")
 
+    # Structured Credit / CLO — check by name regardless of fund_type.
+    # Runs before Real Estate / FI so "CLO" funds don't leak into bond buckets.
+    if re.search(r"\bclos?\b|\bcollateralized\s+loan", name):
+        return ("Structured Credit", "name:clo")
+
     # Bug fix #2: Real Estate BEFORE Fixed Income / Income / Municipal.
     if re.search(r"\breal\s+estate\b|\breit\b|\bhousing\b|\bresidential\b", name):
         return ("Real Estate", "name:real_estate")
@@ -331,9 +357,13 @@ def _classify_from_name(
     # Fixed Income (after Real Estate).
     if re.search(r"\bhigh[- ]yield\b|\bjunk\b", name):
         return ("High Yield Bond", "name:high_yield")
-    if re.search(r"\bmunicipal\b|\bmuni\b|\btax[- ]exempt", name):
+    if re.search(r"\bmunicipal\b|\bmuni\b|\btax[- ](?:exempt|free)", name):
         return ("Municipal Bond", "name:municipal")
-    if re.search(r"\btreasury\b|\bgovernment\s+bond", name):
+    if re.search(
+        r"\btreasury\b|"
+        r"\bgovernment\s+(?:bond|fund|securities|obligations|portfolio)",
+        name,
+    ):
         return ("Government Bond", "name:government")
     if re.search(r"\binvestment[- ]grade\b|\bcorporate\s+bond", name):
         return ("Investment Grade Bond", "name:ig_bond")
@@ -344,6 +374,32 @@ def _classify_from_name(
     # "equity" to be absent.
     if re.search(r"\bbond\b|\bincome\b|\bfixed[- ]income\b", name) and "equity" not in name:
         return ("Intermediate-Term Bond", "name:general_bond")
+
+    # Private fund defaults from fund_type alone. Must run BEFORE the public
+    # equity heuristics (international / size / style) so that names like
+    # "Apollo Global Private Equity Secondaries Fund" are not hijacked by the
+    # `\bglobal\b` → International Equity rule. For ADV-reported private
+    # funds, fund_type is the authoritative signal.
+    if fund_type:
+        ft = fund_type.lower()
+        if "private equity" in ft:
+            if re.search(r"\bsecondar(?:y|ies)\b", name):
+                return ("Private Equity", "name:pe_secondaries")
+            if re.search(r"\bco[- ]invest", name):
+                return ("Private Equity", "name:pe_coinvest")
+            if re.search(r"\bgrowth\s+equit", name):
+                return ("Private Equity", "name:pe_growth")
+            if re.search(r"\binfrastructure", name):
+                return ("Infrastructure", "name:pe_infra")
+            return ("Private Equity", "fund_type:pe")
+        if "venture" in ft:
+            return ("Venture Capital", "fund_type:vc")
+        if "real estate" in ft:
+            return ("Real Estate", "fund_type:re")
+        if "securitized" in ft:
+            if re.search(r"\bclos?\b|\bcollateralized\s+loan", name):
+                return ("Structured Credit", "name:clo")
+            return ("Private Credit", "fund_type:securitized")
 
     # Equity size × style.
     if re.search(r"\bemerging\s+markets?", name):
@@ -376,6 +432,13 @@ def _classify_from_name(
             return ("Small Value", "name:small_value")
         return ("Small Blend", "name:small_blend")
 
+    # Style without size → default to Large (most common for retail funds).
+    # Catches "Vanguard Selected Value", "Dodge & Cox Growth", etc.
+    if is_growth:
+        return ("Large Growth", "name:style_only_growth")
+    if is_value:
+        return ("Large Value", "name:style_only_value")
+
     # Hedge strategies — gated on fund_type.
     if fund_type and "hedge" in fund_type.lower():
         if re.search(r"\blong[/-]short", name):
@@ -391,17 +454,5 @@ def _classify_from_name(
         if re.search(r"\bquant\b|\bsystematic", name):
             return ("Quant/Systematic", "name:quant")
         return ("Multi-Strategy", "name:hedge_generic")
-
-    # Private fund defaults from fund_type alone.
-    if fund_type:
-        ft = fund_type.lower()
-        if "private equity" in ft:
-            return ("Private Equity", "fund_type:pe")
-        if "venture" in ft:
-            return ("Venture Capital", "fund_type:vc")
-        if "real estate" in ft:
-            return ("Real Estate", "fund_type:re")
-        if "securitized" in ft:
-            return ("Private Credit", "fund_type:securitized")
 
     return None
