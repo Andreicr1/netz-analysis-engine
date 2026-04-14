@@ -92,6 +92,75 @@ class TestSeverityRequirements:
         assert frozenset({"lost_class"}) == apply_mod.SEVERITIES_REQUIRING_JUSTIFICATION  # noqa: SIM300
 
 
+class TestLegacyToCanonical:
+    """The ``--legacy-to-canonical-only`` filter must isolate vocabulary
+    migrations from real cross-family changes.
+    """
+
+    def test_unknown_to_canonical_is_legacy(self) -> None:
+        # "Hedge Fund" (legacy 37-cat) → "Multi-Strategy" (canonical)
+        assert apply_mod._is_legacy_to_canonical(
+            "Hedge Fund", "Multi-Strategy",
+        ) is True
+
+    def test_unknown_to_unknown_is_not_legacy(self) -> None:
+        # Both off-taxonomy → not a legacy → canonical migration
+        assert apply_mod._is_legacy_to_canonical(
+            "Hedge Fund", "Some Other Legacy",
+        ) is False
+
+    def test_canonical_to_canonical_is_not_legacy(self) -> None:
+        # True cross-family change — must NOT be misclassified as legacy
+        assert apply_mod._is_legacy_to_canonical(
+            "Large Blend", "High Yield Bond",
+        ) is False
+
+    def test_null_current_is_not_legacy(self) -> None:
+        # NULL current is P0 safe_auto_apply, not a legacy migration
+        assert apply_mod._is_legacy_to_canonical(
+            None, "Large Blend",
+        ) is False
+
+    def test_canonical_to_null_is_not_legacy(self) -> None:
+        # Canonical → NULL is P3 lost_class, not legacy
+        assert apply_mod._is_legacy_to_canonical(
+            "Large Blend", None,
+        ) is False
+
+
+class TestParserNewFlags:
+    def test_legacy_only_flag(self, parser) -> None:
+        args = parser.parse_args(
+            [
+                "--run-id", str(uuid4()),
+                "--severity", "asset_class",
+                "--legacy-to-canonical-only",
+            ],
+        )
+        assert args.legacy_to_canonical_only is True
+
+    def test_source_filter_choices_enforced(self, parser) -> None:
+        # Bogus source value must fail at parse time
+        with pytest.raises(SystemExit):
+            parser.parse_args(
+                [
+                    "--run-id", str(uuid4()),
+                    "--severity", "lost",
+                    "--source-filter", "invented_source",
+                ],
+            )
+
+    def test_source_filter_fallback_accepted(self, parser) -> None:
+        args = parser.parse_args(
+            [
+                "--run-id", str(uuid4()),
+                "--severity", "lost",
+                "--source-filter", "fallback",
+            ],
+        )
+        assert args.source_filter == "fallback"
+
+
 class TestUpdateStmtCoverage:
     """Each source_table the worker writes must have an UPDATE statement."""
 
