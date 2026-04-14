@@ -10,6 +10,7 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
+	import { page } from "$app/state";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 	import type { PageData } from "./$types";
@@ -78,6 +79,9 @@
 	/** All tabs must be visited before activation unlocks (Session 3). */
 	const allTabsVisited = $derived(visitedTabs.size === TABS.length);
 
+	// Allocation profile from URL (linked from Allocation Editor)
+	const allocProfile = $derived(page.url.searchParams.get("alloc"));
+
 	// Cascade timeline phases from workspace
 	const cascadePhases = $derived(workspace.optimizerPhases);
 	const showCascade = $derived(workspace.runPhase !== "idle");
@@ -91,9 +95,14 @@
 	<!-- LEFT COLUMN (40%) — Command Panel -->
 	<div class="builder-left">
 		<!-- Breadcrumb back to screener -->
-		<a href={HREF_SCREENER} class="builder-backlink" data-sveltekit-preload-data="hover">
-			&larr; SCREENER
-		</a>
+		<div class="builder-header-row">
+			<a href={HREF_SCREENER} class="builder-backlink" data-sveltekit-preload-data="hover">
+				&larr; SCREENER
+			</a>
+			{#if allocProfile}
+				<span class="builder-alloc-badge">ALLOC: {allocProfile.toUpperCase()}</span>
+			{/if}
+		</div>
 
 		<!-- Portfolio selector -->
 		<div class="builder-portfolio-select">
@@ -200,6 +209,27 @@
 		border-right: var(--terminal-border-hairline);
 	}
 
+	.builder-header-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		border-bottom: var(--terminal-border-hairline);
+	}
+
+	.builder-alloc-badge {
+		display: inline-flex;
+		align-items: center;
+		padding: 2px var(--terminal-space-2);
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-10);
+		font-weight: 600;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		color: var(--terminal-accent-cyan);
+		border: 1px solid var(--terminal-accent-cyan);
+		margin-right: var(--terminal-space-2);
+	}
+
 	.builder-backlink {
 		display: inline-flex;
 		align-items: center;
@@ -212,7 +242,6 @@
 		text-transform: uppercase;
 		text-decoration: none;
 		color: var(--terminal-fg-tertiary);
-		border-bottom: var(--terminal-border-hairline);
 		transition: color var(--terminal-motion-tick) var(--terminal-motion-easing-out);
 	}
 

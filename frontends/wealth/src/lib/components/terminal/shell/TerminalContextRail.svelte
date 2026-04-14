@@ -27,6 +27,7 @@
 	import type { Snippet } from "svelte";
 	import { fly } from "svelte/transition";
 	import { svelteTransitionFor } from "@investintell/ui";
+	import { pinnedRegime, type PinnedRegime } from "$lib/state/pinned-regime.svelte";
 
 	export type TerminalContextRailEntityKind =
 		| "fund"
@@ -61,6 +62,19 @@
 
 	let { entity, content, collapsed }: TerminalContextRailProps = $props();
 
+	const pinned = $derived(pinnedRegime.current);
+
+	const regimeColorClass = $derived.by(() => {
+		if (!pinned) return "";
+		switch (pinned.label) {
+			case "Normal": return "tcr-regime--ok";
+			case "Risk On": return "tcr-regime--cyan";
+			case "Risk Off": return "tcr-regime--amber";
+			case "Crisis": return "tcr-regime--error";
+			default: return "";
+		}
+	});
+
 	function kindLabel(kind: TerminalContextRailEntityKind): string {
 		switch (kind) {
 			case "fund":
@@ -93,6 +107,22 @@
 				<span class="tcr-entity-id" title={entity.id}>{entity.id}</span>
 			</header>
 			<div class="tcr-body">
+				{#if pinned}
+					<div class="tcr-regime-section">
+						<div class="tcr-regime-row">
+							<span class="tcr-regime-label">REGIME</span>
+							<span class="tcr-regime-value {regimeColorClass}">{pinned.label}</span>
+						</div>
+						<div class="tcr-regime-row">
+							<span class="tcr-regime-label">REGION</span>
+							<span class="tcr-regime-detail">{pinned.region}</span>
+						</div>
+						<div class="tcr-regime-row">
+							<span class="tcr-regime-label">SCORE</span>
+							<span class="tcr-regime-detail">{pinned.score}/100</span>
+						</div>
+					</div>
+				{/if}
 				{#if content}
 					{@render content(entity)}
 				{:else}
@@ -234,5 +264,58 @@
 		color: var(--terminal-fg-tertiary);
 		background: var(--terminal-bg-panel-raised);
 		padding: 0 3px;
+	}
+
+	/* ── Pinned regime section ────────────────────────── */
+
+	.tcr-regime-section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--terminal-space-2);
+		padding: var(--terminal-space-3);
+		margin-bottom: var(--terminal-space-3);
+		border: var(--terminal-border-hairline);
+		background: var(--terminal-bg-void);
+	}
+
+	.tcr-regime-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: var(--terminal-space-2);
+		font-size: var(--terminal-text-10);
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+	}
+
+	.tcr-regime-label {
+		color: var(--terminal-fg-tertiary);
+	}
+
+	.tcr-regime-value {
+		font-weight: 700;
+		color: var(--terminal-fg-primary);
+	}
+
+	.tcr-regime-detail {
+		color: var(--terminal-fg-secondary);
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.tcr-regime--ok {
+		color: var(--terminal-status-ok);
+	}
+
+	.tcr-regime--cyan {
+		color: var(--terminal-accent-cyan);
+	}
+
+	.tcr-regime--amber {
+		color: var(--terminal-accent-amber);
+	}
+
+	.tcr-regime--error {
+		color: var(--terminal-status-error);
 	}
 </style>

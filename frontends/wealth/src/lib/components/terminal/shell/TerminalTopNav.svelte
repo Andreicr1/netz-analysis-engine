@@ -23,6 +23,8 @@
 <script lang="ts">
 	import { resolve } from "$app/paths";
 	import { goto } from "$app/navigation";
+	import { getContext, onDestroy } from "svelte";
+	import { createClientApiClient } from "$lib/api/client";
 
 	// Resolved hrefs for active routes. The lint rule
 	// `svelte/no-navigation-without-resolve` rejects any href that is
@@ -89,6 +91,60 @@
 		userInitials,
 		orgName,
 	}: TerminalTopNavProps = $props();
+
+	// ─── Live regime from /allocation/regime ───────────────────
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const regimeApi = createClientApiClient(getToken);
+
+	interface GlobalRegimeRead {
+		regime: string;
+		confidence: number;
+		as_of_date: string | null;
+	}
+
+	let regimeLabel = $state("STANDBY");
+	let regimeLoaded = $state(false);
+
+	const REGIME_DISPLAY: Record<string, string> = {
+		REGIME_NORMAL: "Normal",
+		normal: "Normal",
+		REGIME_RISK_ON: "Risk On",
+		risk_on: "Risk On",
+		REGIME_RISK_OFF: "Risk Off",
+		risk_off: "Risk Off",
+		REGIME_CRISIS: "Crisis",
+		crisis: "Crisis",
+	};
+
+	function sanitizeRegime(raw: string): string {
+		return REGIME_DISPLAY[raw] ?? raw;
+	}
+
+	const regimeColorClass = $derived.by(() => {
+		switch (regimeLabel) {
+			case "Normal": return "tn-regime-value--ok";
+			case "Risk On": return "tn-regime-value--cyan";
+			case "Risk Off": return "tn-regime-value--amber";
+			case "Crisis": return "tn-regime-value--error";
+			default: return "";
+		}
+	});
+
+	async function fetchRegime() {
+		try {
+			const res = await regimeApi.get<GlobalRegimeRead>("/allocation/regime");
+			regimeLabel = sanitizeRegime(res.regime);
+			regimeLoaded = true;
+		} catch {
+			// Keep current label on failure
+		}
+	}
+
+	$effect(() => {
+		fetchRegime();
+		const timer = setInterval(fetchRegime, 5 * 60 * 1000);
+		return () => clearInterval(timer);
+	});
 
 	const PRIMARY_TABS: ReadonlyArray<PrimaryTab> = [
 		{ id: "macro",    label: "MACRO",    href: HREF_MACRO,           status: "active" },
@@ -281,8 +337,8 @@
 		</button>
 
 		<span class="tn-regime" aria-live="polite">
-			<span class="tn-regime-label">MARKET</span>
-			<span class="tn-regime-value">STANDBY</span>
+			<span class="tn-regime-label">REGIME</span>
+			<span class="tn-regime-value {regimeColorClass}">{regimeLabel}</span>
 		</span>
 
 		<button
@@ -490,6 +546,22 @@
 
 	.tn-regime-value {
 		font-weight: 600;
+	}
+
+	.tn-regime-value--ok {
+		color: var(--terminal-status-ok);
+	}
+
+	.tn-regime-value--cyan {
+		color: var(--terminal-accent-cyan);
+	}
+
+	.tn-regime-value--amber {
+		color: var(--terminal-accent-amber);
+	}
+
+	.tn-regime-value--error {
+		color: var(--terminal-status-error);
 	}
 
 	.tn-tenant {
