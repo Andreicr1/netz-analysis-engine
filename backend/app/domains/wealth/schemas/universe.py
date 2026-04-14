@@ -66,6 +66,8 @@ class UniverseAssetRead(BaseModel):
     aum_usd: Decimal | None = None
     expense_ratio: Decimal | None = None
     return_3y_ann: Decimal | None = None
+    return_5y_ann: Decimal | None = None
+    return_10y_ann: Decimal | None = None
     sharpe_1y: Decimal | None = None
     max_drawdown_1y: Decimal | None = None
     blended_momentum_score: Decimal | None = None

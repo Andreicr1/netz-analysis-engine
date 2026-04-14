@@ -51,6 +51,8 @@ class FundRiskMetrics(Base):
     return_6m: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
     return_1y: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
     return_3y_ann: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    return_5y_ann: Mapped[Decimal | None] = mapped_column(Numeric(12, 8), nullable=True)
+    return_10y_ann: Mapped[Decimal | None] = mapped_column(Numeric(12, 8), nullable=True)
 
     # Risk metrics
     volatility_1y: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
