@@ -205,22 +205,26 @@ async def _emit_audit(
     """
     from app.core.db.audit import write_audit_event
 
+    # Use a SAVEPOINT so a failed audit insert (e.g. NOT NULL on
+    # organization_id when running outside RLS context) doesn't poison
+    # the outer transaction and roll back the production UPDATEs.
     try:
-        await write_audit_event(
-            db,
-            actor_id=actor,
-            action="apply_batch",
-            entity_type="strategy_reclassification",
-            entity_id=str(batch_id),
-            after={
-                "run_id": str(run_id),
-                "batch_id": str(batch_id),
-                "severities": severities,
-                "counts": counts,
-                "justification": justification,
-                "applied_at": datetime.now(timezone.utc).isoformat(),
-            },
-        )
+        async with db.begin_nested():
+            await write_audit_event(
+                db,
+                actor_id=actor,
+                action="apply_batch",
+                entity_type="strategy_reclassification",
+                entity_id=str(batch_id),
+                after={
+                    "run_id": str(run_id),
+                    "batch_id": str(batch_id),
+                    "severities": severities,
+                    "counts": counts,
+                    "justification": justification,
+                    "applied_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
     except Exception as exc:
         logger.warning(
             "audit_event_skipped batch_id=%s reason=%s",
