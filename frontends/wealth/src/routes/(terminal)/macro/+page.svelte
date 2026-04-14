@@ -1,17 +1,20 @@
 <!--
-  /macro — Macro Desk (Phase 7, Session A).
+  /macro — Macro Desk (Terminal Command Center).
 
-  12-column grid dashboard: 4 regional regime tiles (top),
-  sparkline wall (bottom-left 9 cols), committee review feed
-  (bottom-right 3 cols). Terminal-native primitives only.
+  Layout: StressHero (full-width) → SignalBreakdown (2-col) →
+  Bottom grid: Regional Health (5fr) | Indicators (4fr) | Committee (3fr).
+  Terminal-native primitives only.
 -->
 <script lang="ts">
+  import { goto } from "$app/navigation";
   import { getContext } from "svelte";
   import { createClientApiClient } from "$lib/api/client";
   import { pinnedRegime } from "$lib/state/pinned-regime.svelte";
   import Panel from "$lib/components/terminal/layout/Panel.svelte";
   import PanelHeader from "$lib/components/terminal/layout/PanelHeader.svelte";
-  import RegimeTile from "$lib/components/terminal/macro/RegimeTile.svelte";
+  import StressHero from "$lib/components/terminal/macro/StressHero.svelte";
+  import SignalBreakdown from "$lib/components/terminal/macro/SignalBreakdown.svelte";
+  import RegionalHealthTile from "$lib/components/terminal/macro/RegionalHealthTile.svelte";
   import SparklineWall from "$lib/components/terminal/macro/SparklineWall.svelte";
   import CommitteeReviewFeed from "$lib/components/terminal/macro/CommitteeReviewFeed.svelte";
 
@@ -42,11 +45,24 @@
     };
   }
 
+  interface RegimeSignalRead {
+    key: string;
+    label: string;
+    raw_value: number | null;
+    unit: string;
+    stress_score: number;
+    weight_base: number;
+    weight_effective: number;
+    category: "financial" | "real_economy";
+    fred_series: string | null;
+  }
+
   interface GlobalRegimeRead {
     as_of_date: string;
     raw_regime: string;
     stress_score: number | null;
     signal_details: Record<string, string>;
+    signal_breakdown: RegimeSignalRead[];
   }
 
   interface FredTimePoint {
@@ -119,30 +135,35 @@
 
   // -- Data fetching ---------------------------------------------------
 
-  async function fetchMacroData() {
+  async function fetchAllData(signal: AbortSignal) {
     try {
       const [scoresRes, regimeRes, reviewsRes] = await Promise.all([
-        api.get<MacroScoresResponse>("/macro/scores"),
-        api.get<GlobalRegimeRead>("/macro/regime"),
-        api.get<MacroReviewRead[]>("/macro/reviews?limit=10"),
+        api.get<MacroScoresResponse>("/macro/scores", undefined, { signal }),
+        api.get<GlobalRegimeRead>("/macro/regime", undefined, { signal }),
+        api.get<MacroReviewRead[]>("/macro/reviews?limit=10", undefined, { signal }),
       ]);
       scores = scoresRes;
       regime = regimeRes;
       reviews = reviewsRes;
       fetchError = false;
-    } catch {
+    } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       fetchError = true;
     } finally {
       loading = false;
     }
   }
 
-  async function fetchSparklines() {
+  async function fetchSparklines(signal: AbortSignal) {
     const results: typeof sparklineData = [];
 
     const fetches = SPARKLINE_SERIES.map(async (cfg) => {
       try {
-        const res = await api.get<FredDataResponse>(`/macro/fred?series_id=${cfg.seriesId}`);
+        const res = await api.get<FredDataResponse>(
+          `/macro/fred?series_id=${cfg.seriesId}`,
+          undefined,
+          { signal },
+        );
         if (res.data.length > 0) {
           const history = res.data.map((pt) => ({ date: pt.obs_date, value: pt.value }));
           const last = history[history.length - 1]!;
@@ -156,14 +177,18 @@
             unit: cfg.unit,
           });
         }
-      } catch {
+      } catch (e: unknown) {
+        if (e instanceof DOMException && e.name === "AbortError") throw e;
         // Skip unavailable series silently
       }
     });
 
-    await Promise.all(fetches);
+    try {
+      await Promise.all(fetches);
+    } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+    }
 
-    // Preserve config ordering
     const order = new Map(SPARKLINE_SERIES.map((s, i) => [s.name, i]));
     results.sort((a, b) => (order.get(a.name) ?? 99) - (order.get(b.name) ?? 99));
     sparklineData = results;
@@ -171,27 +196,44 @@
 
   // -- Derived views ---------------------------------------------------
 
+  const financialSignals = $derived(
+    (regime?.signal_breakdown ?? [])
+      .filter((s) => s.category === "financial")
+      .sort((a, b) => b.weight_effective - a.weight_effective),
+  );
+
+  const realEconSignals = $derived(
+    (regime?.signal_breakdown ?? [])
+      .filter((s) => s.category === "real_economy")
+      .sort((a, b) => b.weight_effective - a.weight_effective),
+  );
+
+  const financialEffWeight = $derived(
+    financialSignals.reduce((sum, s) => sum + s.weight_effective, 0),
+  );
+
+  const realEconEffWeight = $derived(
+    realEconSignals.reduce((sum, s) => sum + s.weight_effective, 0),
+  );
+
   interface TileData {
     region: string;
     compositeScore: number;
-    regime: string;
     dimensions: Array<{ name: string; score: number }>;
   }
 
   const tiles = $derived.by<TileData[]>(() => {
-    if (!scores || !regime) return [];
+    if (!scores) return [];
     return REGION_ORDER.map((key) => {
       const reg = scores!.regions[key];
       if (!reg) return null;
-      const dims = Object.entries(reg.dimensions).map(([name, d]) => ({
-        name,
-        score: d.score,
-      }));
       return {
         region: REGION_LABELS[key] ?? key,
         compositeScore: reg.composite_score,
-        regime: regime!.raw_regime ?? "Unknown",
-        dimensions: dims,
+        dimensions: Object.entries(reg.dimensions).map(([name, d]) => ({
+          name,
+          score: d.score,
+        })),
       };
     }).filter((t): t is TileData => t !== null);
   });
@@ -212,42 +254,14 @@
     }),
   );
 
-  // -- Regime display helpers ------------------------------------------
-
-  const REGIME_DISPLAY: Record<string, string> = {
-    REGIME_NORMAL: "Normal",
-    normal: "Normal",
-    REGIME_RISK_ON: "Risk On",
-    risk_on: "Risk On",
-    REGIME_RISK_OFF: "Risk Off",
-    risk_off: "Risk Off",
-    REGIME_CRISIS: "Crisis",
-    crisis: "Crisis",
-  };
-
-  function sanitizeRegime(raw: string): string {
-    return REGIME_DISPLAY[raw] ?? raw;
-  }
-
-  const globalRegimeLabel = $derived(
-    regime ? sanitizeRegime(regime.raw_regime) : "Unknown",
-  );
-
   const isPinned = $derived(pinnedRegime.current !== null);
 
   function handlePinRegime() {
-    if (!regime || !scores) return;
-
-    // Compute global composite from regional averages
-    const regionKeys = Object.keys(scores.regions);
-    const avgScore = regionKeys.length > 0
-      ? regionKeys.reduce((sum, k) => sum + (scores!.regions[k]?.composite_score ?? 0), 0) / regionKeys.length
-      : 0;
-
+    if (!regime) return;
     pinnedRegime.pin({
-      label: globalRegimeLabel,
+      label: regime.raw_regime,
       region: "GLOBAL",
-      score: Math.round(avgScore),
+      score: Math.round(regime.stress_score ?? 0),
     });
   }
 
@@ -255,18 +269,27 @@
     pinnedRegime.clear();
   }
 
+  function handleProceedToAlloc() {
+    goto("/terminal/allocation");
+  }
+
   // -- Effects ---------------------------------------------------------
 
   $effect(() => {
-    fetchMacroData();
-    fetchSparklines();
+    const ac = new AbortController();
+
+    fetchAllData(ac.signal);
+    fetchSparklines(ac.signal);
 
     const timer = setInterval(() => {
-      fetchMacroData();
-      fetchSparklines();
-    }, 5 * 60 * 1000); // 5 min poll
+      fetchAllData(ac.signal);
+      fetchSparklines(ac.signal);
+    }, 5 * 60 * 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      ac.abort();
+      clearInterval(timer);
+    };
   });
 </script>
 
@@ -276,59 +299,38 @@
   {:else if fetchError}
     <div class="macro-state macro-state--error">Failed to load macro data. Retrying...</div>
   {:else}
-    <!-- Top row: 4 regime tiles + pin action -->
-    <div class="macro-tiles-row">
-      <div class="macro-tiles">
-        {#each tiles as tile (tile.region)}
-          <RegimeTile
-            region={tile.region}
-            compositeScore={tile.compositeScore}
-            regime={tile.regime}
-            dimensions={tile.dimensions}
-          />
-        {/each}
-      </div>
-      <div class="macro-pin-bar">
-        <span class="macro-global-regime">
-          GLOBAL: <strong>{globalRegimeLabel}</strong>
-          {#if regime?.stress_score != null}
-            <span class="macro-stress-score">STRESS {Math.round(regime.stress_score)}/100</span>
-          {/if}
-        </span>
-        {#if isPinned}
-          <button
-            type="button"
-            class="macro-pin-btn macro-pin-btn--active"
-            onclick={handleUnpinRegime}
-          >
-            UNPIN REGIME
-          </button>
-        {:else}
-          <button
-            type="button"
-            class="macro-pin-btn"
-            onclick={handlePinRegime}
-          >
-            PIN REGIME
-          </button>
-        {/if}
-      </div>
-    </div>
+    <StressHero
+      stressScore={regime?.stress_score ?? 0}
+      regimeLabel={regime?.raw_regime ?? "Unknown"}
+      asOfDate={regime?.as_of_date ?? ""}
+      {financialEffWeight}
+      {realEconEffWeight}
+      {isPinned}
+      onPin={handlePinRegime}
+      onUnpin={handleUnpinRegime}
+      onProceedToAlloc={handleProceedToAlloc}
+    />
 
-    <!-- Signal breakdown -->
-    {#if regime?.signal_details && Object.keys(regime.signal_details).length > 0}
-      <div class="macro-signals">
-        <span class="macro-signals-label">SIGNALS</span>
-        <div class="macro-signals-list">
-          {#each Object.entries(regime.signal_details) as [key, detail] (key)}
-            <span class="macro-signal-chip">{detail}</span>
-          {/each}
-        </div>
-      </div>
-    {/if}
+    <SignalBreakdown signals={regime?.signal_breakdown ?? []} />
 
-    <!-- Bottom row: sparkline wall + committee feed -->
     <div class="macro-bottom">
+      <div class="macro-regions">
+        <Panel>
+          {#snippet header()}
+            <PanelHeader label="REGIONAL ECONOMIC HEALTH" />
+          {/snippet}
+          <div class="region-grid">
+            {#each tiles as tile (tile.region)}
+              <RegionalHealthTile
+                region={tile.region}
+                compositeScore={tile.compositeScore}
+                dimensions={tile.dimensions}
+              />
+            {/each}
+          </div>
+        </Panel>
+      </div>
+
       <div class="macro-sparklines">
         <Panel>
           {#snippet header()}
@@ -360,126 +362,29 @@
     flex-direction: column;
     gap: var(--terminal-space-3);
     width: 100%;
-    height: 100%;
+    height: calc(100vh - 88px);
     font-family: var(--terminal-font-mono);
-    overflow: hidden;
-  }
-
-  .macro-tiles-row {
-    display: flex;
-    flex-direction: column;
-    gap: var(--terminal-space-2);
-    flex-shrink: 0;
-  }
-
-  .macro-tiles {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: var(--terminal-space-3);
-  }
-
-  .macro-pin-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 var(--terminal-space-1);
-  }
-
-  .macro-global-regime {
-    font-size: var(--terminal-text-10);
-    letter-spacing: var(--terminal-tracking-caps);
-    text-transform: uppercase;
-    color: var(--terminal-fg-tertiary);
-  }
-
-  .macro-global-regime strong {
-    color: var(--terminal-fg-primary);
-    font-weight: 700;
-  }
-
-  .macro-pin-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--terminal-space-1);
-    padding: 2px var(--terminal-space-2);
-    background: transparent;
-    border: var(--terminal-border-hairline);
-    border-radius: var(--terminal-radius-none);
-    font-family: var(--terminal-font-mono);
-    font-size: var(--terminal-text-10);
-    font-weight: 600;
-    letter-spacing: var(--terminal-tracking-caps);
-    text-transform: uppercase;
-    color: var(--terminal-fg-secondary);
-    cursor: pointer;
-    transition:
-      border-color var(--terminal-motion-tick) var(--terminal-motion-easing-out),
-      color var(--terminal-motion-tick) var(--terminal-motion-easing-out);
-  }
-
-  .macro-pin-btn:hover {
-    border-color: var(--terminal-accent-amber);
-    color: var(--terminal-accent-amber);
-  }
-
-  .macro-pin-btn--active {
-    border-color: var(--terminal-accent-cyan);
-    color: var(--terminal-accent-cyan);
-  }
-
-  .macro-pin-btn--active:hover {
-    border-color: var(--terminal-status-error);
-    color: var(--terminal-status-error);
-  }
-
-  .macro-stress-score {
-    margin-left: var(--terminal-space-2);
-    font-size: var(--terminal-text-10);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    color: var(--terminal-accent-amber);
-  }
-
-  .macro-signals {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--terminal-space-2);
-    padding: 0 var(--terminal-space-1);
-    flex-shrink: 0;
-  }
-
-  .macro-signals-label {
-    font-size: var(--terminal-text-10);
-    font-weight: 600;
-    letter-spacing: var(--terminal-tracking-caps);
-    text-transform: uppercase;
-    color: var(--terminal-fg-muted);
-    white-space: nowrap;
-    padding-top: 2px;
-  }
-
-  .macro-signals-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--terminal-space-1);
-  }
-
-  .macro-signal-chip {
-    display: inline-block;
-    padding: 1px var(--terminal-space-2);
-    border: var(--terminal-border-hairline);
-    font-size: var(--terminal-text-10);
-    font-family: var(--terminal-font-mono);
-    color: var(--terminal-fg-secondary);
-    white-space: nowrap;
+    overflow-y: auto;
+    padding: 24px;
   }
 
   .macro-bottom {
     display: grid;
-    grid-template-columns: 1fr 300px;
+    grid-template-columns: 5fr 4fr 3fr;
     gap: var(--terminal-space-3);
     flex: 1;
     min-height: 0;
+  }
+
+  .macro-regions {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .region-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--terminal-space-2);
   }
 
   .macro-sparklines {
