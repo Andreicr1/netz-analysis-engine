@@ -29,6 +29,7 @@
 	// not the direct return value of a plain Identifier argument to
 	// `resolve(...)`; hardcoding the three active route literals is
 	// the only pattern its AST matcher accepts.
+	const HREF_MACRO = resolve("/macro");
 	const HREF_SCREENER = resolve("/terminal-screener");
 	const HREF_DD = resolve("/dd");
 	const HREF_BUILDER = resolve("/portfolio/builder");
@@ -89,7 +90,7 @@
 	}: TerminalTopNavProps = $props();
 
 	const PRIMARY_TABS: ReadonlyArray<PrimaryTab> = [
-		{ id: "macro",    label: "MACRO",    href: "/macro",             status: "pending", pendingReason: "Phase 7 — Macro Desk" },
+		{ id: "macro",    label: "MACRO",    href: HREF_MACRO,           status: "active" },
 		{ id: "alloc",    label: "ALLOC",    href: "/allocation",        status: "pending", pendingReason: "Phase 7 — Allocation" },
 		{ id: "screener", label: "SCREENER", href: HREF_SCREENER,        status: "active" },
 		{ id: "dd",       label: "DD",       href: HREF_DD,              status: "active" },
@@ -101,6 +102,7 @@
 
 	function isHrefActive(href: string): boolean {
 		return (
+			href === HREF_MACRO ||
 			href === HREF_SCREENER ||
 			href === HREF_DD ||
 			href === HREF_BUILDER ||
@@ -111,6 +113,7 @@
 	}
 
 	function activePathSegment(href: string): string {
+		if (href === HREF_MACRO) return "/macro";
 		if (href === HREF_SCREENER) return "/terminal-screener";
 		if (href === HREF_DD) return "/dd";
 		if (href === HREF_BUILDER) return "/portfolio/builder";
@@ -172,7 +175,16 @@
 	<ul class="tn-tabs" role="list">
 		{#each PRIMARY_TABS as tab (tab.id)}
 			<li class="tn-tab-item">
-				{#if tab.id === "screener"}
+				{#if tab.id === "macro"}
+					<a
+						class="tn-tab tn-tab--active"
+						class:tn-tab--current={isActiveTab(tab)}
+						href={HREF_MACRO}
+						data-sveltekit-preload-data="hover"
+					>
+						<span class="tn-tab-label">{tab.label}</span>
+					</a>
+				{:else if tab.id === "screener"}
 					<a
 						class="tn-tab tn-tab--active"
 						class:tn-tab--current={isActiveTab(tab)}
