@@ -74,6 +74,11 @@ mv_unified_funds = Table(
     Column("is_index", Boolean),
     Column("is_target_date", Boolean),
     Column("is_fund_of_fund", Boolean),
+    # Universe sanitization (migration 0135). False = retirement/CIT/wrap/
+    # sub-scale/duplicate/retail-adviser. Default catalog query filters
+    # is_institutional = true; admin screens may opt in via
+    # ``CatalogFilters.include_non_institutional``.
+    Column("is_institutional", Boolean),
 )
 
 sec_managers = Table(
@@ -204,6 +209,12 @@ class CatalogFilters:
     return_10y_min: float | None = None
     return_10y_max: float | None = None
 
+    # Universe sanitization opt-out. Defaults to False — catalog queries
+    # exclude non-institutional vehicles (retirement, CIT, wrap, sub-scale,
+    # retail-adviser, duplicates). Admin screens may set True to inspect
+    # excluded rows alongside ``exclusion_reason``.
+    include_non_institutional: bool = False
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  Category-based universe parsing
@@ -300,6 +311,12 @@ def _build_base_stmt(f: CatalogFilters, *, include_risk_membership: bool = False
         stmt = select(mv_unified_funds)
 
     conditions: list[ColumnElement[bool]] = []
+
+    # 0a. Universe sanitization — exclude retirement/CIT/wrap/sub-scale/
+    # retail-adviser/duplicate rows by default. Admin screens opt out via
+    # ``include_non_institutional=True``.
+    if not f.include_non_institutional:
+        conditions.append(mv_unified_funds.c.is_institutional.is_(True))
 
     # 0. Exact external_id match (for detail lookups — bypasses text search)
     if f.external_id:

@@ -271,6 +271,7 @@ async def _read_sec_manager_funds(
                 fund_type,
                 strategy_label       AS current_label
             FROM sec_manager_funds
+            WHERE is_institutional = true
             ORDER BY id
             {limit_clause}
             """,
@@ -300,6 +301,7 @@ async def _read_sec_registered_funds(
                 fund_type,
                 strategy_label       AS current_label
             FROM sec_registered_funds
+            WHERE is_institutional = true
             ORDER BY cik
             {limit_clause}
             """,
@@ -330,6 +332,7 @@ async def _read_sec_etfs(
                 fund_name,
                 strategy_label       AS current_label
             FROM sec_etfs
+            WHERE is_institutional = true
             ORDER BY series_id
             {limit_clause}
             """,
@@ -359,6 +362,7 @@ async def _read_esma_funds(
                 fund_type,
                 strategy_label       AS current_label
             FROM esma_funds
+            WHERE is_institutional = true
             ORDER BY isin
             {limit_clause}
             """,

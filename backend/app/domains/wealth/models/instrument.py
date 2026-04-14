@@ -40,6 +40,12 @@ class Instrument(Base):
         String(64), nullable=True, index=True,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
+    # GENERATED column (migration 0134) — reads from attributes->>'is_institutional'.
+    # Non-institutional rows (retirement, CIT, wrap, sub-scale, etc.) are flagged
+    # by the universe_sanitization worker (lock 900_063).
+    is_institutional: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true",
+    )
     attributes: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
