@@ -70,7 +70,7 @@ class TestProfileAWeights:
     def test_energy_shock_crosses_risk_off(self):
         """With Profile A weights + dynamic amplification,
         energy=100 and calm markets should produce RISK_OFF."""
-        regime, reasons = classify_regime_multi_signal(
+        regime, reasons, _ = classify_regime_multi_signal(
             vix=19.5,
             yield_curve_spread=None,
             cpi_yoy=None,
@@ -88,7 +88,7 @@ class TestProfileAWeights:
 
     def test_all_calm_still_risk_on(self):
         """When all signals are calm, dynamic weights don't change regime."""
-        regime, _ = classify_regime_multi_signal(
+        regime, _, _ = classify_regime_multi_signal(
             vix=15.0,
             yield_curve_spread=None,
             cpi_yoy=None,
@@ -104,7 +104,7 @@ class TestProfileAWeights:
 
     def test_multi_extreme_produces_crisis(self):
         """Multiple extreme signals should produce CRISIS."""
-        regime, _ = classify_regime_multi_signal(
+        regime, _, _ = classify_regime_multi_signal(
             vix=45.0,
             yield_curve_spread=None,
             cpi_yoy=None,
@@ -120,7 +120,7 @@ class TestProfileAWeights:
 
     def test_audit_trail_in_reasons(self):
         """Dynamic weight changes appear in reasons dict."""
-        _, reasons = classify_regime_multi_signal(
+        _, reasons, _ = classify_regime_multi_signal(
             vix=19.5,
             yield_curve_spread=None,
             cpi_yoy=None,
@@ -137,7 +137,7 @@ class TestProfileAWeights:
 
     def test_missing_signals_still_work(self):
         """When only a few signals are present, renormalization + amplification work."""
-        regime, reasons = classify_regime_multi_signal(
+        regime, reasons, _ = classify_regime_multi_signal(
             vix=20.0,
             yield_curve_spread=None,
             cpi_yoy=None,

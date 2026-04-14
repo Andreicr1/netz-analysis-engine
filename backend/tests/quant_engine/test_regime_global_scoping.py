@@ -141,7 +141,7 @@ class TestTaaStateFallbackWithoutSnapshot:
             ) as mock_build,
             patch(
                 "quant_engine.regime_service.classify_regime_multi_signal",
-                return_value=("RISK_ON", {"composite_stress": "10.0/100"}),
+                return_value=("RISK_ON", {"composite_stress": "10.0/100"}, []),
             ) as mock_classify,
         ):
             from app.domains.wealth.workers.risk_calc import _compute_and_persist_taa_state

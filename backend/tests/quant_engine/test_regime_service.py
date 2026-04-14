@@ -8,7 +8,7 @@ from quant_engine.regime_service import classify_regime_multi_signal
 class TestClassifyRegimeAllSignalsStressed:
     def test_all_signals_at_panic_produces_crisis(self):
         """All 10 signals at panic thresholds → CRISIS with stress >= 75."""
-        regime, reasons = classify_regime_multi_signal(
+        regime, reasons, _ = classify_regime_multi_signal(
             vix=35.0,
             yield_curve_spread=-0.5,
             cpi_yoy=3.0,  # below inflation override (4.0)
@@ -28,7 +28,7 @@ class TestClassifyRegimeAllSignalsStressed:
 class TestClassifyRegimeAllSignalsCalm:
     def test_all_signals_calm_produces_risk_on(self):
         """All 10 signals at calm values → RISK_ON with stress < 15."""
-        regime, reasons = classify_regime_multi_signal(
+        regime, reasons, _ = classify_regime_multi_signal(
             vix=15.0,
             yield_curve_spread=1.5,
             cpi_yoy=2.0,

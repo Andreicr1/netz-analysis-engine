@@ -419,6 +419,7 @@ async def get_global_regime(
         raw_regime=snapshot.raw_regime,
         stress_score=snapshot.stress_score,
         signal_details=snapshot.signal_details,
+        signal_breakdown=snapshot.signal_breakdown or [],
     )
 
 

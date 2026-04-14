@@ -8,7 +8,7 @@ from quant_engine.regime_service import classify_regime_multi_signal
 class TestIcsaSignal:
     def test_calm_icsa_produces_low_stress(self):
         """ICSA z-score below calm threshold produces zero stress."""
-        _, reasons = classify_regime_multi_signal(
+        _, reasons, _ = classify_regime_multi_signal(
             vix=20.0, yield_curve_spread=1.0, cpi_yoy=2.0,
             icsa_zscore=0.3,
         )
@@ -16,7 +16,7 @@ class TestIcsaSignal:
 
     def test_extreme_icsa_produces_high_stress(self):
         """ICSA z-score at panic level produces high stress."""
-        _, reasons = classify_regime_multi_signal(
+        _, reasons, _ = classify_regime_multi_signal(
             vix=20.0, yield_curve_spread=1.0, cpi_yoy=2.0,
             icsa_zscore=3.0,
         )
@@ -24,10 +24,10 @@ class TestIcsaSignal:
 
     def test_none_icsa_excluded(self):
         """When icsa_zscore is None, signal is excluded from composite."""
-        _, reasons_without = classify_regime_multi_signal(
+        _, reasons_without, _ = classify_regime_multi_signal(
             vix=20.0, yield_curve_spread=1.0, cpi_yoy=2.0,
         )
-        _, reasons_with = classify_regime_multi_signal(
+        _, reasons_with, _ = classify_regime_multi_signal(
             vix=20.0, yield_curve_spread=1.0, cpi_yoy=2.0,
             icsa_zscore=None,
         )
@@ -39,7 +39,7 @@ class TestIcsaSignal:
 class TestCreditImpulseSignal:
     def test_positive_impulse_low_stress(self):
         """Positive credit growth produces low stress."""
-        _, reasons = classify_regime_multi_signal(
+        _, reasons, _ = classify_regime_multi_signal(
             vix=20.0, yield_curve_spread=1.0, cpi_yoy=2.0,
             credit_impulse=2.0,
         )
@@ -48,7 +48,7 @@ class TestCreditImpulseSignal:
 
     def test_negative_impulse_high_stress(self):
         """Credit contraction produces high stress."""
-        _, reasons = classify_regime_multi_signal(
+        _, reasons, _ = classify_regime_multi_signal(
             vix=20.0, yield_curve_spread=1.0, cpi_yoy=2.0,
             credit_impulse=-3.0,
         )
@@ -56,7 +56,7 @@ class TestCreditImpulseSignal:
 
     def test_none_credit_impulse_excluded(self):
         """When credit_impulse is None, signal is excluded."""
-        _, reasons = classify_regime_multi_signal(
+        _, reasons, _ = classify_regime_multi_signal(
             vix=20.0, yield_curve_spread=1.0, cpi_yoy=2.0,
             credit_impulse=None,
         )
@@ -66,7 +66,7 @@ class TestCreditImpulseSignal:
 class TestPermitsSignal:
     def test_growing_permits_low_stress(self):
         """Rising building permits produce low stress."""
-        _, reasons = classify_regime_multi_signal(
+        _, reasons, _ = classify_regime_multi_signal(
             vix=20.0, yield_curve_spread=1.0, cpi_yoy=2.0,
             permits_roc=10.0,
         )
@@ -74,7 +74,7 @@ class TestPermitsSignal:
 
     def test_falling_permits_high_stress(self):
         """Sharply falling permits produce high stress."""
-        _, reasons = classify_regime_multi_signal(
+        _, reasons, _ = classify_regime_multi_signal(
             vix=20.0, yield_curve_spread=1.0, cpi_yoy=2.0,
             permits_roc=-25.0,
         )
@@ -82,7 +82,7 @@ class TestPermitsSignal:
 
     def test_none_permits_excluded(self):
         """When permits_roc is None, signal is excluded."""
-        _, reasons = classify_regime_multi_signal(
+        _, reasons, _ = classify_regime_multi_signal(
             vix=20.0, yield_curve_spread=1.0, cpi_yoy=2.0,
             permits_roc=None,
         )
@@ -92,7 +92,7 @@ class TestPermitsSignal:
 class TestNewSignalsIntegration:
     def test_all_13_signals_calm_still_risk_on(self):
         """All 13 signals at calm values -> RISK_ON."""
-        regime, reasons = classify_regime_multi_signal(
+        regime, reasons, _ = classify_regime_multi_signal(
             vix=15.0,
             yield_curve_spread=1.5,
             cpi_yoy=2.0,
@@ -111,7 +111,7 @@ class TestNewSignalsIntegration:
 
     def test_all_13_signals_stressed_produces_crisis(self):
         """All 13 signals at panic -> CRISIS."""
-        regime, reasons = classify_regime_multi_signal(
+        regime, reasons, _ = classify_regime_multi_signal(
             vix=35.0,
             yield_curve_spread=-0.5,
             cpi_yoy=3.0,

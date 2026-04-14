@@ -214,19 +214,19 @@ class TestRegimeDecoupled:
     def test_classify_regime_risk_on(self) -> None:
         from quant_engine.regime_service import classify_regime_multi_signal
 
-        regime, reasons = classify_regime_multi_signal(vix=15.0, yield_curve_spread=1.0, cpi_yoy=2.0)
+        regime, reasons, _ = classify_regime_multi_signal(vix=15.0, yield_curve_spread=1.0, cpi_yoy=2.0)
         assert regime == "RISK_ON"
 
     def test_classify_regime_crisis(self) -> None:
         from quant_engine.regime_service import classify_regime_multi_signal
 
-        regime, reasons = classify_regime_multi_signal(vix=40.0, yield_curve_spread=-0.5, cpi_yoy=2.0)
+        regime, reasons, _ = classify_regime_multi_signal(vix=40.0, yield_curve_spread=-0.5, cpi_yoy=2.0)
         assert regime == "CRISIS"
 
     def test_classify_regime_inflation(self) -> None:
         from quant_engine.regime_service import classify_regime_multi_signal
 
-        regime, reasons = classify_regime_multi_signal(vix=20.0, yield_curve_spread=1.0, cpi_yoy=5.0)
+        regime, reasons, _ = classify_regime_multi_signal(vix=20.0, yield_curve_spread=1.0, cpi_yoy=5.0)
         assert regime == "INFLATION"
 
     def test_plausibility_rejects_extreme_vix(self) -> None:
@@ -237,7 +237,7 @@ class TestRegimeDecoupled:
         # lands in the RISK_OFF band (~25-50). The point of the test is
         # that the implausible VIX is dropped — it must NOT propagate as
         # CRISIS just because the raw value was extreme.
-        regime, reasons = classify_regime_multi_signal(vix=300.0, yield_curve_spread=1.0, cpi_yoy=2.0)
+        regime, reasons, _ = classify_regime_multi_signal(vix=300.0, yield_curve_spread=1.0, cpi_yoy=2.0)
         assert regime in {"RISK_ON", "RISK_OFF"}
         assert regime != "CRISIS"
         # vix label is absent because the value was rejected before scoring
@@ -247,7 +247,7 @@ class TestRegimeDecoupled:
         from quant_engine.regime_service import classify_regime_multi_signal
 
         # CPI=50% is implausible → rejected
-        regime, reasons = classify_regime_multi_signal(vix=20.0, yield_curve_spread=1.0, cpi_yoy=50.0)
+        regime, reasons, _ = classify_regime_multi_signal(vix=20.0, yield_curve_spread=1.0, cpi_yoy=50.0)
         assert regime == "RISK_ON"
 
 

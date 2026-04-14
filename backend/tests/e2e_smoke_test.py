@@ -473,10 +473,10 @@ async def main() -> None:
         try:
             from quant_engine.regime_service import classify_regime_multi_signal
 
-            regime, signals = classify_regime_multi_signal(
+            regime, signals, _ = classify_regime_multi_signal(
                 vix=18, yield_curve_spread=0.5, cpi_yoy=2.5, sahm_rule=0.2,
             )
-            crisis_regime, _ = classify_regime_multi_signal(
+            crisis_regime, _, _ = classify_regime_multi_signal(
                 vix=45, yield_curve_spread=-1.0, cpi_yoy=5.0, sahm_rule=0.8,
             )
             ok("4.2 Regime", f"normal={regime}, crisis={crisis_regime}")
