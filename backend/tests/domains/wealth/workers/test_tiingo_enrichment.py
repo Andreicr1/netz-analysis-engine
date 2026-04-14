@@ -2,8 +2,8 @@
 
 Covers:
 - String normalization (smart quotes, NFC, empty, control chars).
-- HTTP retry behaviour (401 short-circuits, 429 retries with backoff).
-- SQL driver behaviour (filters, JSONB merge, idempotency) via mocked session.
+- HTTP fetch behaviour (401/404, 429 circuit breaker, transient retry).
+- SQL driver behaviour (candidate query filters, UPDATE per instrument, idempotency).
 """
 
 from __future__ import annotations
@@ -27,11 +27,9 @@ class TestNormalizeDescription:
         assert out == 'It\'s a "growth" fund - long--term.'
 
     def test_normalize_description_nfc(self) -> None:
-        # "é" can be expressed as U+0065 + U+0301 (decomposed) or U+00E9 (composed).
         decomposed = "caf\u0065\u0301 bond fund"
         composed = "caf\u00e9 bond fund"
         assert mod.normalize_description(decomposed) == composed
-        # Composed input should round-trip unchanged.
         assert mod.normalize_description(composed) == composed
 
     def test_normalize_description_empty(self) -> None:
@@ -49,71 +47,114 @@ class TestNormalizeDescription:
         assert out.startswith("Fund")
 
 
-# ── HTTP fetch + retry ─────────────────────────────────────────────────
+# ── HTTP fetch + circuit breaker ──────────────────────────────────────
 
 
 def _client_with_handler(handler) -> httpx.Client:
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
-class TestFetchDescription:
+class TestFetchMeta:
     def test_worker_handles_tiingo_401(self) -> None:
         calls = {"n": 0}
+        breaker = mod._CircuitBreaker(threshold=30)
 
         def handler(request: httpx.Request) -> httpx.Response:
             calls["n"] += 1
             return httpx.Response(401, json={"detail": "unauthorized"})
 
         with _client_with_handler(handler) as client:
-            outcome, desc = mod._fetch_description(client, "fake-key", "SPY")
+            outcome, meta = mod._fetch_meta(client, "fake-key", "SPY", breaker)
 
         assert outcome == mod._TiingoFetchOutcome.NOT_FOUND
-        assert desc == ""
-        # 401 must short-circuit — no retries.
-        assert calls["n"] == 1
+        assert meta.description == ""
+        assert calls["n"] == 1  # 401 short-circuits — no retry.
+        assert breaker.total_429s == 0
 
-    def test_worker_handles_tiingo_429_with_retry(self, monkeypatch) -> None:
-        # Avoid waiting 2+4+... seconds during the test.
+    def test_worker_handles_tiingo_429_feeds_circuit_breaker(self) -> None:
+        breaker = mod._CircuitBreaker(threshold=30)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(429, json={"detail": "rate limited"})
+
+        with _client_with_handler(handler) as client:
+            outcome, _ = mod._fetch_meta(client, "fake-key", "SPY", breaker)
+
+        assert outcome == mod._TiingoFetchOutcome.RATE_LIMITED
+        # 429 does NOT retry — single call, one breaker tick.
+        assert breaker.total_429s == 1
+
+    def test_transient_error_retries_then_gives_up(self, monkeypatch) -> None:
         monkeypatch.setattr(mod.time, "sleep", lambda _s: None)
+        breaker = mod._CircuitBreaker(threshold=30)
 
         calls = {"n": 0}
 
         def handler(request: httpx.Request) -> httpx.Response:
             calls["n"] += 1
-            if calls["n"] < 3:
-                return httpx.Response(429, json={"detail": "rate limited"})
-            return httpx.Response(
-                200,
-                json={"ticker": "spy", "description": "Recovered after retry."},
-            )
-
-        with _client_with_handler(handler) as client:
-            outcome, desc = mod._fetch_description(client, "fake-key", "SPY")
-
-        assert outcome == mod._TiingoFetchOutcome.OK
-        assert desc == "Recovered after retry."
-        assert calls["n"] == 3
-
-    def test_fetch_description_retry_exhausted(self, monkeypatch) -> None:
-        monkeypatch.setattr(mod.time, "sleep", lambda _s: None)
-
-        def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(503)
 
         with _client_with_handler(handler) as client:
-            outcome, desc = mod._fetch_description(client, "fake-key", "SPY")
+            outcome, _ = mod._fetch_meta(client, "fake-key", "SPY", breaker)
 
-        assert outcome == mod._TiingoFetchOutcome.RETRY_EXHAUSTED
-        assert desc == ""
+        assert outcome == mod._TiingoFetchOutcome.TRANSIENT_ERROR
+        assert calls["n"] == mod._TRANSIENT_RETRY_ATTEMPTS
+
+    def test_200_captures_start_end_dates(self) -> None:
+        breaker = mod._CircuitBreaker(threshold=30)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "ticker": "spy",
+                    "description": "SPDR S&P 500 ETF Trust.",
+                    "startDate": "1993-01-29",
+                    "endDate": "2026-04-14",
+                },
+            )
+
+        with _client_with_handler(handler) as client:
+            outcome, meta = mod._fetch_meta(client, "fake-key", "SPY", breaker)
+
+        assert outcome == mod._TiingoFetchOutcome.OK
+        assert meta.description == "SPDR S&P 500 ETF Trust."
+        assert meta.start_date == "1993-01-29"
+        assert meta.end_date == "2026-04-14"
+
+
+class TestCircuitBreaker:
+    def test_threshold_triggers_abort(self) -> None:
+        breaker = mod._CircuitBreaker(threshold=3)
+        for _ in range(2):
+            breaker.record_429()
+        assert not breaker.should_abort()
+        breaker.record_429()
+        assert breaker.should_abort()
+
+    def test_success_resets_consecutive_counter(self) -> None:
+        breaker = mod._CircuitBreaker(threshold=3)
+        breaker.record_429()
+        breaker.record_429()
+        breaker.record_success()
+        breaker.record_429()
+        assert not breaker.should_abort()  # Streak broken — 2 < 3.
+        assert breaker.total_429s == 3     # But cumulative keeps counting.
 
 
 # ── Worker-level behaviour ─────────────────────────────────────────────
 
 
 class _FakeResult:
-    def __init__(self, rows: list[dict] | None = None, scalar_value=True):
+    def __init__(
+        self,
+        rows: list[dict] | None = None,
+        scalar_value=True,
+        rowcount: int = 0,
+    ):
         self._rows = rows or []
         self._scalar = scalar_value
+        self.rowcount = rowcount
 
     def mappings(self):
         class _Mappings:
@@ -130,10 +171,9 @@ class _FakeResult:
 
 
 class _FakeSession:
-    """Records executed SQL + params. Models just enough of AsyncSession."""
-
-    def __init__(self, rows: list[dict]):
-        self._rows = rows
+    def __init__(self, candidate_rows: list[dict] | None = None, rowcount: int = 1):
+        self._rows = candidate_rows or []
+        self._rowcount = rowcount
         self.executed: list[tuple[str, dict]] = []
         self.commits = 0
 
@@ -144,16 +184,19 @@ class _FakeSession:
             return _FakeResult(scalar_value=True)
         if "pg_advisory_unlock" in sql:
             return _FakeResult(scalar_value=True)
-        if sql.lstrip().upper().startswith("SELECT") or "from instruments_universe" in sql.lower():
+        lower = sql.lower()
+        if lower.lstrip().startswith("select") and "from instruments_universe" in lower:
             return _FakeResult(rows=self._rows)
+        if "update instruments_universe" in lower:
+            return _FakeResult(rowcount=self._rowcount)
         return _FakeResult()
 
     async def commit(self):
         self.commits += 1
 
 
-def _patch_session(rows: list[dict]):
-    session = _FakeSession(rows)
+def _patch_session(rows: list[dict] | None = None, rowcount: int = 1):
+    session = _FakeSession(candidate_rows=rows, rowcount=rowcount)
 
     @asynccontextmanager
     async def factory():
@@ -162,22 +205,19 @@ def _patch_session(rows: list[dict]):
     return session, patch.object(mod, "async_session", factory)
 
 
-def _mock_tiingo_response(desc: str) -> httpx.MockTransport:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"ticker": "x", "description": desc})
-
-    return httpx.MockTransport(handler)
-
-
 @pytest.fixture(autouse=True)
 def _fake_api_key(monkeypatch):
     monkeypatch.setattr(mod.settings, "tiingo_api_key", "test-key")
 
 
+@pytest.fixture(autouse=True)
+def _no_pacing_sleep(monkeypatch):
+    """Tests don't need the 1s per-request pacing — skip all sleeps."""
+    monkeypatch.setattr(mod.time, "sleep", lambda _s: None)
+
+
 @pytest.fixture
 def _patch_http_client(monkeypatch):
-    """Replace _build_http_client so every call gets an httpx MockTransport."""
-
     def _install(handler):
         def _factory() -> httpx.Client:
             return httpx.Client(transport=httpx.MockTransport(handler))
@@ -187,59 +227,64 @@ def _patch_http_client(monkeypatch):
     return _install
 
 
-class TestRunTiingoEnrichment:
+class TestCandidateQuery:
     @pytest.mark.asyncio
-    async def test_worker_skips_instruments_without_ticker(self, _patch_http_client) -> None:
-        """The candidate query embeds ``ticker IS NOT NULL`` — ensure we rely on it."""
+    async def test_candidate_query_filters_and_orders(self, _patch_http_client) -> None:
         _patch_http_client(lambda r: httpx.Response(200, json={"description": "x"}))
 
-        session, ctx = _patch_session(rows=[])  # DB enforces NULL filter — worker sees 0 rows.
-        with ctx:
-            stats = await mod.run_tiingo_enrichment()
-
-        assert stats["candidates"] == 0
-        assert stats["processed"] == 0
-        # Confirm the WHERE clause is present in the emitted SQL so the
-        # filter can't silently regress in a future refactor.
-        select_stmts = [sql for sql, _ in session.executed if "from instruments_universe" in sql.lower()]
-        assert select_stmts
-        assert "TICKER IS NOT NULL" in select_stmts[0].upper()
-
-    @pytest.mark.asyncio
-    async def test_worker_skips_recent_descriptions(self, _patch_http_client) -> None:
-        """Candidate query must bound staleness with the 30-day TTL."""
-        _patch_http_client(lambda r: httpx.Response(200, json={"description": "x"}))
-
-        session, ctx = _patch_session(rows=[])
+        session, ctx = _patch_session()
         with ctx:
             await mod.run_tiingo_enrichment()
 
-        select_stmts = [sql for sql, _ in session.executed if "from instruments_universe" in sql.lower()]
-        assert select_stmts
-        assert "30 days" in select_stmts[0]
+        selects = [
+            sql for sql, _ in session.executed
+            if "from instruments_universe" in sql.lower() and sql.lstrip().lower().startswith("select")
+        ]
+        assert len(selects) == 1  # Single candidate query — no CIK/solo split.
+        sql = selects[0]
+        assert "TICKER IS NOT NULL" in sql.upper()
+        assert "30 days" in sql
+        assert "ORDER BY instrument_id" in sql  # Deterministic checkpoint order.
 
+
+class TestWorkerIntegration:
     @pytest.mark.asyncio
-    async def test_worker_preserves_other_attributes(self, _patch_http_client) -> None:
-        """UPDATE must use ``attributes || jsonb_build_object(...)`` — never overwrite."""
-        _patch_http_client(lambda r: httpx.Response(200, json={"description": "Equity fund."}))
+    async def test_successful_fetch_persists_description_and_dates(self, _patch_http_client) -> None:
+        _patch_http_client(
+            lambda r: httpx.Response(
+                200,
+                json={
+                    "description": "Equity index fund.",
+                    "startDate": "1976-08-31",
+                    "endDate": "2026-04-14",
+                },
+            )
+        )
 
         iid = str(uuid.uuid4())
-        session, ctx = _patch_session(rows=[{"instrument_id": iid, "ticker": "SPY"}])
+        session, ctx = _patch_session(rows=[{"instrument_id": iid, "ticker": "VFINX"}])
         with ctx:
             stats = await mod.run_tiingo_enrichment()
 
+        assert stats["candidates"] == 1
         assert stats["processed"] == 1
-        update_stmts = [sql for sql, _ in session.executed if "UPDATE instruments_universe" in sql]
-        assert update_stmts
-        sql = update_stmts[0]
-        assert "||" in sql  # JSONB merge, not assignment
-        assert "jsonb_build_object" in sql
-        assert "tiingo_description" in sql
-        assert "tiingo_description_updated_at" in sql
+        assert stats["with_description"] == 1
+        updates = [sql for sql, _ in session.executed if "update instruments_universe" in sql.lower()]
+        assert len(updates) == 1
+        sql = updates[0]
+        assert "||" in sql
+        for key in (
+            "tiingo_description",
+            "tiingo_description_updated_at",
+            "tiingo_start_date",
+            "tiingo_end_date",
+        ):
+            assert key in sql
+        # The UPDATE WHERE clause scopes to a single instrument.
+        assert "instrument_id = CAST(:iid AS uuid)" in sql
 
     @pytest.mark.asyncio
-    async def test_worker_persists_empty_description(self, _patch_http_client) -> None:
-        """Empty descriptions still write the timestamp to prevent weekly re-fetching."""
+    async def test_empty_description_still_writes_timestamp(self, _patch_http_client) -> None:
         _patch_http_client(lambda r: httpx.Response(200, json={"description": ""}))
 
         iid = str(uuid.uuid4())
@@ -248,12 +293,46 @@ class TestRunTiingoEnrichment:
             stats = await mod.run_tiingo_enrichment()
 
         assert stats["empty_description"] == 1
-        assert stats["processed"] == 1
+        updates = [sql for sql, _ in session.executed if "update instruments_universe" in sql.lower()]
+        assert len(updates) == 1
 
     @pytest.mark.asyncio
+    async def test_rate_limit_skips_write(self, _patch_http_client) -> None:
+        _patch_http_client(lambda r: httpx.Response(429, json={"detail": "rate limited"}))
+
+        iid = str(uuid.uuid4())
+        session, ctx = _patch_session(rows=[{"instrument_id": iid, "ticker": "ANY"}])
+        with ctx:
+            stats = await mod.run_tiingo_enrichment()
+
+        assert stats["rate_limited"] == 1
+        assert stats["processed"] == 0
+        # No UPDATE fires — row stays unprocessed for next TTL cycle.
+        updates = [sql for sql, _ in session.executed if "update instruments_universe" in sql.lower()]
+        assert updates == []
+
+    @pytest.mark.asyncio
+    async def test_circuit_breaker_aborts_early(self, _patch_http_client, monkeypatch) -> None:
+        """If every candidate 429s, the breaker should stop the loop before completion."""
+        monkeypatch.setattr(mod, "_CONSECUTIVE_429_CIRCUIT_BREAKER", 2)
+        monkeypatch.setattr(mod, "_INCREMENTAL_COMMIT_EVERY", 2)
+
+        _patch_http_client(lambda r: httpx.Response(429))
+
+        rows = [{"instrument_id": str(uuid.uuid4()), "ticker": f"T{i}"} for i in range(10)]
+        session, ctx = _patch_session(rows=rows)
+        with ctx:
+            stats = await mod.run_tiingo_enrichment()
+
+        assert stats["aborted_early"] is True
+        assert stats["rate_limited"] >= 2
+        assert stats["processed"] == 0  # Never wrote anything.
+
+
+class TestIdempotency:
+    @pytest.mark.asyncio
     async def test_worker_idempotent(self, _patch_http_client) -> None:
-        """Running twice against the same candidate set yields the same writes and no duplication."""
-        _patch_http_client(lambda r: httpx.Response(200, json={"description": "Stable fund."}))
+        _patch_http_client(lambda r: httpx.Response(200, json={"description": "Stable."}))
 
         iid = str(uuid.uuid4())
         rows = [{"instrument_id": iid, "ticker": "SPY"}]
@@ -267,14 +346,13 @@ class TestRunTiingoEnrichment:
             stats2 = await mod.run_tiingo_enrichment()
 
         assert stats1["processed"] == stats2["processed"] == 1
-        # Both runs should emit exactly one UPDATE — rerun doesn't produce duplicate statements.
-        updates1 = [s for s, _ in session1.executed if "UPDATE instruments_universe" in s]
-        updates2 = [s for s, _ in session2.executed if "UPDATE instruments_universe" in s]
+        updates1 = [s for s, _ in session1.executed if "update instruments_universe" in s.lower()]
+        updates2 = [s for s, _ in session2.executed if "update instruments_universe" in s.lower()]
         assert len(updates1) == 1
         assert len(updates2) == 1
 
 
-class TestRunTiingoEnrichmentGuards:
+class TestGuards:
     @pytest.mark.asyncio
     async def test_no_api_key_short_circuits(self, monkeypatch) -> None:
         monkeypatch.setattr(mod.settings, "tiingo_api_key", "")
@@ -292,12 +370,21 @@ class TestRunTiingoEnrichmentGuards:
             async def commit(self):
                 pass
 
-        session = _LockedSession()
-
         @asynccontextmanager
         async def factory():
-            yield session
+            yield _LockedSession()
 
         monkeypatch.setattr(mod, "async_session", factory)
         stats = await mod.run_tiingo_enrichment()
         assert stats == {"status": "skipped", "reason": "lock_held"}
+
+    @pytest.mark.asyncio
+    async def test_empty_candidate_set_returns_zero_stats(self, _patch_http_client) -> None:
+        _patch_http_client(lambda r: httpx.Response(200, json={"description": "x"}))
+
+        session, ctx = _patch_session(rows=[])
+        with ctx:
+            stats = await mod.run_tiingo_enrichment()
+
+        assert stats["candidates"] == 0
+        assert stats["processed"] == 0
