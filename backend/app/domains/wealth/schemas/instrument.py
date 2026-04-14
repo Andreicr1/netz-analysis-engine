@@ -74,6 +74,8 @@ class InstrumentRiskMetricsRead(BaseModel):
     # Return metrics
     return_1y: float | None = None
     return_3y_ann: float | None = None
+    return_5y_ann: float | None = None
+    return_10y_ann: float | None = None
 
     # Risk metrics (additional)
     sortino_1y: float | None = None

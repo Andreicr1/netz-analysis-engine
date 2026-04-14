@@ -95,7 +95,7 @@ frontends/
   wealth/           ← SvelteKit "netz-wealth-os"
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0105_portfolio_calibration_fk_on_construction_runs`.
+**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0131_return_5y_10y`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header. **Tenant and user management is 100% via Clerk Dashboard** — no custom admin UI. Organizations, user invites, and role assignment (`ADMIN`, `INVESTMENT_TEAM`, `investor`) are all managed in Clerk. `ConfigService` defaults mean new tenants work immediately without provisioning.
 
@@ -153,7 +153,7 @@ Six non-negotiable principles enforced across the stack: **P1 Bounded**, **P2 Ba
 - **lazy="raise":** Set on ALL relationships. Forces explicit `selectinload()`/`joinedload()`.
 - **RLS subselect:** All RLS policies must use `(SELECT current_setting(...))` not bare `current_setting()`. Without subselect, per-row evaluation causes 1000x slowdown.
 - **Global tables:** `macro_data`, `allocation_blocks`, `vertical_config_defaults`, `benchmark_nav`, `macro_regional_snapshots`, `treasury_data`, `ofr_hedge_fund_data`, `bis_statistics`, `imf_weo_forecasts`, `sec_*` tables, `sec_insider_transactions`, `esma_funds`, `esma_managers`, `instruments_universe`, `nav_timeseries`, `sec_fund_prospectus_returns`, `sec_fund_prospectus_stats`, `fund_risk_metrics` have NO `organization_id`, NO RLS. They are shared across all tenants.
-- **`fund_risk_metrics`** is GLOBAL — pre-computed by `global_risk_metrics` worker (lock 900_071) for ALL active instruments in `instruments_universe`. `organization_id` column is nullable (NULL for global rows). RLS is disabled (hypertable compression incompatible). All tenants see the same risk metrics. Org-scoped `risk_calc` (lock 900_007) can overwrite rows with DTW drift for org-imported instruments, but the base metrics are always global. Routes must NOT filter by `organization_id` when reading risk metrics.
+- **`fund_risk_metrics`** is GLOBAL — pre-computed by `global_risk_metrics` worker (lock 900_071) for ALL active instruments in `instruments_universe`, including DTW drift (by strategy_label), 5Y/10Y annualized returns. `organization_id` column is nullable (NULL for global rows). RLS is disabled (hypertable compression incompatible). All tenants see the same risk metrics. Org-scoped `risk_calc` (lock 900_007) computes org-specific overrides (no DTW — handled globally). Routes must NOT filter by `organization_id` when reading risk metrics.
 - **`instruments_universe`** is a GLOBAL catalog (no RLS). Org-scoped instrument selection is via `instruments_org` (has RLS, `organization_id`, `block_id`, `approval_status`). The `Instrument` model has NO `organization_id`, `block_id`, or `approval_status` — those live on `InstrumentOrg`. All queries needing org-scoped instruments must JOIN `instruments_org`.
 - **`nav_timeseries`** is GLOBAL (no RLS, no `organization_id`). Prices are market data shared across all tenants. Org-scoping for NAV queries is via JOIN `instruments_org`.
 - **No module-level asyncio primitives:** Create `Semaphore`, `Lock`, `Event` lazily inside async functions. Module-level causes "attached to different event loop" errors.
@@ -218,8 +218,8 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `ofr_ingestion` | 900_012 | global | `ofr_hedge_fund_data` (3mo chunks) | OFR API (leverage, AUM, strategy, repo, stress) | Weekly |
 | `benchmark_ingest` | 900_004 | global | `benchmark_nav` (1mo chunks) | Yahoo Finance | Daily |
 | `instrument_ingestion` | 900_010 | global | `nav_timeseries` | Yahoo Finance (or pluggable provider) | Daily |
-| `global_risk_metrics` | 900_071 | global | `fund_risk_metrics` | Computed (CVaR, Sharpe, volatility, momentum, scoring) for ALL instruments_universe | Daily |
-| `risk_calc` | 900_007 | org | `fund_risk_metrics` | Overwrites with DTW drift for org-imported instruments | Daily |
+| `global_risk_metrics` | 900_071 | global | `fund_risk_metrics` | Computed (CVaR, Sharpe, volatility, momentum, scoring, DTW drift by strategy_label, 5Y/10Y returns) for ALL instruments_universe | Daily |
+| `risk_calc` | 900_007 | org | `fund_risk_metrics` | Org-specific metric overrides for instruments in instruments_org (no DTW — handled globally) | Daily |
 | `portfolio_eval` | 900_008 | org | `portfolio_snapshots` | Computed (breach status, regime, cascade) | Daily |
 | `nport_ingestion` | 900_018 | global | `sec_nport_holdings` (3mo chunks) | SEC EDGAR N-PORT XML | Weekly |
 | `sec_13f_ingestion` | 900_021 | global | `sec_13f_holdings`, `sec_13f_diffs` | SEC EDGAR 13F-HR (edgartools) | Weekly |
