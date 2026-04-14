@@ -152,6 +152,9 @@ def classify_regime_multi_signal(
     dxy_zscore: float | None = None,
     energy_shock: float | None = None,
     cfnai: float | None = None,
+    icsa_zscore: float | None = None,
+    credit_impulse: float | None = None,
+    permits_roc: float | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Classify regime using multi-factor stress scoring.
 
@@ -184,11 +187,15 @@ def classify_regime_multi_signal(
                                 INDPRO (heavy retroactive revisions) and ISM PMI
                                 (not available on FRED).
         Yield curve (10%):      10Y-2Y. Inverted = recession signal.
+        ICSA Z-score (8%):      Initial Jobless Claims 4wk MA Z-score.
+                                Weekly frequency, leads Sahm by 4-8 weeks.
         BAA spread (5%):        Corporate credit risk → real economy stress.
         FF Rate-of-Change (5%): 6-month Fed Funds delta. Rapid hikes = stress.
         Sahm Rule (5%):         Labor market recession onset at 0.50.
-        Reserved (5%):          Placeholder for future signals (e.g. Baltic Dry,
-                                soft commodities, shipping rates).
+        Credit Impulse (5%):    6-month RoC of total bank credit (TOTBKCR).
+                                Negative = credit contraction = stress.
+        Building Permits (4%):  6-month RoC of building permits (PERMIT).
+                                Longest-lead recession indicator (9-12 months).
 
     """
     if thresholds is None:
@@ -270,6 +277,23 @@ def classify_regime_multi_signal(
     if sahm_rule is not None:
         s = _ramp(sahm_rule, calm=0.0, panic=0.50)
         signals.append(("sahm", s, 0.05, f"Sahm={sahm_rule:.2f} (stress={s:.0f}/100)"))
+
+    # Initial Jobless Claims Z-score (8%): weekly frequency, leads Sahm by 4-8 weeks
+    if icsa_zscore is not None:
+        s = _ramp(icsa_zscore, calm=0.5, panic=2.5)
+        signals.append(("icsa", s, 0.08, f"ICSA_z={icsa_zscore:+.2f}\u03c3 (stress={s:.0f}/100)"))
+
+    # Credit Impulse (5%): 6m RoC of bank credit. Negative = contraction = stress.
+    # Inverted: we ramp on the negative side.
+    if credit_impulse is not None:
+        s = _ramp(-credit_impulse, calm=-0.5, panic=2.0)
+        signals.append(("credit_impulse", s, 0.05, f"CreditImpulse={credit_impulse:+.1f}% (stress={s:.0f}/100)"))
+
+    # Building Permits 6m RoC (4%): longest-lead recession indicator (9-12 months).
+    # Falling permits = stress. Inverted.
+    if permits_roc is not None:
+        s = _ramp(-permits_roc, calm=-5.0, panic=20.0)
+        signals.append(("permits", s, 0.04, f"Permits_\u03946m={permits_roc:+.1f}% (stress={s:.0f}/100)"))
 
     # Need at least 2 signals for confident classification
     if len(signals) < 2:
@@ -550,6 +574,126 @@ async def _compute_dxy_zscore(
     )
 
 
+async def _compute_icsa_zscore(
+    db: AsyncSession,
+    *,
+    as_of_date: date | None = None,
+) -> float | None:
+    """Z-score of 4-week MA of initial claims vs 52-week rolling stats.
+
+    ICSA is weekly. Compute:
+    1. 4-week moving average of ICSA (smooth weekly noise)
+    2. Mean and stddev of the 4wk MA over the trailing 52 weeks
+    3. Z-score = (current_4wk_ma - mean_52wk) / std_52wk
+    """
+    from datetime import timedelta
+
+    effective_date = as_of_date or date.today()
+
+    stmt = (
+        select(MacroData.obs_date, MacroData.value)
+        .where(
+            MacroData.series_id == "ICSA",
+            MacroData.obs_date > effective_date - timedelta(days=400),
+            MacroData.obs_date <= effective_date,
+        )
+        .order_by(MacroData.obs_date.asc())
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    if len(rows) < 8:  # Need at least 8 weeks for meaningful z-score
+        return None
+
+    values = [float(r.value) for r in rows]
+
+    # 4-week moving average
+    ma4: list[float] = []
+    for i in range(3, len(values)):
+        ma4.append(sum(values[i - 3 : i + 1]) / 4.0)
+
+    if len(ma4) < 26:  # Need at least 26 weeks of MA for stats
+        return None
+
+    current_ma = ma4[-1]
+    # Use trailing 52 4wk-MA values (or all available if less)
+    lookback = ma4[-52:] if len(ma4) >= 52 else ma4
+    mean_val = sum(lookback) / len(lookback)
+    variance = sum((x - mean_val) ** 2 for x in lookback) / len(lookback)
+    std_val = variance**0.5
+
+    if std_val < 1.0:  # Avoid division by near-zero
+        return None
+
+    return float((current_ma - mean_val) / std_val)
+
+
+async def _compute_credit_impulse(
+    db: AsyncSession,
+    *,
+    as_of_date: date | None = None,
+) -> float | None:
+    """Credit impulse: 6-month rate-of-change of total bank credit.
+
+    Falling credit impulse (negative RoC) = credit contraction = stress.
+    Uses TOTBKCR (Total Bank Credit, All Commercial Banks, Weekly).
+
+    Returns percentage change over 6 months. Negative = contraction.
+    """
+    from datetime import timedelta
+
+    effective_date = as_of_date or date.today()
+
+    # Get latest value
+    stmt_latest = (
+        select(MacroData.value)
+        .where(
+            MacroData.series_id == "TOTBKCR",
+            MacroData.obs_date <= effective_date,
+        )
+        .order_by(MacroData.obs_date.desc())
+        .limit(1)
+    )
+    result_latest = await db.execute(stmt_latest)
+    latest = result_latest.scalar_one_or_none()
+    if latest is None:
+        return None
+
+    # Get value ~6 months ago
+    target_date = effective_date - timedelta(days=180)
+    stmt_old = (
+        select(MacroData.value)
+        .where(
+            MacroData.series_id == "TOTBKCR",
+            MacroData.obs_date <= target_date,
+        )
+        .order_by(MacroData.obs_date.desc())
+        .limit(1)
+    )
+    result_old = await db.execute(stmt_old)
+    old = result_old.scalar_one_or_none()
+    if old is None or float(old) == 0:
+        return None
+
+    return ((float(latest) - float(old)) / float(old)) * 100.0
+
+
+async def _compute_permits_roc(
+    db: AsyncSession,
+    *,
+    months: int = 6,
+    as_of_date: date | None = None,
+) -> float | None:
+    """6-month rate-of-change of building permits (PERMIT).
+
+    Falling permits = leading recession indicator (9-12 month lead).
+    Returns percentage change. Negative = declining permits.
+    """
+    return await _compute_series_roc(
+        db, "PERMIT", months=months, as_of_date=as_of_date,
+    )
+
+
 REGIME_SERIES_STALENESS: dict[str, int] = {
     "VIXCLS": STALENESS_DAILY,
     "DGS10": STALENESS_DAILY,
@@ -562,6 +706,9 @@ REGIME_SERIES_STALENESS: dict[str, int] = {
     "DTWEXBGS": STALENESS_DAILY,
     "DCOILWTICO": STALENESS_DAILY,
     "CFNAI": 75,
+    "ICSA": 14,        # Weekly — stale after 2 weeks
+    "TOTBKCR": 14,     # Weekly — stale after 2 weeks
+    "PERMIT": 45,      # Monthly — stale after 45 days
 }
 
 
@@ -647,6 +794,15 @@ async def build_regime_inputs(
     # ── CFNAI ──
     cfnai_val = latest.get("CFNAI")
 
+    # ── Initial Jobless Claims Z-score ──
+    icsa_zscore = await _compute_icsa_zscore(db, as_of_date=effective_date)
+
+    # ── Credit Impulse ──
+    credit_impulse = await _compute_credit_impulse(db, as_of_date=effective_date)
+
+    # ── Building Permits 6m RoC ──
+    permits_roc = await _compute_permits_roc(db, as_of_date=effective_date)
+
     return {
         "vix": latest.get("VIXCLS"),
         "yield_curve_spread": yield_spread,
@@ -658,6 +814,9 @@ async def build_regime_inputs(
         "dxy_zscore": dxy_z,
         "energy_shock": energy_shock,
         "cfnai": cfnai_val,
+        "icsa_zscore": icsa_zscore,
+        "credit_impulse": credit_impulse,
+        "permits_roc": permits_roc,
     }
 
 
@@ -693,6 +852,9 @@ async def get_current_regime(
             dxy_zscore=inputs.get("dxy_zscore"),
             energy_shock=inputs.get("energy_shock"),
             cfnai=inputs.get("cfnai"),
+            icsa_zscore=inputs.get("icsa_zscore"),
+            credit_impulse=inputs.get("credit_impulse"),
+            permits_roc=inputs.get("permits_roc"),
         )
 
         # Determine as_of from macro_data latest obs_date

@@ -16,6 +16,7 @@ EXPECTED_KEYS = {
     "vix", "yield_curve_spread", "cpi_yoy", "sahm_rule",
     "hy_oas", "baa_spread", "fed_funds_delta_6m",
     "dxy_zscore", "energy_shock", "cfnai",
+    "icsa_zscore", "credit_impulse", "permits_roc",
 }
 
 
@@ -47,11 +48,11 @@ def _build_fresh_macro_rows(as_of: date | None = None):
 def _make_db_mock(bulk_rows, cpi_12m=295.0, ff_6m=5.00):
     """Create an AsyncSession mock that returns appropriate results.
 
-    The bulk query returns bulk_rows. Subsequent queries for CPI 12m ago
-    and FF 6m ago return scalar values. Z-score/RoC queries return series.
+    Uses statement introspection to route results correctly regardless
+    of call ordering (which varies when CPI/SAHM data is absent).
     """
     db = AsyncMock()
-    call_count = 0
+    first_call = True
 
     class FakeResult:
         def __init__(self, rows=None, scalar=None):
@@ -68,46 +69,71 @@ def _make_db_mock(bulk_rows, cpi_12m=295.0, ff_6m=5.00):
             return self._scalar
 
     async def fake_execute(stmt, *args, **kwargs):
-        nonlocal call_count
-        call_count += 1
+        nonlocal first_call
+        from collections import namedtuple
 
-        stmt_str = str(stmt) if not hasattr(stmt, "compile") else ""
+        # Compile statement to string for routing
+        try:
+            compiled = stmt.compile(compile_kwargs={"literal_binds": True})
+            stmt_str = str(compiled)
+        except Exception:
+            stmt_str = str(stmt)
 
-        # First call = bulk fetch
-        if call_count == 1:
+        # First call = bulk fetch (DISTINCT series_id with IN)
+        if first_call and "DISTINCT" in stmt_str and "IN" in stmt_str:
+            first_call = False
             return FakeResult(rows=bulk_rows)
 
+        # ICSA query (obs_date, value ordered ASC)
+        if "ICSA" in stmt_str and "ASC" in stmt_str:
+            IcsaRow = namedtuple("IcsaRow", ["obs_date", "value"])
+            d = date.today()
+            icsa_rows = [
+                IcsaRow(obs_date=d - timedelta(days=7 * i), value=220000 + i * 100)
+                for i in range(60)
+            ]
+            icsa_rows.reverse()
+            return FakeResult(rows=icsa_rows)
+
+        # TOTBKCR queries (credit impulse)
+        if "TOTBKCR" in stmt_str:
+            return FakeResult(scalar=18000.0)
+
+        # PERMIT RoC queries
+        if "PERMIT" in stmt_str:
+            if "DESC" in stmt_str and "value" in stmt_str.lower() and "obs_date" in stmt_str.lower():
+                PermRow = namedtuple("PermRow", ["value", "obs_date"])
+                return FakeResult(rows=[PermRow(value=1500.0, obs_date=date.today())])
+            return FakeResult(scalar=1400.0)
+
         # CPI 12m lookback
-        if call_count == 2:
+        if "CPIAUCSL" in stmt_str:
             return FakeResult(scalar=cpi_12m)
 
-        # FF delta queries (latest + 6m ago)
-        if call_count == 3:
-            d = date.today()
-            from collections import namedtuple
-            Row = namedtuple("Row", ["value", "obs_date"])
-            return FakeResult(rows=[Row(value=5.25, obs_date=d)])
-        if call_count == 4:
+        # DFF (Fed Funds) queries
+        if "DFF" in stmt_str:
+            if "DESC" in stmt_str and "obs_date" in stmt_str.lower():
+                FFRow = namedtuple("FFRow", ["value", "obs_date"])
+                return FakeResult(rows=[FFRow(value=5.25, obs_date=date.today())])
             return FakeResult(scalar=ff_6m)
 
-        # Z-score queries return enough values for computation
-        if call_count <= 8:
-            from collections import namedtuple
-            Row = namedtuple("Row", [0])  # single-column result
-            import random
-            random.seed(42)
+        # DCOILWTICO RoC queries (value + obs_date)
+        if "DCOILWTICO" in stmt_str and "LIMIT" in stmt_str:
+            # Check if it's a multi-column query (RoC) or single-column (z-score)
+            if "obs_date" in stmt_str.lower() and "value" in stmt_str.lower():
+                CrudeRow = namedtuple("CrudeRow", ["value", "obs_date"])
+                return FakeResult(rows=[CrudeRow(value=75.0, obs_date=date.today())])
+            # Z-score: single-column values
+            vals = [(v,) for v in [70 + i * 0.1 for i in range(100)]]
+            return FakeResult(rows=vals)
+
+        # DTWEXBGS z-score
+        if "DTWEXBGS" in stmt_str:
             vals = [(v,) for v in [110 + i * 0.1 for i in range(100)]]
             return FakeResult(rows=vals)
 
-        # RoC queries
-        if call_count == 9:
-            from collections import namedtuple
-            Row = namedtuple("Row", ["value", "obs_date"])
-            return FakeResult(rows=[Row(value=75.0, obs_date=date.today())])
-        if call_count == 10:
-            return FakeResult(scalar=70.0)
-
-        return FakeResult()
+        # Fallback for any remaining scalar queries
+        return FakeResult(scalar=70.0)
 
     db.execute = fake_execute
     return db
