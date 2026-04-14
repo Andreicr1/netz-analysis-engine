@@ -37,9 +37,8 @@ Why not a stamp-only approach:
 
 from __future__ import annotations
 
-from alembic import op  # noqa: F401
 import sqlalchemy as sa  # noqa: F401
-
+from alembic import op  # noqa: F401
 
 # revision identifiers, used by Alembic.
 revision: str = "0132_merge_0110_heads"

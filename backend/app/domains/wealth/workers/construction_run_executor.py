@@ -331,9 +331,7 @@ async def _emit_cascade_phase_events(
 
     for idx, (phase_key, phase_label) in enumerate(_CASCADE_PHASES):
         # Determine phase outcome
-        if total_failure:
-            status = "failed"
-        elif idx < (winning_idx or 0):
+        if total_failure or idx < (winning_idx or 0):
             status = "failed"
         elif idx == winning_idx:
             status = "succeeded"

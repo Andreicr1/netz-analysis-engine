@@ -4057,9 +4057,9 @@ async def trigger_monte_carlo(
         return cached
 
     # Fetch NAV series
-    from app.domains.wealth.services.nav_reader import fetch_nav_series
-
     from datetime import timedelta
+
+    from app.domains.wealth.services.nav_reader import fetch_nav_series
     start_date = date.today() - timedelta(days=int(1260 * 1.5))  # ~5Y buffer
     nav_rows = await fetch_nav_series(db, portfolio_id, start_date, date.today())
 
