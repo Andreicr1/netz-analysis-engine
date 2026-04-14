@@ -39,6 +39,8 @@ class FundRiskRead(SanitizedScoreComponentsMixin):
     return_6m: Decimal | None = None
     return_1y: Decimal | None = None
     return_3y_ann: Decimal | None = None
+    return_5y_ann: Decimal | None = None
+    return_10y_ann: Decimal | None = None
     volatility_1y: Decimal | None = None
     max_drawdown_1y: Decimal | None = None
     max_drawdown_3y: Decimal | None = None

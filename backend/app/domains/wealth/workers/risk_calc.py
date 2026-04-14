@@ -572,6 +572,8 @@ def _compute_metrics_from_returns(
     metrics["return_6m"] = _round_or_none(_compute_return(returns, 126))
     metrics["return_1y"] = _round_or_none(_compute_return(returns, 252))
     metrics["return_3y_ann"] = _round_or_none(_compute_annualized_return(returns, 3))
+    metrics["return_5y_ann"] = _round_or_none(_compute_annualized_return(returns, 5))
+    metrics["return_10y_ann"] = _round_or_none(_compute_annualized_return(returns, 10))
 
     # Volatility
     metrics["volatility_1y"] = _round_or_none(_compute_volatility(returns, 252))
@@ -829,6 +831,115 @@ async def _compute_block_dtw_scores(
         logger.debug(
             "DTW drift computed for block",
             block_id=block_id,
+            n_funds=len(fund_ids),
+            window=min_len,
+        )
+
+    return dtw_scores
+
+
+DTW_SUB_BATCH_SIZE = 200
+DTW_LARGE_GROUP_THRESHOLD = 500
+
+
+async def _compute_global_dtw_scores(
+    db: AsyncSession,
+    computed: "list[tuple[Instrument | _FundSnapshot, dict]]",
+    as_of_date: date,
+    strategy_map: dict[str, str | None],
+    dtw_window: int = 252,
+) -> dict[str, DtwDriftResult]:
+    """Compute DTW drift scores grouped by strategy_label (global).
+
+    Instead of allocation blocks (org-scoped), groups funds by their
+    strategy_label from mv_unified_funds. Each strategy group uses its
+    equal-weight average as the benchmark.
+
+    Funds with no strategy_label are grouped under "__unclassified__".
+    Groups with < 2 funds get degraded status (no peer comparison possible).
+    Groups with > 500 funds are split into sub-batches of 200, using the
+    full group mean as benchmark for all sub-batches.
+    """
+    # Group funds by strategy_label
+    strategy_funds: dict[str, list[tuple[_FundSnapshot, dict]]] = defaultdict(list)
+    for fund, metrics in computed:
+        fid_str = str(fund.instrument_id)
+        strategy = strategy_map.get(fid_str) or "__unclassified__"
+        strategy_funds[strategy].append((fund, metrics))
+
+    dtw_scores: dict[str, DtwDriftResult] = {}
+
+    for strategy, group in strategy_funds.items():
+        if len(group) < 2:
+            for fund, _ in group:
+                dtw_scores[str(fund.instrument_id)] = DtwDriftResult(
+                    score=None,
+                    status=DtwDriftStatus.degraded,
+                    reason=f"single fund in strategy '{strategy}' — no peer comparison possible",
+                )
+            continue
+
+        # Batch-fetch returns for all funds in this strategy group
+        group_fund_ids = [fund.instrument_id for fund, _ in group]
+        returns_by_fund = await _fetch_block_returns_batch(
+            db, group_fund_ids, as_of_date, window_days=dtw_window,
+        )
+
+        # Build arrays for all funds with data
+        fund_return_arrays: list[np.ndarray] = []
+        fund_ids: list[str] = []
+        for fund, _ in group:
+            fid = str(fund.instrument_id)
+            arr = returns_by_fund.get(fid, np.array([], dtype=float))
+            if len(arr) >= 10:
+                fund_return_arrays.append(arr)
+                fund_ids.append(fid)
+            else:
+                dtw_scores[fid] = DtwDriftResult(
+                    score=None,
+                    status=DtwDriftStatus.degraded,
+                    reason=f"insufficient data for DTW: {len(arr)} points (min 10)",
+                )
+
+        if len(fund_ids) < 2:
+            for fid in fund_ids:
+                dtw_scores[fid] = DtwDriftResult(
+                    score=None,
+                    status=DtwDriftStatus.degraded,
+                    reason=f"< 2 funds with data in strategy '{strategy}'",
+                )
+            continue
+
+        # Align to common length
+        min_len = min(len(a) for a in fund_return_arrays)
+        if min_len < 10:
+            for fid in fund_ids:
+                dtw_scores[fid] = DtwDriftResult(
+                    score=None,
+                    status=DtwDriftStatus.degraded,
+                    reason=f"insufficient common window: {min_len} points",
+                )
+            continue
+
+        matrix = np.vstack([a[-min_len:] for a in fund_return_arrays])
+        benchmark = matrix.mean(axis=0)
+
+        if len(fund_ids) > DTW_LARGE_GROUP_THRESHOLD:
+            # Sub-batch processing for large groups
+            for sb_start in range(0, len(fund_ids), DTW_SUB_BATCH_SIZE):
+                sb_ids = fund_ids[sb_start:sb_start + DTW_SUB_BATCH_SIZE]
+                sb_matrix = matrix[sb_start:sb_start + DTW_SUB_BATCH_SIZE]
+                results = compute_dtw_drift_batch(sb_matrix, benchmark, window=min_len)
+                for fid, result in zip(sb_ids, results, strict=False):
+                    dtw_scores[fid] = result
+        else:
+            results = compute_dtw_drift_batch(matrix, benchmark, window=min_len)
+            for fid, result in zip(fund_ids, results, strict=False):
+                dtw_scores[fid] = result
+
+        logger.debug(
+            "DTW drift computed for strategy",
+            strategy=strategy,
             n_funds=len(fund_ids),
             window=min_len,
         )
@@ -1173,7 +1284,7 @@ async def run_global_regime_detection(eval_date: date | None = None) -> None:
 
         try:
             inputs = await build_regime_inputs(db, as_of_date=target_date)
-            regime, reasons = classify_regime_multi_signal(**inputs)
+            regime, reasons, structured_signals = classify_regime_multi_signal(**inputs)
             stress_score = extract_stress_score(reasons)
             logger.info(
                 "global_regime_classified",
@@ -1187,6 +1298,7 @@ async def run_global_regime_detection(eval_date: date | None = None) -> None:
                 raw_regime=regime,
                 stress_score=stress_score,
                 signal_details=reasons,
+                signal_breakdown=structured_signals,
             )
             upsert_stmt = upsert_stmt.on_conflict_do_update(
                 index_elements=["as_of_date"],
@@ -1194,6 +1306,7 @@ async def run_global_regime_detection(eval_date: date | None = None) -> None:
                     "raw_regime": upsert_stmt.excluded.raw_regime,
                     "stress_score": upsert_stmt.excluded.stress_score,
                     "signal_details": upsert_stmt.excluded.signal_details,
+                    "signal_breakdown": upsert_stmt.excluded.signal_breakdown,
                 },
             )
             await db.execute(upsert_stmt)
@@ -1246,7 +1359,7 @@ async def _compute_and_persist_taa_state(
         )
         # Graceful fallback: compute inline (same as before)
         inputs = await build_regime_inputs(db, as_of_date=eval_date)
-        regime, reasons = classify_regime_multi_signal(**inputs)
+        regime, reasons, _ = classify_regime_multi_signal(**inputs)
         stress_score = extract_stress_score(reasons)
     else:
         regime = snapshot.raw_regime
@@ -1509,8 +1622,8 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
             logger.info("Funds to process", count=len(funds))
 
             eval_date = as_of_date or date.today()
-            # 3 years + 30-day buffer — same window used in compute_fund_risk_metrics
-            start_date = eval_date - timedelta(days=3 * 365 + 30)
+            # 10 years + 60-day buffer — supports 5Y/10Y annualized returns
+            start_date = eval_date - timedelta(days=10 * 365 + 60)
 
             all_fund_ids = [fund.instrument_id for fund in funds]
 
@@ -1697,31 +1810,9 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                     strategy_label=strategy_lbl,
                 )
 
-            # Pass 2: compute DTW drift scores per block (reuses DB session, no extra query per fund)
-            logger.info("Computing DTW drift scores", n_funds=len(computed))
-            dtw_scores = await _compute_block_dtw_scores(db, computed, as_of_date=eval_date, block_id_map=block_id_map)
-            logger.info("DTW drift scores computed", n_scores=len(dtw_scores))
-
-            # Pass 3: upsert metrics + dtw_drift_score (all in one transaction)
+            # Pass 2: upsert metrics (DTW drift now handled by global worker)
             try:
                 for fund, metrics in computed:
-                    fid_str = str(fund.instrument_id)
-                    dtw_result = dtw_scores.get(
-                        fid_str,
-                        DtwDriftResult(score=None, status=DtwDriftStatus.degraded, reason="fund not in dtw_scores"),
-                    )
-                    # Use score_or_default so DB column always gets a float,
-                    # but the decision to fall back is explicit, not silent.
-                    metrics["dtw_drift_score"] = round(dtw_result.score_or_default(0.0), 6)
-                    if not dtw_result.is_usable:
-                        logger.warning(
-                            "dtw_drift_degraded",
-                            fund_id=fid_str,
-                            ticker=fund.ticker,
-                            status=dtw_result.status.value,
-                            reason=dtw_result.reason,
-                        )
-
                     metrics["organization_id"] = org_id
                     upsert = pg_insert(FundRiskMetrics).values(**metrics)
                     # Conflict target includes organization_id so this org's
@@ -1738,7 +1829,7 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                     )
                     await db.execute(upsert)
                     results[fund.ticker or str(fund.instrument_id)] = 1
-                    logger.info("Risk metrics staged", ticker=fund.ticker, dtw_drift=metrics["dtw_drift_score"])
+                    logger.info("Risk metrics staged", ticker=fund.ticker)
 
                 # Single commit for the entire batch — atomic and WAL-efficient
                 await db.commit()
@@ -1775,12 +1866,12 @@ GLOBAL_RISK_BATCH_SIZE = 200
 async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, int]:
     """Compute base risk metrics for ALL active instruments with NAV.
 
-    Global worker — no org_id, no RLS, no DTW drift.
+    Global worker — no org_id, no RLS.
     Writes to fund_risk_metrics with organization_id = NULL.
     Any tenant importing a fund immediately sees pre-computed metrics.
 
-    The org-scoped run_risk_calc() can later overwrite specific rows
-    with organization_id + DTW drift for instruments in instruments_org.
+    DTW drift is computed globally by strategy_label (from mv_unified_funds).
+    5Y and 10Y annualized returns computed when sufficient NAV history exists.
     """
     logger.info("global_risk_metrics.start", as_of_date=str(as_of_date))
     results: dict[str, int] = {"computed": 0, "skipped": 0, "error": 0}
@@ -1796,7 +1887,7 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
         try:
             rfr = await get_risk_free_rate(db)
             eval_date = as_of_date or date.today()
-            start_date = eval_date - timedelta(days=3 * 365 + 30)
+            start_date = eval_date - timedelta(days=10 * 365 + 60)
 
             # All active funds with ticker (no org join)
             stmt = (
@@ -2008,11 +2099,41 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
                         strategy_label=strategy_lbl,
                     )
 
-                # Upsert batch — no DTW drift, no org_id
+                # Pass 1.9: DTW drift scores by strategy_label (global)
+                batch_tickers_dtw = [f.ticker for f in batch if f.ticker]
+                strategy_map_batch: dict[str, str | None] = {}
+                if batch_tickers_dtw:
+                    placeholders_dtw = ", ".join(f"'{t}'" for t in batch_tickers_dtw)
+                    strat_result = await db.execute(text(f"""
+                        SELECT ticker, strategy_label FROM mv_unified_funds
+                        WHERE ticker IN ({placeholders_dtw})
+                          AND strategy_label IS NOT NULL
+                    """))
+                    ticker_to_strat = {r[0]: r[1] for r in strat_result.all()}
+                    for fund, _ in computed:
+                        if fund.ticker and fund.ticker in ticker_to_strat:
+                            strategy_map_batch[str(fund.instrument_id)] = ticker_to_strat[fund.ticker]
+
+                dtw_scores_batch = await _compute_global_dtw_scores(
+                    db, computed, as_of_date=eval_date,
+                    strategy_map=strategy_map_batch,
+                )
+                logger.info(
+                    "global_risk_metrics.dtw_computed",
+                    batch_start=batch_start,
+                    dtw_scores=len(dtw_scores_batch),
+                )
+
+                # Upsert batch with DTW drift, no org_id
                 try:
                     for fund, metrics in computed:
                         metrics["organization_id"] = None
-                        metrics["dtw_drift_score"] = None
+                        fid_str = str(fund.instrument_id)
+                        dtw_result = dtw_scores_batch.get(
+                            fid_str,
+                            DtwDriftResult(score=None, status=DtwDriftStatus.degraded, reason="not in dtw batch"),
+                        )
+                        metrics["dtw_drift_score"] = round(dtw_result.score_or_default(0.0), 6) if dtw_result.is_usable else None
                         upsert = pg_insert(FundRiskMetrics).values(**metrics)
                         # Conflict target includes organization_id (NULL here);
                         # NULLS NOT DISTINCT unique index from migration 0093
@@ -2496,7 +2617,7 @@ async def _compute_elite_ranking(
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Risk calculation worker")
-    parser.add_argument("--org-id", type=uuid.UUID, help="Compute org-scoped metrics with DTW drift for a specific tenant.")
+    parser.add_argument("--org-id", type=uuid.UUID, help="Compute org-scoped metrics for a specific tenant.")
     args = parser.parse_args()
 
     if args.org_id:
