@@ -977,6 +977,35 @@ async def trigger_run_geography_enrichment(
     )
 
 
+@router.post(
+    "/run-tiingo-enrichment",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger Tiingo description enrichment",
+    description=(
+        "Schedules the tiingo_enrichment worker as a background task. "
+        "Fetches fund descriptions from Tiingo's /tiingo/daily/{ticker} "
+        "meta endpoint and persists them (normalized UTF-8) into "
+        "instruments_universe.attributes.tiingo_description. TTL is 30 days. "
+        "Uses advisory lock 900_061. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_tiingo_enrichment(
+    background_tasks: BackgroundTasks,
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.tiingo_enrichment import run_tiingo_enrichment
+
+    return await _dispatch_worker(
+        background_tasks, "run-tiingo-enrichment", "global",
+        run_tiingo_enrichment,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
+
+
 # ── Wealth Library maintenance workers (Phase 1.2) ──────────────────
 
 
