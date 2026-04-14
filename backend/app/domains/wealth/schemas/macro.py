@@ -16,7 +16,6 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domains.wealth.schemas.sanitized import (
-    SanitizedRegimeHierarchyMixin,
     sanitize_report_json,
 )
 
@@ -106,21 +105,6 @@ class MacroSnapshotResponse(BaseModel):
 # ---------------------------------------------------------------------------
 #  Phase 2: Regime Hierarchy + Committee Workflow
 # ---------------------------------------------------------------------------
-
-
-class RegimeHierarchyRead(SanitizedRegimeHierarchyMixin):
-    """Hierarchical regime: global + per-region.
-
-    Both `global_regime` and `regional_regimes` values are translated
-    from the backend enum (RISK_ON / RISK_OFF / CRISIS) to the
-    institutional tri-state (Expansion / Cautious / Stress) by the
-    `SanitizedRegimeHierarchyMixin` post-validator.
-    """
-
-    global_regime: str
-    regional_regimes: dict[str, str]  # region → regime (sanitised)
-    composition_reasons: dict[str, str] = {}
-    as_of_date: date | None = None
 
 
 class MacroReviewRead(BaseModel):

@@ -16,14 +16,12 @@ class RegimeRead(BaseModel):
     """Market regime classification response schema.
 
     Used by both wealth risk routes and credit macro overlay.
-    Phase 2: optional regional_regimes for hierarchical regime.
     """
 
     regime: str | None = None
     as_of_date: date | None = None
     profiles: dict[str, str] | None = None
     reasons: dict[str, str] | None = None
-    regional_regimes: dict[str, str] | None = None  # Phase 2: region → regime
 
 
 @dataclass

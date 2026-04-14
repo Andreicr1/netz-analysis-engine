@@ -169,7 +169,7 @@ class TestGlobalRegimeSchema:
             signal_details={"vix": {"value": 25.0, "signal": "STRESS"}},
         )
         dumped = data.model_dump()
-        assert dumped["raw_regime"] == "RISK_OFF"
+        assert dumped["raw_regime"] == "Cautious"
         assert dumped["as_of_date"] == date(2026, 4, 13)
         assert dumped["stress_score"] == Decimal("45.0")
         assert "vix" in dumped["signal_details"]

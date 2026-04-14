@@ -46,10 +46,11 @@ export interface MacroScores {
 }
 
 export interface RegimeHierarchy {
-	global_regime: string;
-	regional_regimes: Record<string, string>;
-	composition_reasons: Record<string, string>;
-	as_of_date: string | null;
+	global_regime?: string;
+	raw_regime: string;
+	stress_score: number | null;
+	signal_details: Record<string, string>;
+	as_of_date: string;
 }
 
 export interface TreasuryPoint {

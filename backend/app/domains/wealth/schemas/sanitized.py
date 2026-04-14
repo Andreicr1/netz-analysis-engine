@@ -38,7 +38,7 @@ Design choices
 
 Consumers in this commit
 ------------------------
-    RegimeHierarchyRead    — inherits SanitizedRegimeHierarchyMixin
+    GlobalRegimeRead       — model_validator humanizes raw_regime
     CVaRStatus             — inherits SanitizedRegimeFieldMixin
     RegimeHistoryPoint     — inherits SanitizedRegimeFieldMixin
     MacroReviewRead        — model validator walks report_json
@@ -287,28 +287,6 @@ class SanitizedRegimeFieldMixin(BaseModel):
         current = getattr(self, "regime", None)
         if isinstance(current, str):
             object.__setattr__(self, "regime", humanize_regime(current))
-        return self
-
-
-class SanitizedRegimeHierarchyMixin(BaseModel):
-    """For schemas with `global_regime` + `regional_regimes: dict[str, str]`.
-
-    Used by `RegimeHierarchyRead` where the full regime tree is
-    exposed. Both levels are translated.
-    """
-
-    @model_validator(mode="after")
-    def _sanitize_regime_hierarchy(self) -> "SanitizedRegimeHierarchyMixin":
-        gr = getattr(self, "global_regime", None)
-        if isinstance(gr, str):
-            object.__setattr__(self, "global_regime", humanize_regime(gr))
-        rr = getattr(self, "regional_regimes", None)
-        if isinstance(rr, dict):
-            object.__setattr__(
-                self,
-                "regional_regimes",
-                {k: humanize_regime(v) if isinstance(v, str) else v for k, v in rr.items()},
-            )
         return self
 
 

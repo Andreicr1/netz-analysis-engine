@@ -42,11 +42,11 @@
     };
   }
 
-  interface RegimeHierarchyRead {
-    global_regime: string;
-    regional_regimes: Record<string, string>;
-    composition_reasons: Record<string, string>;
-    as_of_date: string | null;
+  interface GlobalRegimeRead {
+    as_of_date: string;
+    raw_regime: string;
+    stress_score: number | null;
+    signal_details: Record<string, string>;
   }
 
   interface FredTimePoint {
@@ -78,7 +78,7 @@
   // -- State -----------------------------------------------------------
 
   let scores = $state<MacroScoresResponse | null>(null);
-  let regime = $state<RegimeHierarchyRead | null>(null);
+  let regime = $state<GlobalRegimeRead | null>(null);
   let reviews = $state<MacroReviewRead[]>([]);
   let sparklineData = $state<Array<{
     name: string;
@@ -123,7 +123,7 @@
     try {
       const [scoresRes, regimeRes, reviewsRes] = await Promise.all([
         api.get<MacroScoresResponse>("/macro/scores"),
-        api.get<RegimeHierarchyRead>("/macro/regime"),
+        api.get<GlobalRegimeRead>("/macro/regime"),
         api.get<MacroReviewRead[]>("/macro/reviews?limit=10"),
       ]);
       scores = scoresRes;
@@ -190,7 +190,7 @@
       return {
         region: REGION_LABELS[key] ?? key,
         compositeScore: reg.composite_score,
-        regime: regime!.regional_regimes[key] ?? "Unknown",
+        regime: regime!.raw_regime ?? "Unknown",
         dimensions: dims,
       };
     }).filter((t): t is TileData => t !== null);
@@ -230,7 +230,7 @@
   }
 
   const globalRegimeLabel = $derived(
-    regime ? sanitizeRegime(regime.global_regime) : "Unknown",
+    regime ? sanitizeRegime(regime.raw_regime) : "Unknown",
   );
 
   const isPinned = $derived(pinnedRegime.current !== null);
@@ -291,6 +291,9 @@
       <div class="macro-pin-bar">
         <span class="macro-global-regime">
           GLOBAL: <strong>{globalRegimeLabel}</strong>
+          {#if regime?.stress_score != null}
+            <span class="macro-stress-score">STRESS {Math.round(regime.stress_score)}/100</span>
+          {/if}
         </span>
         {#if isPinned}
           <button
@@ -311,6 +314,18 @@
         {/if}
       </div>
     </div>
+
+    <!-- Signal breakdown -->
+    {#if regime?.signal_details && Object.keys(regime.signal_details).length > 0}
+      <div class="macro-signals">
+        <span class="macro-signals-label">SIGNALS</span>
+        <div class="macro-signals-list">
+          {#each Object.entries(regime.signal_details) as [key, detail] (key)}
+            <span class="macro-signal-chip">{detail}</span>
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     <!-- Bottom row: sparkline wall + committee feed -->
     <div class="macro-bottom">
@@ -415,6 +430,48 @@
   .macro-pin-btn--active:hover {
     border-color: var(--terminal-status-error);
     color: var(--terminal-status-error);
+  }
+
+  .macro-stress-score {
+    margin-left: var(--terminal-space-2);
+    font-size: var(--terminal-text-10);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--terminal-accent-amber);
+  }
+
+  .macro-signals {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--terminal-space-2);
+    padding: 0 var(--terminal-space-1);
+    flex-shrink: 0;
+  }
+
+  .macro-signals-label {
+    font-size: var(--terminal-text-10);
+    font-weight: 600;
+    letter-spacing: var(--terminal-tracking-caps);
+    text-transform: uppercase;
+    color: var(--terminal-fg-muted);
+    white-space: nowrap;
+    padding-top: 2px;
+  }
+
+  .macro-signals-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--terminal-space-1);
+  }
+
+  .macro-signal-chip {
+    display: inline-block;
+    padding: 1px var(--terminal-space-2);
+    border: var(--terminal-border-hairline);
+    font-size: var(--terminal-text-10);
+    font-family: var(--terminal-font-mono);
+    color: var(--terminal-fg-secondary);
+    white-space: nowrap;
   }
 
   .macro-bottom {
