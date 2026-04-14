@@ -32,8 +32,8 @@ Phase A.2 (stress replay redesign) is deferred. Phase B (DCC-GARCH, regime-mixtu
 |---|---|---|
 | 1 | No shadow mode, no feature flags, no rollback automation | Greenfield; saved effort goes into adversarial solver tests |
 | 2 | Legacy `POST /portfolios/{id}/construct` and legacy parametric stress route **frozen**; new engine wired to the brutalist terminal only | Legacy UI is read-only "fluff" for bankers; serious allocation happens in the terminal |
-| 3 | `γ` (risk aversion) **fixed at 2.5** — no regime conditioning | Avoids whipsaw de-risking at market trough; keeps attribution clean |
-| 4 | Survivorship bias **accepted** in Phase A | Prove architecture first; CRSP/Morningstar cost not justified yet |
+| 3 | `γ` (risk aversion) **fixed at 2.5** — documented institutional default, overridable ONLY via ConfigService with audit trail | Avoids whipsaw de-risking at market trough; keeps attribution clean. If IC mandates change (e.g., "increase risk aversion for defensive sleeve"), the change goes through `ConfigService.get("wealth", "construction", org_id)["risk_aversion"]` with `AuditEvent` write. Never hardcode a second value. |
+| 4 | Survivorship bias **accepted** in Phase A, but **flagged explicitly** in `inputs_metadata` | Prove architecture first; CRSP/Morningstar cost not justified yet. Quantified impact: +50-150bps/year upward bias on expected returns estimated from surviving-fund 10Y CAGR. Flag `survivorship_bias_accepted: true` + `estimated_bias_bps_annual: [50, 150]` in JSONB. IC must see this on every run. |
 | 5 | Hybrid factor model: **fundamental factors for covariance, PCA strictly on residuals for diagnostic** | Explicability to IC first, statistical optimality second |
 | 6 | κ(Σ) monitoring **embedded in PR-A1** — not a later add-on | Backend must fail loudly before optimizer produces extreme weights |
 | 7 | Phase A.2 (stress replay) deferred to post-A1-A4 merge | Keeps the 2-week vertical slice tight |
@@ -110,10 +110,18 @@ if κ > 1e4:
     raise IllConditionedCovarianceError(κ, N, T, ...)
 elif κ > 1e3:
     logger.warning("construction.covariance_poorly_conditioned", κ=κ, ...)
-    # skip Phase 1 of CLARABEL cascade, go directly to Phase 1.5 (robust SOCP)
+    # MUST force robust=True in the caller to optimize_fund_portfolio().
+    # Phase 1.5 (robust SOCP, ellipsoidal uncertainty set) exists at
+    # optimizer_service.py:545 but is GATED BY the `robust` param — there is
+    # no automatic fallback today. The `inputs_metadata.kappa_warning_triggered`
+    # flag MUST be consumed by the route/worker and passed as `robust=True`
+    # to the optimizer. Do NOT silently degrade.
 ```
 
 `κ`, `N`, `T`, and factor-model summary all written to `portfolio_construction_runs.inputs_metadata` JSONB.
+
+**Verified pre-existing capability (2026-04-14, by Andrei):**
+- `optimize_fund_portfolio()` at `optimizer_service.py:545` implements Ben-Tal/Nemirovski robust counterpart with χ²_{0.95, n}-calibrated κ. Activated by `robust=True` kwarg. Cholesky fallback to eigenvalue-clipped `L` handles near-PSD matrices. Works today.
 
 ---
 
@@ -191,6 +199,15 @@ elif κ > 1e3:
     - λ=1.0 must equal sample covariance exactly (up to 1e-10)
     - λ=0.94 (RiskMetrics) gives documented half-life
     - Weights sum to 1.0 within 1e-10
+  - Test κ > 1e3 warning → `robust_mode_activated` flag:
+    - Construct a near-singular Σ (κ ≈ 5e3)
+    - Assert `inputs_metadata.kappa_warning_triggered == True`
+    - Assert the route/worker calls `optimize_fund_portfolio(..., robust=True)` — verify via mock spy
+    - Assert `inputs_metadata.robust_mode_activated == True`
+  - Test γ sourcing:
+    - Default run → `inputs_metadata.risk_aversion_source == "institutional_default"`, `risk_aversion_gamma == 2.5`
+    - ConfigService override (mocked with `org_id` having `{"risk_aversion": 3.5}`) → `risk_aversion_source == "config_override"`, `risk_aversion_gamma == 3.5`, + `AuditEvent` written with before/after
+    - Test assertion: every γ change produces an `AuditEvent` row — no silent override
 
 - `backend/tests/quant_engine/test_construction_integration.py` (NEW)
   - End-to-end on a real 20-fund selection from `instruments_universe` with sufficient history. Assert:
@@ -231,6 +248,15 @@ elif κ > 1e3:
     - Standard BL posterior formula
     - Keep existing `compute_bl_returns()` (single-view) as a thin wrapper for backward compatibility
   - τ is a float parameter (fixed 0.05 default) — no regime conditioning in Phase A.
+  - **Ω regularization (critical — Ω singular crashes `solve`):**
+    - Before any `np.linalg.solve(Ω, ...)` or `np.linalg.inv(P @ τΣ @ P.T + Ω)`, enforce:
+      ```python
+      eps = 1e-8 * np.trace(Omega) / max(Omega.shape[0], 1)
+      Omega_reg = Omega + eps * np.eye(Omega.shape[0])
+      ```
+    - Alternative: use `np.linalg.pinv(Omega)` directly (Moore-Penrose pseudoinverse) if regularization causes condition-number issues downstream.
+    - A confidence=1.0 IC view (`Ω_ii → 0`) must produce a posterior that respects the view without raising `LinAlgError`.
+    - Test this edge case explicitly in `test_black_litterman_multi_view.py`: IC view with confidence=0.999 and confidence=1.0 — both must converge numerically.
 
 - `backend/app/domains/wealth/services/quant_queries.py`
   - `_build_thbb_prior()` implementation:
@@ -289,7 +315,9 @@ elif κ > 1e3:
   - `assemble_factor_covariance(fit: FundamentalFactorFit) -> np.ndarray`:
     - Returns `Σ = B · F · B' + diag(D)`
     - Applies PSD enforcement (eigenvalue clamp at `max(1e-10, 1e-8 * trace(Σ)/N)`)
+    - **Type signature enforcement:** this function's signature takes `FundamentalFactorFit` **only**. It MUST NOT accept `PCADiagnostic` or any residual-PCA type as a parameter. This is checked by the type system (mypy) at `make check`, not by runtime grep.
   - Keep existing PCA function untouched. Add `compute_residual_pca(residual_series, n_components=3) -> PCADiagnostic` — **diagnostic only**, writes to `portfolio_construction_runs.inputs_metadata.residual_pca` for audit. Never feeds back into `Σ`.
+  - `PCADiagnostic` is a separate frozen dataclass whose only consumer is the JSONB audit writer. It is never imported by `assemble_factor_covariance`, `compute_fund_level_inputs`, or any optimizer code. Enforce via explicit import hygiene: `assemble_factor_covariance`'s module MUST NOT `from factor_model_service import PCADiagnostic`.
 
 - `backend/app/domains/wealth/services/quant_queries.py`
   - Modify `compute_fund_level_inputs()` to call `factor_model_service` when `N ≥ 20`, else fall back to 5Y EWMA + LW single-index shrinkage (keep existing LW path, retarget from constant-correlation to single-index).
@@ -307,20 +335,20 @@ elif κ > 1e3:
     - Diagonal dominated by B F B' + D decomposition
   - Test residual PCA **is not fed back** into Σ (regression check — a grep or mock assertion)
 
-**Factor proxy fallback list (§3.2):**
+**Factor proxy fallback list (§3.2) — NEVER substitute a level change where a total return is specified. Level changes and total returns are not interchangeable and introduce systematic bias.**
 
 | Primary | Fallback 1 | Fallback 2 |
 |---|---|---|
-| SPY | `benchmark_nav` `SPX` composite | raw SP500 series in `macro_data` |
-| IEF | 7-10Y Treasury from benchmark_nav | Compute from DGS10 / DGS2 level changes |
-| HYG | `BAMLH0A0HYM2` total return proxy | BAMLH0A0HYM2 OAS level change (not ideal, flag in audit) |
+| SPY | `benchmark_nav` SPX total-return composite | **skip**, reduce to K=7 |
+| IEF | 7-10Y Treasury total return from benchmark_nav | **skip Duration factor** — do NOT synthesize from DGS10/DGS2 level changes (yield changes ≠ bond returns without duration multiplier + convexity adjustment). Reduce to K-1. |
+| HYG | benchmark_nav HY total return | **skip Credit factor** — do NOT use `BAMLH0A0HYM2` OAS level change. OAS is a spread level, not a return; differencing it produces a bp-change time series with wrong units, wrong variance structure, and zero carry. Reduce to K-1. |
 | DXY | DTWEXBGS from macro_data | skip factor, reduce to K=7 |
 | DCOILWTICO | direct from macro_data | skip factor, reduce to K=7 |
-| IWM | `benchmark_nav` small-cap index | skip Size factor |
-| IWD / IWF | Value / Growth indices | skip Value factor |
-| EFA | `benchmark_nav` MSCI EAFE | skip International factor |
+| IWM | `benchmark_nav` small-cap total return | skip Size factor |
+| IWD / IWF | Value / Growth total return indices | skip Value factor |
+| EFA | `benchmark_nav` MSCI EAFE total return | skip International factor |
 
-When a factor is skipped, log audit event, reduce K accordingly, never inject synthetic data.
+When a factor is skipped, log audit event (`factor_skipped` with reason), reduce K accordingly, never inject synthetic data or proxies with incompatible units. Record skipped factors in `inputs_metadata.factor_model.factors_skipped`.
 
 **Acceptance criteria:**
 - `make check` passes
@@ -337,7 +365,9 @@ When a factor is skipped, log audit event, reduce K accordingly, never inject sy
 
 **Files to touch:**
 
-- `backend/app/core/db/migrations/versions/NNNN_construction_inputs_metadata.py` (NEW)
+- `backend/app/core/db/migrations/versions/0132_construction_inputs_metadata.py` (NEW)
+  - Revision `0132_construction_inputs_metadata`, `down_revision = "0131_return_5y_10y"`.
+  - The other head (`0110`) is a stale orphan branch — do NOT chain to it. Main sequence is 0131 → 0132.
   - Add JSONB column to `portfolio_construction_runs`:
     ```python
     op.add_column("portfolio_construction_runs",
@@ -350,6 +380,9 @@ When a factor is skipped, log audit event, reduce K accordingly, never inject sy
       "cov_lookback_days": 1260,
       "ewma_lambda": 0.97,
       "higher_moments_window": 756,
+      "risk_aversion_gamma": 2.5,
+      "risk_aversion_source": "institutional_default",
+      "tau_prior_confidence": 0.05,
       "condition_number": 123.4,
       "prior_weights": {"10y": 0.5, "5y": 0.3, "eq": 0.2},
       "n_funds_by_history": {"10y+": 30, "5y+": 45, "1y_only": 5},
@@ -357,7 +390,9 @@ When a factor is skipped, log audit event, reduce K accordingly, never inject sy
       "factor_model": {
         "used": true,
         "k_factors": 8,
+        "k_factors_effective": 8,
         "factor_names": [...],
+        "factors_skipped": [],
         "r_squared_mean": 0.72,
         "r_squared_p25": 0.48,
         "residual_pca_top3_explained": [0.12, 0.08, 0.05]
@@ -366,9 +401,15 @@ When a factor is skipped, log audit event, reduce K accordingly, never inject sy
       "lookback_start_date": "2021-04-14",
       "lookback_end_date": "2026-04-14",
       "kappa_warning_triggered": false,
-      "kappa_error_triggered": false
+      "kappa_error_triggered": false,
+      "robust_mode_activated": false,
+      "survivorship_bias_accepted": true,
+      "estimated_survivorship_bias_bps_annual": [50, 150],
+      "omega_regularization_epsilon": 1.2e-10
     }
     ```
+  - **`kappa_warning_triggered: true`** MUST cause the route/worker to call `optimize_fund_portfolio(..., robust=True)`. Set `robust_mode_activated: true` in metadata when this gating fires.
+  - **`survivorship_bias_accepted: true`** MUST be surfaced in the terminal UI (PR-A5 scope) as a visible provenance badge. IC must not be able to ignore this flag.
 
 - `backend/app/domains/wealth/routes/model_portfolios.py`
   - **Do not touch** the existing `/construct` route — frozen for banker UI.
