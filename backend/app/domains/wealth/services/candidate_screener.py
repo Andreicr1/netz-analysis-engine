@@ -147,6 +147,7 @@ async def discover_candidates(
         )
         .where(
             Instrument.is_active == True,  # noqa: E712
+            Instrument.is_institutional == True,  # noqa: E712
         )
     )
 
