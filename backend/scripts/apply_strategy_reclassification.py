@@ -50,7 +50,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import async_session_factory as async_session
-from app.domains.wealth.services.classification_family import classify_severity
+from app.domains.wealth.services.classification_family import (
+    classify_severity,
+    family_of,
+)
 
 logger = logging.getLogger("apply_strategy_reclassification")
 
@@ -205,27 +208,57 @@ async def _emit_audit(
     """
     from app.core.db.audit import write_audit_event
 
+    # SAVEPOINT isolates the audit insert. ``audit_events`` requires
+    # ``organization_id`` NOT NULL; a CLI invocation has no RLS context
+    # so the insert raises NotNullViolationError at flush time. Without
+    # ``begin_nested`` that error poisons the outer transaction and
+    # rolls back the production UPDATEs we just applied.
     try:
-        await write_audit_event(
-            db,
-            actor_id=actor,
-            action="apply_batch",
-            entity_type="strategy_reclassification",
-            entity_id=str(batch_id),
-            after={
-                "run_id": str(run_id),
-                "batch_id": str(batch_id),
-                "severities": severities,
-                "counts": counts,
-                "justification": justification,
-                "applied_at": datetime.now(timezone.utc).isoformat(),
-            },
-        )
+        async with db.begin_nested():
+            await write_audit_event(
+                db,
+                actor_id=actor,
+                action="apply_batch",
+                entity_type="strategy_reclassification",
+                entity_id=str(batch_id),
+                after={
+                    "run_id": str(run_id),
+                    "batch_id": str(batch_id),
+                    "severities": severities,
+                    "counts": counts,
+                    "justification": justification,
+                    "applied_at": datetime.now(timezone.utc).isoformat(),
+                    "legacy_taxonomy_migration": counts.get(
+                        "legacy_to_canonical", 0,
+                    ) > 0,
+                },
+            )
     except Exception as exc:
         logger.warning(
             "audit_event_skipped batch_id=%s reason=%s",
             batch_id, exc,
         )
+
+
+def _is_legacy_to_canonical(
+    current: str | None, proposed: str | None,
+) -> bool:
+    """A legacy → canonical migration is a P2 row where the current label
+    is non-canonical (no family entry) and the proposed label is canonical.
+
+    These ~21k rows were swept into ``asset_class_change`` by the original
+    severity matrix only because ``unknown != equity`` (etc). They are
+    vocabulary upgrades, not real cross-family reclassifications, and
+    carry no information loss — the previous label was already off-taxonomy.
+    """
+    # ``current is not None`` excludes NULL→canonical (which is P0
+    # safe_auto_apply, gated separately and never blocked by --force).
+    return (
+        current is not None
+        and family_of(current) is None
+        and proposed is not None
+        and family_of(proposed) is not None
+    )
 
 
 async def apply_batch(
@@ -235,17 +268,39 @@ async def apply_batch(
     dry_run: bool,
     actor: str,
     justification: str | None,
+    legacy_only: bool = False,
+    source_filter: str | None = None,
 ) -> dict[str, int]:
     """Walk the stage table once; apply rows whose severity is selected.
 
     Idempotency guarantee: ``WHERE applied_at IS NULL`` filters out any
     row from a previous batch. Severity is computed *fresh* per row so a
     label that changed between report and apply is still gated correctly.
+
+    Two narrowing filters can be combined with ``severities``:
+
+    ``legacy_only``
+        Only applies rows where ``current_family is None`` (current label
+        not in canonical taxonomy) AND ``proposed_family is not None``.
+        Use with ``--severity asset_class`` to migrate the legacy 37-label
+        vocabulary into the canonical 51-label taxonomy without touching
+        true cross-family changes. Counted as ``legacy_to_canonical``
+        rather than under the underlying severity tag.
+
+    ``source_filter``
+        Only applies rows whose ``classification_source`` matches the
+        given value (``fallback``, ``tiingo_description``, ``name_regex``,
+        or ``adv_brochure``). Useful with ``--severity lost`` to apply
+        only fallback-driven NULL transitions where the cascade had no
+        signal to work with.
     """
     batch_id = uuid4()
     counts: dict[str, int] = dict.fromkeys(severities, 0)
+    counts["legacy_to_canonical"] = 0
     counts["unchanged_skipped"] = 0
     counts["other_severity_skipped"] = 0
+    counts["filtered_legacy"] = 0
+    counts["filtered_source"] = 0
     counts["errors"] = 0
 
     async with async_session() as db:
@@ -275,14 +330,36 @@ async def apply_batch(
             if severity not in severities:
                 counts["other_severity_skipped"] += 1
                 continue
+
+            # ── Optional narrowing filters ───────────────────────────
+            is_legacy = _is_legacy_to_canonical(
+                row.current_strategy_label,
+                row.proposed_strategy_label,
+            )
+            if legacy_only and not is_legacy:
+                counts["filtered_legacy"] += 1
+                continue
+            if source_filter and row.classification_source != source_filter:
+                counts["filtered_source"] += 1
+                continue
+
+            # Counter bucket: legacy_to_canonical takes precedence over
+            # the raw severity tag so the operator sees the migration
+            # signal in the result summary.
+            counter_key = (
+                "legacy_to_canonical"
+                if (legacy_only and is_legacy)
+                else severity
+            )
+
             if dry_run:
-                counts[severity] += 1
+                counts[counter_key] += 1
                 continue
             try:
                 await _apply_one(
                     db, row=row, batch_id=batch_id, actor=actor,
                 )
-                counts[severity] += 1
+                counts[counter_key] += 1
             except Exception as exc:
                 logger.exception(
                     "apply_failed stage_id=%s source=%s pk=%s err=%s",
@@ -290,7 +367,10 @@ async def apply_batch(
                 )
                 counts["errors"] += 1
 
-        applied_total = sum(counts[s] for s in severities)
+        applied_total = (
+            sum(counts[s] for s in severities)
+            + counts["legacy_to_canonical"]
+        )
         if not dry_run and applied_total > 0:
             await db.execute(
                 text(
@@ -353,6 +433,29 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the interactive 'APPLY' confirmation prompt (CI use)",
     )
+    parser.add_argument(
+        "--legacy-to-canonical-only",
+        action="store_true",
+        help=(
+            "Only apply rows where the CURRENT label is non-canonical "
+            "(unknown family) and the PROPOSED label is canonical. "
+            "Treats them as a vocabulary migration: --force is NOT "
+            "required even when severity is asset_class. Combine with "
+            "--severity asset_class to migrate the legacy 37-label "
+            "vocabulary into the 51-label canonical taxonomy."
+        ),
+    )
+    parser.add_argument(
+        "--source-filter",
+        default=None,
+        choices=("fallback", "tiingo_description", "name_regex", "adv_brochure"),
+        help=(
+            "Only apply rows whose classification_source matches. "
+            "Most useful with '--severity lost --source-filter fallback' "
+            "to apply only NULL transitions where the cascade had no "
+            "signal at any layer."
+        ),
+    )
     return parser
 
 
@@ -362,10 +465,18 @@ async def main() -> None:
 
     severities = _resolve_severities(args.severity)
 
-    needs_force = bool(set(severities) & SEVERITIES_REQUIRING_FORCE)
+    # ``--legacy-to-canonical-only`` waives the --force gate for P2
+    # because the operation is a vocabulary migration, not a real
+    # asset-class reclassification (current label is off-taxonomy, no
+    # information can be lost). lost_class still needs justification.
+    needs_force = bool(
+        set(severities) & SEVERITIES_REQUIRING_FORCE,
+    ) and not args.legacy_to_canonical_only
     if needs_force and not args.force:
         parser.error(
-            "--force is required when applying asset_class_change or lost_class",
+            "--force is required when applying asset_class_change or "
+            "lost_class. (Pass --legacy-to-canonical-only to waive "
+            "--force for vocabulary migrations only.)",
         )
     needs_justification = bool(
         set(severities) & SEVERITIES_REQUIRING_JUSTIFICATION,
@@ -374,18 +485,30 @@ async def main() -> None:
         parser.error(
             "--justification is required when applying lost_class",
         )
+    if (
+        args.legacy_to_canonical_only
+        and "asset_class_change" not in severities
+    ):
+        parser.error(
+            "--legacy-to-canonical-only only makes sense with "
+            "--severity asset_class (or all)",
+        )
 
     actor = args.actor or getpass.getuser()
     run_id = UUID(args.run_id)
     dry_run = not args.confirm
 
     print("apply_strategy_reclassification")
-    print(f"  run_id       : {run_id}")
-    print(f"  severities   : {', '.join(severities)}")
-    print(f"  dry_run      : {dry_run}")
-    print(f"  actor        : {actor}")
+    print(f"  run_id            : {run_id}")
+    print(f"  severities        : {', '.join(severities)}")
+    print(f"  dry_run           : {dry_run}")
+    print(f"  actor             : {actor}")
+    if args.legacy_to_canonical_only:
+        print("  legacy_only       : True (vocabulary migration mode)")
+    if args.source_filter:
+        print(f"  source_filter     : {args.source_filter}")
     if args.justification:
-        print(f"  justification: {args.justification}")
+        print(f"  justification     : {args.justification}")
     print()
 
     if not dry_run and not args.yes:
@@ -399,6 +522,8 @@ async def main() -> None:
         dry_run=dry_run,
         actor=actor,
         justification=args.justification,
+        legacy_only=args.legacy_to_canonical_only,
+        source_filter=args.source_filter,
     )
 
     print("\n=== RESULT ===")

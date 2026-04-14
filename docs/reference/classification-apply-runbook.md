@@ -69,31 +69,64 @@ python backend/scripts/apply_strategy_reclassification.py \
   --run-id <uuid> --severity style --confirm
 ```
 
-## Phase 4 — Apply P2 (asset class changes, ~13,000 rows)
+## Phase 4 — Apply P2 (asset class changes)
 
-Medium risk: fund moves family. Allocation blocks, peer groups, and
-scoring weights may shift.
+Empirically, P2 splits into two very different sub-buckets that should
+be applied separately:
+
+### 4a. Legacy → Canonical vocabulary migration (low risk, large volume)
+
+Rows where the *current* `strategy_label` is from the old 37-category
+vocabulary (no entry in `STRATEGY_FAMILY`) and the *proposed* label is
+canonical. These were swept into "asset_class_change" only because
+`unknown != equity` (etc), but they carry no information loss — the
+previous label was already off-taxonomy. Use the dedicated flag:
+
+```bash
+python backend/scripts/apply_strategy_reclassification.py \
+  --run-id <uuid> --severity asset_class \
+  --legacy-to-canonical-only --confirm
+```
+
+`--legacy-to-canonical-only` waives the `--force` requirement because
+the operation is a vocabulary upgrade, not a real reclassification.
+Counted in the result summary under `legacy_to_canonical`.
+
+### 4b. True cross-family changes (medium risk, smaller volume)
+
+Rows where both labels are canonical but in different families
+(e.g. `Large Blend` → `High Yield Bond`). These need real review —
+sample 20+ rows per `source_table` from the CSV first; reject the run
+if the cascade is misclassifying a recognisable cohort.
 
 ```bash
 python backend/scripts/apply_strategy_reclassification.py \
   --run-id <uuid> --severity asset_class --confirm --force
 ```
 
-Per source table, sample 20+ rows from the CSV before applying. Reject
-the run if the cascade is misclassifying a recognisable cohort
-(e.g. all "Income" funds going to Fixed Income when half are equity
-income).
+Without `--legacy-to-canonical-only`, the script will apply BOTH
+sub-buckets — only do this after Phase 4a has completed and the true
+cross-family residual is small enough to inspect manually.
 
-## Phase 5 — Apply P3 (lost class, ~9,600 rows)
+## Phase 5 — Apply P3 (lost class)
 
-High risk: label becomes NULL. Requires IC sign-off and a written
-justification recorded in the audit event.
+High risk: label becomes NULL. Use `--source-filter fallback` to
+restrict the apply to rows where the cascade had no signal at any
+layer (Tiingo description, name regex, ADV brochure all came up empty).
+For those, NULL is genuinely better than a stale legacy label:
 
 ```bash
 python backend/scripts/apply_strategy_reclassification.py \
-  --run-id <uuid> --severity lost --confirm --force \
-  --justification "IC 2026-04-14: ESMA residuals approved for null-out"
+  --run-id <uuid> --severity lost --source-filter fallback \
+  --confirm --force \
+  --justification "Cascade fallback: no canonical label found, NULL preferable to non-canonical legacy"
 ```
+
+For rows where `classification_source` is `tiingo_description` or
+`name_regex` and the proposed label is NULL, treat as suspect — Layer
+1/2 fired but didn't reach a canonical label, which usually indicates
+a classifier bug rather than a genuine "this fund has no strategy"
+case. Inspect manually before applying.
 
 ## Combined batches
 
