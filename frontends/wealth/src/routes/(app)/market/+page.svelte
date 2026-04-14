@@ -213,7 +213,7 @@
 	// ── Snapshot regime badge ────────────────────────────────────────────
 
 	function snapshotRegimeLabel(r: RegimeHierarchy): string {
-		const regime = r.global_regime;
+		const regime = r.raw_regime ?? r.global_regime;
 		if (!regime) return "";
 		return regime.replace(/_/g, " ").toUpperCase();
 	}
@@ -234,10 +234,8 @@
 				</span>
 				<span class="macro-regime-separator">&#x2022;</span>
 			{/if}
-			{#if regime?.regional_regimes}
-				{#each Object.keys(regime.regional_regimes) as region (region)}
-					<span class="macro-region-tag">{region}</span>
-				{/each}
+			{#if regime?.stress_score != null}
+				<span class="macro-region-tag">STRESS {Math.round(regime.stress_score)}/100</span>
 			{/if}
 			{#if scores}
 				<span class="macro-asof">AS OF {scores.as_of_date}</span>
@@ -328,8 +326,8 @@
 				<button class="region-header" onclick={() => toggleRegion(regionName)}>
 					<div class="region-header-left">
 						<span class="region-name">{regionDisplayName(regionName)}</span>
-						{#if regime?.regional_regimes[regionName]}
-							<span class="region-regime-badge">{regime.regional_regimes[regionName].replace(/_/g, " ").toUpperCase()}</span>
+						{#if regime?.raw_regime}
+							<span class="region-regime-badge">{regime.raw_regime.replace(/_/g, " ").toUpperCase()}</span>
 						{/if}
 						<span class="region-coverage">COVERAGE {regionData.coverage != null ? formatNumber(regionData.coverage * 100, 0) : "—"}%</span>
 					</div>

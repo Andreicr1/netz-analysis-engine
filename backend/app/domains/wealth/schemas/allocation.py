@@ -6,6 +6,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.domains.wealth.schemas.sanitized import humanize_regime
+
 
 class StrategicAllocationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="ignore")
@@ -145,6 +147,11 @@ class GlobalRegimeRead(BaseModel):
     raw_regime: str
     stress_score: Decimal | None = None
     signal_details: dict[str, object] = {}
+
+    @model_validator(mode="after")
+    def _humanize(self) -> "GlobalRegimeRead":
+        object.__setattr__(self, "raw_regime", humanize_regime(self.raw_regime))
+        return self
 
 
 # ── TAA (Tactical Asset Allocation) schemas (Sprint 3) ──────────

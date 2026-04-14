@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, date, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 import structlog
@@ -24,9 +24,10 @@ from app.core.config.config_service import ConfigService
 from app.core.db.engine import async_session_factory
 from app.core.security.clerk_auth import CurrentUser, get_current_user, require_role
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
-from app.domains.wealth.models.allocation import StrategicAllocation
+from app.domains.wealth.models.allocation import MacroRegimeSnapshot, StrategicAllocation
 from app.domains.wealth.models.macro_committee import MacroReview
 from app.domains.wealth.routes.common import _get_content_semaphore, require_content_slot
+from app.domains.wealth.schemas.allocation import GlobalRegimeRead
 from app.domains.wealth.schemas.macro import (
     BisDataResponse,
     BisTimePoint,
@@ -44,7 +45,6 @@ from app.domains.wealth.schemas.macro import (
     MacroSnapshotResponse,
     OfrDataResponse,
     OfrTimePoint,
-    RegimeHierarchyRead,
     RegionalScoreRead,
     TreasuryDataResponse,
     TreasuryTimePoint,
@@ -62,13 +62,6 @@ from quant_engine.allocation_proposal_service import (
     compute_regime_tilted_weights,
     extract_regime_from_review,
     extract_regional_scores_from_snapshot,
-)
-from quant_engine.regime_service import (
-    REGIONAL_REGIME_SIGNALS,
-    classify_regional_regime,
-    compose_global_regime,
-    get_latest_macro_values,
-    resolve_regional_regime_config,
 )
 from vertical_engines.wealth.macro_committee_engine import (
     build_report_json,
@@ -232,55 +225,38 @@ async def get_macro_snapshot(
 
 @router.get(
     "/regime",
-    response_model=RegimeHierarchyRead,
-    summary="Hierarchical regime: global + per-region",
+    response_model=GlobalRegimeRead,
+    summary="Current global market regime (multi-signal)",
     tags=["macro"],
 )
-async def get_hierarchical_regime(
+async def get_regime(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-    org_id: UUID | None = Depends(get_org_id),
-) -> RegimeHierarchyRead:
-    """Return hierarchical regime classification: global + 4 regions.
+) -> GlobalRegimeRead:
+    """Return the latest global regime from macro_regime_snapshot.
 
-    Uses ICE BofA credit spreads for regional signals and GDP-weighted
-    composition with pessimistic override for global regime.
+    Uses the 10-signal multi-factor stress model (55% financial + 45% real economy).
+    Computed daily by the regime_detection worker.
     """
-    macro = await get_latest_macro_values(db)
-    config_service = ConfigService(db)
-    raw_result = await config_service.get("liquid_funds", "macro_intelligence", org_id)
-    config = resolve_regional_regime_config(raw_result.value)
-
-    vix_val = macro.get("VIXCLS", (None, None))[0]
-    cpi_val = macro.get("CPI_YOY", (None, None))[0]
-
-    regional_results: dict[str, str] = {}
-    for region, signal_ids in REGIONAL_REGIME_SIGNALS.items():
-        signal_values = {
-            sid: macro.get(sid, (None, None))[0] for sid in signal_ids
-        }
-        result = classify_regional_regime(
-            region, signal_values,
-            vix=vix_val if region == "US" else None,
-            cpi_yoy=cpi_val,
-            config=config,
-        )
-        regional_results[region] = result.regime
-
-    global_regime, composition_reasons = compose_global_regime(
-        regional_results, config=config,
+    stmt = (
+        select(MacroRegimeSnapshot)
+        .order_by(MacroRegimeSnapshot.as_of_date.desc())
+        .limit(1)
     )
+    result = await db.execute(stmt)
+    snapshot = result.scalar_one_or_none()
 
-    as_of = None
-    for _, obs_date in macro.values():
-        if obs_date is not None and (as_of is None or obs_date > as_of):
-            as_of = obs_date
+    if snapshot is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No regime snapshot available. The regime_detection worker may not have run yet.",
+        )
 
-    return RegimeHierarchyRead(
-        global_regime=global_regime,
-        regional_regimes=regional_results,
-        composition_reasons=composition_reasons,
-        as_of_date=as_of,
+    return GlobalRegimeRead(
+        as_of_date=snapshot.as_of_date,
+        raw_regime=snapshot.raw_regime,
+        stress_score=snapshot.stress_score,
+        signal_details=snapshot.signal_details,
     )
 
 
@@ -354,39 +330,22 @@ async def generate_review(
             previous.data_json if previous else None,
         )
 
-        # Compute regime hierarchy and embed in report for downstream use
+        # Embed latest regime snapshot in report for downstream use
         regime_data: dict[str, Any] | None = None
         try:
-            config_service = ConfigService(db)
-            raw_config = await config_service.get(
-                "liquid_funds", "macro_intelligence", org_id,
+            regime_stmt = (
+                select(MacroRegimeSnapshot)
+                .order_by(MacroRegimeSnapshot.as_of_date.desc())
+                .limit(1)
             )
-            regime_config = resolve_regional_regime_config(raw_config.value)
-            macro = await get_latest_macro_values(db)
-            vix_val = macro.get("VIXCLS", (None, None))[0]
-            cpi_val = macro.get("CPI_YOY", (None, None))[0]
-
-            regional_regimes: dict[str, str] = {}
-            for region, signal_ids in REGIONAL_REGIME_SIGNALS.items():
-                signal_values = {
-                    sid: macro.get(sid, (None, None))[0] for sid in signal_ids
+            regime_result = await db.execute(regime_stmt)
+            regime_snapshot = regime_result.scalar_one_or_none()
+            if regime_snapshot:
+                regime_data = {
+                    "global": regime_snapshot.raw_regime,
+                    "stress_score": float(regime_snapshot.stress_score) if regime_snapshot.stress_score else None,
+                    "signal_details": regime_snapshot.signal_details,
                 }
-                rr = classify_regional_regime(
-                    region, signal_values,
-                    vix=vix_val if region == "US" else None,
-                    cpi_yoy=cpi_val,
-                    config=regime_config,
-                )
-                regional_regimes[region] = rr.regime
-
-            global_regime, composition_reasons = compose_global_regime(
-                regional_regimes, config=regime_config,
-            )
-            regime_data = {
-                "global": global_regime,
-                "regional": regional_regimes,
-                "composition_reasons": composition_reasons,
-            }
         except Exception:
             logger.warning("regime_embed_failed", exc_info=True)
 
@@ -478,33 +437,17 @@ async def _generate_allocation_proposals(
     report_json = review.report_json or {}
     global_regime = extract_regime_from_review(report_json)
 
-    # If regime data wasn't embedded in report, compute it live
+    # If regime data wasn't embedded in report, read from snapshot
     if global_regime == "RISK_ON" and not report_json.get("regime"):
-        macro = await get_latest_macro_values(db)
-        raw_regime_config = await config_service.get(
-            "liquid_funds", "macro_intelligence", org_id,
+        regime_stmt = (
+            select(MacroRegimeSnapshot)
+            .order_by(MacroRegimeSnapshot.as_of_date.desc())
+            .limit(1)
         )
-        regime_config = resolve_regional_regime_config(raw_regime_config.value)
-        vix_val = macro.get("VIXCLS", (None, None))[0]
-        cpi_val = macro.get("CPI_YOY", (None, None))[0]
-
-        regional_results: dict[str, str] = {}
-        for region, signal_ids in REGIONAL_REGIME_SIGNALS.items():
-            signal_values = {
-                sid: macro.get(sid, (None, None))[0] for sid in signal_ids
-            }
-            rr = classify_regional_regime(
-                region, signal_values,
-                vix=vix_val if region == "US" else None,
-                cpi_yoy=cpi_val,
-                config=regime_config,
-            )
-            regional_results[region] = rr.regime
-
-        global_regime_computed, _ = compose_global_regime(
-            regional_results, config=regime_config,
-        )
-        global_regime = global_regime_computed
+        regime_result = await db.execute(regime_stmt)
+        regime_snapshot = regime_result.scalar_one_or_none()
+        if regime_snapshot:
+            global_regime = regime_snapshot.raw_regime
 
     # Get snapshot data for regional scores
     regional_scores: dict[str, float] = {}

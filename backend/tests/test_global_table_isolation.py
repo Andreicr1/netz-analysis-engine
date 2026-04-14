@@ -111,7 +111,8 @@ ALLOWLISTED_GLOBAL_TABLE_CONSUMERS: dict[str, str] = {
     "app/domains/admin/services/config_writer.py": "admin — uses session from caller (always get_db_admin in route layer); writes VerticalConfigDefault",
     # ── Wealth routes — read-only access to global reference data ───────────
     "app/domains/wealth/routes/attribution.py": "read — SELECT only on AllocationBlock and BenchmarkNav; no writes",
-    "app/domains/wealth/routes/macro.py": "read — SELECT only on MacroRegionalSnapshot; no writes",
+    "app/domains/wealth/routes/allocation.py": "read — SELECT only on MacroRegimeSnapshot for global regime display; no writes",
+    "app/domains/wealth/routes/macro.py": "read — SELECT only on MacroRegionalSnapshot and MacroRegimeSnapshot; no writes",
     "app/domains/wealth/routes/entity_analytics.py": "read — SELECT only on AllocationBlock and BenchmarkNav for benchmark resolution; no writes",
     "app/domains/wealth/services/blended_benchmark_service.py": "read — SELECT only on AllocationBlock and BenchmarkNav; no writes",
     "app/domains/wealth/services/benchmark_resolver.py": "read — SELECT only on AllocationBlock and BenchmarkNav for composite benchmark resolution; no writes",

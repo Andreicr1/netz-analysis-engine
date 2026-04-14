@@ -351,6 +351,16 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/allocation/regime",
+    "name": "get_global_regime"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/allocation/regime-overlay",
+    "name": "get_regime_overlay"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/allocation/{profile}/effective",
     "name": "get_effective"
   },
@@ -872,7 +882,7 @@
   {
     "method": "GET",
     "path": "/api/v1/macro/regime",
-    "name": "get_hierarchical_regime"
+    "name": "get_regime"
   },
   {
     "method": "GET",
