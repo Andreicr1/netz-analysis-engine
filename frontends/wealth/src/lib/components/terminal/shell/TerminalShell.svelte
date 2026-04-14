@@ -128,24 +128,36 @@
 	// dispatch surface). `active` entries invoke goto via resolve();
 	// `pending` entries open the palette so the user sees the
 	// pending badge for that route.
+	async function navMacro() {
+		await goto(resolve("/macro"));
+	}
+
+	async function navAlloc() {
+		await goto(resolve("/allocation"));
+	}
+
 	async function navScreener() {
-		const target = resolve("/terminal-screener");
-		await goto(target);
-	}
-
-	async function navLive() {
-		const target = resolve("/portfolio/live");
-		await goto(target);
-	}
-
-	async function navResearch() {
-		const target = resolve("/research");
-		await goto(target);
+		await goto(resolve("/terminal-screener"));
 	}
 
 	async function navDD() {
-		const target = resolve("/dd");
-		await goto(target);
+		await goto(resolve("/dd"));
+	}
+
+	async function navBuilder() {
+		await goto(resolve("/portfolio/builder"));
+	}
+
+	async function navLive() {
+		await goto(resolve("/portfolio/live"));
+	}
+
+	async function navResearch() {
+		await goto(resolve("/research"));
+	}
+
+	async function navAlerts() {
+		await goto(resolve("/alerts"));
 	}
 
 	function openPalette() {
@@ -155,14 +167,14 @@
 	type GoToHandler = () => void | Promise<void>;
 
 	const GO_TO_SHORTCUTS: Readonly<Record<string, GoToHandler>> = {
+		m: navMacro,
+		a: navAlloc,
 		s: navScreener,
+		d: navDD,
+		p: navBuilder,
 		l: navLive,
 		r: navResearch,
-		m: openPalette, // Macro — pending route
-		a: openPalette, // Alloc — pending
-		p: openPalette, // Portfolio Builder — pending
-		n: openPalette, // Alerts (n for notifications) — pending
-		d: navDD,       // DD — active
+		n: navAlerts,
 	};
 
 	const GO_TO_WINDOW_MS = 800;

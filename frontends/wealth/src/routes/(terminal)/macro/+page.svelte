@@ -8,6 +8,7 @@
 <script lang="ts">
   import { getContext } from "svelte";
   import { createClientApiClient } from "$lib/api/client";
+  import { pinnedRegime } from "$lib/state/pinned-regime.svelte";
   import Panel from "$lib/components/terminal/layout/Panel.svelte";
   import PanelHeader from "$lib/components/terminal/layout/PanelHeader.svelte";
   import RegimeTile from "$lib/components/terminal/macro/RegimeTile.svelte";
@@ -211,6 +212,49 @@
     }),
   );
 
+  // -- Regime display helpers ------------------------------------------
+
+  const REGIME_DISPLAY: Record<string, string> = {
+    REGIME_NORMAL: "Normal",
+    normal: "Normal",
+    REGIME_RISK_ON: "Risk On",
+    risk_on: "Risk On",
+    REGIME_RISK_OFF: "Risk Off",
+    risk_off: "Risk Off",
+    REGIME_CRISIS: "Crisis",
+    crisis: "Crisis",
+  };
+
+  function sanitizeRegime(raw: string): string {
+    return REGIME_DISPLAY[raw] ?? raw;
+  }
+
+  const globalRegimeLabel = $derived(
+    regime ? sanitizeRegime(regime.global_regime) : "Unknown",
+  );
+
+  const isPinned = $derived(pinnedRegime.current !== null);
+
+  function handlePinRegime() {
+    if (!regime || !scores) return;
+
+    // Compute global composite from regional averages
+    const regionKeys = Object.keys(scores.regions);
+    const avgScore = regionKeys.length > 0
+      ? regionKeys.reduce((sum, k) => sum + (scores!.regions[k]?.composite_score ?? 0), 0) / regionKeys.length
+      : 0;
+
+    pinnedRegime.pin({
+      label: globalRegimeLabel,
+      region: "GLOBAL",
+      score: Math.round(avgScore),
+    });
+  }
+
+  function handleUnpinRegime() {
+    pinnedRegime.clear();
+  }
+
   // -- Effects ---------------------------------------------------------
 
   $effect(() => {
@@ -232,16 +276,40 @@
   {:else if fetchError}
     <div class="macro-state macro-state--error">Failed to load macro data. Retrying...</div>
   {:else}
-    <!-- Top row: 4 regime tiles -->
-    <div class="macro-tiles">
-      {#each tiles as tile (tile.region)}
-        <RegimeTile
-          region={tile.region}
-          compositeScore={tile.compositeScore}
-          regime={tile.regime}
-          dimensions={tile.dimensions}
-        />
-      {/each}
+    <!-- Top row: 4 regime tiles + pin action -->
+    <div class="macro-tiles-row">
+      <div class="macro-tiles">
+        {#each tiles as tile (tile.region)}
+          <RegimeTile
+            region={tile.region}
+            compositeScore={tile.compositeScore}
+            regime={tile.regime}
+            dimensions={tile.dimensions}
+          />
+        {/each}
+      </div>
+      <div class="macro-pin-bar">
+        <span class="macro-global-regime">
+          GLOBAL: <strong>{globalRegimeLabel}</strong>
+        </span>
+        {#if isPinned}
+          <button
+            type="button"
+            class="macro-pin-btn macro-pin-btn--active"
+            onclick={handleUnpinRegime}
+          >
+            UNPIN REGIME
+          </button>
+        {:else}
+          <button
+            type="button"
+            class="macro-pin-btn"
+            onclick={handlePinRegime}
+          >
+            PIN REGIME
+          </button>
+        {/if}
+      </div>
     </div>
 
     <!-- Bottom row: sparkline wall + committee feed -->
@@ -282,11 +350,71 @@
     overflow: hidden;
   }
 
+  .macro-tiles-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--terminal-space-2);
+    flex-shrink: 0;
+  }
+
   .macro-tiles {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: var(--terminal-space-3);
-    flex-shrink: 0;
+  }
+
+  .macro-pin-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--terminal-space-1);
+  }
+
+  .macro-global-regime {
+    font-size: var(--terminal-text-10);
+    letter-spacing: var(--terminal-tracking-caps);
+    text-transform: uppercase;
+    color: var(--terminal-fg-tertiary);
+  }
+
+  .macro-global-regime strong {
+    color: var(--terminal-fg-primary);
+    font-weight: 700;
+  }
+
+  .macro-pin-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--terminal-space-1);
+    padding: 2px var(--terminal-space-2);
+    background: transparent;
+    border: var(--terminal-border-hairline);
+    border-radius: var(--terminal-radius-none);
+    font-family: var(--terminal-font-mono);
+    font-size: var(--terminal-text-10);
+    font-weight: 600;
+    letter-spacing: var(--terminal-tracking-caps);
+    text-transform: uppercase;
+    color: var(--terminal-fg-secondary);
+    cursor: pointer;
+    transition:
+      border-color var(--terminal-motion-tick) var(--terminal-motion-easing-out),
+      color var(--terminal-motion-tick) var(--terminal-motion-easing-out);
+  }
+
+  .macro-pin-btn:hover {
+    border-color: var(--terminal-accent-amber);
+    color: var(--terminal-accent-amber);
+  }
+
+  .macro-pin-btn--active {
+    border-color: var(--terminal-accent-cyan);
+    color: var(--terminal-accent-cyan);
+  }
+
+  .macro-pin-btn--active:hover {
+    border-color: var(--terminal-status-error);
+    color: var(--terminal-status-error);
   }
 
   .macro-bottom {
