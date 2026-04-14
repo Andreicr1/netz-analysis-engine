@@ -61,11 +61,16 @@ STRATEGY_LABELS: frozenset[str] = frozenset(
         "Small Blend", "Small Growth", "Small Value",
         "International Equity", "Emerging Markets Equity",
         "Global Equity", "Sector Equity",
+        # Equity — geographic / thematic (Round 2)
+        "European Equity", "Asian Equity", "ESG/Sustainable Equity",
         # Fixed Income
         "Short-Term Bond", "Intermediate-Term Bond", "Long-Term Bond",
         "High Yield Bond", "Investment Grade Bond",
         "Government Bond", "Municipal Bond", "International Bond",
         "Inflation-Linked Bond",
+        # Fixed Income — geographic / sector / thematic (Round 2)
+        "European Bond", "Emerging Markets Debt", "ESG/Sustainable Bond",
+        "Mortgage-Backed Securities", "Asset-Backed Securities",
         # Private / Alts
         "Private Credit", "Private Equity", "Venture Capital",
         "Real Estate", "Infrastructure", "Commodities", "Precious Metals",
@@ -74,6 +79,8 @@ STRATEGY_LABELS: frozenset[str] = frozenset(
         "Long/Short Equity", "Global Macro", "Multi-Strategy",
         "Event-Driven", "Volatility Arbitrage", "Convertible Arbitrage",
         "Quant/Systematic",
+        # Convertibles — non-hedge mutual fund variant (Round 2)
+        "Convertible Securities",
         # Multi-Asset
         "Balanced", "Target Date", "Allocation",
         # Other
@@ -142,6 +149,15 @@ def _classify_from_description(
     """
     text = description.lower()
 
+    # ── Long/Short (Round 2 P1) — outside hedge gate (UCITS support) ─
+    if re.search(
+        r"long[/\s-]+short\s+(?:equit|strategy)|"
+        r"long[/\s-]+short\s+position|"
+        r"employs?\s+a\s+long[/\s-]+short",
+        text,
+    ):
+        return ("Long/Short Equity", "desc:long_short")
+
     # ── Balanced / Multi-Asset (explicit composition) ───────────────
     # Catches "60% debt 40% equity", "approximately 50% stocks and 50% bonds".
     balanced_patterns = (
@@ -189,6 +205,39 @@ def _classify_from_description(
         if re.search(pattern, text):
             return ("Commodities", f"desc:commodities:{pattern[:40]}")
 
+    # ── ESG / Sustainable (Round 2 P6) — runs before generic equity/bond ─
+    if re.search(
+        r"environmental.{0,15}social.{0,15}governance|"
+        r"\besg\b|sustainable\s+invest|"
+        r"impact\s+invest|socially\s+responsible",
+        text,
+    ):
+        if re.search(r"\b(?:bond|fixed[- ]income|debt|credit)\b", text):
+            return ("ESG/Sustainable Bond", "desc:esg_bond")
+        if re.search(r"\b(?:equit|stocks?|shares?|companies)\b", text):
+            return ("ESG/Sustainable Equity", "desc:esg_equity")
+        return ("ESG/Sustainable Equity", "desc:esg_ambiguous")
+
+    # ── Mortgage-Backed / Asset-Backed (Round 2 P4) — before Structured Credit ─
+    if re.search(
+        r"mortgage[- ]backed\s+secur|"
+        r"\bmbs\b|\bcmbs\b|"
+        r"agency\s+mortgage|residential\s+mortgage",
+        text,
+    ):
+        return ("Mortgage-Backed Securities", "desc:mbs")
+    if re.search(
+        r"asset[- ]backed\s+secur|"
+        r"(?:auto|credit\s+card|student\s+loan)[- ]backed",
+        text,
+    ):
+        return ("Asset-Backed Securities", "desc:abs")
+
+    # ── Standalone Convertible Securities (Round 2 P2) — non-hedge ──
+    if re.search(r"invests?\s+.*convertible\s+(?:securities|bonds)", text):
+        if not (fund_type and "hedge" in fund_type.lower()):
+            return ("Convertible Securities", "desc:convertible_securities")
+
     # ── Structured Credit / CLO (specific — runs BEFORE Private Credit) ─
     if re.search(
         r"\bcollateralized\s+loan\s+obligation|"
@@ -211,6 +260,21 @@ def _classify_from_description(
         if re.search(pattern, text):
             return ("Private Credit", f"desc:private_credit:{pattern[:40]}")
 
+    # ── European bonds (Round 2 P7) — before generic Govt/IG/HY ────
+    if re.search(
+        r"(?:european|euro(?:pean|zone)|eu|germany|france|italy|spain|uk|united\s+kingdom)\s+"
+        r"(?:government|sovereign|corporate)\s+(?:bond|debt|securit)",
+        text,
+    ):
+        return ("European Bond", "desc:european_bond")
+
+    # ── Emerging Markets Debt (Round 2 P8) — before EM Equity / IG Bond ─
+    if re.search(
+        r"emerging\s+market(?:s)?\s+(?:debt|bond|fixed[- ]income|sovereign|corporate\s+bond)",
+        text,
+    ):
+        return ("Emerging Markets Debt", "desc:em_debt")
+
     # ── Fixed Income (specificity descending) ───────────────────────
     if re.search(r"\bhigh[- ]yield\s+bonds?|\bjunk\s+bonds?|\bnon[- ]investment\s+grade", text):
         return ("High Yield Bond", "desc:high_yield")
@@ -231,6 +295,31 @@ def _classify_from_description(
         return ("Investment Grade Bond", "desc:ig_bond")
     if re.search(r"\binflation[- ]linked|\btreasury\s+inflation|\btips\b", text):
         return ("Inflation-Linked Bond", "desc:tips")
+
+    # ── Sector Equity (Round 2 P3) — before size×style ─────────────
+    sector_desc_re = (
+        r"invests?\s+(?:primarily|at\s+least\s+\d+%)\s+.*"
+        r"(?:energy|health\s*care|technology|financial|utilit|"
+        r"consumer|industrial|material|telecom)\s+(?:sector|compan|stocks|equit)"
+    )
+    if re.search(sector_desc_re, text):
+        return ("Sector Equity", "desc:sector_equity")
+
+    # ── European equity (Round 2 P7) — before International ────────
+    if re.search(
+        r"(?:european|euro(?:pean|zone)|eu)\s+(?:equit|stocks?|compan|shares?)|"
+        r"(?:germany|france|italy|spain|uk|united\s+kingdom)\s+(?:equit|compan|stocks?)",
+        text,
+    ):
+        return ("European Equity", "desc:european_equity")
+
+    # ── Asian equity (Round 2 P8) — before International ───────────
+    if re.search(
+        r"\basia(?:n|[- ]pacific)?\s+(?:equit|stocks?|compan|shares?)|"
+        r"\b(?:china|japan|korea|taiwan|singapore|hong\s+kong|india)\s+(?:equit|stocks?|compan)",
+        text,
+    ):
+        return ("Asian Equity", "desc:asian_equity")
 
     # ── Equity (size × style, with international/EM override) ──────
     if re.search(r"\b(?:emerging\s+markets?|developing\s+countries)", text):
@@ -307,6 +396,29 @@ def _classify_from_name(
     has_gold = bool(re.search(r"\bgold\b(?!\s*man)", name))
     has_silver_mining = bool(re.search(r"\bsilver\b|\bmining\b|\bprecious\s+metal", name))
 
+    # Round 2 P1: Long/Short detection OUTSIDE hedge gate (UCITS/mutual funds
+    # named "Long Short Global Equity" must classify even when fund_type is
+    # not "Hedge Fund"). Allow space, slash, or hyphen as separator.
+    if re.search(r"\blong[\s/-]+short\b", name):
+        return ("Long/Short Equity", "name:long_short_ucits_or_hedge")
+
+    # Round 2 P5: Long-leverage ETFs (2x, 3x, ultra, daily bull). Strip the
+    # leverage keyword and recurse on underlying. Excludes "ultra short"
+    # (handled by inverse block below). Lineage carries `leveraged:` prefix.
+    if re.search(
+        r"\b(?:2x|3x|ultra(?!\s+short)|daily\s+(?:bull|long))\b",
+        name,
+    ):
+        stripped = re.sub(
+            r"\b(?:2x|3x|ultra(?!\s+short)|daily\s+(?:bull|long))\b",
+            "",
+            name,
+        ).strip()
+        if stripped and stripped != name:
+            sub = _classify_from_name(stripped, fund_type)
+            if sub is not None:
+                return (sub[0], f"name:leveraged:{sub[1]}")
+
     # Bug fix #3: Short / Inverse FIRST — strip the direction prefix and
     # recurse on the underlying exposure. Must run BEFORE Real Estate so
     # that "ProShares Short Real Estate" carries the ``short`` lineage
@@ -329,6 +441,26 @@ def _classify_from_name(
     if re.search(r"\bclos?\b|\bcollateralized\s+loan", name):
         return ("Structured Credit", "name:clo")
 
+    # Round 2 P4: Mortgage-Backed / Asset-Backed Securities — BEFORE Real
+    # Estate so "PIMCO Mortgage-Backed Securities" doesn't fall into Real
+    # Estate via "mortgage". Pattern is strict: requires "mortgage-backed"
+    # or "MBS/CMBS" — does NOT match "Mortgage Real Estate ETF".
+    if re.search(
+        r"mortgage[- ]backed|"
+        r"\bmbs\s+(?:fund|portfolio|strateg)|"
+        r"\bcmbs\b|"
+        r"(?:agency|residential|commercial)\s+mortgage\s+(?:secur|bond)",
+        name,
+    ):
+        return ("Mortgage-Backed Securities", "name:mbs")
+    if re.search(
+        r"asset[- ]backed\s+secur|"
+        r"\babs\s+(?:fund|portfolio|strateg)|"
+        r"(?:auto|consumer)[- ]backed\s+loan",
+        name,
+    ):
+        return ("Asset-Backed Securities", "name:abs")
+
     # Bug fix #2: Real Estate BEFORE Fixed Income / Income / Municipal.
     if re.search(r"\breal\s+estate\b|\breit\b|\bhousing\b|\bresidential\b", name):
         return ("Real Estate", "name:real_estate")
@@ -340,6 +472,16 @@ def _classify_from_name(
     if re.search(r"\btarget\s+(?:date|retirement|\d{4})", name):
         return ("Target Date", "name:target_date")
 
+    # Round 2 P6: ESG / Sustainable — before Precious Metals / size×style.
+    # Distinguish bond vs equity ESG by presence of bond keyword in name.
+    if re.search(
+        r"\b(?:esg|sustainable|sustainability|responsible\s+invest|sri|impact)\b",
+        name,
+    ):
+        if re.search(r"\b(?:bond|fixed[- ]income|debt|credit)\b", name):
+            return ("ESG/Sustainable Bond", "name:esg_bond")
+        return ("ESG/Sustainable Equity", "name:esg_equity")
+
     # Precious Metals (uses the word-boundary ``gold`` boolean above).
     if has_gold or has_silver_mining:
         return ("Precious Metals", "name:precious_metals")
@@ -348,11 +490,33 @@ def _classify_from_name(
     if re.search(r"\bdirect\s+lend|\bprivate\s+(?:credit|debt|lending)|\bmiddle[- ]market", name):
         return ("Private Credit", "name:private_credit")
 
+    # Round 2 P2: Standalone Convertible Securities (non-hedge mutual funds).
+    # Must run BEFORE the hedge-gated Convertible Arbitrage so non-hedge
+    # funds with "Convertible Securities/Bond/Fund" in name get the right label.
+    if re.search(r"\bconvertible\s+(?:secur|bond|fund)", name):
+        if not (fund_type and "hedge" in fund_type.lower()):
+            return ("Convertible Securities", "name:convertible_securities")
+
     # Bug fix #5: Convertible is only Convertible Arbitrage when the fund
     # is actually a hedge fund. A mutual fund called "Convertible
     # Opportunities" is an equity fund, not an arb strategy.
     if "convertible" in name and fund_type and "hedge" in fund_type.lower():
         return ("Convertible Arbitrage", "name:convertible_arb")
+
+    # Round 2 P7: European Bond — before generic Govt/IG/HY.
+    if re.search(
+        r"\beuropean\s+(?:bond|fixed|debt|credit|sovereign|corporate)",
+        name,
+    ):
+        return ("European Bond", "name:european_bond")
+
+    # Round 2 P8: Emerging Markets Debt — before generic IG/HY.
+    if re.search(
+        r"emerging\s+market(?:s)?\s+(?:debt|bond|fixed|sovereign|corporate)|"
+        r"\bem\s+(?:debt|bond|sovereign)",
+        name,
+    ):
+        return ("Emerging Markets Debt", "name:em_debt")
 
     # Fixed Income (after Real Estate).
     if re.search(r"\bhigh[- ]yield\b|\bjunk\b", name):
@@ -400,6 +564,46 @@ def _classify_from_name(
             if re.search(r"\bclos?\b|\bcollateralized\s+loan", name):
                 return ("Structured Credit", "name:clo")
             return ("Private Credit", "fund_type:securitized")
+
+    # Round 2 P3: Sector Equity — before EM/International/size×style.
+    sector_patterns = (
+        (r"\b(?:energy|oil\s+&\s+gas|petroleum)\s+(?:sector|fund|etf|portfolio|equities|stocks?)", "energy"),
+        (r"\b(?:health\s*care|biotech|pharmaceutical|medical)\b", "healthcare"),
+        (r"\b(?:technology|tech\s+sector|software|semiconductor)\b", "technology"),
+        (r"\b(?:financials?|bank(?:ing)?\s+sector|insurance\s+sector)\b", "financials"),
+        (r"\b(?:utilit|infrastructure\s+equity)", "utilities"),
+        (r"\b(?:consumer\s+(?:discretion|staples)|retail\s+sector)", "consumer"),
+        (r"\b(?:industrial(?:s)?|transportation|aerospace)\b", "industrials"),
+        (r"\b(?:materials\s+sector|chemicals\s+equity|metals\s+&\s+mining)", "materials"),
+        (r"\b(?:communic|media\s+sector|telecom)", "communications"),
+    )
+    for pattern, sector_name in sector_patterns:
+        if re.search(pattern, name):
+            return ("Sector Equity", f"name:sector:{sector_name}")
+
+    # Round 2 P7: European Equity — before International.
+    if re.search(
+        r"\beuropean\s+(?:equit|stock|company|compan|share)|"
+        r"\beuro(?:pean|zone)\s+(?:equit|stock|index)|"
+        r"\beuro\s*stoxx\b",
+        name,
+    ):
+        return ("European Equity", "name:european_equity")
+
+    # Round 2 P8: Asian Equity — before International. Country word + any
+    # equity-flavored keyword (equit/stock/compan/fund/portfolio/growth/value/
+    # smaller). Skips if name has a clear bond/debt context.
+    asian_country_re = (
+        r"\b(?:asia(?:n|[- ]pacific)?|china|japan|korea|taiwan|"
+        r"singapore|hong\s+kong|india)\b"
+    )
+    if re.search(asian_country_re, name):
+        if not re.search(r"\bbond\b|\bdebt\b|\bfixed[- ]income\b|\bsovereign\b", name):
+            if re.search(
+                r"\b(?:equit|stock|compan|fund|portfolio|index|growth|value|smaller)\b",
+                name,
+            ):
+                return ("Asian Equity", "name:asian_equity")
 
     # Equity size × style.
     if re.search(r"\bemerging\s+markets?", name):
