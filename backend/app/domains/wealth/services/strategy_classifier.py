@@ -219,18 +219,24 @@ def _classify_from_description(
         return ("ESG/Sustainable Equity", "desc:esg_ambiguous")
 
     # ── Mortgage-Backed / Asset-Backed (Round 2 P4) — before Structured Credit ─
-    if re.search(
+    # Round 2.5 P3: only fire if the MBS/ABS keyword appears in the first
+    # 200 chars of the description. Tiingo descriptions state the primary
+    # strategy at the top; MBS/ABS mentioned later is usually a "may also
+    # invest in" secondary disclosure that doesn't define the fund. Without
+    # this guard, money market, multi-asset, and inflation-protected funds
+    # were being mis-classified as MBS due to boilerplate prospectus text.
+    _MBS_TERM = (
         r"mortgage[- ]backed\s+secur|"
         r"\bmbs\b|\bcmbs\b|"
-        r"agency\s+mortgage|residential\s+mortgage",
-        text,
-    ):
+        r"agency\s+mortgage|residential\s+mortgage"
+    )
+    if re.search(_MBS_TERM, text[:200]):
         return ("Mortgage-Backed Securities", "desc:mbs")
-    if re.search(
+    _ABS_TERM = (
         r"asset[- ]backed\s+secur|"
-        r"(?:auto|credit\s+card|student\s+loan)[- ]backed",
-        text,
-    ):
+        r"(?:auto|credit\s+card|student\s+loan)[- ]backed"
+    )
+    if re.search(_ABS_TERM, text[:200]):
         return ("Asset-Backed Securities", "desc:abs")
 
     # ── Standalone Convertible Securities (Round 2 P2) — non-hedge ──
@@ -511,15 +517,27 @@ def _classify_from_name(
         return ("European Bond", "name:european_bond")
 
     # Round 2 P8: Emerging Markets Debt — before generic IG/HY.
+    # Round 2.5 P1b: relaxed match — also catches "Emerging Value Bond",
+    # "Emerging High Yield", etc., where the legacy pattern required the
+    # literal "markets" word and missed bond funds tagged with just
+    # "emerging".
     if re.search(
         r"emerging\s+market(?:s)?\s+(?:debt|bond|fixed|sovereign|corporate)|"
         r"\bem\s+(?:debt|bond|sovereign)",
         name,
     ):
         return ("Emerging Markets Debt", "name:em_debt")
+    if re.search(r"\bemerging\b", name) and re.search(
+        r"\b(?:bond|debt|credit|sovereign|corporate)\b", name,
+    ):
+        return ("Emerging Markets Debt", "name:em_debt_loose")
 
     # Fixed Income (after Real Estate).
-    if re.search(r"\bhigh[- ]yield\b|\bjunk\b", name):
+    # Round 2.5 P2a: "high income" is overwhelmingly HY — extend pattern
+    # so "Pioneer Diversified High Income", "AB HIGH INCOME FUND",
+    # "Eaton Vance High Income 2022 Target Term Trust" don't fall through
+    # to the generic Intermediate-Term Bond default.
+    if re.search(r"\bhigh[- ]yield\b|\bjunk\b|\bhigh\s+income\b", name):
         return ("High Yield Bond", "name:high_yield")
     if re.search(r"\bmunicipal\b|\bmuni\b|\btax[- ](?:exempt|free)", name):
         return ("Municipal Bond", "name:municipal")
@@ -529,7 +547,16 @@ def _classify_from_name(
         name,
     ):
         return ("Government Bond", "name:government")
-    if re.search(r"\binvestment[- ]grade\b|\bcorporate\s+bond", name):
+    # Round 2.5 P2b: \bIG\b abbreviation is the institutional shorthand
+    # for investment grade — picks up "TARGETNETZERO GLOBAL IG CORPORATE",
+    # "IG Bond Fund", etc. Standalone "corporate" added too: most
+    # corporate-bond funds are IG; HY funds are tagged as such above.
+    if re.search(
+        r"\binvestment[- ]grade\b|"
+        r"\bcorporate\s+(?:bond|debt|credit)|"
+        r"\big\s+(?:bond|corporate|credit|debt)",
+        name,
+    ):
         return ("Investment Grade Bond", "name:ig_bond")
     if re.search(r"\btips\b|\binflation[- ]linked", name):
         return ("Inflation-Linked Bond", "name:tips")
@@ -607,9 +634,25 @@ def _classify_from_name(
 
     # Equity size × style.
     if re.search(r"\bemerging\s+markets?", name):
+        # Round 2.5 P1c: emerging-markets keyword + bond context = EMD,
+        # not equity. Belt-and-suspenders: name:em_debt_loose above
+        # already catches most of these, but this guards the edge case
+        # where the bond pattern wasn't expressed.
+        if re.search(r"\b(?:bond|debt|credit|sovereign|corporate|fixed[- ]income)\b", name):
+            return ("Emerging Markets Debt", "name:emerging_bond_context")
         return ("Emerging Markets Equity", "name:emerging")
     if re.search(r"\binternational\b|\bglobal\b|\bworld\b|\bforeign\b", name):
-        return ("International Equity", "name:international")
+        # Round 2.5 P1a: don't classify as International Equity if the
+        # name carries fixed-income context — by this point all specific
+        # bond patterns (HY, IG, Govt, Muni, EMD, European Bond) have
+        # already had a chance to fire, so a remaining bond keyword means
+        # this is a bond fund the specific patterns didn't catch.
+        # Catches "TARGETNETZERO GLOBAL IG CORPORATE" → IG Bond,
+        # "Lombard Odier Global Bond" → Intermediate-Term Bond, etc.
+        if not re.search(
+            r"\b(?:bond|debt|credit|fixed[- ]income|sovereign)\b", name,
+        ):
+            return ("International Equity", "name:international")
 
     is_large = bool(re.search(r"\blarge[- ]cap\b|\bs&p\s*500", name))
     is_mid = bool(re.search(r"\bmid[- ]cap\b", name))
