@@ -83,8 +83,8 @@
 		width: 100%;
 		height: 100%;
 		overflow: hidden;
-		background: #000000;
-		font-family: "Urbanist", system-ui, sans-serif;
+		background: var(--terminal-bg-void);
+		font-family: var(--terminal-font-mono);
 	}
 
 	.tr-zone {
@@ -106,33 +106,34 @@
 		flex-shrink: 0;
 		display: flex;
 		align-items: flex-end;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-		background: #05080f;
+		border-bottom: var(--terminal-border-hairline);
+		background: var(--terminal-bg-panel);
 		padding: 0 8px;
 		gap: 16px;
 	}
 
 	.tr-tab {
 		height: 100%;
-		font-size: 11px;
+		font-size: var(--terminal-text-11);
 		font-weight: 600;
 		letter-spacing: 0.05em;
-		color: #64748b;
+		color: var(--terminal-fg-tertiary);
 		background: transparent;
 		border: none;
 		border-bottom: 2px solid transparent;
 		padding: 0 4px;
 		cursor: pointer;
 		outline: none;
+		font-family: var(--terminal-font-mono);
 	}
 
 	.tr-tab:hover {
-		color: #cbd5e1;
+		color: var(--terminal-fg-secondary);
 	}
 
 	.tr-tab-active {
-		color: #ffffff;
-		border-bottom-color: #2d7ef7;
+		color: var(--terminal-fg-primary);
+		border-bottom-color: var(--terminal-accent-cyan);
 	}
 
 	.tr-panel-content {

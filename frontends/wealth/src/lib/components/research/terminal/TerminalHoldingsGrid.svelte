@@ -42,7 +42,6 @@
 			error = null;
 			try {
 				const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
-				// We assume ticker acts as the external_id here
 				const res = await fetch(`${API_BASE}/wealth/discovery/funds/${ticker}/analysis/holdings/top`, {
 					signal: controller.signal,
 				});
@@ -92,8 +91,8 @@
 						<tbody>
 							{#each data.top_holdings as holding}
 								<tr>
-									<td class="text-left font-medium text-white">{holding.issuer_name}</td>
-									<td class="text-left text-gray-400">{holding.sector}</td>
+									<td class="text-left td-primary">{holding.issuer_name}</td>
+									<td class="text-left td-secondary">{holding.sector}</td>
 									<td class="text-right">{formatPercent(holding.weight * 100)}</td>
 									<td class="text-right">${formatNumber(holding.market_value)}</td>
 								</tr>
@@ -117,16 +116,16 @@
 						</thead>
 						<tbody>
 							{#each data.sector_breakdown as sector}
-								<tr class="relative">
-									<td class="text-left relative z-10">
+								<tr class="sector-row">
+									<td class="text-left sector-cell">
 										<div
-											class="h-full absolute left-0 top-0 bg-[#1e293b] z-[-1]"
+											class="sector-bar"
 											style="width: {sector.weight * 100}%;"
 										></div>
-										<span class="pl-1 text-white">{sector.name}</span>
+										<span class="sector-name">{sector.name}</span>
 									</td>
-									<td class="text-right z-10 relative">{sector.holdings_count}</td>
-									<td class="text-right z-10 relative">{formatPercent(sector.weight * 100)}</td>
+									<td class="text-right">{sector.holdings_count}</td>
+									<td class="text-right">{formatPercent(sector.weight * 100)}</td>
 								</tr>
 							{/each}
 						</tbody>
@@ -141,13 +140,13 @@
 	.h-root {
 		width: 100%;
 		height: 100%;
-		background: #05080f;
+		background: var(--terminal-bg-panel);
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
-		font-family: "Urbanist", system-ui, sans-serif;
+		font-family: var(--terminal-font-mono);
 	}
 
 	.h-message {
@@ -155,13 +154,13 @@
 		align-items: center;
 		justify-content: center;
 		height: 100%;
-		color: #94a3b8;
-		font-size: 11px;
+		color: var(--terminal-fg-secondary);
+		font-size: var(--terminal-text-11);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.h-error {
-		color: #ef4444;
+		color: var(--terminal-status-error);
 	}
 
 	.h-grid {
@@ -188,20 +187,20 @@
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
-		border: 1px solid rgba(255, 255, 255, 0.08);
-		background: #0a0e17;
+		border: var(--terminal-border-hairline);
+		background: var(--terminal-bg-panel-raised);
 	}
 
 	.h-section-header {
 		height: 24px;
 		line-height: 24px;
 		padding: 0 8px;
-		font-size: 10px;
+		font-size: var(--terminal-text-10);
 		font-weight: 700;
 		letter-spacing: 0.05em;
-		color: #94a3b8;
-		background: #0e1320;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		color: var(--terminal-fg-secondary);
+		background: var(--terminal-bg-panel);
+		border-bottom: var(--terminal-border-hairline);
 		flex-shrink: 0;
 	}
 
@@ -209,10 +208,9 @@
 		flex: 1;
 		min-width: 0;
 		min-height: 0;
-		overflow: y-auto;
+		overflow-y: auto;
 	}
 
-	/* Scrollbar minimalista */
 	.h-scroll-area::-webkit-scrollbar {
 		width: 4px;
 		height: 4px;
@@ -221,44 +219,75 @@
 		background: transparent;
 	}
 	.h-scroll-area::-webkit-scrollbar-thumb {
-		background: rgba(255, 255, 255, 0.1);
+		background: var(--terminal-fg-disabled);
 	}
 	.h-scroll-area::-webkit-scrollbar-thumb:hover {
-		background: rgba(255, 255, 255, 0.2);
+		background: var(--terminal-fg-muted);
 	}
 
 	.h-table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 11px;
+		font-size: var(--terminal-text-11);
 		font-variant-numeric: tabular-nums;
-		color: #cbd5e1;
+		color: var(--terminal-fg-secondary);
 	}
 
 	.h-table th {
 		position: sticky;
 		top: 0;
 		z-index: 20;
-		background: #0e1320;
-		color: #64748b;
+		background: var(--terminal-bg-panel);
+		color: var(--terminal-fg-tertiary);
 		font-weight: 600;
 		padding: 4px 8px;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		border-bottom: var(--terminal-border-hairline);
 		white-space: nowrap;
 	}
 
 	.h-table td {
 		padding: 4px 8px;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+		border-bottom: 1px solid var(--terminal-fg-disabled);
 		white-space: nowrap;
 	}
 
 	.h-table tr:hover td {
-		background: rgba(255, 255, 255, 0.02);
+		background: var(--terminal-bg-panel-raised);
 	}
 
 	.text-left { text-align: left; }
 	.text-right { text-align: right; }
+
+	.td-primary {
+		font-weight: 600;
+		color: var(--terminal-fg-primary);
+	}
+
+	.td-secondary {
+		color: var(--terminal-fg-tertiary);
+	}
+
+	.sector-row {
+		position: relative;
+	}
+
+	.sector-cell {
+		position: relative;
+	}
+
+	.sector-bar {
+		position: absolute;
+		left: 0;
+		top: 0;
+		height: 100%;
+		background: var(--terminal-fg-disabled);
+		z-index: 0;
+	}
+
+	.sector-name {
+		position: relative;
+		z-index: 1;
+		padding-left: 4px;
+		color: var(--terminal-fg-primary);
+	}
 </style>
-
-

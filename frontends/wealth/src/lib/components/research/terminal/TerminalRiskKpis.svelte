@@ -1,27 +1,32 @@
 <!--
-  TerminalRiskKpis — right panel showing risk statistics for selected node.
-  High-contrast blocks with small labels (9px) and large numbers (16px tabular-nums).
+  TerminalRiskKpis — right panel showing real risk metrics for selected node.
+  Fetches from GET /instruments/{instrumentId}/risk-metrics.
 -->
 <script lang="ts">
-	import { getContext, onDestroy } from "svelte";
-	import { formatNumber } from "@investintell/ui";
+	import { getContext } from "svelte";
+	import { formatNumber, formatPercent } from "@investintell/ui";
 	import type { TreeNode } from "./TerminalAssetTree.svelte";
 	import ScoreBreakdownPopover from "./ScoreBreakdownPopover.svelte";
+	import { createClientApiClient } from "$lib/api/client";
 
-	interface RiskData {
-		annReturn: number;
-		annVolatility: number;
-		sharpe: number;
-		sortino: number;
-		maxDrawdown: number;
-		currentDrawdown: number;
-		longestDrawdownDays: number;
-		upCapture: number;
-		downCapture: number;
-		beta: number;
-		trackingError: number;
-		infoRatio: number;
-		managerScore: number;
+	interface RiskMetrics {
+		instrument_id: string;
+		score_components: Record<string, number> | null;
+		manager_score: number | null;
+		sharpe_1y: number | null;
+		volatility_1y: number | null;
+		max_drawdown_1y: number | null;
+		cvar_95_1m: number | null;
+		return_1y: number | null;
+		return_3y_ann: number | null;
+		sortino_1y: number | null;
+		max_drawdown_3y: number | null;
+		alpha_1y: number | null;
+		beta_1y: number | null;
+		information_ratio_1y: number | null;
+		tracking_error_1y: number | null;
+		blended_momentum_score: number | null;
+		volatility_garch: number | null;
 	}
 
 	interface Props {
@@ -30,63 +35,74 @@
 
 	let { selectedNode }: Props = $props();
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const api = createClientApiClient(getToken);
 
-	// Generate deterministic mock risk data from node id
-	function mockRisk(node: TreeNode): RiskData {
-		let hash = 0;
-		for (let i = 0; i < node.id.length; i++) {
-			hash = (hash * 31 + node.id.charCodeAt(i)) | 0;
+	let risk = $state<RiskMetrics | null>(null);
+	let loading = $state(false);
+	let errorMessage = $state<string | null>(null);
+
+	// Fetch real risk metrics when selected node changes
+	$effect(() => {
+		const iid = selectedNode?.instrumentId;
+		if (!iid) {
+			risk = null;
+			errorMessage = null;
+			loading = false;
+			return;
 		}
-		const seed = Math.abs(hash);
-		const r = (min: number, max: number) => min + ((seed * 7 + min * 13) % 1000) / 1000 * (max - min);
 
-		return {
-			annReturn: r(2, 28),
-			annVolatility: r(5, 22),
-			sharpe: r(0.2, 2.1),
-			sortino: r(0.3, 2.8),
-			maxDrawdown: -r(4, 35),
-			currentDrawdown: -r(0, 8),
-			longestDrawdownDays: Math.floor(r(30, 420)),
-			upCapture: r(80, 120),
-			downCapture: r(60, 110),
-			beta: r(0.4, 1.3),
-			trackingError: r(1, 8),
-			infoRatio: r(-0.2, 1.5),
-			managerScore: r(20, 95),
-		};
-	}
+		let cancelled = false;
+		loading = true;
+		errorMessage = null;
 
-	const risk = $derived(selectedNode ? mockRisk(selectedNode) : null);
+		(async () => {
+			try {
+				const data = await api.get<RiskMetrics>(`/instruments/${iid}/risk-metrics`);
+				if (!cancelled) {
+					risk = data;
+					errorMessage = null;
+				}
+			} catch (err: unknown) {
+				if (!cancelled) {
+					risk = null;
+					if (err instanceof Error && err.message.includes("404")) {
+						errorMessage = null; // 404 = no data, not an error
+					} else {
+						errorMessage = err instanceof Error ? err.message : "Failed to fetch risk metrics";
+					}
+				}
+			} finally {
+				if (!cancelled) loading = false;
+			}
+		})();
 
-	function fmt(v: number, d: number = 2): string {
-		return formatNumber(v, d);
-	}
+		return () => { cancelled = true; };
+	});
 
-	function pctClass(v: number): string {
+	function pctClass(v: number | null): string {
+		if (v == null) return "";
 		if (v > 0) return "pos";
 		if (v < 0) return "neg";
 		return "";
 	}
 
 	let showPopover = $state(false);
-	let scoreButtonRef: HTMLElement;
+	let scoreButtonRef = $state<HTMLElement>(undefined!);
 	let popoverTop = $state(0);
 	let popoverLeft = $state(0);
 
 	function togglePopover(e: MouseEvent) {
 		if (!showPopover) {
 			const rect = scoreButtonRef.getBoundingClientRect();
-			// Position the popover below and to the left to avoid edge clipping
 			popoverTop = rect.bottom + 8;
-			popoverLeft = rect.right - 280; // 280px is popover width
+			popoverLeft = rect.right - 280;
 			showPopover = true;
 		} else {
 			showPopover = false;
 		}
 	}
 
-	function closePopover(e: MouseEvent) {
+	function closePopover() {
 		if (showPopover) showPopover = false;
 	}
 
@@ -101,23 +117,6 @@
 		e.stopPropagation();
 	}
 
-	// Mock score data
-	const mockScoreData = $derived(
-		risk ? {
-			totalScore: risk.managerScore,
-			penaltyApplied: risk.managerScore < 40,
-			missingData: risk.managerScore < 40 ? ['expense_ratio'] : [],
-			components: [
-				{ name: 'Risk-Adjusted Return (Sharpe)', weight: 0.30, score: risk.managerScore * 0.9 },
-				{ name: 'Return Consistency', weight: 0.20, score: risk.managerScore * 0.85 },
-				{ name: 'Drawdown Control', weight: 0.20, score: risk.managerScore * 1.1 },
-				{ name: 'Information Ratio', weight: 0.15, score: risk.managerScore * 1.05 },
-				{ name: 'Fee Efficiency', weight: 0.10, score: risk.managerScore * 0.95 },
-				{ name: 'Flows Momentum', weight: 0.05, score: risk.managerScore * 1.15 }
-			]
-		} : null
-	);
-
 	// Hide popover if node changes
 	$effect(() => {
 		if (selectedNode) {
@@ -130,7 +129,7 @@
 
 	async function exportTearSheet() {
 		if (!selectedNode || isGeneratingPdf) return;
-		
+
 		const externalId = selectedNode.ticker ?? selectedNode.id;
 		isGeneratingPdf = true;
 
@@ -138,28 +137,27 @@
 			const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 			const token = await getToken();
 			const response = await fetch(`${API_BASE}/wealth/funds/${externalId}/reports/tear-sheet`, {
-				method: 'POST',
+				method: "POST",
 				headers: {
 					"Authorization": `Bearer ${token}`
 				}
 			});
 
 			if (!response.ok) {
-				throw new Error('Failed to generate Tear Sheet');
+				throw new Error("Failed to generate Tear Sheet");
 			}
 
 			const blob = await response.blob();
 			const url = URL.createObjectURL(blob);
-			
-			const a = document.createElement('a');
-			a.style.display = 'none';
+
+			const a = document.createElement("a");
+			a.style.display = "none";
 			a.href = url;
 			a.download = `${externalId}-tear-sheet.pdf`;
-			
+
 			document.body.appendChild(a);
 			a.click();
-			
-			// Cleanup
+
 			setTimeout(() => {
 				document.body.removeChild(a);
 				URL.revokeObjectURL(url);
@@ -170,10 +168,26 @@
 			isGeneratingPdf = false;
 		}
 	}
+
+	const hasData = $derived(risk != null);
+	const noData = $derived(!loading && !risk && !errorMessage && selectedNode?.instrumentId != null);
 </script>
 
 <div class="rk-root">
-	{#if risk && selectedNode}
+	{#if loading}
+		<div class="rk-empty">
+			<span class="rk-empty-text">Loading risk metrics...</span>
+		</div>
+	{:else if errorMessage}
+		<div class="rk-empty">
+			<span class="rk-empty-text rk-err">{errorMessage}</span>
+		</div>
+	{:else if noData || (!selectedNode?.instrumentId && selectedNode)}
+		<div class="rk-empty">
+			<span class="rk-empty-icon">&#9670;</span>
+			<span class="rk-empty-text">No risk data available</span>
+		</div>
+	{:else if hasData && selectedNode}
 		<div class="rk-header">
 			<div class="rk-header-left">
 				<span class="rk-node-label">
@@ -182,57 +196,67 @@
 				<span class="rk-node-type">{selectedNode.fundType}</span>
 			</div>
 			<div class="rk-header-right">
-				<div 
-					class="rk-score-btn" 
-					bind:this={scoreButtonRef} 
+				<div
+					class="rk-score-btn"
+					bind:this={scoreButtonRef}
 					onclick={(e) => { stopPropagation(e); togglePopover(e); }}
-					onkeydown={(e) => { if (e.key === 'Enter') togglePopover(e as any); }}
+					onkeydown={(e) => { if (e.key === "Enter") togglePopover(e as any); }}
 					role="button"
 					tabindex="0"
 					aria-haspopup="dialog"
 					aria-expanded={showPopover}
 				>
-					<div class="rk-score-label">FUND SCORE</div>
+					<div class="rk-score-label">NETZ SCORE</div>
 					<div class="rk-score-val">
-						{#if risk.managerScore >= 75}
+						{#if risk!.manager_score == null}
+							<span class="rk-na">--</span>
+						{:else if risk!.manager_score >= 75}
 							<span class="elite">[ ELITE ]</span>
-						{:else if risk.managerScore < 40}
+						{:else if risk!.manager_score < 40}
 							<span class="eviction">[ EVICTION ]</span>
 						{:else}
-							{fmt(risk.managerScore, 1)}
+							{formatNumber(risk!.manager_score, 0)}
 						{/if}
 					</div>
 				</div>
-				
-				<button 
-					class="rk-export-btn {isGeneratingPdf ? 'exporting' : ''}" 
-					onclick={exportTearSheet} 
+
+				<button
+					class="rk-export-btn {isGeneratingPdf ? 'exporting' : ''}"
+					onclick={exportTearSheet}
 					disabled={isGeneratingPdf}
 				>
-					{isGeneratingPdf ? '[ GENERATING PDF... ]' : '[ EXPORT TEAR SHEET ]'}
+					{isGeneratingPdf ? "[ GENERATING PDF... ]" : "[ EXPORT TEAR SHEET ]"}
 				</button>
 			</div>
 		</div>
 
-		<!-- Risk Statistics -->
+		<!-- Return & Risk -->
 		<div class="rk-section">
-			<div class="rk-section-title">RISK STATISTICS</div>
+			<div class="rk-section-title">RETURN & RISK</div>
 			<div class="rk-block">
 				<div class="rk-kpi">
-					<span class="rk-label">Ann. Return</span>
-					<span class="rk-value {pctClass(risk.annReturn)}">{fmt(risk.annReturn)}%</span>
+					<span class="rk-label">Annual Return</span>
+					<span class="rk-value {pctClass(risk!.return_1y)}">
+						{risk!.return_1y != null ? formatPercent(risk!.return_1y) : "--"}
+					</span>
 				</div>
 				<div class="rk-kpi">
-					<span class="rk-label">Ann. Volatility</span>
-					<span class="rk-value">{fmt(risk.annVolatility)}%</span>
+					<span class="rk-label">Annual Volatility</span>
+					<span class="rk-value">
+						{risk!.volatility_1y != null ? formatPercent(risk!.volatility_1y) : "--"}
+					</span>
 				</div>
 				<div class="rk-kpi">
 					<span class="rk-label">Sharpe Ratio</span>
-					<span class="rk-value">{fmt(risk.sharpe)}</span>
+					<span class="rk-value">
+						{risk!.sharpe_1y != null ? formatNumber(risk!.sharpe_1y, 2) : "--"}
+					</span>
 				</div>
 				<div class="rk-kpi">
 					<span class="rk-label">Sortino Ratio</span>
-					<span class="rk-value">{fmt(risk.sortino)}</span>
+					<span class="rk-value">
+						{risk!.sortino_1y != null ? formatNumber(risk!.sortino_1y, 2) : "--"}
+					</span>
 				</div>
 			</div>
 		</div>
@@ -242,50 +266,72 @@
 			<div class="rk-section-title">DRAWDOWN ANALYSIS</div>
 			<div class="rk-block">
 				<div class="rk-kpi">
-					<span class="rk-label">Max Drawdown</span>
-					<span class="rk-value neg">{fmt(risk.maxDrawdown)}%</span>
+					<span class="rk-label">Max Drawdown (1Y)</span>
+					<span class="rk-value neg">
+						{risk!.max_drawdown_1y != null ? formatPercent(risk!.max_drawdown_1y) : "--"}
+					</span>
 				</div>
 				<div class="rk-kpi">
-					<span class="rk-label">Current Drawdown</span>
-					<span class="rk-value neg">{fmt(risk.currentDrawdown)}%</span>
+					<span class="rk-label">Max Drawdown (3Y)</span>
+					<span class="rk-value neg">
+						{risk!.max_drawdown_3y != null ? formatPercent(risk!.max_drawdown_3y) : "--"}
+					</span>
 				</div>
 				<div class="rk-kpi">
-					<span class="rk-label">Longest DD</span>
-					<span class="rk-value">{risk.longestDrawdownDays}d</span>
+					<span class="rk-label">Risk Budget (1M)</span>
+					<span class="rk-value neg">
+						{risk!.cvar_95_1m != null ? formatPercent(risk!.cvar_95_1m) : "--"}
+					</span>
 				</div>
 			</div>
 		</div>
 
-		<!-- Up/Down Capture -->
-		<div class="rk-section">
-			<div class="rk-section-title">CAPTURE RATIOS</div>
-			<div class="rk-block">
-				<div class="rk-kpi">
-					<span class="rk-label">Up Capture</span>
-					<span class="rk-value pos">{fmt(risk.upCapture, 1)}%</span>
-				</div>
-				<div class="rk-kpi">
-					<span class="rk-label">Down Capture</span>
-					<span class="rk-value neg">{fmt(risk.downCapture, 1)}%</span>
-				</div>
-			</div>
-		</div>
-
-		<!-- Additional Metrics -->
+		<!-- Factor Exposure -->
 		<div class="rk-section">
 			<div class="rk-section-title">FACTOR EXPOSURE</div>
 			<div class="rk-block">
 				<div class="rk-kpi">
 					<span class="rk-label">Beta</span>
-					<span class="rk-value">{fmt(risk.beta)}</span>
+					<span class="rk-value">
+						{risk!.beta_1y != null ? formatNumber(risk!.beta_1y, 2) : "--"}
+					</span>
 				</div>
 				<div class="rk-kpi">
 					<span class="rk-label">Tracking Error</span>
-					<span class="rk-value">{fmt(risk.trackingError)}%</span>
+					<span class="rk-value">
+						{risk!.tracking_error_1y != null ? formatPercent(risk!.tracking_error_1y) : "--"}
+					</span>
 				</div>
 				<div class="rk-kpi">
 					<span class="rk-label">Information Ratio</span>
-					<span class="rk-value {pctClass(risk.infoRatio)}">{fmt(risk.infoRatio)}</span>
+					<span class="rk-value {pctClass(risk!.information_ratio_1y)}">
+						{risk!.information_ratio_1y != null ? formatNumber(risk!.information_ratio_1y, 2) : "--"}
+					</span>
+				</div>
+				<div class="rk-kpi">
+					<span class="rk-label">Alpha</span>
+					<span class="rk-value {pctClass(risk!.alpha_1y)}">
+						{risk!.alpha_1y != null ? formatPercent(risk!.alpha_1y) : "--"}
+					</span>
+				</div>
+			</div>
+		</div>
+
+		<!-- Momentum -->
+		<div class="rk-section">
+			<div class="rk-section-title">MOMENTUM</div>
+			<div class="rk-block">
+				<div class="rk-kpi">
+					<span class="rk-label">Momentum</span>
+					<span class="rk-value">
+						{risk!.blended_momentum_score != null ? formatNumber(risk!.blended_momentum_score, 0) + "/100" : "--"}
+					</span>
+				</div>
+				<div class="rk-kpi">
+					<span class="rk-label">Netz Score</span>
+					<span class="rk-value">
+						{risk!.manager_score != null ? formatNumber(risk!.manager_score, 0) + "/100" : "--"}
+					</span>
 				</div>
 			</div>
 		</div>
@@ -297,15 +343,18 @@
 	{/if}
 </div>
 
-{#if showPopover && mockScoreData}
-	<div 
-		class="rk-popover-portal" 
+{#if showPopover && risk}
+	<div
+		class="rk-popover-portal"
 		style="top: {popoverTop}px; left: {popoverLeft}px;"
 		onclick={stopPropagation}
 		onkeydown={(e) => e.stopPropagation()}
 		role="presentation"
 	>
-		<ScoreBreakdownPopover scoreData={mockScoreData} />
+		<ScoreBreakdownPopover
+			scoreComponents={risk.score_components}
+			managerScore={risk.manager_score}
+		/>
 	</div>
 {/if}
 
@@ -314,20 +363,20 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
-		background: #0c1018;
-		border-left: 1px solid rgba(255, 255, 255, 0.06);
-		font-family: "Urbanist", system-ui, sans-serif;
+		background: var(--terminal-bg-panel);
+		border-left: var(--terminal-border-hairline);
+		font-family: var(--terminal-font-mono);
 		overflow-y: auto;
 		overflow-x: hidden;
 	}
 
-	/* ── Header ───────────────────────────────────── */
+	/* -- Header ----------------------------------------- */
 	.rk-header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		padding: 12px 14px 8px;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		border-bottom: var(--terminal-border-hairline);
 		flex-shrink: 0;
 	}
 
@@ -344,9 +393,9 @@
 	}
 
 	.rk-node-label {
-		font-size: 14px;
+		font-size: var(--terminal-text-14);
 		font-weight: 800;
-		color: #e2e8f0;
+		color: var(--terminal-fg-primary);
 		letter-spacing: 0.04em;
 	}
 
@@ -355,7 +404,7 @@
 		font-weight: 600;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 	}
 
 	.rk-score-btn {
@@ -363,7 +412,7 @@
 		align-items: center;
 		gap: 8px;
 		padding: 4px 8px;
-		border-radius: 4px;
+		border-radius: var(--terminal-radius-none);
 		cursor: pointer;
 		transition: background 150ms ease;
 		user-select: none;
@@ -371,33 +420,33 @@
 	}
 
 	.rk-score-btn:hover {
-		background: rgba(255, 255, 255, 0.05);
+		background: var(--terminal-bg-panel-raised);
 	}
 
 	.rk-score-label {
 		font-size: 9px;
 		font-weight: 700;
 		letter-spacing: 0.05em;
-		color: #64748b;
+		color: var(--terminal-fg-tertiary);
 	}
 
 	.rk-score-val {
-		font-size: 14px;
+		font-size: var(--terminal-text-14);
 		font-weight: 800;
-		color: #ffffff;
+		color: var(--terminal-fg-primary);
 		font-variant-numeric: tabular-nums;
-		font-family: monospace;
 	}
 
-	.elite { color: #2d7ef7; font-size: 11px; letter-spacing: 0.05em; }
-	.eviction { color: #ca8a04; font-size: 11px; letter-spacing: 0.05em; }
+	.rk-na { color: var(--terminal-fg-muted); }
+	.elite { color: var(--terminal-accent-cyan); font-size: var(--terminal-text-11); letter-spacing: 0.05em; }
+	.eviction { color: var(--terminal-accent-amber); font-size: var(--terminal-text-11); letter-spacing: 0.05em; }
 
 	.rk-export-btn {
 		background: transparent;
-		border: 1px solid #1e293b;
-		color: #94a3b8;
-		font-family: monospace;
-		font-size: 10px;
+		border: var(--terminal-border-hairline);
+		color: var(--terminal-fg-secondary);
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-10);
 		font-weight: 700;
 		letter-spacing: 0.05em;
 		padding: 4px 8px;
@@ -407,8 +456,8 @@
 	}
 
 	.rk-export-btn:hover:not(:disabled) {
-		border-color: #2d7ef7;
-		color: #2d7ef7;
+		border-color: var(--terminal-accent-cyan);
+		color: var(--terminal-accent-cyan);
 	}
 
 	.rk-export-btn:disabled {
@@ -416,17 +465,17 @@
 	}
 
 	.rk-export-btn.exporting {
-		color: #ca8a04;
-		border-color: #ca8a04;
+		color: var(--terminal-accent-amber);
+		border-color: var(--terminal-accent-amber);
 		animation: pulseBorder 1.5s infinite alternate;
 	}
 
 	@keyframes pulseBorder {
-		0% { border-color: rgba(202, 138, 4, 0.4); color: rgba(202, 138, 4, 0.8); }
-		100% { border-color: rgba(202, 138, 4, 1); color: #ca8a04; }
+		0% { border-color: var(--terminal-accent-amber-dim); color: var(--terminal-accent-amber-dim); }
+		100% { border-color: var(--terminal-accent-amber); color: var(--terminal-accent-amber); }
 	}
 
-	/* ── Section ──────────────────────────────────── */
+	/* -- Section ---------------------------------------- */
 	.rk-section {
 		padding: 0 10px;
 		margin-bottom: 2px;
@@ -436,21 +485,21 @@
 		font-size: 9px;
 		font-weight: 700;
 		letter-spacing: 0.1em;
-		color: #3a4455;
+		color: var(--terminal-fg-muted);
 		text-transform: uppercase;
 		padding: 10px 4px 4px;
 	}
 
 	.rk-block {
-		background: #0e1320;
-		border-radius: 3px;
+		background: var(--terminal-bg-panel-raised);
+		border-radius: var(--terminal-radius-none);
 		padding: 8px 10px;
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
 	}
 
-	/* ── KPI row ──────────────────────────────────── */
+	/* -- KPI row ---------------------------------------- */
 	.rk-kpi {
 		display: flex;
 		align-items: baseline;
@@ -462,23 +511,23 @@
 		font-size: 9px;
 		font-weight: 600;
 		letter-spacing: 0.04em;
-		color: #5a6577;
+		color: var(--terminal-fg-tertiary);
 		text-transform: uppercase;
 		flex-shrink: 0;
 	}
 
 	.rk-value {
-		font-size: 16px;
+		font-size: var(--terminal-text-16);
 		font-weight: 800;
-		color: #e2e8f0;
+		color: var(--terminal-fg-primary);
 		font-variant-numeric: tabular-nums;
 		text-align: right;
 	}
 
-	.pos { color: #22c55e; }
-	.neg { color: #ef4444; }
+	.pos { color: var(--terminal-status-success); }
+	.neg { color: var(--terminal-status-error); }
 
-	/* ── Empty ────────────────────────────────────── */
+	/* -- Empty ------------------------------------------ */
 	.rk-empty {
 		display: flex;
 		flex-direction: column;
@@ -486,7 +535,7 @@
 		justify-content: center;
 		gap: 8px;
 		height: 100%;
-		color: #3a4455;
+		color: var(--terminal-fg-muted);
 	}
 
 	.rk-empty-icon {
@@ -495,16 +544,18 @@
 	}
 
 	.rk-empty-text {
-		font-family: "Urbanist", system-ui, sans-serif;
-		font-size: 11px;
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-11);
 		letter-spacing: 0.04em;
 	}
 
-	/* ── Popover Portal ───────────────────────────── */
+	.rk-err {
+		color: var(--terminal-status-error);
+	}
+
+	/* -- Popover Portal --------------------------------- */
 	.rk-popover-portal {
 		position: fixed;
-		z-index: 1000;
+		z-index: var(--terminal-z-dropdown);
 	}
 </style>
-
-
