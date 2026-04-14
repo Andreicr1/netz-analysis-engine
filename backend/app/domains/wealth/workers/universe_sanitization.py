@@ -252,26 +252,22 @@ async def _sanitize_sec_manager_funds(db: AsyncSession) -> dict[str, int]:
     )
     counts["gav_below_3b"] = r.rowcount or 0
 
-    # Rule 7 — retail adviser heuristic (>500 individual clients OR
-    # fewer than 2 pooled vehicles: the firm is not a pure institutional
-    # allocator).
-    r = await db.execute(
-        text(
-            "UPDATE sec_manager_funds f "
-            "SET is_institutional = false, "
-            "    exclusion_reason = 'retail_adviser', "
-            "    sanitized_at = NOW() "
-            "FROM sec_managers m "
-            "WHERE f.crd_number = m.crd_number "
-            "  AND f.is_institutional = true "
-            "  AND f.exclusion_reason IS NULL "
-            "  AND ( "
-            "    COALESCE((m.client_types->'individuals'->>'count')::int, 0) > 500 "
-            "    OR COALESCE((m.client_types->'pooled_vehicles'->>'count')::int, 0) < 2 "
-            "  )",
-        ),
-    )
-    counts["retail_adviser"] = r.rowcount or 0
+    # Rule 7 — retail adviser heuristic: REMOVED.
+    #
+    # Original design: flag managers with >500 individual clients OR <2
+    # pooled vehicles. Empirical validation against the 2026-04-14 DB
+    # snapshot showed this catches foundational institutional managers
+    # (PIMCO, Neuberger Berman, Lazard, Western Asset, Franklin, UBS AM)
+    # because top-tier firms run both wealth platforms (thousands of
+    # individual clients) and institutional private fund books. 1,185
+    # funds from the top of the league table were false-flagged.
+    #
+    # ``client_types`` alone cannot separate "institutional manager with
+    # wealth platform" from "retail RIA". The $3B GAV floor above
+    # already filters the genuinely small RIAs, and ``duplicate_filing``
+    # cleans multi-adviser noise. If later data shows residual retail
+    # pollution, revisit with a stricter signal such as
+    # ``individuals_pct_aum > 90%`` once that granularity is populated.
 
     # Rule 8 — duplicate multi-adviser filings. For a fund reported by
     # multiple CRDs with the same (fund_name, GAV), keep the adviser with
@@ -458,20 +454,23 @@ async def _sanitize_sec_mmfs(db: AsyncSession) -> dict[str, int]:
     )
     counts["retirement_or_insurance"] = r.rowcount or 0
 
+    # Retail MMFs expose a boolean ``is_retail`` flag populated from
+    # N-MFP (``mmf_category`` is the investment style — Government,
+    # Prime, Tax Exempt — not the retail/institutional split).
     r = await db.execute(
         text(
-            r"""
+            """
             UPDATE sec_money_market_funds
             SET is_institutional = false,
-                exclusion_reason = 'retail_mmf_category',
+                exclusion_reason = 'retail_mmf',
                 sanitized_at = NOW()
             WHERE is_institutional = true
               AND exclusion_reason IS NULL
-              AND mmf_category ~* '(retail|\mgovernment\s+retail\M)'
+              AND is_retail IS TRUE
             """,
         ),
     )
-    counts["retail_mmf_category"] = r.rowcount or 0
+    counts["retail_mmf"] = r.rowcount or 0
 
     counts.update(await _summary(db, "sec_money_market_funds"))
     logger.info("sec_money_market_funds_sanitized", **counts)
