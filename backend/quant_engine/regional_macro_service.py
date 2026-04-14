@@ -214,6 +214,9 @@ CREDIT_SERIES: list[SeriesSpec] = [
     SeriesSpec("NETCIBAL", "credit_quality", "Net Charge-Off Rate — All Loans", "quarterly"),
     SeriesSpec("CCLACBW027SBOG", "credit_quality", "CRE Loans (commercial banks)", "weekly"),
     SeriesSpec("DRCILNFNQ", "credit_quality", "Delinquency Rate — C&I Loans", "quarterly"),
+    # Regime leading indicators
+    SeriesSpec("ICSA", "labor", "Initial Jobless Claims", "weekly"),
+    SeriesSpec("TOTBKCR", "credit_cycle", "Total Bank Credit, All Commercial Banks", "weekly"),
     # Banking Activity
     SeriesSpec("TOTLL", "banking", "Total Loans & Leases", "weekly"),
     SeriesSpec("DPSACBW027SBOG", "banking", "Total Deposits", "weekly"),

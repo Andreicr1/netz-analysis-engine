@@ -131,6 +131,84 @@ def _validate_plausibility(
     return value
 
 
+def _amplify_weights(
+    signals: list[tuple[str, float, float, str]],
+    alpha: float = 2.0,
+    gamma: float = 2.0,
+    w_max: float = 0.35,
+) -> list[tuple[str, float, float, str]]:
+    """Compute dynamic weights based on signal amplitude.
+
+    Extreme signals get amplified weights via convex scaling.
+    Calm signals are nearly transparent to the amplification.
+
+    Formula: w_eff_i = w_base_i * (1 + alpha * (s_i / 100)^gamma)
+    Then renormalize to unit sum, cap at w_max with redistribution.
+
+    Args:
+        signals: List of (label, score, weight, reason) tuples.
+        alpha: Max amplification multiplier. 2.0 means a maxed signal
+               gets 3x its base weight before renormalization.
+        gamma: Convexity exponent. 2.0 (quadratic) means score=50 gets
+               25% of max amplification, score=80 gets 64%.
+        w_max: Hard cap on any single signal's final weight. Prevents
+               single-factor tyranny.
+
+    Returns:
+        New signals list with adjusted weights summing to ~1.0.
+    """
+    if not signals:
+        return signals
+
+    # Step 1: amplify
+    amplified: list[tuple[str, float, float, str]] = []
+    for label, score, weight, reason in signals:
+        amp = weight * (1.0 + alpha * (score / 100.0) ** gamma)
+        amplified.append((label, score, amp, reason))
+
+    # Step 2: normalize to unit sum
+    total = sum(w for _, _, w, _ in amplified)
+    if total <= 0:
+        return signals
+
+    normalized = [
+        (label, score, w / total, reason)
+        for label, score, w, reason in amplified
+    ]
+
+    # Step 3: enforce w_max cap with redistribution
+    for _ in range(5):  # Max 5 iterations to converge
+        excess = 0.0
+        uncapped_total = 0.0
+        has_capped = False
+        result: list[tuple[str, float, float, str]] = []
+
+        for label, score, w, reason in normalized:
+            if w > w_max:
+                excess += w - w_max
+                result.append((label, score, w_max, reason))
+                has_capped = True
+            else:
+                uncapped_total += w
+                result.append((label, score, w, reason))
+
+        if not has_capped or excess <= 0 or uncapped_total <= 0:
+            normalized = result
+            break
+
+        # Redistribute excess proportionally among uncapped signals
+        normalized = [
+            (
+                label, score,
+                w + (excess * w / uncapped_total) if w < w_max else w,
+                reason,
+            )
+            for label, score, w, reason in result
+        ]
+
+    return normalized
+
+
 @dataclass
 class RegimeResult:
     regime: str
@@ -152,6 +230,9 @@ def classify_regime_multi_signal(
     dxy_zscore: float | None = None,
     energy_shock: float | None = None,
     cfnai: float | None = None,
+    icsa_zscore: float | None = None,
+    credit_impulse: float | None = None,
+    permits_roc: float | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Classify regime using multi-factor stress scoring.
 
@@ -167,28 +248,33 @@ def classify_regime_multi_signal(
     CPI override: inflation above threshold triggers INFLATION regime
     regardless of stress score.
 
-    === FAST SIGNALS (55%) — react within days ===
-        VIX (20%):              Implied vol. LT avg ~19, ramp 18→35.
-        HY OAS (15%):           US HY credit spread. Normal ~3.0, stress >5.0.
-        Energy Shock (10%):     Composite of WTI Z-score (1Y) and WTI RoC (3m),
+    Profile A base weights (40% financial / 60% real-economy).
+    Dynamic amplification via _amplify_weights() boosts extreme signals.
+
+    === FINANCIAL SIGNALS (40%) — react within days ===
+        VIX (10%):              Implied vol. LT avg ~19, ramp 18→35.
+        HY OAS (12%):           US HY credit spread. Normal ~3.0, stress >5.0.
+        Energy Shock (12%):     Composite of WTI Z-score (1Y) and WTI RoC (3m),
                                 fused via max(z_score, roc_score). Single signal
                                 avoids multicollinearity — both spike together
                                 during supply shocks but capture different tails.
-        DXY Z-score (10%):      Dollar strength surprise → global liquidity crunch.
+        DXY Z-score (8%):       Dollar strength surprise → global liquidity crunch.
+        BAA spread (5%):        Corporate credit risk → real economy stress.
 
-    === SLOW SIGNALS (45%) — structural, weeks-to-months lag ===
-        CFNAI (15%):            Chicago Fed National Activity Index. Composite
+    === REAL-ECONOMY SIGNALS (60%) — structural, weeks-to-months lag ===
+        CFNAI (18%):            Chicago Fed National Activity Index. Composite
                                 of 85 indicators (production, employment,
                                 consumption, sales). 0 = trend growth, below
-                                -0.70 = high probability of recession. Replaces
-                                INDPRO (heavy retroactive revisions) and ISM PMI
-                                (not available on FRED).
-        Yield curve (10%):      10Y-2Y. Inverted = recession signal.
-        BAA spread (5%):        Corporate credit risk → real economy stress.
+                                -0.70 = high probability of recession.
+        Sahm Rule (8%):         Labor market recession onset at 0.50.
+        ICSA Z-score (8%):      Initial Jobless Claims 4wk MA Z-score.
+                                Weekly frequency, leads Sahm by 4-8 weeks.
+        Yield curve (5%):       10Y-2Y. Inverted = recession signal.
         FF Rate-of-Change (5%): 6-month Fed Funds delta. Rapid hikes = stress.
-        Sahm Rule (5%):         Labor market recession onset at 0.50.
-        Reserved (5%):          Placeholder for future signals (e.g. Baltic Dry,
-                                soft commodities, shipping rates).
+        Credit Impulse (5%):    6-month RoC of total bank credit (TOTBKCR).
+                                Negative = credit contraction = stress.
+        Building Permits (4%):  6-month RoC of building permits (PERMIT).
+                                Longest-lead recession indicator (9-12 months).
 
     """
     if thresholds is None:
@@ -216,20 +302,20 @@ def classify_regime_multi_signal(
 
     # ═══ FINANCIAL SIGNALS (55%) ═══
 
-    # VIX (20%): implied vol. LT avg ~19, ramp 18→35
+    # VIX (10%): implied vol. LT avg ~19, ramp 18→35
     if vix is not None:
         s = _ramp(vix, calm=18.0, panic=35.0)
-        signals.append(("vix", s, 0.20, f"VIX={vix:.1f} (stress={s:.0f}/100)"))
+        signals.append(("vix", s, 0.10, f"VIX={vix:.1f} (stress={s:.0f}/100)"))
 
-    # US HY OAS (15%): credit stress. Normal ~3.0%, stress >5.0%
+    # US HY OAS (12%): credit stress. Normal ~3.0%, stress >5.0%
     if hy_oas is not None:
         s = _ramp(hy_oas, calm=2.5, panic=6.0)
-        signals.append(("hy_oas", s, 0.15, f"US_HY_OAS={hy_oas:.2f}% (stress={s:.0f}/100)"))
+        signals.append(("hy_oas", s, 0.12, f"US_HY_OAS={hy_oas:.2f}% (stress={s:.0f}/100)"))
 
-    # DXY Z-score (10%): sharp dollar rally = global liquidity crunch
+    # DXY Z-score (8%): sharp dollar rally = global liquidity crunch
     if dxy_zscore is not None:
         s = _ramp(dxy_zscore, calm=0.0, panic=2.0)
-        signals.append(("dxy", s, 0.10, f"DXY_z={dxy_zscore:+.2f}σ (stress={s:.0f}/100)"))
+        signals.append(("dxy", s, 0.08, f"DXY_z={dxy_zscore:+.2f}σ (stress={s:.0f}/100)"))
 
     # ═══ SLOW SIGNALS (45%) — structural, weeks-to-months lag ═══
 
@@ -239,7 +325,7 @@ def classify_regime_multi_signal(
     # double-count the same event. max() captures whichever tail is louder.
     if energy_shock is not None:
         s = _ramp(energy_shock, calm=0.0, panic=100.0)
-        signals.append(("energy_shock", s, 0.10, f"Energy_shock={energy_shock:.0f}/100 (stress={s:.0f}/100)"))
+        signals.append(("energy_shock", s, 0.12, f"Energy_shock={energy_shock:.0f}/100 (stress={s:.0f}/100)"))
 
     # CFNAI (15%): Chicago Fed National Activity Index.
     # Composite of 85 indicators. 0 = trend growth, negative = below trend.
@@ -248,38 +334,78 @@ def classify_regime_multi_signal(
     if cfnai is not None:
         # Inverted: positive = calm (above-trend growth), negative = stress
         s = _ramp(-cfnai, calm=0.20, panic=0.70)
-        signals.append(("cfnai", s, 0.15, f"CFNAI={cfnai:+.2f} (stress={s:.0f}/100)"))
+        signals.append(("cfnai", s, 0.18, f"CFNAI={cfnai:+.2f} (stress={s:.0f}/100)"))
 
-    # Yield curve (10%): +1.0=calm, -0.5=full stress (inverted)
+    # Yield curve (5%): +1.0=calm, -0.5=full stress (inverted)
     if yield_curve_spread is not None:
         yc_s = _ramp(-yield_curve_spread, calm=-1.0, panic=0.5)
         # Move to slow block (recession signal takes months to materialize)
-        signals.append(("yield_curve", yc_s, 0.10, f"10Y-2Y={yield_curve_spread:+.2f}% (stress={yc_s:.0f}/100)"))
+        signals.append(("yield_curve", yc_s, 0.05, f"10Y-2Y={yield_curve_spread:+.2f}% (stress={yc_s:.0f}/100)"))
 
     # BAA-10Y spread (5%): corporate credit → real economy stress
     if baa_spread is not None:
         s = _ramp(baa_spread, calm=1.2, panic=2.5)
         signals.append(("baa_spread", s, 0.05, f"BAA-10Y={baa_spread:.2f}% (stress={s:.0f}/100)"))
 
+
     # Fed Funds rate-of-change (5%): surprise tightening
     if fed_funds_delta_6m is not None:
         s = _ramp(fed_funds_delta_6m, calm=-0.50, panic=1.50)
         signals.append(("ff_roc", s, 0.05, f"FF_Δ6m={fed_funds_delta_6m:+.2f}% (stress={s:.0f}/100)"))
 
-    # Sahm Rule (5%): labor market recession onset at 0.50
+    # Sahm Rule (8%): labor market recession onset at 0.50
     if sahm_rule is not None:
         s = _ramp(sahm_rule, calm=0.0, panic=0.50)
-        signals.append(("sahm", s, 0.05, f"Sahm={sahm_rule:.2f} (stress={s:.0f}/100)"))
+        signals.append(("sahm", s, 0.08, f"Sahm={sahm_rule:.2f} (stress={s:.0f}/100)"))
+
+    # Initial Jobless Claims Z-score (8%): weekly frequency, leads Sahm by 4-8 weeks
+    if icsa_zscore is not None:
+        s = _ramp(icsa_zscore, calm=0.5, panic=2.5)
+        signals.append(("icsa", s, 0.08, f"ICSA_z={icsa_zscore:+.2f}\u03c3 (stress={s:.0f}/100)"))
+
+    # Credit Impulse (5%): 6m RoC of bank credit. Negative = contraction = stress.
+    # Inverted: we ramp on the negative side.
+    if credit_impulse is not None:
+        s = _ramp(-credit_impulse, calm=-0.5, panic=2.0)
+        signals.append(("credit_impulse", s, 0.05, f"CreditImpulse={credit_impulse:+.1f}% (stress={s:.0f}/100)"))
+
+    # Building Permits 6m RoC (4%): longest-lead recession indicator (9-12 months).
+    # Falling permits = stress. Inverted.
+    if permits_roc is not None:
+        s = _ramp(-permits_roc, calm=-5.0, panic=20.0)
+        signals.append(("permits", s, 0.04, f"Permits_\u03946m={permits_roc:+.1f}% (stress={s:.0f}/100)"))
 
     # Need at least 2 signals for confident classification
     if len(signals) < 2:
         reasons["decision"] = "RISK_OFF: insufficient signals for confident classification"
         return "RISK_OFF", reasons
 
-    # Compute weighted composite — normalize for missing signals
-    raw_score = sum(s * w for _, s, w, _ in signals)
+    # Step 1: renormalize base weights for available signals
     weight_sum = sum(w for _, _, w, _ in signals)
-    stress_score = raw_score / weight_sum if weight_sum > 0 else 50.0
+    if weight_sum > 0 and abs(weight_sum - 1.0) > 0.001:
+        signals = [(l, s, w / weight_sum, r) for l, s, w, r in signals]
+
+    # Step 2: resolve amplification config
+    amp_config: dict[str, Any] = {}
+    if config:
+        amp_config = config.get("regime_amplification", {})
+    amp_alpha = float(amp_config.get("alpha", 2.0))
+    amp_gamma = float(amp_config.get("gamma", 2.0))
+    amp_w_max = float(amp_config.get("w_max", 0.35))
+
+    # Step 3: apply dynamic weight amplification
+    base_signals = list(signals)  # snapshot before amplification
+    signals = _amplify_weights(signals, alpha=amp_alpha, gamma=amp_gamma, w_max=amp_w_max)
+
+    # Step 4: log weight changes for audit trail
+    for (label, _, w_final, _), (_, _, w_base, _) in zip(signals, base_signals, strict=True):
+        if abs(w_final - w_base) > 0.005:
+            reasons[f"w_dyn_{label}"] = f"{w_base:.3f}\u2192{w_final:.3f}"
+
+    reasons["amplification"] = f"alpha={amp_alpha}, gamma={amp_gamma}, w_max={amp_w_max}"
+
+    # Step 5: compute composite
+    stress_score = sum(s * w for _, s, w, _ in signals)
 
     for label, _, _, reason_str in signals:
         reasons[label] = reason_str
@@ -550,6 +676,126 @@ async def _compute_dxy_zscore(
     )
 
 
+async def _compute_icsa_zscore(
+    db: AsyncSession,
+    *,
+    as_of_date: date | None = None,
+) -> float | None:
+    """Z-score of 4-week MA of initial claims vs 52-week rolling stats.
+
+    ICSA is weekly. Compute:
+    1. 4-week moving average of ICSA (smooth weekly noise)
+    2. Mean and stddev of the 4wk MA over the trailing 52 weeks
+    3. Z-score = (current_4wk_ma - mean_52wk) / std_52wk
+    """
+    from datetime import timedelta
+
+    effective_date = as_of_date or date.today()
+
+    stmt = (
+        select(MacroData.obs_date, MacroData.value)
+        .where(
+            MacroData.series_id == "ICSA",
+            MacroData.obs_date > effective_date - timedelta(days=400),
+            MacroData.obs_date <= effective_date,
+        )
+        .order_by(MacroData.obs_date.asc())
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    if len(rows) < 8:  # Need at least 8 weeks for meaningful z-score
+        return None
+
+    values = [float(r.value) for r in rows]
+
+    # 4-week moving average
+    ma4: list[float] = []
+    for i in range(3, len(values)):
+        ma4.append(sum(values[i - 3 : i + 1]) / 4.0)
+
+    if len(ma4) < 26:  # Need at least 26 weeks of MA for stats
+        return None
+
+    current_ma = ma4[-1]
+    # Use trailing 52 4wk-MA values (or all available if less)
+    lookback = ma4[-52:] if len(ma4) >= 52 else ma4
+    mean_val = sum(lookback) / len(lookback)
+    variance = sum((x - mean_val) ** 2 for x in lookback) / len(lookback)
+    std_val = variance**0.5
+
+    if std_val < 1.0:  # Avoid division by near-zero
+        return None
+
+    return float((current_ma - mean_val) / std_val)
+
+
+async def _compute_credit_impulse(
+    db: AsyncSession,
+    *,
+    as_of_date: date | None = None,
+) -> float | None:
+    """Credit impulse: 6-month rate-of-change of total bank credit.
+
+    Falling credit impulse (negative RoC) = credit contraction = stress.
+    Uses TOTBKCR (Total Bank Credit, All Commercial Banks, Weekly).
+
+    Returns percentage change over 6 months. Negative = contraction.
+    """
+    from datetime import timedelta
+
+    effective_date = as_of_date or date.today()
+
+    # Get latest value
+    stmt_latest = (
+        select(MacroData.value)
+        .where(
+            MacroData.series_id == "TOTBKCR",
+            MacroData.obs_date <= effective_date,
+        )
+        .order_by(MacroData.obs_date.desc())
+        .limit(1)
+    )
+    result_latest = await db.execute(stmt_latest)
+    latest = result_latest.scalar_one_or_none()
+    if latest is None:
+        return None
+
+    # Get value ~6 months ago
+    target_date = effective_date - timedelta(days=180)
+    stmt_old = (
+        select(MacroData.value)
+        .where(
+            MacroData.series_id == "TOTBKCR",
+            MacroData.obs_date <= target_date,
+        )
+        .order_by(MacroData.obs_date.desc())
+        .limit(1)
+    )
+    result_old = await db.execute(stmt_old)
+    old = result_old.scalar_one_or_none()
+    if old is None or float(old) == 0:
+        return None
+
+    return ((float(latest) - float(old)) / float(old)) * 100.0
+
+
+async def _compute_permits_roc(
+    db: AsyncSession,
+    *,
+    months: int = 6,
+    as_of_date: date | None = None,
+) -> float | None:
+    """6-month rate-of-change of building permits (PERMIT).
+
+    Falling permits = leading recession indicator (9-12 month lead).
+    Returns percentage change. Negative = declining permits.
+    """
+    return await _compute_series_roc(
+        db, "PERMIT", months=months, as_of_date=as_of_date,
+    )
+
+
 REGIME_SERIES_STALENESS: dict[str, int] = {
     "VIXCLS": STALENESS_DAILY,
     "DGS10": STALENESS_DAILY,
@@ -562,6 +808,9 @@ REGIME_SERIES_STALENESS: dict[str, int] = {
     "DTWEXBGS": STALENESS_DAILY,
     "DCOILWTICO": STALENESS_DAILY,
     "CFNAI": 75,
+    "ICSA": 14,        # Weekly — stale after 2 weeks
+    "TOTBKCR": 14,     # Weekly — stale after 2 weeks
+    "PERMIT": 45,      # Monthly — stale after 45 days
 }
 
 
@@ -647,6 +896,15 @@ async def build_regime_inputs(
     # ── CFNAI ──
     cfnai_val = latest.get("CFNAI")
 
+    # ── Initial Jobless Claims Z-score ──
+    icsa_zscore = await _compute_icsa_zscore(db, as_of_date=effective_date)
+
+    # ── Credit Impulse ──
+    credit_impulse = await _compute_credit_impulse(db, as_of_date=effective_date)
+
+    # ── Building Permits 6m RoC ──
+    permits_roc = await _compute_permits_roc(db, as_of_date=effective_date)
+
     return {
         "vix": latest.get("VIXCLS"),
         "yield_curve_spread": yield_spread,
@@ -658,6 +916,9 @@ async def build_regime_inputs(
         "dxy_zscore": dxy_z,
         "energy_shock": energy_shock,
         "cfnai": cfnai_val,
+        "icsa_zscore": icsa_zscore,
+        "credit_impulse": credit_impulse,
+        "permits_roc": permits_roc,
     }
 
 
@@ -693,6 +954,9 @@ async def get_current_regime(
             dxy_zscore=inputs.get("dxy_zscore"),
             energy_shock=inputs.get("energy_shock"),
             cfnai=inputs.get("cfnai"),
+            icsa_zscore=inputs.get("icsa_zscore"),
+            credit_impulse=inputs.get("credit_impulse"),
+            permits_roc=inputs.get("permits_roc"),
         )
 
         # Determine as_of from macro_data latest obs_date
