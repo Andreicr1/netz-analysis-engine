@@ -58,8 +58,11 @@ _RAW_VALUE_RE = re.compile(r"[-+]?\d+\.?\d*")
 
 
 def _extract_raw_value(reason_str: str) -> float | None:
-    """Parse the first number from reason strings like 'VIX=19.5 (stress=...)'."""
+    """Parse the raw value from reason strings like 'VIX=19.5 (stress=...)'."""
+    # Extract the value portion: split on '(' to drop stress suffix, then on '=' to get RHS
     prefix = reason_str.split("(")[0] if "(" in reason_str else reason_str
+    if "=" in prefix:
+        prefix = prefix.split("=", 1)[1]
     m = _RAW_VALUE_RE.search(prefix)
     if m:
         try:
