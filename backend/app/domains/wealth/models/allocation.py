@@ -50,6 +50,7 @@ class MacroRegimeSnapshot(Base):
     raw_regime: Mapped[str] = mapped_column(String(20), nullable=False)
     stress_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 1))
     signal_details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    signal_breakdown: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )

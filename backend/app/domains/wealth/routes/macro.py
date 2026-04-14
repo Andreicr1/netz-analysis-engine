@@ -257,6 +257,7 @@ async def get_regime(
         raw_regime=snapshot.raw_regime,
         stress_score=snapshot.stress_score,
         signal_details=snapshot.signal_details,
+        signal_breakdown=snapshot.signal_breakdown or [],
     )
 
 
@@ -891,6 +892,8 @@ _FRED_ALLOWLIST: set[str] = {
     "BRACPIALLMINMEI", "INDCPIALLMINMEI", "INTDSRBRM193N", "BAMLEMCBPIOAS",
     # Global
     "GPRH", "USEPUINDXD", "DTWEXBGS",
+    # Regime signal sparklines
+    "CFNAI", "ICSA", "TOTBKCR",
 }
 
 

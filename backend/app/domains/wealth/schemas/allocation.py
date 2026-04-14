@@ -140,6 +140,20 @@ class SimulationResult(BaseModel):
     computed_at: datetime
 
 
+class RegimeSignalRead(BaseModel):
+    """Structured breakdown of a single regime signal."""
+
+    key: str
+    label: str
+    raw_value: float | None = None
+    unit: str = ""
+    stress_score: float = 0.0
+    weight_base: float = 0.0
+    weight_effective: float = 0.0
+    category: str = "financial"
+    fred_series: str | None = None
+
+
 class GlobalRegimeRead(BaseModel):
     """Global regime snapshot — no org context needed."""
 
@@ -147,6 +161,7 @@ class GlobalRegimeRead(BaseModel):
     raw_regime: str
     stress_score: Decimal | None = None
     signal_details: dict[str, object] = {}
+    signal_breakdown: list[RegimeSignalRead] = []
 
     @model_validator(mode="after")
     def _humanize(self) -> "GlobalRegimeRead":

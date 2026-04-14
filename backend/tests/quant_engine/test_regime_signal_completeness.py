@@ -163,7 +163,7 @@ class TestSignalCountDifference:
     def test_10_signals_vs_7_signals_score_differs(self):
         """10-signal classification produces different stress than 7-signal."""
         # 7 signals (old behavior: 3 missing)
-        _, reasons_7 = classify_regime_multi_signal(
+        _, reasons_7, _ = classify_regime_multi_signal(
             vix=22.0,
             yield_curve_spread=0.5,
             cpi_yoy=2.5,
@@ -177,7 +177,7 @@ class TestSignalCountDifference:
         )
 
         # 10 signals (with moderate stress values)
-        _, reasons_10 = classify_regime_multi_signal(
+        _, reasons_10, _ = classify_regime_multi_signal(
             vix=22.0,
             yield_curve_spread=0.5,
             cpi_yoy=2.5,

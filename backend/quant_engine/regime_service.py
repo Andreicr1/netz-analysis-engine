@@ -22,6 +22,7 @@ Config is injected as parameter by callers via ConfigService.get("liquid_funds",
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, TypedDict
@@ -35,6 +36,37 @@ from app.shared.models import MacroData
 from app.shared.schemas import RegimeRead
 
 logger = structlog.get_logger()
+
+# ── Signal metadata for structured breakdown ──────────────────────────────
+
+SIGNAL_METADATA: dict[str, dict[str, str]] = {
+    "vix":            {"label": "VIX",              "unit": "",     "category": "financial",    "fred_series": "VIXCLS"},
+    "hy_oas":         {"label": "Credit Spread",    "unit": "%",    "category": "financial",    "fred_series": "BAMLH0A0HYM2"},
+    "energy_shock":   {"label": "Energy Shock",     "unit": "/100", "category": "financial",    "fred_series": "DCOILWTICO"},
+    "dxy":            {"label": "USD Strength",     "unit": "\u03c3",    "category": "financial",    "fred_series": "DTWEXBGS"},
+    "yield_curve":    {"label": "Yield Curve",      "unit": "%",    "category": "financial",    "fred_series": "DGS10"},
+    "baa_spread":     {"label": "Corp. Stress",     "unit": "%",    "category": "financial",    "fred_series": "BAA10Y"},
+    "cfnai":          {"label": "Activity Index",   "unit": "",     "category": "real_economy", "fred_series": "CFNAI"},
+    "sahm":           {"label": "Employment",       "unit": "",     "category": "real_economy", "fred_series": "SAHMREALTIME"},
+    "ff_roc":         {"label": "Fed Policy",       "unit": "%",    "category": "real_economy", "fred_series": "DFF"},
+    "icsa":           {"label": "Jobless Claims",   "unit": "\u03c3",    "category": "real_economy", "fred_series": "ICSA"},
+    "credit_impulse": {"label": "Credit Impulse",   "unit": "%",    "category": "real_economy", "fred_series": "TOTBKCR"},
+    "permits":        {"label": "Building Permits", "unit": "%",    "category": "real_economy", "fred_series": "PERMIT"},
+}
+
+_RAW_VALUE_RE = re.compile(r"[-+]?\d+\.?\d*")
+
+
+def _extract_raw_value(reason_str: str) -> float | None:
+    """Parse the first number from reason strings like 'VIX=19.5 (stress=...)'."""
+    prefix = reason_str.split("(")[0] if "(" in reason_str else reason_str
+    m = _RAW_VALUE_RE.search(prefix)
+    if m:
+        try:
+            return float(m.group())
+        except ValueError:
+            return None
+    return None
 
 
 class RegimeThresholds(TypedDict):
@@ -233,7 +265,7 @@ def classify_regime_multi_signal(
     icsa_zscore: float | None = None,
     credit_impulse: float | None = None,
     permits_roc: float | None = None,
-) -> tuple[str, dict[str, str]]:
+) -> tuple[str, dict[str, str], list[dict[str, Any]]]:
     """Classify regime using multi-factor stress scoring.
 
     Combines financial market signals with real-economy indicators to avoid
@@ -292,7 +324,7 @@ def classify_regime_multi_signal(
     if cpi_yoy is not None and cpi_yoy >= thresholds["cpi_yoy_high"]:
         reasons["cpi"] = f"CPI_YoY={cpi_yoy:.1f}% >= {thresholds['cpi_yoy_high']}% (INFLATION)"
         reasons["decision"] = "INFLATION: CPI above threshold overrides stress score"
-        return "INFLATION", reasons
+        return "INFLATION", reasons, []
 
     # ── Multi-factor stress scoring ──
     # Each signal produces a sub-score 0-100 via _ramp().
@@ -378,7 +410,7 @@ def classify_regime_multi_signal(
     # Need at least 2 signals for confident classification
     if len(signals) < 2:
         reasons["decision"] = "RISK_OFF: insufficient signals for confident classification"
-        return "RISK_OFF", reasons
+        return "RISK_OFF", reasons, []
 
     # Step 1: renormalize base weights for available signals
     weight_sum = sum(w for _, _, w, _ in signals)
@@ -427,7 +459,24 @@ def classify_regime_multi_signal(
         regime = "RISK_ON"
         reasons["decision"] = f"RISK_ON: composite stress {stress_score}/100 — benign conditions"
 
-    return regime, reasons
+    # ── Build structured signal breakdown ──
+    base_weight_map = {label: w for label, _, w, _ in base_signals}
+    structured_signals: list[dict[str, Any]] = []
+    for label, sub_score, weight, reason_str in signals:
+        meta = SIGNAL_METADATA.get(label, {})
+        structured_signals.append({
+            "key": label,
+            "label": meta.get("label", label),
+            "raw_value": _extract_raw_value(reason_str),
+            "unit": meta.get("unit", ""),
+            "stress_score": round(sub_score, 1),
+            "weight_base": round(base_weight_map.get(label, weight), 4),
+            "weight_effective": round(weight, 4),
+            "category": meta.get("category", "financial"),
+            "fred_series": meta.get("fred_series"),
+        })
+
+    return regime, reasons, structured_signals
 
 
 def _ramp(value: float, calm: float, panic: float) -> float:
@@ -942,7 +991,7 @@ async def get_current_regime(
 
     # Need at least VIX or HY OAS or energy data to classify
     if inputs.get("vix") is not None or inputs.get("hy_oas") is not None or inputs.get("energy_shock") is not None:
-        regime, reasons = classify_regime_multi_signal(
+        regime, reasons, _ = classify_regime_multi_signal(
             vix=inputs.get("vix"),
             yield_curve_spread=inputs.get("yield_curve_spread"),
             cpi_yoy=inputs.get("cpi_yoy"),
