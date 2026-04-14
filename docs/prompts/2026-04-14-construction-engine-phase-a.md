@@ -365,9 +365,9 @@ When a factor is skipped, log audit event (`factor_skipped` with reason), reduce
 
 **Files to touch:**
 
-- `backend/app/core/db/migrations/versions/0132_construction_inputs_metadata.py` (NEW)
-  - Revision `0132_construction_inputs_metadata`, `down_revision = "0131_return_5y_10y"`.
-  - The other head (`0110`) is a stale orphan branch — do NOT chain to it. Main sequence is 0131 → 0132.
+- `backend/app/core/db/migrations/versions/0133_construction_inputs_metadata.py` (NEW)
+  - Revision `0133_construction_inputs_metadata`, `down_revision = "0132_merge_0110_heads"`.
+  - 0132 is the merge migration that reconciled the two 0110 heads (signal_breakdown vs compress_segmentby_fix). See `scripts/reconcile_0110_heads.py` and `0132_merge_0110_heads.py` docstring for the historical context. Current alembic state has a single head at 0132; this migration descends from it.
   - Add JSONB column to `portfolio_construction_runs`:
     ```python
     op.add_column("portfolio_construction_runs",
