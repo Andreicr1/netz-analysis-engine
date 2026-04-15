@@ -276,18 +276,19 @@ def analyze_holdings(holdings: list[dict[str, Any]]) -> HoldingsAnalysis:
         top_issuer_cats = []
         ic_hhi = 0.0
 
-    # Coverage tiers. The upper bound (130%) screens out *trust-CIK
+    # Coverage tiers. The upper bound (110%) screens out *trust-CIK
     # aggregation*: N-PORT filings under a parent trust CIK union holdings
     # across all series in the trust, producing pct_of_nav sums of 200-3000%
-    # that conflate multiple distinct funds into one analysis. Empirically
-    # ~25% of CIKs in production exceed this threshold; their composition
-    # numbers are meaningless for single-fund classification.
-    if 90 <= coverage <= 130:
+    # that conflate multiple distinct funds into one analysis. Legitimate
+    # single-fund filings sit at 100% ± rounding/hedges (≤105%); anything
+    # over 110% is presumed aggregation artifact. Empirically ~309 CIKs in
+    # production exceed 200% and another ~192 sit between 110-200%.
+    if 90 <= coverage <= 110:
         qual = "high"
     elif 70 <= coverage < 90:
         qual = "medium"
     else:
-        qual = "low"  # under-covered (<70) OR trust-aggregated (>130)
+        qual = "low"  # under-covered (<70) OR trust-aggregated (>110)
 
     return HoldingsAnalysis(
         as_of_date=as_of,

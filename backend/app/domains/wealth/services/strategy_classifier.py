@@ -113,8 +113,17 @@ def classify_fund(
     signal of its mandate.
     """
     # ── Layer 0: N-PORT holdings composition (highest authority) ────
-    if holdings_analysis is not None and holdings_analysis.coverage_quality in (
-        "high", "medium",
+    # Two gates protect Layer 0 from upstream data-quality issues:
+    #   • coverage_quality in (high, medium) — excludes trust-CIK
+    #     aggregation per the analyzer's 110% upper bound.
+    #   • _is_coherent_composition — ≤ 2 dominant asset-class buckets.
+    #     Catches residual aggregation cases that slip past the coverage
+    #     gate when sub-fund holdings happen to sum near 100% but mix
+    #     equity + FI + derivatives sleeves from disparate sub-funds.
+    if (
+        holdings_analysis is not None
+        and holdings_analysis.coverage_quality in ("high", "medium")
+        and _is_coherent_composition(holdings_analysis)
     ):
         hit = _classify_from_holdings(holdings_analysis, fund_name, fund_type)
         if hit is not None:
@@ -162,43 +171,97 @@ def classify_fund(
 # Layer 0 — N-PORT holdings composition
 # ───────────────────────────────────────────────────────────────────
 
+
+def _is_coherent_composition(h: HoldingsAnalysis) -> bool:
+    """Detect suspect trust-CIK aggregation by counting dominant buckets.
+
+    A legitimate single-fund filing has ONE dominant asset class (equity,
+    FI, derivatives, or cash), or TWO for genuine balanced/multi-asset
+    funds (equity + FI). Three or more buckets above 30% means the CIK is
+    almost certainly a parent trust whose N-PORT filing aggregates
+    holdings from multiple structurally different sub-funds (e.g., an
+    equity sleeve + a bond sleeve + a derivatives overlay reported as one
+    blob). Such compositions are not interpretable for single-fund
+    classification — Layer 0 abstains and the cascade falls through to
+    Tiingo description / name regex.
+    """
+    dominant_count = sum((
+        h.equity_pct > 30,
+        h.fixed_income_pct > 30,
+        h.derivatives_pct > 30,
+        h.cash_pct > 30,
+    ))
+    return dominant_count <= 2
+
+
 def _classify_from_holdings(
     h: HoldingsAnalysis,
     fund_name: str,
     fund_type: str | None,  # noqa: ARG001 — reserved for future heuristics
 ) -> tuple[str, str] | None:
-    """Layer 0: classify from fund composition.
+    """Layer 0: classify from fund composition. **FI-only scope.**
 
-    Uses only signals we can derive reliably from N-PORT *without* GICS
-    sector enrichment:
+    Uses only signals we can derive *reliably* from N-PORT today:
 
-      • Asset-mix buckets (equity / FI / cash / derivatives)
-      • Geography from ISIN[0:2]
-      • Fixed-income subtype from N-PORT issuerCat (UST/USGSE/USGA → Govt;
-        MUN → Municipal) and asset_class (ABS-MBS → MBS; LON → Loans)
-      • Equity Real Estate from asset_class = RE (REIT sleeve)
+      • Asset-mix buckets (equity / FI / cash / derivatives) for the
+        outer dispatch
+      • Fixed-income subtype from N-PORT issuerCat
+        (UST/USGSE/USGA → Government, MUN → Municipal,
+        CORP → Investment Grade) and asset_class
+        (ABS-MBS → MBS, ABS-* → ABS)
+      • Geography from ISIN[0:2] — used **only** to refine FI subtype
+        (Emerging Markets Debt, European Bond), never for equity
+        classification (see notes below)
       • Derivative subtype mix for Global Macro detection
+      • Cash-dominant detection for Money Market funds
+      • Balanced/Target Date detection for genuinely multi-asset funds
+        (gated on *real* bond exposure, not cash buffers)
 
-    Rules deliberately *not* expressed here:
-      • GICS sector concentration → Real Estate / Sector Equity / etc.
-        The ``sector`` column carries N-PORT issuerCat (CORP/MUN/...),
-        not GICS, so any "top sector > X" rule misfires (every equity
-        sleeve looks like 100% CORP). Phase 4.5 will add a real GICS
-        enrichment via CUSIP/ticker → GICS lookup.
-      • Growth/value and small/mid/large style box. We have no
-        per-holding market cap and no GICS sector → both signals are
-        unreliable.
+    Equity classification is intentionally NOT performed here.
+    --------------------------------------------------------
+    A spot-check on production data showed equity-side rules at 45-55%
+    noise rate vs ~85-95% for FI rules. The failure modes are
+    structural data limitations, not gate-tunable:
+
+      • ADR confounder: ISIN[0:2]="US" for US-listed ADRs of foreign
+        companies (e.g., Boston Partners Emerging Markets Fund holds
+        Chinese ADRs with US ISIN → ISIN-based geography mis-flags as
+        US-dominant equity).
+      • Income-fund confounder: Strategic Income / Equity Income funds
+        hold convertibles + preferreds (asset_class=EC/EP in N-PORT) →
+        composition looks equity-dominant despite an income mandate.
+      • IssuerCat ≠ GICS: the ``sector`` column carries N-PORT
+        issuerCat (CORP/MUN/UST/...) — every equity sleeve looks 100%
+        CORP regardless of GICS sector, so Real Estate / Sector Equity /
+        growth-vs-value cannot be inferred.
+      • Trust-CIK aggregation residual: even after the 110% coverage
+        cap and the dominant-bucket coherence gate, ~10% of CIKs still
+        union sub-fund holdings into a single misleading composition.
+
+    Phase 4.5 roadmap (separate sprint) addresses these:
+      • CUSIP/ticker → GICS sector enrichment (OpenFIGI or equivalent)
+      • Per-holding country-of-domicile (ADR resolution)
+      • Per-holding market cap (size dimension of the style box)
+      • Per-holding credit rating (HY vs IG disambiguation)
+      • universe_sync trust-CIK fix (series-level mapping)
+
+    Equity-dominant funds today fall through to Layer 1 (Tiingo
+    description) and Layer 2 (name regex). Both layers handle equity
+    funds adequately; FI is where Layer 0 wins because Layer 2's name
+    regex bungles bond subtype ("Voya US Bond Index" → generic
+    Intermediate-Term Bond loses the Treasury/Muni/Corporate signal).
 
     Priority (first match wins):
-      1. Global Macro signature: derivatives >60% + meaningful FX/IR
-      2. Cash-dominant: cash >=80% → Cash Equivalent
-      3. Target Date: balanced range AND date hint in fund name
-      4. Balanced: 30-70% equity AND 30-70% fixed income
-      5. Equity-dominant (>=70% equity): geography → REIT sleeve → Large Blend
-      6. Fixed-income-dominant (>=70% FI): geography → MBS → Govt → Muni →
-         generic Intermediate-Term Bond
+      1. Global Macro — derivatives >60% with FX/IR mix
+      2. Cash Equivalent — cash >=80%
+      3. Target Date — balanced composition + date hint in name
+      4. Balanced — 30-70% equity AND 30-70% real-FI sleeve
+      5. Fixed-income-dominant (>=70% FI) → issuerCat dispatch:
+           Emerging Markets Debt | European Bond | MBS | ABS |
+           Government Bond | Municipal Bond | Investment Grade Bond
 
     Returns ``(label, pattern)`` or ``None`` when no signal qualifies.
+    Equity-dominant funds always return ``None`` and fall through.
     """
     # Rule 1: Global Macro signature
     if h.derivatives_pct > 60 and (h.derivatives_fx_pct + h.derivatives_ir_pct) > 30:
@@ -208,8 +271,14 @@ def _classify_from_holdings(
     if h.cash_pct >= 80:
         return ("Cash Equivalent", "holdings:cash_dominant")
 
-    # Rule 3: Target Date (multi-asset + date hint in name)
-    if 30 <= h.equity_pct <= 70 and 20 <= h.fixed_income_pct <= 60:
+    # Rule 3: Target Date — multi-asset composition + date hint in name.
+    # Even Target Date checks real_fi to avoid catching equity funds with
+    # a date in the name (e.g., a "2030 Vision Fund" that's pure equity).
+    real_fi = (
+        h.fi_government_pct + h.fi_municipal_pct
+        + h.fi_corporate_pct + h.fi_mbs_pct
+    )
+    if 30 <= h.equity_pct <= 70 and real_fi >= 20:
         if re.search(
             r"target\s+(?:date|retirement|maturity|\d{4})|\b(?:19|20)\d{2}\s+fund\b",
             fund_name,
@@ -217,33 +286,17 @@ def _classify_from_holdings(
         ):
             return ("Target Date", "holdings:target_date_confirmed")
 
-    # Rule 4: Balanced
-    if 30 <= h.equity_pct <= 70 and 30 <= h.fixed_income_pct <= 70:
+    # Rule 4: Balanced — require *real* bond exposure (not cash buffers).
+    # ``fixed_income_pct`` includes loans, ABS, STIV-like positions;
+    # ``real_fi`` only counts genuine bond sleeves (Govt + Muni + Corp +
+    # MBS). Tightened bound (>=30 vs prior >=25) eliminated the bulk of
+    # equity-with-cash false positives in the Sprint B spot-check.
+    if 30 <= h.equity_pct <= 70 and 30 <= real_fi <= 70:
         return ("Balanced", "holdings:balanced")
 
-    # Rule 5: Equity-dominant → geography → REIT sleeve → Large Blend
-    if h.equity_pct >= 70:
-        if h.geography_em_pct > 50:
-            return ("Emerging Markets Equity", "holdings:em_equity")
-        if h.geography_europe_pct > 60:
-            return ("European Equity", "holdings:european_equity")
-        if h.geography_asia_developed_pct > 60:
-            return ("Asian Equity", "holdings:asian_equity")
-
-        non_us = 100 - h.geography_us_pct
-        if non_us > 60:
-            return ("International Equity", "holdings:international_equity")
-
-        # REIT-dominant equity → Real Estate (asset_class=RE, not GICS)
-        if h.equity_real_estate_pct >= 50:
-            return ("Real Estate", "holdings:reit_dominant")
-
-        # Diversified US-dominant equity. Without GICS or market cap we
-        # cannot resolve the style box; "Large Blend" is the safest
-        # institutional default for a US-equity-dominant diversified fund.
-        return ("Large Blend", "holdings:us_equity_generic")
-
-    # Rule 6: Fixed-income-dominant — issuerCat-aware subtype dispatch
+    # Rule 5: Fixed-income-dominant — issuerCat-aware subtype dispatch.
+    # All thresholds are share-of-NAV (not share-of-FI) for a stricter
+    # gate; a fund needs absolute concentration to claim a subtype.
     if h.fixed_income_pct >= 70:
         # Geography first (overrides subtype for cross-border funds)
         if h.geography_em_pct > 40:
@@ -251,31 +304,28 @@ def _classify_from_holdings(
         if h.geography_europe_pct > 50:
             return ("European Bond", "holdings:european_bond")
 
-        # MBS-heavy (asset_class=ABS-MBS dominates the FI sleeve)
+        # MBS / ABS by asset_class (independent of issuerCat)
         if h.fi_mbs_pct >= 50:
             return ("Mortgage-Backed Securities", "holdings:fi_mbs")
-        # ABS-heavy
         if h.fi_abs_pct >= 50:
             return ("Asset-Backed Securities", "holdings:fi_abs")
 
-        # IssuerCat dispatch on the FI sleeve. Use share-of-FI rather than
-        # share-of-NAV so funds with cash buffers still classify cleanly
-        # (e.g., 75% UST + 20% cash → Government Bond).
-        fi_total = max(h.fixed_income_pct, 1e-9)
-        govt_share = h.fi_government_pct / fi_total
-        muni_share = h.fi_municipal_pct / fi_total
-
-        if govt_share >= 0.60:
+        # IssuerCat dispatch by share-of-NAV
+        if h.fi_government_pct > 60:
             return ("Government Bond", "holdings:fi_government")
-        if muni_share >= 0.60:
+        if h.fi_municipal_pct > 50:
             return ("Municipal Bond", "holdings:fi_municipal")
+        if h.fi_corporate_pct > 60:
+            return ("Investment Grade Bond", "holdings:fi_corporate")
 
-        # Default: Corporate-heavy or mixed credit. Without ratings we can't
-        # split HY vs IG; Investment Grade Bond is the safer default for the
-        # corporate-dominated US universe (HY is < 5% of registered fund AUM).
-        return ("Investment Grade Bond", "holdings:fi_corporate_generic")
+        # Mixed credit / generic default. Without ratings we can't split
+        # HY vs IG; Intermediate-Term Bond is the safest neutral label.
+        return ("Intermediate-Term Bond", "holdings:fi_generic")
 
-    # No clear signal from holdings → fall through to Layer 1.
+    # Equity-dominant funds: deliberate fall-through to Layer 1/2.
+    # See module docstring for rationale (ADR confounder, GICS gap,
+    # income-fund confounder, trust-CIK residual). Phase 4.5 unlocks
+    # equity-side classification.
     return None
 
 

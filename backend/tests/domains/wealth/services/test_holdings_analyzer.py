@@ -191,10 +191,11 @@ class TestEdgeCases:
         assert r.total_nav_covered_pct == 500.0
         assert r.coverage_quality == "low"
 
-    def test_coverage_135_just_over_threshold_is_low(self):
-        r = analyze_holdings([_holding("EC", 135, "CORP")])
+    def test_coverage_115_just_over_threshold_is_low(self):
+        r = analyze_holdings([_holding("EC", 115, "CORP")])
         assert r.coverage_quality == "low"
 
-    def test_coverage_125_within_threshold_is_high(self):
-        r = analyze_holdings([_holding("EC", 125, "CORP")])
+    def test_coverage_105_within_threshold_is_high(self):
+        """Legitimate funds sit at 100% ± rounding/hedges (≤105%)."""
+        r = analyze_holdings([_holding("EC", 105, "CORP")])
         assert r.coverage_quality == "high"

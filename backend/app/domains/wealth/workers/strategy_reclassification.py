@@ -293,20 +293,36 @@ async def _read_instruments_universe(
     db: AsyncSession, limit: int | None,
 ) -> AsyncIterator[_FundRow]:
     limit_clause = f"LIMIT {int(limit)}" if limit else ""
+    # Ambiguous-CIK guard: ~88% of instruments_universe rows with a CIK
+    # share that CIK with sibling rows because universe_sync currently
+    # writes the *trust* CIK rather than the fund/series CIK. N-PORT for
+    # a trust CIK aggregates holdings across all sub-funds, producing a
+    # composition that does not represent any individual fund. We only
+    # surface ``cik`` to Layer 0 when the CIK maps 1:1 within
+    # instruments_universe; everything else falls through to Layer 1/2.
+    # Tracked by: universe_sync trust-CIK fix (Phase 4.5 follow-up).
     rows = await db.execute(
         text(
             f"""
+            WITH cik_counts AS (
+                SELECT attributes->>'sec_cik' AS sec_cik, COUNT(*) AS n
+                FROM instruments_universe
+                WHERE attributes->>'sec_cik' IS NOT NULL
+                GROUP BY attributes->>'sec_cik'
+            )
             SELECT
-                instrument_id::text        AS pk,
-                name                       AS fund_name,
-                attributes->>'fund_type'   AS fund_type,
-                attributes->>'strategy_label'      AS current_label,
-                attributes->>'tiingo_description'  AS tiingo_desc,
-                attributes->>'sec_cik'             AS cik
-            FROM instruments_universe
-            WHERE is_active = true
-              AND name IS NOT NULL
-            ORDER BY instrument_id
+                iu.instrument_id::text        AS pk,
+                iu.name                       AS fund_name,
+                iu.attributes->>'fund_type'   AS fund_type,
+                iu.attributes->>'strategy_label'      AS current_label,
+                iu.attributes->>'tiingo_description'  AS tiingo_desc,
+                CASE WHEN cc.n = 1 THEN iu.attributes->>'sec_cik' END  AS cik
+            FROM instruments_universe iu
+            LEFT JOIN cik_counts cc
+              ON cc.sec_cik = iu.attributes->>'sec_cik'
+            WHERE iu.is_active = true
+              AND iu.name IS NOT NULL
+            ORDER BY iu.instrument_id
             {limit_clause}
             """,
         ),
@@ -394,14 +410,21 @@ async def _read_sec_etfs(
     rows = await db.execute(
         text(
             f"""
+            WITH cik_counts AS (
+                SELECT cik, COUNT(*) AS n
+                FROM sec_etfs
+                WHERE is_institutional = true
+                GROUP BY cik
+            )
             SELECT
-                series_id            AS pk,
-                cik                  AS cik,
-                fund_name,
-                strategy_label       AS current_label
-            FROM sec_etfs
-            WHERE is_institutional = true
-            ORDER BY series_id
+                e.series_id          AS pk,
+                CASE WHEN cc.n = 1 THEN e.cik END  AS cik,
+                e.fund_name,
+                e.strategy_label     AS current_label
+            FROM sec_etfs e
+            LEFT JOIN cik_counts cc ON cc.cik = e.cik
+            WHERE e.is_institutional = true
+            ORDER BY e.series_id
             {limit_clause}
             """,
         ),
