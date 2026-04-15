@@ -857,6 +857,104 @@ async def fetch_bl_views_for_portfolio(
     return bl_views
 
 
+async def _build_ic_views(
+    db: AsyncSession,
+    portfolio_id: uuid.UUID | None,
+    available_ids: list[str],
+    sigma_annual: np.ndarray,
+    tau: float,
+) -> list:
+    """Build IC views for multi-view Black-Litterman stacking.
+
+    Pulls active `portfolio_views` rows, maps them to picking-matrix rows, and
+    computes Ω_ii via the Idzorek (2005) mapping:
+
+        Ω_ii = (1 - confidence) / confidence · (P_i · τΣ · P_iᵀ)
+
+    Where `P_i · τΣ · P_iᵀ` is the prior variance along the view direction —
+    an Idzorek-style scale-matched uncertainty. Confidence is NOT clamped here:
+    confidence=1.0 produces Ω_ii = 0 and is handled by the regularization
+    inside :func:`compute_bl_posterior_multi_view`.
+
+    Returns a list of `View` dataclasses (quant_engine.black_litterman_service.View).
+    Empty list if no portfolio_id, no active views, or none map to available_ids.
+    """
+    if portfolio_id is None:
+        return []
+
+    from app.domains.wealth.models.portfolio_view import PortfolioView
+    from quant_engine.black_litterman_service import View
+
+    today = date.today()
+    stmt = (
+        select(PortfolioView)
+        .where(
+            PortfolioView.portfolio_id == portfolio_id,
+            PortfolioView.effective_from <= today,
+        )
+        .where(
+            (PortfolioView.effective_to.is_(None))
+            | (PortfolioView.effective_to >= today),
+        )
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    if not rows:
+        return []
+
+    id_to_idx = {fid: i for i, fid in enumerate(available_ids)}
+    n = len(available_ids)
+    views: list[View] = []
+
+    for v in rows:
+        p_row = np.zeros(n, dtype=np.float64)
+        if v.view_type == "absolute":
+            asset_id = str(v.asset_instrument_id) if v.asset_instrument_id else None
+            if asset_id is None or asset_id not in id_to_idx:
+                continue
+            p_row[id_to_idx[asset_id]] = 1.0
+        elif v.view_type == "relative":
+            long_id = str(v.asset_instrument_id) if v.asset_instrument_id else None
+            short_id = str(v.peer_instrument_id) if v.peer_instrument_id else None
+            if (
+                long_id is None or short_id is None
+                or long_id not in id_to_idx or short_id not in id_to_idx
+            ):
+                continue
+            p_row[id_to_idx[long_id]] = 1.0
+            p_row[id_to_idx[short_id]] = -1.0
+        else:
+            continue
+
+        conf = float(v.confidence)
+        # Prior variance along the view direction (Idzorek 2005).
+        prior_var = float(p_row @ (tau * sigma_annual) @ p_row)
+        if prior_var <= 0.0:
+            prior_var = 1e-12
+
+        if conf <= 0.0:
+            # Degenerate: zero confidence → view carries no information.
+            # Make Ω_ii huge so the posterior ignores it.
+            omega_ii = prior_var * 1e12
+        elif conf >= 1.0:
+            # Certainty: Ω_ii → 0. Regularization in compute_bl_posterior_multi_view
+            # keeps the solve stable while letting the view dominate.
+            omega_ii = 0.0
+        else:
+            omega_ii = prior_var * (1.0 - conf) / conf
+
+        views.append(
+            View(
+                P=p_row.reshape(1, n),
+                Q=np.array([float(v.expected_return)], dtype=np.float64),
+                Omega=np.array([[omega_ii]], dtype=np.float64),
+                source="ic_view",
+                confidence=conf,
+            ),
+        )
+
+    return views
+
+
 async def fetch_strategic_weights_for_funds(
     db: AsyncSession,
     fund_ids: list[str],
@@ -1040,17 +1138,43 @@ async def compute_fund_level_inputs(
             mean_weights_used = {"10y": 0.0, "5y": 0.0, "eq": 1.0}
             n_funds_by_history = {"10y+": 0, "5y+": 0, "1y_only": len(available_ids)}
         else:
-            # THBB (default) — per-fund availability-conditional blend
+            # THBB (default) — per-fund availability-conditional blend.
+            # PR-A2: wrap THBB prior in multi-view BL with data view + IC views.
             instrument_uuids = [uuid.UUID(fid) for fid in available_ids]
             return_horizons = await _fetch_return_horizons(
                 db, instrument_uuids, as_of_date,
             )
-            mu_vec, mean_weights_used, n_funds_by_history = _build_thbb_prior(
+            mu_prior_vec, mean_weights_used, n_funds_by_history = _build_thbb_prior(
                 available_ids,
                 return_horizons,
                 annual_cov,
                 w_benchmark,
                 risk_aversion=gamma,
+            )
+
+            from quant_engine.black_litterman_service import (
+                TAU_PHASE_A,
+                View,
+                compute_bl_posterior_multi_view,
+            )
+
+            # Data view: each fund's own 1Y annualized mean with standard-error Ω
+            P_data, Q_data, Omega_data = _build_data_view(returns_matrix, available_ids)
+            data_view = View(
+                P=P_data, Q=Q_data, Omega=Omega_data,
+                source="data_view", confidence=None,
+            )
+
+            # IC views from portfolio_views (empty list if no portfolio_id)
+            ic_views = await _build_ic_views(
+                db, portfolio_id, available_ids, annual_cov, tau=TAU_PHASE_A,
+            )
+
+            mu_vec = compute_bl_posterior_multi_view(
+                mu_prior=mu_prior_vec,
+                sigma=annual_cov,
+                views=[data_view, *ic_views],
+                tau=TAU_PHASE_A,
             )
 
     expected_returns = {fid: float(mu_vec[i]) for i, fid in enumerate(available_ids)}
