@@ -19,32 +19,50 @@
 	const buttonLabel = $derived.by(() => {
 		switch (phase) {
 			case "running":
+			case "factor_modeling":
+			case "shrinkage":
 			case "optimizer":
 			case "stress":
-				return "Running\u2026";
+			case "deduped":
+				return "Building\u2026";
 			case "done":
 				return "Complete";
 			case "error":
-				return "Failed \u2014 Retry";
+				return "Re-run";
+			case "cancelled":
+				// A.6 — cancelled uses neutral wording + neutral style.
+				return "Run again";
 			default:
 				return "Run Construction";
 		}
 	});
 
 	const isDisabled = $derived(
-		!hasPortfolio || phase === "running" || phase === "optimizer" || phase === "stress",
+		!hasPortfolio ||
+			phase === "running" ||
+			phase === "factor_modeling" ||
+			phase === "shrinkage" ||
+			phase === "optimizer" ||
+			phase === "stress" ||
+			phase === "deduped",
 	);
 
 	const statusClass = $derived.by(() => {
 		switch (phase) {
 			case "running":
+			case "factor_modeling":
+			case "shrinkage":
 			case "optimizer":
 			case "stress":
+			case "deduped":
 				return "rc-btn--running";
 			case "done":
 				return "rc-btn--done";
 			case "error":
 				return "rc-btn--error";
+			case "cancelled":
+				// A.6 — neutral, NOT red.
+				return "rc-btn--cancelled";
 			default:
 				return "";
 		}
@@ -52,7 +70,7 @@
 
 	async function handleRun() {
 		if (isDisabled) return;
-		const result = await workspace.runConstructJob();
+		const result = await workspace.runBuildJob();
 		if (result && onRunComplete) {
 			onRunComplete();
 		}
@@ -141,6 +159,12 @@
 	.rc-btn--error {
 		background: var(--terminal-status-error);
 		color: var(--terminal-fg-primary);
+	}
+
+	.rc-btn--cancelled {
+		background: var(--terminal-bg-panel-sunken);
+		color: var(--terminal-fg-primary);
+		border: var(--terminal-border-hairline);
 	}
 
 	.rc-check {

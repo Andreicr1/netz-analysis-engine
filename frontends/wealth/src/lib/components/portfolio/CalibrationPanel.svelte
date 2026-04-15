@@ -141,7 +141,7 @@
 				previewError = workspace.lastError?.message ?? "Preview failed to persist";
 				return;
 			}
-			await workspace.runConstructJob();
+			await workspace.runBuildJob();
 			isPreviewing = false;
 		}, 1500);
 	}

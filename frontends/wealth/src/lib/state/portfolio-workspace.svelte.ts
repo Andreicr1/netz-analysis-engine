@@ -1678,9 +1678,12 @@ export class PortfolioWorkspaceState {
 		}
 	}
 
-	/** Legacy alias — kept so existing components can still call ``constructPortfolio``. */
+	/**
+	 * Legacy alias — delegates to the hardened runBuildJob (PR-A5 A.5).
+	 * Kept so external tests and older callers keep compiling.
+	 */
 	async constructPortfolio() {
-		await this.runConstructJob();
+		await this.runBuildJob();
 	}
 
 	/** Apply a single SSE event to ``runPhase`` and cascade timeline. */

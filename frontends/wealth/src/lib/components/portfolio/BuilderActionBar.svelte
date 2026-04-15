@@ -15,7 +15,7 @@
 
   Construction (``construct``) is a special case: it does not POST
   to the transition dispatcher. The action bar invokes the parent's
-  ``onConstruct`` callback which fires ``workspace.runConstructJob()``
+  ``onConstruct`` callback which fires ``workspace.runBuildJob()``
   via the existing Phase 4 SSE flow. Every other action goes through
   ``workspace.applyTransition`` (Phase 5 backend dispatcher).
 -->
@@ -45,7 +45,7 @@
 	interface Props {
 		/**
 		 * Construction handler — Phase 4 Task 4.5 already wires this to
-		 * ``workspace.runConstructJob()``. The action bar fires it when
+		 * ``workspace.runBuildJob()``. The action bar fires it when
 		 * the user presses the ``construct`` button instead of POSTing
 		 * to the transition dispatcher (construct has its own
 		 * Job-or-Stream route per DL18 P2).

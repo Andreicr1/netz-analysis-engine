@@ -34,7 +34,7 @@
 
 	function handleConstruct() {
 		workspace.openAnalyticsForPortfolio();
-		void workspace.runConstructJob();
+		void workspace.runBuildJob();
 	}
 
 	const chartTitle = $derived(
