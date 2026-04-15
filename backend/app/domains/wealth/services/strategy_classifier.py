@@ -32,7 +32,11 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-ClassificationSource = Literal["tiingo_description", "name_regex", "adv_brochure", "fallback"]
+from app.domains.wealth.services.holdings_analyzer import HoldingsAnalysis
+
+ClassificationSource = Literal[
+    "nport_holdings", "tiingo_description", "name_regex", "adv_brochure", "fallback",
+]
 ClassificationConfidence = Literal["high", "medium", "low"]
 
 # Minimum description length to trust Layer 1. Empirically ~98% of Tiingo
@@ -94,14 +98,43 @@ def classify_fund(
     fund_name: str,
     fund_type: str | None,
     tiingo_description: str | None,
+    holdings_analysis: HoldingsAnalysis | None = None,
 ) -> ClassificationResult:
     """Run the cascade. Pure function; no DB access, no side effects.
 
     Returns the highest-authority classification that matches. If nothing
-    matches (Layers 1 and 2 both miss), returns a ``fallback`` result with
+    matches (all layers miss), returns a ``fallback`` result with
     ``strategy_label=None`` so the caller can try Layer 3 (brochure) or
     leave the label unchanged.
+
+    Layer 0 (N-PORT holdings composition) runs before Layer 1 (Tiingo
+    description) when a high/medium-coverage ``HoldingsAnalysis`` is
+    supplied — what a fund actually holds is the most authoritative
+    signal of its mandate.
     """
+    # ── Layer 0: N-PORT holdings composition (highest authority) ────
+    # Two gates protect Layer 0 from upstream data-quality issues:
+    #   • coverage_quality in (high, medium) — excludes trust-CIK
+    #     aggregation per the analyzer's 110% upper bound.
+    #   • _is_coherent_composition — ≤ 2 dominant asset-class buckets.
+    #     Catches residual aggregation cases that slip past the coverage
+    #     gate when sub-fund holdings happen to sum near 100% but mix
+    #     equity + FI + derivatives sleeves from disparate sub-funds.
+    if (
+        holdings_analysis is not None
+        and holdings_analysis.coverage_quality in ("high", "medium")
+        and _is_coherent_composition(holdings_analysis)
+    ):
+        hit = _classify_from_holdings(holdings_analysis, fund_name, fund_type)
+        if hit is not None:
+            label, pattern = hit
+            return ClassificationResult(
+                strategy_label=label,
+                source="nport_holdings",
+                confidence="high",
+                matched_pattern=pattern,
+            )
+
     # ── Layer 1: Tiingo description ─────────────────────────────────
     if tiingo_description and len(tiingo_description) >= _MIN_DESCRIPTION_CHARS:
         hit = _classify_from_description(tiingo_description, fund_type)
@@ -132,6 +165,180 @@ def classify_fund(
         confidence="low",
         matched_pattern=None,
     )
+
+
+# ───────────────────────────────────────────────────────────────────
+# Layer 0 — N-PORT holdings composition
+# ───────────────────────────────────────────────────────────────────
+
+
+def _is_coherent_composition(h: HoldingsAnalysis) -> bool:
+    """Detect suspect trust-CIK aggregation by counting dominant buckets.
+
+    A legitimate single-fund filing has ONE dominant asset class (equity,
+    FI, derivatives, or cash), or TWO for genuine balanced/multi-asset
+    funds (equity + FI). Three or more buckets above 30% means the CIK is
+    almost certainly a parent trust whose N-PORT filing aggregates
+    holdings from multiple structurally different sub-funds (e.g., an
+    equity sleeve + a bond sleeve + a derivatives overlay reported as one
+    blob). Such compositions are not interpretable for single-fund
+    classification — Layer 0 abstains and the cascade falls through to
+    Tiingo description / name regex.
+    """
+    dominant_count = sum((
+        h.equity_pct > 30,
+        h.fixed_income_pct > 30,
+        h.derivatives_pct > 30,
+        h.cash_pct > 30,
+    ))
+    return dominant_count <= 2
+
+
+def _classify_from_holdings(
+    h: HoldingsAnalysis,
+    fund_name: str,
+    fund_type: str | None,  # noqa: ARG001 — reserved for future heuristics
+) -> tuple[str, str] | None:
+    """Layer 0: classify from fund composition. **FI-only scope.**
+
+    Uses only signals we can derive *reliably* from N-PORT today:
+
+      • Asset-mix buckets (equity / FI / cash / derivatives) for the
+        outer dispatch
+      • Fixed-income subtype from N-PORT issuerCat
+        (UST/USGSE/USGA → Government, MUN → Municipal,
+        CORP → Investment Grade) and asset_class
+        (ABS-MBS → MBS, ABS-* → ABS)
+      • Geography from ISIN[0:2] — used **only** to refine FI subtype
+        (Emerging Markets Debt, European Bond), never for equity
+        classification (see notes below)
+      • Derivative subtype mix for Global Macro detection
+      • Cash-dominant detection for Money Market funds
+      • Balanced/Target Date detection for genuinely multi-asset funds
+        (gated on *real* bond exposure, not cash buffers)
+
+    Equity classification is intentionally NOT performed here.
+    --------------------------------------------------------
+    A spot-check on production data showed equity-side rules at 45-55%
+    noise rate vs ~85-95% for FI rules. The failure modes are
+    structural data limitations, not gate-tunable:
+
+      • ADR confounder: ISIN[0:2]="US" for US-listed ADRs of foreign
+        companies (e.g., Boston Partners Emerging Markets Fund holds
+        Chinese ADRs with US ISIN → ISIN-based geography mis-flags as
+        US-dominant equity).
+      • Income-fund confounder: Strategic Income / Equity Income funds
+        hold convertibles + preferreds (asset_class=EC/EP in N-PORT) →
+        composition looks equity-dominant despite an income mandate.
+      • IssuerCat ≠ GICS: the ``sector`` column carries N-PORT
+        issuerCat (CORP/MUN/UST/...) — every equity sleeve looks 100%
+        CORP regardless of GICS sector, so Real Estate / Sector Equity /
+        growth-vs-value cannot be inferred.
+      • Trust-CIK aggregation residual: even after the 110% coverage
+        cap and the dominant-bucket coherence gate, ~10% of CIKs still
+        union sub-fund holdings into a single misleading composition.
+
+    Phase 4.5 roadmap (separate sprint) addresses these:
+      • CUSIP/ticker → GICS sector enrichment (OpenFIGI or equivalent)
+      • Per-holding country-of-domicile (ADR resolution)
+      • Per-holding market cap (size dimension of the style box)
+      • Per-holding credit rating (HY vs IG disambiguation)
+      • universe_sync trust-CIK fix (series-level mapping)
+
+    Equity-dominant funds today fall through to Layer 1 (Tiingo
+    description) and Layer 2 (name regex). Both layers handle equity
+    funds adequately; FI is where Layer 0 wins because Layer 2's name
+    regex bungles bond subtype ("Voya US Bond Index" → generic
+    Intermediate-Term Bond loses the Treasury/Muni/Corporate signal).
+
+    Priority (first match wins). All rules are strict patterns —
+    audited at >=85% accuracy on production data. Mixed-credit FI funds
+    and equity-with-cash-buffer funds fall through to Layer 1/2 rather
+    than accept a catch-all label with known noise.
+
+      1. Global Macro — derivatives >60% with FX/IR mix
+      2. Cash Equivalent — cash >=80%
+      3. Target Date — balanced composition + date hint in name
+      4. Fixed-income-dominant (>=70% FI) → issuerCat dispatch:
+           Emerging Markets Debt | European Bond | MBS | ABS |
+           Government Bond | Municipal Bond | Investment Grade Bond
+         Mixed credit without a dominant subtype: fall through.
+
+    Returns ``(label, pattern)`` or ``None`` when no signal qualifies.
+    Equity-dominant funds always return ``None`` and fall through.
+    """
+    # Rule 1: Global Macro signature
+    if h.derivatives_pct > 60 and (h.derivatives_fx_pct + h.derivatives_ir_pct) > 30:
+        return ("Global Macro", "holdings:global_macro")
+
+    # Rule 2: Cash-dominant
+    if h.cash_pct >= 80:
+        return ("Cash Equivalent", "holdings:cash_dominant")
+
+    # Rule 3: Target Date — multi-asset composition + date hint in name.
+    # Even Target Date checks real_fi to avoid catching equity funds with
+    # a date in the name (e.g., a "2030 Vision Fund" that's pure equity).
+    real_fi = (
+        h.fi_government_pct + h.fi_municipal_pct
+        + h.fi_corporate_pct + h.fi_mbs_pct
+    )
+    if 30 <= h.equity_pct <= 70 and real_fi >= 20:
+        if re.search(
+            r"target\s+(?:date|retirement|maturity|\d{4})|\b(?:19|20)\d{2}\s+fund\b",
+            fund_name,
+            re.IGNORECASE,
+        ):
+            return ("Target Date", "holdings:target_date_confirmed")
+
+    # NOTE: Balanced rule removed entirely after Sprint B audit. Even
+    # the tightened "diversified FI sleeve" version produced too few
+    # confident hits to justify the maintenance burden, and Layer 2's
+    # name regex catches genuine balanced funds (Wellington, allocation,
+    # 60/40 in the name) accurately. Reintroduce only after Phase 4.5
+    # data enrichment makes the equity sleeve discoverable.
+
+    # Rule 5: Fixed-income-dominant — issuerCat-aware subtype dispatch.
+    # All thresholds are share-of-NAV (not share-of-FI) for a stricter
+    # gate; a fund needs absolute concentration to claim a subtype.
+    #
+    # NOTE: Generic FI catch-all (``holdings:fi_generic`` →
+    # Intermediate-Term Bond) was removed after Sprint B audit showed
+    # ~30% noise. Smart Backend / Dumb Frontend principle: do not emit
+    # Layer 0 unless we can stand behind the label at >=85% accuracy.
+    # Mixed-credit FI funds without a dominant subtype fall through to
+    # Layer 1 (Tiingo description) and Layer 2 (name regex), which
+    # already classify them adequately. Reintroduce the catch-all only
+    # after Phase 4.5 lands credit-rating enrichment that lets us split
+    # HY vs IG and resolves the trust-CIK contamination upstream.
+    if h.fixed_income_pct >= 70:
+        # Geography first (overrides subtype for cross-border funds)
+        if h.geography_em_pct > 40:
+            return ("Emerging Markets Debt", "holdings:em_debt")
+        if h.geography_europe_pct > 50:
+            return ("European Bond", "holdings:european_bond")
+
+        # MBS / ABS by asset_class (independent of issuerCat)
+        if h.fi_mbs_pct >= 50:
+            return ("Mortgage-Backed Securities", "holdings:fi_mbs")
+        if h.fi_abs_pct >= 50:
+            return ("Asset-Backed Securities", "holdings:fi_abs")
+
+        # IssuerCat dispatch by share-of-NAV — strict patterns only
+        if h.fi_government_pct > 60:
+            return ("Government Bond", "holdings:fi_government")
+        if h.fi_municipal_pct > 50:
+            return ("Municipal Bond", "holdings:fi_municipal")
+        if h.fi_corporate_pct > 60:
+            return ("Investment Grade Bond", "holdings:fi_corporate")
+
+        # No strict pattern matched — fall through to Layer 1/2.
+        return None
+
+    # Equity-dominant funds: deliberate fall-through to Layer 1/2.
+    # See module docstring for rationale (ADR confounder, GICS gap,
+    # income-fund confounder, trust-CIK residual). Phase 4.5 unlocks
+    # equity-side classification.
+    return None
 
 
 # ───────────────────────────────────────────────────────────────────

@@ -19,10 +19,17 @@ Source coverage
     Primary target for Layer 1: the upstream ``tiingo_enrichment`` worker
     populates ``attributes.tiingo_description`` here. ``fund_type`` and
     current ``strategy_label`` live inside the same JSONB blob.
-``sec_manager_funds``, ``sec_registered_funds``, ``sec_etfs``, ``esma_funds``
-    No Tiingo description available — the cascade degrades cleanly to
-    Layer 2 (name regex). We still benefit from the bug fixes documented
-    in ``strategy_classifier.py``.
+    Fund CIK (when present in ``attributes.sec_cik``) unlocks Layer 0.
+``sec_registered_funds``, ``sec_etfs``
+    Native ``cik`` column — Layer 0 (N-PORT holdings composition) runs
+    first, then degrades cleanly to Layer 2 (name regex) for funds
+    without N-PORT coverage.
+``sec_manager_funds``
+    Private funds; no fund-level CIK exists (only manager CRD), so
+    Layer 0 is skipped. Cascade jumps straight to Layer 2.
+``esma_funds``
+    European UCITS; no N-PORT filings. Layer 0 skipped, cascade jumps
+    to Layer 2.
 """
 
 from __future__ import annotations
@@ -39,6 +46,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import async_session_factory as async_session
+from app.domains.wealth.services.holdings_analyzer import (
+    HoldingsAnalysis,
+    analyze_holdings,
+)
 from app.domains.wealth.services.strategy_classifier import (
     ClassificationResult,
     classify_fund,
@@ -75,6 +86,8 @@ class _FundRow:
     fund_type: str | None
     current_strategy_label: str | None
     tiingo_description: str | None  # None for sources without Tiingo enrichment
+    cik: str | None = None  # Fund CIK for N-PORT lookup; None when not applicable
+                            # (sec_manager_funds has no fund CIK; esma_funds has no N-PORT).
 
 
 # ───────────────────────────────────────────────────────────────────
@@ -175,15 +188,29 @@ async def _reclassify_source(
         logger.warning("strategy_reclassification.unknown_source", source=source)
         return {"candidates": 0, "staged": 0, "fallback": 0}
 
-    stats = {"candidates": 0, "staged": 0, "fallback": 0}
+    stats = {
+        "candidates": 0, "staged": 0, "fallback": 0,
+        "holdings_lookups": 0, "holdings_hits": 0,
+    }
     buffer: list[tuple[_FundRow, ClassificationResult]] = []
 
     async for row in reader(db, limit):
         stats["candidates"] += 1
+
+        # Layer 0 prep: fetch latest N-PORT holdings if this source carries a
+        # fund CIK. Per-row indexed lookup against idx_sec_nport_holdings_cik_date.
+        holdings_analysis: HoldingsAnalysis | None = None
+        if row.cik:
+            stats["holdings_lookups"] += 1
+            holdings_analysis = await _compute_holdings_analysis(db, row.cik)
+            if holdings_analysis is not None and holdings_analysis.n_holdings > 0:
+                stats["holdings_hits"] += 1
+
         result = classify_fund(
             fund_name=row.fund_name,
             fund_type=row.fund_type,
             tiingo_description=row.tiingo_description,
+            holdings_analysis=holdings_analysis,
         )
         # Even ``fallback`` rows are staged — they give the operator
         # visibility into how much of the catalog the cascade could NOT
@@ -217,6 +244,42 @@ def _reader_for_source(source: str) -> _SourceReader | None:
 
 
 # ───────────────────────────────────────────────────────────────────
+# Layer 0 helper — N-PORT holdings fetch + analysis
+# ───────────────────────────────────────────────────────────────────
+
+_NPORT_LATEST_SQL = text(
+    """
+    WITH latest AS (
+        SELECT MAX(report_date) AS rd
+        FROM sec_nport_holdings
+        WHERE cik = :cik
+    )
+    SELECT
+        report_date, cusip, isin, issuer_name,
+        asset_class, sector, market_value, pct_of_nav, currency
+    FROM sec_nport_holdings
+    WHERE cik = :cik
+      AND report_date = (SELECT rd FROM latest)
+    """,
+)
+
+
+async def _compute_holdings_analysis(
+    db: AsyncSession, cik: str,
+) -> HoldingsAnalysis | None:
+    """Fetch the latest N-PORT report for ``cik`` and summarise it.
+
+    Returns ``None`` when no holdings exist for the CIK (the classifier
+    handles ``None`` by skipping Layer 0 cleanly).
+    """
+    rows = await db.execute(_NPORT_LATEST_SQL, {"cik": cik})
+    raw = [dict(r._mapping) for r in rows]
+    if not raw:
+        return None
+    return analyze_holdings(raw)
+
+
+# ───────────────────────────────────────────────────────────────────
 # Source readers — one per table
 #
 # Each reader yields ``_FundRow`` regardless of the underlying schema so
@@ -230,19 +293,36 @@ async def _read_instruments_universe(
     db: AsyncSession, limit: int | None,
 ) -> AsyncIterator[_FundRow]:
     limit_clause = f"LIMIT {int(limit)}" if limit else ""
+    # Ambiguous-CIK guard: ~88% of instruments_universe rows with a CIK
+    # share that CIK with sibling rows because universe_sync currently
+    # writes the *trust* CIK rather than the fund/series CIK. N-PORT for
+    # a trust CIK aggregates holdings across all sub-funds, producing a
+    # composition that does not represent any individual fund. We only
+    # surface ``cik`` to Layer 0 when the CIK maps 1:1 within
+    # instruments_universe; everything else falls through to Layer 1/2.
+    # Tracked by: universe_sync trust-CIK fix (Phase 4.5 follow-up).
     rows = await db.execute(
         text(
             f"""
+            WITH cik_counts AS (
+                SELECT attributes->>'sec_cik' AS sec_cik, COUNT(*) AS n
+                FROM instruments_universe
+                WHERE attributes->>'sec_cik' IS NOT NULL
+                GROUP BY attributes->>'sec_cik'
+            )
             SELECT
-                instrument_id::text        AS pk,
-                name                       AS fund_name,
-                attributes->>'fund_type'   AS fund_type,
-                attributes->>'strategy_label'      AS current_label,
-                attributes->>'tiingo_description'  AS tiingo_desc
-            FROM instruments_universe
-            WHERE is_active = true
-              AND name IS NOT NULL
-            ORDER BY instrument_id
+                iu.instrument_id::text        AS pk,
+                iu.name                       AS fund_name,
+                iu.attributes->>'fund_type'   AS fund_type,
+                iu.attributes->>'strategy_label'      AS current_label,
+                iu.attributes->>'tiingo_description'  AS tiingo_desc,
+                CASE WHEN cc.n = 1 THEN iu.attributes->>'sec_cik' END  AS cik
+            FROM instruments_universe iu
+            LEFT JOIN cik_counts cc
+              ON cc.sec_cik = iu.attributes->>'sec_cik'
+            WHERE iu.is_active = true
+              AND iu.name IS NOT NULL
+            ORDER BY iu.instrument_id
             {limit_clause}
             """,
         ),
@@ -255,6 +335,7 @@ async def _read_instruments_universe(
             fund_type=r["fund_type"],
             current_strategy_label=r["current_label"],
             tiingo_description=r["tiingo_desc"],
+            cik=r["cik"],
         )
 
 
@@ -297,6 +378,7 @@ async def _read_sec_registered_funds(
             f"""
             SELECT
                 cik                  AS pk,
+                cik                  AS cik,
                 fund_name,
                 fund_type,
                 strategy_label       AS current_label
@@ -315,6 +397,7 @@ async def _read_sec_registered_funds(
             fund_type=r["fund_type"],
             current_strategy_label=r["current_label"],
             tiingo_description=None,
+            cik=r["cik"],
         )
 
 
@@ -327,13 +410,21 @@ async def _read_sec_etfs(
     rows = await db.execute(
         text(
             f"""
+            WITH cik_counts AS (
+                SELECT cik, COUNT(*) AS n
+                FROM sec_etfs
+                WHERE is_institutional = true
+                GROUP BY cik
+            )
             SELECT
-                series_id            AS pk,
-                fund_name,
-                strategy_label       AS current_label
-            FROM sec_etfs
-            WHERE is_institutional = true
-            ORDER BY series_id
+                e.series_id          AS pk,
+                CASE WHEN cc.n = 1 THEN e.cik END  AS cik,
+                e.fund_name,
+                e.strategy_label     AS current_label
+            FROM sec_etfs e
+            LEFT JOIN cik_counts cc ON cc.cik = e.cik
+            WHERE e.is_institutional = true
+            ORDER BY e.series_id
             {limit_clause}
             """,
         ),
@@ -346,6 +437,7 @@ async def _read_sec_etfs(
             fund_type="ETF",
             current_strategy_label=r["current_label"],
             tiingo_description=None,
+            cik=r["cik"],
         )
 
 
