@@ -47,6 +47,17 @@
 	const loading = $derived(workspace.isLoadingCalibration);
 	const applying = $derived(workspace.isApplyingCalibration);
 
+	// PR-A5 F.1 — snapshot of the calibration as of the most recent
+	// construction run. Drives the per-field "Anteriormente" overlay
+	// in every CalibrationField. Loose typing is intentional — the
+	// snapshot JSONB schema evolves with calibration; readers cast
+	// per known key with safe fallbacks.
+	const snapshot = $derived(
+		(workspace.constructionRun?.calibration_snapshot ?? null) as
+			| (Partial<PortfolioCalibration> & Record<string, unknown>)
+			| null,
+	);
+
 	// ── TAA regime indicator state (Sprint 4) ────────────────────
 
 	// Local working copy of the calibration — cloned on load + on portfolio switch.
@@ -295,6 +306,7 @@
 						value={draft.mandate}
 						onChange={(v) => update({ mandate: v as CalibrationMandate })}
 						options={MANDATE_OPTIONS}
+						originalValue={snapshot?.mandate as string | undefined}
 					/>
 
 					<CalibrationSliderField
@@ -310,6 +322,7 @@
 						digits={2}
 						edgeLabels={["Tighter", "Looser"]}
 						accent="danger"
+						originalValue={snapshot?.cvar_limit as number | undefined}
 					/>
 
 					<CalibrationSliderField
@@ -323,6 +336,7 @@
 						step={0.01}
 						displayFormat="percent"
 						digits={1}
+						originalValue={snapshot?.max_single_fund_weight as number | undefined}
 					/>
 
 					<CalibrationSliderField
@@ -336,6 +350,9 @@
 						step={0.05}
 						displayFormat="percent"
 						digits={0}
+						originalValue={snapshot == null
+							? undefined
+							: ((snapshot.turnover_cap ?? TURNOVER_CAP_SENTINEL) as number)}
 					/>
 
 					<CalibrationScenarioGroup
@@ -344,6 +361,9 @@
 						value={draft.stress_scenarios_active}
 						onChange={(v) => update({ stress_scenarios_active: v })}
 						options={STRESS_OPTIONS}
+						originalValue={snapshot?.stress_scenarios_active as
+							| readonly StressScenarioId[]
+							| undefined}
 					/>
 				</section>
 		{:else if tier === "advanced"}
@@ -361,6 +381,9 @@
 									: (v as PortfolioCalibration["regime_override"]),
 							})}
 						options={REGIME_OPTIONS}
+						originalValue={snapshot == null
+							? undefined
+							: ((snapshot.regime_override as string | null | undefined) ?? "auto")}
 					/>
 
 					<CalibrationToggleField
@@ -369,6 +392,7 @@
 						description="Enable the Bayesian blend of the prior with IC views. Off = equilibrium prior only."
 						value={draft.bl_enabled}
 						onChange={(v) => update({ bl_enabled: v })}
+						originalValue={snapshot?.bl_enabled as boolean | undefined}
 					/>
 
 					<CalibrationSliderField
@@ -383,6 +407,7 @@
 						displayFormat="raw"
 						digits={2}
 						disabled={!draft.bl_enabled}
+						originalValue={snapshot?.bl_view_confidence_default as number | undefined}
 					/>
 
 					<CalibrationToggleField
@@ -391,6 +416,7 @@
 						description="Use forward-looking conditional volatility instead of realized vol."
 						value={draft.garch_enabled}
 						onChange={(v) => update({ garch_enabled: v })}
+						originalValue={snapshot?.garch_enabled as boolean | undefined}
 					/>
 
 					<CalibrationSliderField
@@ -404,6 +430,9 @@
 						step={0.1}
 						displayFormat="raw"
 						digits={1}
+						originalValue={snapshot == null
+							? undefined
+							: ((snapshot.turnover_lambda ?? TURNOVER_LAMBDA_SENTINEL) as number)}
 					/>
 
 					<CalibrationSliderField
@@ -417,6 +446,7 @@
 						step={0.05}
 						displayFormat="x"
 						digits={2}
+						originalValue={snapshot?.stress_severity_multiplier as number | undefined}
 					/>
 
 					<CalibrationToggleField
@@ -425,6 +455,7 @@
 						description="Enable the credit-side advisor that recommends fund additions to close risk budget gaps."
 						value={draft.advisor_enabled}
 						onChange={(v) => update({ advisor_enabled: v })}
+						originalValue={snapshot?.advisor_enabled as boolean | undefined}
 					/>
 
 					<CalibrationSelectField
@@ -434,6 +465,9 @@
 						value={draft.cvar_level.toString()}
 						onChange={(v) => update({ cvar_level: Number.parseFloat(v) })}
 						options={CVAR_LEVEL_OPTIONS}
+						originalValue={snapshot?.cvar_level == null
+							? undefined
+							: (snapshot.cvar_level as number).toString()}
 					/>
 
 					<CalibrationSliderField
@@ -447,6 +481,9 @@
 						step={0.1}
 						displayFormat="raw"
 						digits={1}
+						originalValue={snapshot == null
+							? undefined
+							: ((snapshot.lambda_risk_aversion ?? LAMBDA_RISK_AVERSION_SENTINEL) as number)}
 					/>
 
 					<CalibrationSliderField
@@ -460,6 +497,9 @@
 						step={0.05}
 						displayFormat="raw"
 						digits={2}
+						originalValue={snapshot == null
+							? undefined
+							: ((snapshot.shrinkage_intensity_override ?? SHRINKAGE_SENTINEL) as number)}
 					/>
 				</section>
 		{:else if tier === "expert"}

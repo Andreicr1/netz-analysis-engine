@@ -13,6 +13,7 @@
 		value: boolean;
 		onChange: (value: boolean) => void;
 		disabled?: boolean;
+		originalValue?: boolean;
 	}
 
 	let {
@@ -22,7 +23,15 @@
 		value,
 		onChange,
 		disabled = false,
+		originalValue,
 	}: Props = $props();
+
+	const showOriginal = $derived(
+		originalValue !== undefined && originalValue !== value,
+	);
+	const originalLabel = $derived(
+		showOriginal ? (originalValue ? "Ativado" : "Desativado") : null,
+	);
 
 	function handleChange(e: Event) {
 		onChange((e.target as HTMLInputElement).checked);
@@ -32,6 +41,11 @@
 <div class="ctf-root" class:ctf-root--disabled={disabled}>
 	<div class="ctf-header">
 		<label class="ctf-label" for={id}>{label}</label>
+		{#if showOriginal && originalLabel !== null}
+			<span class="ctf-original-chip" title="Valor da última construção">
+				Anteriormente: {originalLabel}
+			</span>
+		{/if}
 		<label class="ctf-switch">
 			<input
 				{id}
@@ -116,5 +130,19 @@
 	}
 	.ctf-switch input:focus-visible + .ctf-slider {
 		box-shadow: 0 0 0 3px color-mix(in srgb, var(--terminal-accent-amber) 25%, transparent);
+	}
+	.ctf-original-chip {
+		margin-left: 8px;
+		padding: 2px 6px;
+		font-size: 10px;
+		font-weight: 500;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--terminal-fg-muted);
+		background: var(--terminal-bg-panel-raised);
+		border: 1px solid var(--terminal-fg-muted);
+		border-radius: 2px;
+		font-family: var(--terminal-font-mono);
+		white-space: nowrap;
 	}
 </style>

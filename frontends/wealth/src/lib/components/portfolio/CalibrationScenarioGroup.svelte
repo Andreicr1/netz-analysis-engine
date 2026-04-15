@@ -20,6 +20,7 @@
 		onChange: (value: StressScenarioId[]) => void;
 		options: readonly Option[];
 		disabled?: boolean;
+		originalValue?: readonly StressScenarioId[];
 	}
 
 	let {
@@ -29,7 +30,23 @@
 		onChange,
 		options,
 		disabled = false,
+		originalValue,
 	}: Props = $props();
+
+	const originalSet = $derived(
+		originalValue ? new Set(originalValue) : null,
+	);
+	const draftSet = $derived(new Set(value));
+
+	const added = $derived.by(() =>
+		originalSet ? value.filter((v) => !originalSet.has(v)) : [],
+	);
+	const removed = $derived.by(() =>
+		originalSet ? [...originalSet].filter((v) => !draftSet.has(v)) : [],
+	);
+	const showOriginal = $derived(
+		originalValue !== undefined && (added.length > 0 || removed.length > 0),
+	);
 
 	function toggle(id: StressScenarioId) {
 		if (value.includes(id)) {
@@ -44,6 +61,24 @@
 	<div class="csg-header">
 		<span class="csg-label">{label}</span>
 		<span class="csg-count">{value.length}/{options.length}</span>
+		{#if showOriginal}
+			{#if added.length > 0}
+				<span
+					class="csg-original-chip csg-original-chip--added"
+					title="Cenários adicionados desde a última construção"
+				>
+					+{added.length} {added.length === 1 ? "cenário" : "cenários"}
+				</span>
+			{/if}
+			{#if removed.length > 0}
+				<span
+					class="csg-original-chip csg-original-chip--removed"
+					title="Cenários removidos desde a última construção"
+				>
+					−{removed.length} {removed.length === 1 ? "cenário" : "cenários"}
+				</span>
+			{/if}
+		{/if}
 	</div>
 	{#if description}
 		<p class="csg-description">{description}</p>
@@ -158,5 +193,25 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.csg-original-chip {
+		margin-left: 8px;
+		padding: 2px 6px;
+		font-size: 10px;
+		font-weight: 500;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		border: 1px solid var(--terminal-fg-muted);
+		border-radius: 2px;
+		font-family: var(--terminal-font-mono);
+		white-space: nowrap;
+	}
+	.csg-original-chip--added {
+		color: var(--terminal-status-success);
+		background: var(--terminal-bg-panel-raised);
+	}
+	.csg-original-chip--removed {
+		color: var(--terminal-status-warn);
+		background: var(--terminal-bg-panel-raised);
 	}
 </style>
