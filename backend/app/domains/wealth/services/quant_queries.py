@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Literal
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from quant_engine.rebalance_service import CascadeResult
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import structlog
 from sqlalchemy import select
@@ -38,6 +39,12 @@ from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.models.rebalance import RebalanceEvent
 from app.domains.wealth.models.risk import FundRiskMetrics
+from quant_engine.factor_model_pca import compute_residual_pca
+from quant_engine.factor_model_service import (
+    assemble_factor_covariance,
+    build_fundamental_factor_returns,
+    fit_fundamental_loadings,
+)
 
 logger = structlog.get_logger()
 
@@ -131,13 +138,6 @@ TRADING_DAYS_PER_YEAR = 252
 MIN_OBSERVATIONS = 120
 _FFILL_LIMIT = 3  # max business days to forward-fill a stale NAV
 
-from quant_engine.factor_model_service import (
-    assemble_factor_covariance,
-    build_fundamental_factor_returns,
-    compute_residual_pca,
-    fit_fundamental_loadings,
-)
-
 # ── Phase A construction engine constants ────────────────────────────
 COV_LOOKBACK_DAYS_5Y = 1260
 HIGHER_MOMENTS_WINDOW_3Y = 756
@@ -185,15 +185,15 @@ class FundLevelInputs:
     Dates are pure Python dates. instrument IDs are strings.
     """
 
-    cov_matrix: np.ndarray  # type: ignore[type-arg]
+    cov_matrix: npt.NDArray[np.float64]
     expected_returns: dict[str, float]
     available_ids: list[str]
-    skewness: np.ndarray  # type: ignore[type-arg]
-    excess_kurtosis: np.ndarray  # type: ignore[type-arg]
+    skewness: npt.NDArray[np.float64]
+    excess_kurtosis: npt.NDArray[np.float64]
     condition_number: float
-    factor_loadings: np.ndarray | None  # type: ignore[type-arg]
+    factor_loadings: npt.NDArray[np.float64] | None
     factor_names: list[str] | None
-    residual_variance: np.ndarray | None  # type: ignore[type-arg]
+    residual_variance: npt.NDArray[np.float64] | None
     prior_weights_used: dict[str, float]
     n_funds_by_history: dict[str, int]
     regime_probability_at_calc: float | None
@@ -206,6 +206,24 @@ class FundLevelInputs:
     kappa_warning_triggered: bool = False
     kappa_error_triggered: bool = False
     funds_excluded: tuple[tuple[str, str], ...] = ()  # (fund_id, reason) pairs
+    # A.2 — PR-A3 spec §7: persist factor model + residual PCA provenance.
+    # Shape::
+    #     {
+    #         "factor_model": {
+    #             "k_factors": 8,
+    #             "k_factors_effective": int,
+    #             "factors_skipped": [str, ...],
+    #             "r_squared_per_fund": {fund_id: float},
+    #             "kappa_factor_cov": float,
+    #             "shrinkage_lambda": float | None,
+    #         },
+    #         "residual_pca": {
+    #             "n_components": int,
+    #             "cumulative_variance": list[float],
+    #             "top_eigenvalue_share": float,
+    #         },
+    #     }
+    inputs_metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def _align_returns_with_ffill(
@@ -358,9 +376,9 @@ async def compute_inputs_from_nav(
 
 
 def _apply_ledoit_wolf(
-    returns_matrix: np.ndarray,  # type: ignore[type-arg]
-    market_index: np.ndarray | None = None,  # type: ignore[type-arg]
-) -> np.ndarray:  # type: ignore[type-arg]
+    returns_matrix: npt.NDArray[np.float64],
+    market_index: npt.NDArray[np.float64] | None = None,
+) -> npt.NDArray[np.float64]:
     """Apply Ledoit-Wolf shrinkage to compute covariance from returns.
 
     Retargeted in PR-A3 from constant-correlation to single-index shrinkage.
@@ -371,10 +389,10 @@ def _apply_ledoit_wolf(
     """
     T, N = returns_matrix.shape
     if T < 2:
-        return np.cov(returns_matrix, rowvar=False)
+        return np.asarray(np.cov(returns_matrix, rowvar=False), dtype=np.float64)
 
     # 1. Sample covariance
-    sample_cov = np.cov(returns_matrix, rowvar=False)
+    sample_cov = np.asarray(np.cov(returns_matrix, rowvar=False), dtype=np.float64)
 
     # 2. Target covariance (Single-Index Model)
     # R_i = alpha_i + beta_i * R_m + epsilon_i
@@ -390,7 +408,8 @@ def _apply_ledoit_wolf(
         try:
             from sklearn.covariance import ledoit_wolf
             _, alpha = ledoit_wolf(returns_matrix)
-            return sample_cov * (1 - alpha) + np.diag(np.diag(sample_cov)) * alpha
+            shrunk = sample_cov * (1 - alpha) + np.diag(np.diag(sample_cov)) * alpha
+            return np.asarray(shrunk, dtype=np.float64)
         except Exception:
             return sample_cov
 
@@ -1143,72 +1162,120 @@ async def compute_fund_level_inputs(
     factor_loadings = None
     factor_names = None
     residual_variance = None
+    # A.2 — metadata persisted on FundLevelInputs.inputs_metadata
+    factor_model_meta: dict[str, Any] = {
+        "k_factors": 8,
+        "k_factors_effective": 0,
+        "factors_skipped": [],
+        "r_squared_per_fund": {},
+        "kappa_factor_cov": None,
+        "shrinkage_lambda": None,
+    }
+    residual_pca_meta: dict[str, Any] = {
+        "n_components": 0,
+        "cumulative_variance": [],
+        "top_eigenvalue_share": 0.0,
+    }
+
+    # A.7 — hoist `build_fundamental_factor_returns` out of the N>=20 / N<20
+    # branch so it is called exactly once per invocation (previously called in
+    # the factor-model path AND again in the LW fallback to recover the market
+    # proxy).
+    try:
+        factor_returns_df = await build_fundamental_factor_returns(
+            db, common_dates[0], common_dates[-1]
+        )
+    except Exception as fr_err:
+        logger.warning(
+            "factor_returns_fetch_failed",
+            reason=str(fr_err),
+        )
+        factor_returns_df = pd.DataFrame()
 
     if len(available_ids) >= 20:
-        # 3a. Fundamental factor-model path (PR-A3)
-        # Pull factor returns for the same common_dates window
-        start_date = common_dates[0]
-        end_date = common_dates[-1]
-        factor_returns = await build_fundamental_factor_returns(db, start_date, end_date)
-
-        if not factor_returns.empty and len(factor_returns) >= MIN_OBSERVATIONS:
-            # Re-align returns_matrix with factor_returns (intersection of dates)
-            # Both are daily.
-            common_idx = factor_returns.index.intersection(pd.to_datetime(common_dates))
+        if not factor_returns_df.empty and len(factor_returns_df) >= MIN_OBSERVATIONS:
+            common_idx = factor_returns_df.index.intersection(
+                pd.to_datetime(common_dates)
+            )
             if len(common_idx) >= MIN_OBSERVATIONS:
-                f_returns = factor_returns.loc[common_idx].values
-                # Indexing returns_matrix by date (it was aligned with common_dates)
+                f_returns = factor_returns_df.loc[common_idx].values
                 date_to_idx = {d: i for i, d in enumerate(pd.to_datetime(common_dates))}
                 matrix_idx = [date_to_idx[d] for d in common_idx]
                 r_matrix = returns_matrix[matrix_idx]
 
-                # Fit
                 fit = fit_fundamental_loadings(
-                    r_matrix, 
-                    f_returns, 
+                    r_matrix,
+                    f_returns,
+                    factor_names=factor_returns_df.columns.tolist(),
                     ewma_lambda=ewma_lambda,
-                    factor_names=factor_returns.columns.tolist()
                 )
                 annual_cov = assemble_factor_covariance(fit)
 
-                # Diagnostic PCA
-                _pca_diag = compute_residual_pca(fit.residual_series)
-                # Note: PR-A4 will write _pca_diag to audit log.
+                # A.2 — residual PCA diagnostic wired into metadata (was discarded)
+                pca_diag = compute_residual_pca(fit.residual_series)
 
                 factor_loadings = fit.loadings
                 factor_names = fit.factor_names
                 residual_variance = fit.residual_variance
 
-                # Populate skipped factors from attrs for audit logging
-                factors_skipped = factor_returns.attrs.get("skipped", [])
+                factors_skipped = factor_returns_df.attrs.get("skipped", [])
+                try:
+                    kappa_factor_cov = float(np.linalg.cond(fit.factor_cov))
+                except Exception:
+                    kappa_factor_cov = float("nan")
+
+                factor_model_meta = {
+                    "k_factors": 8,
+                    "k_factors_effective": len(fit.factor_names),
+                    "factors_skipped": [s.get("name", "") for s in factors_skipped],
+                    "r_squared_per_fund": {
+                        fid: float(fit.r_squared_per_fund[i])
+                        for i, fid in enumerate(available_ids)
+                    },
+                    "kappa_factor_cov": kappa_factor_cov,
+                    "shrinkage_lambda": fit.shrinkage_lambda,
+                }
+                ev = pca_diag.explained_variance_ratio
+                residual_pca_meta = {
+                    "n_components": int(len(ev)),
+                    "cumulative_variance": [float(x) for x in np.cumsum(ev).tolist()],
+                    "top_eigenvalue_share": float(ev[0]) if len(ev) > 0 else 0.0,
+                }
+
                 if factors_skipped:
                     logger.info(
                         "fundamental_factor_model_partial_fit",
-                        n_factors=len(factor_names),
+                        n_factors=len(fit.factor_names),
                         skipped_count=len(factors_skipped),
                         skipped=factors_skipped,
                     )
             else:
-                logger.warning("factor_returns_alignment_failed", reason="insufficient overlapping dates")
+                logger.warning(
+                    "factor_returns_alignment_failed",
+                    reason="insufficient overlapping dates",
+                )
                 daily_cov = _apply_ledoit_wolf(returns_matrix)
                 annual_cov = daily_cov * TRADING_DAYS_PER_YEAR
         else:
-            logger.warning("fundamental_factor_model_skipped", reason="insufficient factor data")
+            logger.warning(
+                "fundamental_factor_model_skipped",
+                reason="insufficient factor data",
+            )
             daily_cov = _apply_ledoit_wolf(returns_matrix)
             annual_cov = daily_cov * TRADING_DAYS_PER_YEAR
     else:
         # 3b. LW single-index shrinkage fallback (N < 20)
-        # We use _apply_ledoit_wolf which now implements single-index shrinkage.
-        # We can optionally pass the market index (equity_us) if available.
         market_index = None
-        if len(available_ids) > 0:
-            # Try to get market index for shrinkage target
-            try:
-                f_ret = await build_fundamental_factor_returns(db, common_dates[0], common_dates[-1])
-                if "equity_us" in f_ret.columns:
-                    market_index = f_ret["equity_us"].reindex(pd.to_datetime(common_dates)).ffill().values
-            except Exception:
-                pass
+        if (
+            not factor_returns_df.empty
+            and "equity_us" in factor_returns_df.columns
+        ):
+            market_index = (
+                factor_returns_df["equity_us"]
+                .reindex(pd.to_datetime(common_dates))
+                .ffill()
+                .values
+            )
 
         daily_cov = _apply_ledoit_wolf(returns_matrix, market_index=market_index)
         annual_cov = daily_cov * TRADING_DAYS_PER_YEAR
@@ -1368,6 +1435,10 @@ async def compute_fund_level_inputs(
         kappa_warning_triggered=kappa_warn,
         kappa_error_triggered=kappa_error,
         funds_excluded=tuple(excluded),
+        inputs_metadata={
+            "factor_model": factor_model_meta,
+            "residual_pca": residual_pca_meta,
+        },
     )
 
 

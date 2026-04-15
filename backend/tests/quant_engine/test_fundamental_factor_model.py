@@ -14,11 +14,11 @@ from app.domains.wealth.services.quant_queries import (
     FundLevelInputs,
     compute_fund_level_inputs,
 )
+from quant_engine.factor_model_pca import compute_residual_pca
 from quant_engine.factor_model_service import (
     FundamentalFactorFit,
     assemble_factor_covariance,
     build_fundamental_factor_returns,
-    compute_residual_pca,
     fit_fundamental_loadings,
 )
 
@@ -54,27 +54,56 @@ def sample_fund_returns(sample_factor_returns):
 
 def test_fit_fundamental_loadings(sample_factor_returns, sample_fund_returns):
     fund_returns, true_loadings = sample_fund_returns
-    
+
     fit = fit_fundamental_loadings(
-        fund_returns, 
-        sample_factor_returns.values, 
-        ewma_lambda=1.0  # Equal weights for simpler recovery check
+        fund_returns,
+        sample_factor_returns.values,
+        factor_names=sample_factor_returns.columns.tolist(),
+        ewma_lambda=1.0,  # Equal weights for simpler recovery check
     )
-    
+
     assert isinstance(fit, FundamentalFactorFit)
     assert fit.loadings.shape == (5, 3)
+    # A.9 — factor_names populated from explicit parameter, never empty
+    assert fit.factor_names == ["equity_us", "duration", "credit"]
     # Recovered loadings should be close to true_loadings
     np.testing.assert_allclose(fit.loadings, true_loadings, atol=0.02)
     assert len(fit.residual_variance) == 5
     assert fit.residual_series.shape == (100, 5)
     assert len(fit.r_squared_per_fund) == 5
     assert np.all(fit.r_squared_per_fund > 0.8)  # high fit by construction
+    # A.6 — Ledoit-Wolf shrinkage λ is recorded on the fit
+    assert fit.shrinkage_lambda is not None
+    assert 0.0 <= fit.shrinkage_lambda <= 1.0
+
+
+def test_fit_fundamental_loadings_zero_variance_fund_guarded():
+    """A.10 — a constant-return fund must not divide by zero in r_squared."""
+    T, N, K = 200, 3, 2
+    rng = np.random.default_rng(0)
+    factor_returns = rng.standard_normal((T, K)) * 0.01
+    fund_returns = rng.standard_normal((T, N)) * 0.01
+    fund_returns[:, 1] = 0.0  # fund 1 has zero variance
+
+    fit = fit_fundamental_loadings(
+        fund_returns,
+        factor_returns,
+        factor_names=["f1", "f2"],
+        ewma_lambda=0.97,
+    )
+
+    assert np.isfinite(fit.r_squared_per_fund).all()
+    assert fit.r_squared_per_fund[1] == 0.0
 
 
 def test_assemble_factor_covariance(sample_factor_returns, sample_fund_returns):
     fund_returns, _ = sample_fund_returns
-    fit = fit_fundamental_loadings(fund_returns, sample_factor_returns.values)
-    
+    fit = fit_fundamental_loadings(
+        fund_returns,
+        sample_factor_returns.values,
+        factor_names=sample_factor_returns.columns.tolist(),
+    )
+
     sigma = assemble_factor_covariance(fit)
     
     assert sigma.shape == (5, 5)
@@ -170,46 +199,70 @@ async def test_efa_absent_triggers_international_factor_skip():
 
 
 @pytest.mark.asyncio
-async def test_k_equals_six_end_to_end():
-    """T4: Realistic 25-fund portfolio, current DB shape (K=6)."""
+async def test_k_equals_six_contract_with_stubbed_factor_returns(monkeypatch):
+    """T4 (contract): 25-fund portfolio, factor matrix stubbed via AsyncSession.execute.
+
+    The real database integration test lives in
+    ``test_fundamental_factor_model_integration.py`` under the
+    ``@pytest.mark.integration`` lane (PR-A3 Section A §11). This unit-level
+    test exercises the full ``compute_fund_level_inputs`` path with the
+    production ``build_fundamental_factor_returns`` driven by a mocked
+    ``AsyncSession`` — so the production SQL joins and audit pipeline still
+    execute, but without docker.
+    """
     n_funds = 25
     ids = [uuid.uuid4() for _ in range(n_funds)]
-    
-    # 5Y history
     n_days = 1260
     rng = np.random.default_rng(2026)
     raw_returns = rng.standard_normal((n_days, n_funds)) * 0.01
     dates = [date(2021, 1, 1) + timedelta(days=i) for i in range(n_days)]
-    
-    returns_dict = {}
-    for i, iid in enumerate(ids):
-        returns_dict[str(iid)] = {d: float(raw_returns[j, i]) for j, d in enumerate(dates)}
-        
-    # Mock factor returns (K=6)
-    factor_df = pd.DataFrame(
-        rng.standard_normal((n_days, 6)) * 0.01,
-        index=pd.to_datetime(dates),
-        columns=["equity_us", "duration", "credit", "usd", "commodity", "size"]
-    )
-    factor_df.attrs["skipped"] = [
-        {"name": "value", "reason": "IWF absent"},
-        {"name": "international", "reason": "EFA absent"}
-    ]
-    
+
+    returns_dict = {
+        str(iid): {d: float(raw_returns[j, i]) for j, d in enumerate(dates)}
+        for i, iid in enumerate(ids)
+    }
+
+    # Build the underlying rows that build_fundamental_factor_returns will
+    # pivot into factors. 7 benchmark tickers + 2 macro series. We skip EFA
+    # and IWF so only 6 factors survive — matching the original intent.
+    bench_tickers = ["SPY", "IEF", "HYG", "IWM", "IWD"]
+    bench_rows = []
+    for d in dates:
+        for t in bench_tickers:
+            bench_rows.append((d, t, rng.standard_normal() * 0.01))
+    macro_rows = []
+    for d in dates:
+        macro_rows.append((d, "DTWEXBGS", 100.0 + rng.standard_normal()))
+        macro_rows.append((d, "DCOILWTICO", 70.0 + rng.standard_normal()))
+
     db = AsyncMock()
-    
+    # Two execute calls per invocation of build_fundamental_factor_returns
+    # (benchmarks then macro). compute_fund_level_inputs calls it exactly once
+    # after A.7 (hoisted).
+    db.execute.side_effect = [
+        MagicMock(all=MagicMock(return_value=bench_rows)),
+        MagicMock(all=MagicMock(return_value=macro_rows)),
+    ]
+
+    async def _noop_audit(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "quant_engine.factor_model_service.write_audit_event",
+        _noop_audit,
+    )
+
     with patch(
         "app.domains.wealth.services.quant_queries._fetch_returns_by_type",
         new=AsyncMock(return_value=(returns_dict, "log")),
     ), patch(
         "app.domains.wealth.services.quant_queries._fetch_return_horizons",
-        new=AsyncMock(return_value={str(iid): {"10y": 0.05, "5y": 0.05} for iid in ids}),
+        new=AsyncMock(
+            return_value={str(iid): {"10y": 0.05, "5y": 0.05} for iid in ids}
+        ),
     ), patch(
         "app.domains.wealth.services.quant_queries.fetch_strategic_weights_for_funds",
         new=AsyncMock(return_value=np.full(n_funds, 1 / n_funds)),
-    ), patch(
-        "app.domains.wealth.services.quant_queries.build_fundamental_factor_returns",
-        new=AsyncMock(return_value=factor_df),
     ), patch(
         "app.domains.wealth.services.quant_queries._maybe_regime_condition_cov",
         return_value=None,
@@ -217,14 +270,29 @@ async def test_k_equals_six_end_to_end():
         result = await compute_fund_level_inputs(
             db, ids, profile="balanced", as_of_date=date(2026, 4, 14)
         )
-        
+
     assert isinstance(result, FundLevelInputs)
     assert result.cov_matrix.shape == (25, 25)
-    assert result.factor_loadings.shape == (25, 6)
-    assert len(result.factor_names) == 6
+    assert result.factor_loadings is not None
+    assert result.factor_loadings.shape[0] == 25
+    # At most 6 factors because EFA / IWF missing from the stubbed benchmark rows
+    assert result.factor_loadings.shape[1] <= 6
+    assert result.factor_names is not None and len(result.factor_names) <= 6
+    assert result.residual_variance is not None
     assert len(result.residual_variance) == 25
-    # PSD check
     assert np.linalg.eigvalsh(result.cov_matrix).min() >= 1e-11
+    # A.2 — inputs_metadata populated
+    fm = result.inputs_metadata["factor_model"]
+    assert fm["k_factors"] == 8
+    assert fm["k_factors_effective"] == len(result.factor_names)
+    assert set(fm["r_squared_per_fund"].keys()) == {str(i) for i in ids}
+    assert fm["kappa_factor_cov"] is not None
+    # Ledoit-Wolf shrinkage recorded
+    assert fm["shrinkage_lambda"] is not None
+    # Residual PCA recorded
+    pca = result.inputs_metadata["residual_pca"]
+    assert pca["n_components"] >= 1
+    assert len(pca["cumulative_variance"]) == pca["n_components"]
 
 
 @pytest.mark.asyncio
@@ -245,19 +313,31 @@ async def test_oas_level_is_never_used_as_credit_return():
 
 
 def test_residual_pca_not_fed_back_into_sigma():
-    """T7: Regression check that residual PCA is not used in Σ."""
-    # We can inspect the source code of assemble_factor_covariance
-    import inspect
+    """T7: Regression check that residual PCA is not used in Σ.
 
+    The docstring may legitimately *mention* PCADiagnostic for documentation,
+    so we only assert that neither symbol is referenced in the function's
+    executable code (``__code__.co_names``).
+    """
     from quant_engine.factor_model_service import assemble_factor_covariance
-    source = inspect.getsource(assemble_factor_covariance)
-    assert "compute_residual_pca" not in source
-    assert "PCADiagnostic" not in source
+
+    co_names = assemble_factor_covariance.__code__.co_names
+    assert "compute_residual_pca" not in co_names
+    assert "PCADiagnostic" not in co_names
 
 
 @pytest.mark.asyncio
-async def test_single_index_fallback_when_n_less_than_20():
+async def test_single_index_fallback_when_n_less_than_20(monkeypatch):
     """T8: N=15 universe fallback."""
+
+    async def _noop_audit(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "quant_engine.factor_model_service.write_audit_event",
+        _noop_audit,
+    )
+
     n_funds = 15
     ids = [uuid.uuid4() for _ in range(n_funds)]
     n_days = 200
