@@ -27,10 +27,12 @@ Sprint S3 calibrations:
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 import numpy as np
 import structlog
+from scipy.linalg import block_diag
 
 from quant_engine.mandate_risk_aversion import resolve_risk_aversion
 
@@ -42,6 +44,113 @@ logger = structlog.get_logger()
 # c=0 nor degenerates into ω=0 (singular Omega) at c=1.
 _CONFIDENCE_FLOOR = 0.01
 _CONFIDENCE_CEIL = 0.99
+
+# Phase A multi-view BL: τ fixed at 0.05. Regime-conditional τ is Phase B.
+TAU_PHASE_A = 0.05
+
+# Ω regularization floor: when the assembled block-diagonal Ω is near-singular
+# (e.g. a confidence=1.0 IC view produces Ω_ii → 0), we add eps·I where
+# eps = REG_OMEGA_EPS_FACTOR · trace(Ω) / K. This preserves the view's
+# dominance without triggering np.linalg.LinAlgError in the posterior solve.
+REG_OMEGA_EPS_FACTOR = 1e-8
+
+
+@dataclass(frozen=True)
+class View:
+    """Single BL view — picking matrix, expected return, uncertainty.
+
+    Fields:
+        P: (m, N) picking matrix (m sub-views); identity rows for absolute views,
+           [+1, ..., -1, ...] rows for relative views.
+        Q: (m,) view expected returns (annualized, same units as μ prior).
+        Omega: (m, m) view uncertainty. Diagonal in typical use; full matrix
+           allowed for cross-correlated views.
+        source: "data_view" (historical 1Y mean) or "ic_view" (IC-provided).
+        confidence: raw confidence ∈ [0, 1]; only meaningful for IC views.
+    """
+
+    P: np.ndarray
+    Q: np.ndarray
+    Omega: np.ndarray
+    source: Literal["data_view", "ic_view"]
+    confidence: float | None = None
+
+
+def compute_bl_posterior_multi_view(
+    mu_prior: np.ndarray,
+    sigma: np.ndarray,
+    views: list[View],
+    tau: float = TAU_PHASE_A,
+) -> np.ndarray:
+    """Multi-view Black-Litterman posterior.
+
+    Stacks heterogeneous views (data view + IC views) into block-diagonal Ω
+    and solves the canonical BL posterior:
+
+        μ_post = [(τΣ)⁻¹ + P'Ω⁻¹P]⁻¹ · [(τΣ)⁻¹·μ_prior + P'Ω⁻¹·Q]
+
+    Unlike the legacy :func:`compute_bl_returns`, this function takes μ_prior
+    explicitly (the caller supplies THBB or equilibrium π) and never clamps
+    view confidence — certainty-1.0 views are handled via Ω regularization.
+
+    Args:
+        mu_prior: (N,) prior expected returns. The THBB blend from Phase A
+            construction, or any other prior the caller has assembled.
+        sigma: (N, N) prior covariance. Typically the 5Y EWMA cov (Phase A).
+        views: list of View objects. Empty → returns mu_prior unchanged.
+        tau: scalar prior uncertainty (default 0.05, Phase A convention).
+            Regime-conditional τ is Phase B — do not change here.
+
+    Returns:
+        (N,) BL posterior expected returns.
+
+    Notes:
+        Ω regularization — a confidence=1.0 IC view produces Ω_ii = 0, which
+        makes Ω singular and breaks np.linalg.solve. We add eps·I where
+        eps = 1e-8 · trace(Ω) / K, preserving view dominance while keeping
+        the solve numerically stable. This is the standard BL implementation
+        detail in Meucci (2010) §5.3 and Idzorek (2005) §4.
+    """
+    n = sigma.shape[0]
+
+    if not views:
+        return np.asarray(mu_prior, dtype=np.float64)
+
+    P_stack = np.vstack([v.P for v in views])            # (K_total, N)
+    Q_stack = np.concatenate([v.Q for v in views])       # (K_total,)
+    Omega = block_diag(*[v.Omega for v in views])        # (K_total, K_total)
+
+    # Ω regularization — see docstring. trace/K is scale-aware.
+    k = Omega.shape[0]
+    trace = float(np.trace(Omega))
+    if trace <= 0.0:
+        # Degenerate: all views declared certainty=1.0 → fallback to a small
+        # absolute epsilon so the solve proceeds. Dominated views still win.
+        eps = 1e-12
+    else:
+        eps = REG_OMEGA_EPS_FACTOR * trace / max(k, 1)
+    Omega_reg = Omega + eps * np.eye(k)
+
+    tau_sigma = tau * sigma
+    tau_sigma_inv = np.linalg.inv(tau_sigma)
+
+    # Solve via linear system (more stable than inv + matmul)
+    #   M · μ_post = rhs
+    M = tau_sigma_inv + P_stack.T @ np.linalg.solve(Omega_reg, P_stack)
+    rhs = tau_sigma_inv @ mu_prior + P_stack.T @ np.linalg.solve(Omega_reg, Q_stack)
+    mu_post = np.linalg.solve(M, rhs)
+
+    logger.info(
+        "bl_posterior_multi_view",
+        n_assets=n,
+        n_views_total=int(k),
+        n_view_groups=len(views),
+        tau=tau,
+        omega_eps=eps,
+        sources=[v.source for v in views],
+    )
+
+    return np.asarray(mu_post, dtype=np.float64)
 
 
 def compute_bl_returns(
