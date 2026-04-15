@@ -32,7 +32,11 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-ClassificationSource = Literal["tiingo_description", "name_regex", "adv_brochure", "fallback"]
+from app.domains.wealth.services.holdings_analyzer import HoldingsAnalysis
+
+ClassificationSource = Literal[
+    "nport_holdings", "tiingo_description", "name_regex", "adv_brochure", "fallback",
+]
 ClassificationConfidence = Literal["high", "medium", "low"]
 
 # Minimum description length to trust Layer 1. Empirically ~98% of Tiingo
@@ -94,14 +98,34 @@ def classify_fund(
     fund_name: str,
     fund_type: str | None,
     tiingo_description: str | None,
+    holdings_analysis: HoldingsAnalysis | None = None,
 ) -> ClassificationResult:
     """Run the cascade. Pure function; no DB access, no side effects.
 
     Returns the highest-authority classification that matches. If nothing
-    matches (Layers 1 and 2 both miss), returns a ``fallback`` result with
+    matches (all layers miss), returns a ``fallback`` result with
     ``strategy_label=None`` so the caller can try Layer 3 (brochure) or
     leave the label unchanged.
+
+    Layer 0 (N-PORT holdings composition) runs before Layer 1 (Tiingo
+    description) when a high/medium-coverage ``HoldingsAnalysis`` is
+    supplied — what a fund actually holds is the most authoritative
+    signal of its mandate.
     """
+    # ── Layer 0: N-PORT holdings composition (highest authority) ────
+    if holdings_analysis is not None and holdings_analysis.coverage_quality in (
+        "high", "medium",
+    ):
+        hit = _classify_from_holdings(holdings_analysis, fund_name, fund_type)
+        if hit is not None:
+            label, pattern = hit
+            return ClassificationResult(
+                strategy_label=label,
+                source="nport_holdings",
+                confidence="high",
+                matched_pattern=pattern,
+            )
+
     # ── Layer 1: Tiingo description ─────────────────────────────────
     if tiingo_description and len(tiingo_description) >= _MIN_DESCRIPTION_CHARS:
         hit = _classify_from_description(tiingo_description, fund_type)
@@ -132,6 +156,127 @@ def classify_fund(
         confidence="low",
         matched_pattern=None,
     )
+
+
+# ───────────────────────────────────────────────────────────────────
+# Layer 0 — N-PORT holdings composition
+# ───────────────────────────────────────────────────────────────────
+
+def _classify_from_holdings(
+    h: HoldingsAnalysis,
+    fund_name: str,
+    fund_type: str | None,  # noqa: ARG001 — reserved for future heuristics
+) -> tuple[str, str] | None:
+    """Layer 0: classify from fund composition.
+
+    Uses only signals we can derive reliably from N-PORT *without* GICS
+    sector enrichment:
+
+      • Asset-mix buckets (equity / FI / cash / derivatives)
+      • Geography from ISIN[0:2]
+      • Fixed-income subtype from N-PORT issuerCat (UST/USGSE/USGA → Govt;
+        MUN → Municipal) and asset_class (ABS-MBS → MBS; LON → Loans)
+      • Equity Real Estate from asset_class = RE (REIT sleeve)
+      • Derivative subtype mix for Global Macro detection
+
+    Rules deliberately *not* expressed here:
+      • GICS sector concentration → Real Estate / Sector Equity / etc.
+        The ``sector`` column carries N-PORT issuerCat (CORP/MUN/...),
+        not GICS, so any "top sector > X" rule misfires (every equity
+        sleeve looks like 100% CORP). Phase 4.5 will add a real GICS
+        enrichment via CUSIP/ticker → GICS lookup.
+      • Growth/value and small/mid/large style box. We have no
+        per-holding market cap and no GICS sector → both signals are
+        unreliable.
+
+    Priority (first match wins):
+      1. Global Macro signature: derivatives >60% + meaningful FX/IR
+      2. Cash-dominant: cash >=80% → Cash Equivalent
+      3. Target Date: balanced range AND date hint in fund name
+      4. Balanced: 30-70% equity AND 30-70% fixed income
+      5. Equity-dominant (>=70% equity): geography → REIT sleeve → Large Blend
+      6. Fixed-income-dominant (>=70% FI): geography → MBS → Govt → Muni →
+         generic Intermediate-Term Bond
+
+    Returns ``(label, pattern)`` or ``None`` when no signal qualifies.
+    """
+    # Rule 1: Global Macro signature
+    if h.derivatives_pct > 60 and (h.derivatives_fx_pct + h.derivatives_ir_pct) > 30:
+        return ("Global Macro", "holdings:global_macro")
+
+    # Rule 2: Cash-dominant
+    if h.cash_pct >= 80:
+        return ("Cash Equivalent", "holdings:cash_dominant")
+
+    # Rule 3: Target Date (multi-asset + date hint in name)
+    if 30 <= h.equity_pct <= 70 and 20 <= h.fixed_income_pct <= 60:
+        if re.search(
+            r"target\s+(?:date|retirement|maturity|\d{4})|\b(?:19|20)\d{2}\s+fund\b",
+            fund_name,
+            re.IGNORECASE,
+        ):
+            return ("Target Date", "holdings:target_date_confirmed")
+
+    # Rule 4: Balanced
+    if 30 <= h.equity_pct <= 70 and 30 <= h.fixed_income_pct <= 70:
+        return ("Balanced", "holdings:balanced")
+
+    # Rule 5: Equity-dominant → geography → REIT sleeve → Large Blend
+    if h.equity_pct >= 70:
+        if h.geography_em_pct > 50:
+            return ("Emerging Markets Equity", "holdings:em_equity")
+        if h.geography_europe_pct > 60:
+            return ("European Equity", "holdings:european_equity")
+        if h.geography_asia_developed_pct > 60:
+            return ("Asian Equity", "holdings:asian_equity")
+
+        non_us = 100 - h.geography_us_pct
+        if non_us > 60:
+            return ("International Equity", "holdings:international_equity")
+
+        # REIT-dominant equity → Real Estate (asset_class=RE, not GICS)
+        if h.equity_real_estate_pct >= 50:
+            return ("Real Estate", "holdings:reit_dominant")
+
+        # Diversified US-dominant equity. Without GICS or market cap we
+        # cannot resolve the style box; "Large Blend" is the safest
+        # institutional default for a US-equity-dominant diversified fund.
+        return ("Large Blend", "holdings:us_equity_generic")
+
+    # Rule 6: Fixed-income-dominant — issuerCat-aware subtype dispatch
+    if h.fixed_income_pct >= 70:
+        # Geography first (overrides subtype for cross-border funds)
+        if h.geography_em_pct > 40:
+            return ("Emerging Markets Debt", "holdings:em_debt")
+        if h.geography_europe_pct > 50:
+            return ("European Bond", "holdings:european_bond")
+
+        # MBS-heavy (asset_class=ABS-MBS dominates the FI sleeve)
+        if h.fi_mbs_pct >= 50:
+            return ("Mortgage-Backed Securities", "holdings:fi_mbs")
+        # ABS-heavy
+        if h.fi_abs_pct >= 50:
+            return ("Asset-Backed Securities", "holdings:fi_abs")
+
+        # IssuerCat dispatch on the FI sleeve. Use share-of-FI rather than
+        # share-of-NAV so funds with cash buffers still classify cleanly
+        # (e.g., 75% UST + 20% cash → Government Bond).
+        fi_total = max(h.fixed_income_pct, 1e-9)
+        govt_share = h.fi_government_pct / fi_total
+        muni_share = h.fi_municipal_pct / fi_total
+
+        if govt_share >= 0.60:
+            return ("Government Bond", "holdings:fi_government")
+        if muni_share >= 0.60:
+            return ("Municipal Bond", "holdings:fi_municipal")
+
+        # Default: Corporate-heavy or mixed credit. Without ratings we can't
+        # split HY vs IG; Investment Grade Bond is the safer default for the
+        # corporate-dominated US universe (HY is < 5% of registered fund AUM).
+        return ("Investment Grade Bond", "holdings:fi_corporate_generic")
+
+    # No clear signal from holdings → fall through to Layer 1.
+    return None
 
 
 # ───────────────────────────────────────────────────────────────────
