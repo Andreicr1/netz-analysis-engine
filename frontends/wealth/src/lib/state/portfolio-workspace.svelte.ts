@@ -4,9 +4,11 @@
  * All API calls go through NetzApiClient (no mocks).
  */
 
+import { v4 as uuidv4 } from "uuid";
 import { createClientApiClient } from "$lib/api/client";
 import { BLOCK_LABELS } from "$lib/constants/blocks";
 import { parseSseStream } from "$lib/util/sse-reader";
+import type { BuildAccepted, BuildEvent, BuildPhase } from "$lib/types/portfolio-build";
 import type {
 	ModelPortfolio,
 	NAVPoint,
@@ -426,12 +428,40 @@ export class PortfolioWorkspaceState {
 	 * BuilderColumn / BuilderRightStack for the "Building…" pill + the
 	 * auto-switch to the Narrative tab on ``done``.
 	 */
-	runPhase = $state<"idle" | "running" | "optimizer" | "stress" | "done" | "error">("idle");
+	runPhase = $state<
+		| "idle"
+		| "running"
+		| "factor_modeling"
+		| "shrinkage"
+		| "optimizer"
+		| "stress"
+		| "done"
+		| "error"
+		| "cancelled"
+		| "deduped"
+	>("idle");
 	runError = $state<string | null>(null);
 	private _activeRunAbort: AbortController | null = null;
 
 	/** Optimizer cascade phase states for the CascadeTimeline (Session 2). */
 	optimizerPhases = $state<CascadePhase[]>(structuredClone(DEFAULT_CASCADE_PHASES));
+
+	// ── PR-A5: Build pipeline (POST /portfolios/{id}/build) ────────────
+	/** 0…1 progress surfaced by _publish_phase. 0 when idle. */
+	runProgress = $state<number>(0);
+	/** Raw metrics payloads per pipeline phase, keyed by friendly name. */
+	buildMetrics = $state<{
+		factor: Record<string, unknown> | null;
+		shrinkage: Record<string, unknown> | null;
+		socp: Record<string, unknown> | null;
+		backtest: Record<string, unknown> | null;
+	}>({ factor: null, shrinkage: null, socp: null, backtest: null });
+	/** Transient notice surfaced when the advisory lock deduped our build. */
+	buildDedupedNotice = $state<string | null>(null);
+	private _activeBuildJobId: string | null = null;
+	private _activeBuildAbort: AbortController | null = null;
+	/** Idempotency-Key of the most recent build POST — retained for QA/dev re-run toggle only. */
+	private _lastIdempotencyKey: string | null = null;
 
 	// ── Session 3: Backtest + Monte Carlo state ──────────────────────
 	backtestData = $state.raw<BacktestNavHistory | null>(null);
@@ -1678,6 +1708,219 @@ export class PortfolioWorkspaceState {
 		) {
 			this.optimizerPhases = this.optimizerPhases.map((p) => {
 				if (p.key === ev.phase) {
+					return {
+						...p,
+						status: (ev.status as CascadePhase["status"]) ?? "succeeded",
+						objectiveValue: ev.objective_value ?? null,
+					};
+				}
+				return p;
+			});
+		}
+	}
+
+	// ── PR-A5: POST /portfolios/{id}/build (Job-or-Stream, hardened) ──
+	//
+	// Companion to runConstructJob (legacy /model-portfolios/{id}/construct).
+	// Endpoint is guarded by @idempotent + SingleFlightLock + advisory lock
+	// (builder.py) and RBAC-gated to IC members. We generate a fresh
+	// Idempotency-Key per click (spec A.11/D.1); double-clicks coalesce
+	// server-side to the same job_id (HTTP 202 cached) and the SSE stream
+	// of the second caller receives a DEDUPED event — see A.4.3.
+	async runBuildJob(): Promise<ConstructionRunPayload | null> {
+		if (!this._getToken || !this.portfolioId) return null;
+
+		// Cancel any in-flight BUILD stream if the user re-presses.
+		this._activeBuildAbort?.abort();
+		const abort = new AbortController();
+		this._activeBuildAbort = abort;
+
+		const idempotencyKey = uuidv4();
+		this._lastIdempotencyKey = idempotencyKey;
+
+		this.runPhase = "running";
+		this.runProgress = 0;
+		this.runError = null;
+		this.buildDedupedNotice = null;
+		this.optimizerPhases = structuredClone(DEFAULT_CASCADE_PHASES);
+		this.buildMetrics = { factor: null, shrinkage: null, socp: null, backtest: null };
+		this.isConstructing = true;
+		this.lastError = null;
+
+		try {
+			const api = this.api();
+			const accepted = await api.post<BuildAccepted>(
+				`/portfolios/${this.portfolioId}/build`,
+				undefined,
+				{ timeoutMs: 130_000, headers: { "Idempotency-Key": idempotencyKey } },
+			);
+			this._activeBuildJobId = accepted.job_id;
+
+			const token = await this._getToken();
+			const envBase =
+				(import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+				"http://localhost:8000/api/v1";
+			const host = envBase.replace(/\/api\/v1\/?$/, "");
+			const streamUrl = accepted.stream_url.startsWith("http")
+				? accepted.stream_url
+				: `${host}${accepted.stream_url}`;
+
+			const res = await fetch(streamUrl, {
+				headers: {
+					Authorization: `Bearer ${token}`,
+					Accept: "text/event-stream",
+				},
+				signal: abort.signal,
+			});
+
+			const terminalBox: { event: BuildEvent | null } = { event: null };
+
+			await parseSseStream(
+				res,
+				(raw) => {
+					const parsed = raw as BuildEvent;
+					this._applyBuildEvent(parsed);
+					const phase = parsed.phase as BuildPhase | undefined;
+					if (phase === "COMPLETED" || phase === "ERROR" || phase === "CANCELLED") {
+						terminalBox.event = parsed;
+						abort.abort();
+					}
+					// DEDUPED is NOT terminal — see A.4.3. We keep reading the
+					// stream because the advisory-lock loser shares the same
+					// job_id and receives the full event sequence.
+				},
+				abort.signal,
+			);
+
+			const terminal = terminalBox.event;
+			if (!terminal) {
+				this.runPhase = "error";
+				this.runError = "Stream closed before terminal event";
+				return null;
+			}
+
+			if (terminal.phase === "ERROR") {
+				this.runPhase = "error";
+				this.runError = terminal.message ?? terminal.reason ?? "Construction failed";
+				return null;
+			}
+			if (terminal.phase === "CANCELLED") {
+				this.runPhase = "cancelled";
+				this.runError = null;
+				return null;
+			}
+
+			// COMPLETED → load the persisted run.
+			if (terminal.run_id) {
+				await this.loadConstructionRun(terminal.run_id);
+			}
+			this.runPhase = "done";
+			const profile = this.portfolio?.profile;
+			if (profile) {
+				this.loadRegimeBands(profile);
+				this.loadTaaHistory(profile);
+				this.loadEffectiveWithRegime(profile);
+			}
+			return this.constructionRun;
+		} catch (err) {
+			if ((err as { name?: string } | null)?.name === "AbortError") {
+				return null;
+			}
+			this.runPhase = "error";
+			this.runError = err instanceof Error ? err.message : "Construction failed";
+			this.lastError = {
+				action: "construct",
+				message: this.runError,
+				timestamp: Date.now(),
+			};
+			return null;
+		} finally {
+			this.isConstructing = false;
+			if (this._activeBuildAbort === abort) this._activeBuildAbort = null;
+			this._activeBuildJobId = null;
+		}
+	}
+
+	/**
+	 * Apply a single sanitised SSE event from /portfolios/{id}/build.
+	 *
+	 * Contract (PR-A5 A.4):
+	 *   - ``ev.phase`` drives the top-level runPhase transition.
+	 *   - ``ev.raw_type`` forwards optimizer cascade sub-phases for the
+	 *     existing CascadeTimeline pills (legacy ``_applyRunEvent`` path).
+	 *   - ``ev.metrics`` is stored raw on ``buildMetrics`` — translation
+	 *     into human chips is handled by metric-translators.ts (Section C).
+	 *   - ``ev.message`` is already sanitised server-side; NEVER
+	 *     re-sanitise here.
+	 */
+	private _applyBuildEvent(ev: BuildEvent): void {
+		// Progress first — backend may emit it on any event.
+		if (typeof ev.progress === "number" && Number.isFinite(ev.progress)) {
+			this.runProgress = Math.max(0, Math.min(1, ev.progress));
+		}
+
+		const phase = ev.phase as BuildPhase | undefined;
+		switch (phase) {
+			case "STARTED":
+				this.runPhase = "running";
+				this.runProgress = 0;
+				this.optimizerPhases = structuredClone(DEFAULT_CASCADE_PHASES);
+				break;
+			case "FACTOR_MODELING":
+				this.runPhase = "factor_modeling";
+				if (ev.metrics) this.buildMetrics = { ...this.buildMetrics, factor: ev.metrics };
+				break;
+			case "SHRINKAGE":
+				this.runPhase = "shrinkage";
+				if (ev.metrics) this.buildMetrics = { ...this.buildMetrics, shrinkage: ev.metrics };
+				break;
+			case "SOCP_OPTIMIZATION":
+				this.runPhase = "optimizer";
+				if (ev.metrics) this.buildMetrics = { ...this.buildMetrics, socp: ev.metrics };
+				break;
+			case "BACKTESTING":
+				this.runPhase = "stress";
+				if (ev.metrics) this.buildMetrics = { ...this.buildMetrics, backtest: ev.metrics };
+				break;
+			case "COMPLETED":
+				// runPhase flips to "done" in the caller after loadConstructionRun resolves
+				break;
+			case "ERROR":
+				this.runPhase = "error";
+				this.runError = ev.message ?? ev.reason ?? "Construction failed";
+				break;
+			case "CANCELLED":
+				this.runPhase = "cancelled";
+				this.runError = null;
+				break;
+			case "DEDUPED":
+				// A.4.3 — do NOT error. Surface a transient notice and keep
+				// the stream open; the advisory-lock loser still receives
+				// the full event sequence on the same job_id.
+				this.buildDedupedNotice =
+					"Another build is already running for this portfolio; following the live stream.";
+				break;
+			default:
+				// No phase ⇒ optimizer cascade sub-event. Fall through to
+				// raw_type handling below.
+				break;
+		}
+
+		// Optimizer cascade sub-phases (raw_type === "optimizer_phase_complete").
+		// Mirrors _applyRunEvent so the pills update regardless of whether the
+		// backend sent ``type`` sanitised or ``raw_type`` forwarded.
+		const rawType = ev.raw_type ?? ev.type;
+		if (
+			(rawType === "optimizer_phase_complete" ||
+				rawType === "Optimizer phase completed") &&
+			ev.phase &&
+			typeof ev.phase === "string"
+		) {
+			// ev.phase for optimizer sub-events is a cascade KEY (primary, robust, ...),
+			// not a pipeline phase. The two namespaces do not overlap.
+			const cascadeKey = ev.phase;
+			this.optimizerPhases = this.optimizerPhases.map((p) => {
+				if (p.key === cascadeKey) {
 					return {
 						...p,
 						status: (ev.status as CascadePhase["status"]) ?? "succeeded",
