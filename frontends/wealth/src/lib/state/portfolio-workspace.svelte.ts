@@ -1537,19 +1537,22 @@ export class PortfolioWorkspaceState {
 	/**
 	 * Kick off a Phase 3 Job-or-Stream construction run (DL18 P2).
 	 *
-	 * Flow:
+	 * @deprecated PR-A5 A.5/E.3 — use {@link runBuildJob} instead. Kept
+	 *   around only so the Phase 4 test harness keeps compiling until
+	 *   the legacy backend route ``/model-portfolios/{id}/construct`` is
+	 *   removed in PR-A7. No production call site should reach this
+	 *   method; grep ``frontends/wealth/src`` for ``runConstructJob`` —
+	 *   expect zero non-test hits (see Section E.3 audit).
+	 *
+	 * Flow (preserved verbatim for test compatibility):
 	 *   1. POST /model-portfolios/{id}/construct → 202 ConstructRunAccepted
 	 *   2. Open fetch()+ReadableStream SSE at stream_url (NEVER EventSource
 	 *      — Clerk JWT needs Authorization header, DL15).
 	 *   3. Advance runPhase on each event ('run_started' | 'optimizer_started'
 	 *      | 'stress_started').
 	 *   4. On terminal 'done', fetch the run detail via loadConstructionRun
-	 *      and transition runPhase → 'done'. Callers that care about the
-	 *      resolution await the returned promise; it settles on terminal.
+	 *      and transition runPhase → 'done'.
 	 *   5. On terminal 'error', set runError + runPhase → 'error'.
-	 *
-	 * The legacy ``isConstructing`` boolean is kept in sync for
-	 * backwards-compatibility with components that still read it.
 	 */
 	async runConstructJob(): Promise<ConstructionRunPayload | null> {
 		if (!this._getToken || !this.portfolioId) return null;

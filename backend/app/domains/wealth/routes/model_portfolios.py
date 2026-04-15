@@ -506,7 +506,11 @@ async def apply_portfolio_transition(
     "/{portfolio_id}/construct",
     response_model=ConstructRunAccepted,
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Run optimizer + stress + advisor + validation + narrative (Job-or-Stream)",
+    summary=(
+        "[DEPRECATED \u2014 use POST /portfolios/{id}/build] "
+        "Run optimizer + stress + advisor + validation + narrative (Job-or-Stream)"
+    ),
+    deprecated=True,
 )
 async def construct_portfolio(
     portfolio_id: uuid.UUID,
@@ -516,6 +520,16 @@ async def construct_portfolio(
     org_id: str = Depends(get_org_id),
 ) -> ConstructRunAccepted:
     """Kick off an enriched construction run via the Job-or-Stream pattern.
+
+    .. deprecated:: 2026-04-15 (PR-A5)
+       Superseded by ``POST /portfolios/{id}/build`` which adds
+       ``@idempotent`` (Redis 600s) + ``SingleFlightLock`` (in-process)
+       + ``pg_try_advisory_xact_lock`` (cross-process), ``require_ic_member()``
+       RBAC, sanitised SSE phases (STARTED/FACTOR_MODELING/SHRINKAGE/
+       SOCP_OPTIMIZATION/BACKTESTING/COMPLETED + ERROR/CANCELLED/DEDUPED)
+       and cross-tenant job-owner enforcement. This route remains
+       functional for \u2265 2 sprints (removal tracked as PR-A7).
+
 
     Phase 3 Task 3.4 of `docs/superpowers/plans/2026-04-08-portfolio-enterprise-workbench.md`.
 
@@ -542,6 +556,17 @@ async def construct_portfolio(
     )
 
     _require_ic_role(actor)
+
+    # PR-A5 E.1 — structured deprecation signal. Dashboards tail
+    # ``legacy_construct_endpoint_called`` to confirm the removal gate
+    # (zero events over a full week before PR-A7 can delete the route).
+    logger.warning(
+        "legacy_construct_endpoint_called",
+        portfolio_id=str(portfolio_id),
+        organization_id=str(org_id),
+        actor_id=actor.actor_id,
+        migration_target="POST /portfolios/{id}/build",
+    )
 
     result = await db.execute(
         select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
