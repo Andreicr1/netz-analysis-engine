@@ -85,6 +85,13 @@
 	// Cascade timeline phases from workspace
 	const cascadePhases = $derived(workspace.optimizerPhases);
 	const showCascade = $derived(workspace.runPhase !== "idle");
+	// PR-A5 A.8 — thin progress bar visible only while a build is in-flight.
+	const showProgress = $derived(
+		workspace.runPhase !== "idle" &&
+			workspace.runPhase !== "done" &&
+			workspace.runPhase !== "error",
+	);
+	const runProgress = $derived(workspace.runProgress);
 </script>
 
 <svelte:head>
@@ -158,7 +165,7 @@
 		<!-- Zone D: Cascade Timeline (visible during/after run) -->
 		{#if showCascade}
 			<div in:fly={{ y: -8, ...svelteTransitionFor("primary", { duration: "update" }) }}>
-				<CascadeTimeline phases={cascadePhases} />
+				<CascadeTimeline phases={cascadePhases} {runProgress} {showProgress} />
 			</div>
 		{/if}
 

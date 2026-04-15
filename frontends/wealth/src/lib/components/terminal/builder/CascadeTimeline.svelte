@@ -13,9 +13,15 @@
 
 	interface Props {
 		phases: CascadePhase[];
+		/** PR-A5 A.8 — 0..1 build progress. Visible while a build is in-flight. */
+		runProgress?: number;
+		/** PR-A5 A.8 — whether the thin progress bar should render. */
+		showProgress?: boolean;
 	}
 
-	let { phases }: Props = $props();
+	let { phases, runProgress = 0, showProgress = false }: Props = $props();
+
+	const progressPct = $derived(Math.max(0, Math.min(1, runProgress)) * 100);
 
 	/** Index of the last completed (succeeded/failed) phase for connector fill. */
 	const lastCompletedIdx = $derived.by(() => {
@@ -67,12 +73,26 @@
 			</div>
 		{/each}
 	</div>
+
+	{#if showProgress}
+		<!-- PR-A5 A.8 — thin 2px run-progress bar under the pills. -->
+		<div
+			class="ct-progress"
+			role="progressbar"
+			aria-valuenow={Math.round(progressPct)}
+			aria-valuemin="0"
+			aria-valuemax="100"
+			aria-label="Construction progress"
+		>
+			<div class="ct-progress-fill" style:width="{progressPct}%"></div>
+		</div>
+	{/if}
 </div>
 
 <style>
 	.ct-root {
 		position: relative;
-		height: 160px;
+		min-height: 160px;
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
@@ -214,6 +234,22 @@
 		font-size: var(--terminal-text-10);
 		font-variant-numeric: tabular-nums;
 		color: var(--terminal-fg-secondary);
+	}
+
+	/* ── Thin progress bar (PR-A5 A.8) ───────────────── */
+
+	.ct-progress {
+		position: relative;
+		margin-top: var(--terminal-space-2);
+		height: 2px;
+		background: var(--terminal-border-hairline, var(--terminal-fg-muted));
+		overflow: hidden;
+	}
+
+	.ct-progress-fill {
+		height: 100%;
+		background: var(--terminal-accent, var(--terminal-accent-amber));
+		transition: width 0.3s cubic-bezier(0.33, 1, 0.68, 1);
 	}
 
 	/* ── Pulse animation ─────────────────────────────── */
