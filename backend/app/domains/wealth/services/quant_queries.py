@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from quant_engine.drift_service import DriftReport
@@ -129,6 +130,75 @@ async def fetch_returns_matrix(
 TRADING_DAYS_PER_YEAR = 252
 MIN_OBSERVATIONS = 120
 _FFILL_LIMIT = 3  # max business days to forward-fill a stale NAV
+
+# ── Phase A construction engine constants ────────────────────────────
+COV_LOOKBACK_DAYS_5Y = 1260
+HIGHER_MOMENTS_WINDOW_3Y = 756
+EWMA_LAMBDA_DEFAULT = 0.97
+RISK_AVERSION_INSTITUTIONAL_DEFAULT = 2.5
+KAPPA_WARN_THRESHOLD = 1e3
+KAPPA_ERROR_THRESHOLD = 1e4
+# Survivorship bias estimate (bps/year) — see design doc 2026-04-14
+SURVIVORSHIP_BIAS_BPS_RANGE = (50, 150)
+
+
+class IllConditionedCovarianceError(Exception):
+    """Raised when κ(Σ) exceeds KAPPA_ERROR_THRESHOLD (1e4).
+
+    The caller MUST NOT proceed to the optimizer — extreme weights would result.
+    Phase A policy: fail loudly, write audit event, surface to IC in the terminal.
+    """
+
+    def __init__(
+        self,
+        condition_number: float,
+        n_funds: int,
+        n_obs: int,
+        worst_eigenvalues: list[float] | None = None,
+        message: str | None = None,
+    ) -> None:
+        self.condition_number = condition_number
+        self.n_funds = n_funds
+        self.n_obs = n_obs
+        self.worst_eigenvalues = worst_eigenvalues or []
+        detail = (
+            f"κ(Σ)={condition_number:.3e} exceeds error threshold ({KAPPA_ERROR_THRESHOLD:.0e}); "
+            f"N={n_funds}, T={n_obs}"
+        )
+        if self.worst_eigenvalues:
+            detail += f", worst eigenvalues={[f'{v:.3e}' for v in self.worst_eigenvalues]}"
+        super().__init__(message or detail)
+
+
+@dataclass(frozen=True)
+class FundLevelInputs:
+    """Frozen dataclass returned by compute_fund_level_inputs() (Phase A engine).
+
+    All arrays are numpy float64. Frozen to be thread-safe across async boundaries.
+    Dates are pure Python dates. instrument IDs are strings.
+    """
+
+    cov_matrix: np.ndarray
+    expected_returns: dict[str, float]
+    available_ids: list[str]
+    skewness: np.ndarray
+    excess_kurtosis: np.ndarray
+    condition_number: float
+    factor_loadings: np.ndarray | None
+    factor_names: list[str] | None
+    residual_variance: np.ndarray | None
+    prior_weights_used: dict[str, float]
+    n_funds_by_history: dict[str, int]
+    regime_probability_at_calc: float | None
+    used_return_type: str
+    lookback_start_date: date
+    lookback_end_date: date
+    # Provenance fields consumed by PR-A4 inputs_metadata JSONB
+    risk_aversion_gamma: float = RISK_AVERSION_INSTITUTIONAL_DEFAULT
+    risk_aversion_source: str = "institutional_default"
+    kappa_warning_triggered: bool = False
+    kappa_error_triggered: bool = False
+    funds_excluded: tuple[tuple[str, str], ...] = ()  # (fund_id, reason) pairs
 
 
 def _align_returns_with_ffill(
@@ -298,6 +368,392 @@ def _apply_ledoit_wolf(returns_matrix: np.ndarray) -> np.ndarray:
         return np.cov(returns_matrix, rowvar=False)
 
 
+# ── Phase A estimator helpers ────────────────────────────────────────
+
+
+def _compute_ewma_covariance(
+    returns_matrix: np.ndarray, lambda_: float = EWMA_LAMBDA_DEFAULT,
+) -> np.ndarray:
+    """Exponentially-weighted moving-average covariance of daily returns.
+
+    Weights decay as λ^(T-1-t) for t ∈ [0, T); older observations downweighted.
+    Weights normalized to sum to 1. λ=1.0 reduces to the sample covariance
+    (within numerical tolerance). Returned matrix is the DAILY covariance —
+    caller annualizes by multiplying by TRADING_DAYS_PER_YEAR.
+
+    Reference: JPMorgan RiskMetrics (1996) — λ=0.94 for daily FX, 0.97 for equity.
+    """
+    if not (0.0 < lambda_ <= 1.0):
+        raise ValueError(f"ewma_lambda must be in (0, 1], got {lambda_}")
+
+    T = returns_matrix.shape[0]
+    if T < 2:
+        raise ValueError(f"EWMA covariance requires T≥2, got T={T}")
+
+    # Decay weights: oldest observation gets λ^(T-1), newest gets λ^0 = 1
+    exponents = np.arange(T - 1, -1, -1, dtype=np.float64)
+    weights = np.power(lambda_, exponents)
+    weights = weights / weights.sum()
+
+    # Weighted mean (vectorized)
+    mean = np.average(returns_matrix, axis=0, weights=weights)
+    deviations = returns_matrix - mean
+
+    # Weighted covariance: (D^T * w) @ D  with weights normalized to sum=1.
+    # Unbiased correction for EWMA is λ=1 → (T-1)/T standard; for λ<1 the
+    # weights already encode effective sample size. Keep the biased form
+    # with ddof=0 semantics — sample cov recovered when λ=1.0 via the
+    # trailing rescale below.
+    weighted_cov = (deviations * weights[:, None]).T @ deviations
+
+    # When λ=1.0 and T observations, the vanilla weighted sum above equals
+    # (1/T) · Σ (x - x̄)(x - x̄)^T. Rescale by T/(T-1) to match np.cov default.
+    if lambda_ == 1.0:
+        weighted_cov = weighted_cov * (T / (T - 1))
+
+    return weighted_cov
+
+
+def _compute_condition_number(sigma: np.ndarray) -> float:
+    """κ(Σ) — ratio of largest to smallest eigenvalue magnitude.
+
+    Uses np.linalg.cond on a symmetric matrix. Returns np.inf for singular input.
+    """
+    try:
+        kappa = float(np.linalg.cond(sigma))
+    except np.linalg.LinAlgError:
+        return float("inf")
+    if not np.isfinite(kappa):
+        return float("inf")
+    return kappa
+
+
+def _repair_psd(
+    sigma: np.ndarray, *, min_eigenvalue: float = 1e-10,
+) -> tuple[np.ndarray, bool]:
+    """Clamp negative/tiny eigenvalues of a near-PSD matrix.
+
+    Returns (repaired_matrix, was_repaired). Logs on repair. Never raises.
+    """
+    try:
+        eigvals = np.linalg.eigvalsh(sigma)
+    except np.linalg.LinAlgError:
+        return sigma, False
+    if eigvals.min() < min_eigenvalue:
+        e, V = np.linalg.eigh(sigma)
+        e = np.maximum(e, min_eigenvalue)
+        repaired = V @ np.diag(e) @ V.T
+        logger.info(
+            "covariance_psd_repair",
+            min_eigenvalue_before=float(eigvals.min()),
+            clamp_floor=min_eigenvalue,
+        )
+        # Symmetrize to wash out floating-point drift
+        return (repaired + repaired.T) / 2, True
+    return sigma, False
+
+
+def _guard_condition_number(
+    sigma: np.ndarray,
+    n_obs: int,
+) -> tuple[float, bool, bool]:
+    """Return (κ, warn_triggered, error_triggered). Raises on error.
+
+    - κ > KAPPA_ERROR_THRESHOLD (1e4): raises IllConditionedCovarianceError
+    - κ > KAPPA_WARN_THRESHOLD (1e3): logs warning, returns warn=True
+    - otherwise: returns warn=False, error=False
+    """
+    kappa = _compute_condition_number(sigma)
+    n_funds = sigma.shape[0]
+
+    if kappa > KAPPA_ERROR_THRESHOLD:
+        # Grab the 3 smallest eigenvalues for the error detail
+        try:
+            e = np.linalg.eigvalsh(sigma)
+            worst = sorted(e.tolist())[:3]
+        except np.linalg.LinAlgError:
+            worst = []
+        logger.error(
+            "construction_covariance_ill_conditioned",
+            kappa=kappa,
+            n_funds=n_funds,
+            n_obs=n_obs,
+        )
+        raise IllConditionedCovarianceError(
+            condition_number=kappa,
+            n_funds=n_funds,
+            n_obs=n_obs,
+            worst_eigenvalues=worst,
+        )
+
+    if kappa > KAPPA_WARN_THRESHOLD:
+        logger.warning(
+            "construction_covariance_poorly_conditioned",
+            kappa=kappa,
+            n_funds=n_funds,
+            n_obs=n_obs,
+        )
+        return kappa, True, False
+
+    return kappa, False, False
+
+
+def _sanitize_returns(
+    fund_returns: dict[str, dict[date, float]],
+    instrument_ids: list[uuid.UUID],
+) -> tuple[dict[str, dict[date, float]], list[str], list[tuple[str, str]]]:
+    """Exclude funds with NaN/Inf/zero-variance data pre-estimation.
+
+    Returns (clean_fund_returns, clean_ids_ordered, excluded). `excluded` is a
+    list of (fund_id, reason) pairs for audit. Order is preserved from
+    instrument_ids.
+    """
+    excluded: list[tuple[str, str]] = []
+    clean: dict[str, dict[date, float]] = {}
+    clean_ids: list[str] = []
+    for iid in instrument_ids:
+        sid = str(iid)
+        series = fund_returns.get(sid)
+        if not series:
+            # Funds with no data are handled by the caller (not excluded here —
+            # they simply don't appear in fund_returns).
+            continue
+        values = np.fromiter(series.values(), dtype=np.float64, count=len(series))
+        if not np.isfinite(values).all():
+            excluded.append((sid, "non_finite_returns"))
+            logger.warning("fund_excluded_pre_estimation", fund_id=sid, reason="non_finite_returns")
+            continue
+        stdev = float(np.std(values, ddof=1)) if len(values) > 1 else 0.0
+        # Guard against float residual noise (np.std on constant series can
+        # return O(1e-19) instead of exactly 0). A daily return with σ < 1e-12
+        # contributes zero information to the optimizer.
+        if stdev < 1e-12:
+            excluded.append((sid, "zero_variance"))
+            logger.warning("fund_excluded_pre_estimation", fund_id=sid, reason="zero_variance")
+            continue
+        clean[sid] = series
+        clean_ids.append(sid)
+    return clean, clean_ids, excluded
+
+
+async def _fetch_return_horizons(
+    db: AsyncSession,
+    instrument_ids: list[uuid.UUID],
+    as_of_date: date,
+) -> dict[str, dict[str, float | None]]:
+    """Fetch return_5y_ann and return_10y_ann for each instrument at or before as_of_date.
+
+    Returns {instrument_id_str: {"5y": float|None, "10y": float|None}}.
+    Missing rows / NULL values map to None; caller applies THBB availability schedule.
+    """
+    from app.domains.wealth.models.risk import FundRiskMetrics
+
+    # Pull the most recent row ≤ as_of_date per instrument_id.
+    stmt = (
+        select(
+            FundRiskMetrics.instrument_id,
+            FundRiskMetrics.calc_date,
+            FundRiskMetrics.return_5y_ann,
+            FundRiskMetrics.return_10y_ann,
+        )
+        .where(
+            FundRiskMetrics.instrument_id.in_(instrument_ids),
+            FundRiskMetrics.calc_date <= as_of_date,
+        )
+        .order_by(FundRiskMetrics.instrument_id, FundRiskMetrics.calc_date.desc())
+    )
+    rows = (await db.execute(stmt)).all()
+
+    latest: dict[str, dict[str, float | None]] = {}
+    for instrument_id, _calc_date, r5, r10 in rows:
+        sid = str(instrument_id)
+        if sid in latest:
+            continue  # keep only the most recent (ORDER BY DESC + de-dup)
+        latest[sid] = {
+            "5y": float(r5) if r5 is not None else None,
+            "10y": float(r10) if r10 is not None else None,
+        }
+    # Funds with no row at all
+    for iid in instrument_ids:
+        sid = str(iid)
+        if sid not in latest:
+            latest[sid] = {"5y": None, "10y": None}
+    return latest
+
+
+def _thbb_weights_for_fund(
+    has_10y: bool, has_5y: bool,
+) -> tuple[float, float, float]:
+    """Availability-conditional THBB blend weights, renormalized to 1.0.
+
+    Schedule:
+      10y + 5y + eq:  (0.5, 0.3, 0.2)
+      5y + eq:        (0.0, 0.7, 0.3)
+      eq only:        (0.0, 0.0, 1.0)
+    """
+    if has_10y and has_5y:
+        return 0.5, 0.3, 0.2
+    if has_5y:
+        return 0.0, 0.7, 0.3
+    return 0.0, 0.0, 1.0
+
+
+def _build_thbb_prior(
+    available_ids: list[str],
+    return_horizons: dict[str, dict[str, float | None]],
+    sigma_annual: np.ndarray,
+    w_benchmark: np.ndarray,
+    risk_aversion: float,
+) -> tuple[np.ndarray, dict[str, float], dict[str, int]]:
+    """Three-Horizon Bayesian Blend prior for expected returns.
+
+    μ₀ = w_10·return_10y_ann + w_5·return_5y_ann + w_eq·π
+    where π = γ·Σ·w_benchmark (He-Litterman reverse optimization).
+
+    Returns:
+        (mu_prior, mean_weights_used, n_funds_by_history)
+        - mu_prior: (N,) annualized prior returns
+        - mean_weights_used: mean across funds of (w_10, w_5, w_eq) — for audit
+        - n_funds_by_history: counts per availability bucket
+    """
+    pi = risk_aversion * (sigma_annual @ w_benchmark)
+
+    N = len(available_ids)
+    mu_prior = np.zeros(N, dtype=np.float64)
+    accum_w10 = accum_w5 = accum_weq = 0.0
+    buckets = {"10y+": 0, "5y+": 0, "1y_only": 0}
+
+    for i, fid in enumerate(available_ids):
+        r10 = return_horizons.get(fid, {}).get("10y")
+        r5 = return_horizons.get(fid, {}).get("5y")
+        has_10y = r10 is not None
+        has_5y = r5 is not None
+
+        w10, w5, weq = _thbb_weights_for_fund(has_10y, has_5y)
+        accum_w10 += w10
+        accum_w5 += w5
+        accum_weq += weq
+
+        if has_10y:
+            buckets["10y+"] += 1
+        elif has_5y:
+            buckets["5y+"] += 1
+        else:
+            buckets["1y_only"] += 1
+
+        mu_prior[i] = (
+            w10 * (r10 if r10 is not None else 0.0)
+            + w5 * (r5 if r5 is not None else 0.0)
+            + weq * pi[i]
+        )
+
+    mean_weights = {
+        "10y": accum_w10 / N if N else 0.0,
+        "5y": accum_w5 / N if N else 0.0,
+        "eq": accum_weq / N if N else 0.0,
+    }
+    return mu_prior, mean_weights, buckets
+
+
+def _build_data_view(
+    returns_matrix: np.ndarray,
+    available_ids: list[str],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Data-view tuple (P, Q, Ω) for Black-Litterman.
+
+    - P = I_N   (each fund has its own view on its own mean)
+    - Q = annualized 1Y daily mean per fund (tail of the returns matrix)
+    - Ω = diag(σ²_annual / N_obs_1y)   (standard error of the mean)
+
+    Returns arrays ready for BL stacking in PR-A2. Not consumed in PR-A1.
+    """
+    N = len(available_ids)
+    if returns_matrix.shape[1] != N:
+        raise ValueError(
+            f"returns_matrix has {returns_matrix.shape[1]} columns, expected {N}",
+        )
+
+    tail_n = min(TRADING_DAYS_PER_YEAR, returns_matrix.shape[0])
+    tail = returns_matrix[-tail_n:]
+    daily_mean = tail.mean(axis=0)
+    daily_var = tail.var(axis=0, ddof=1)
+    q = daily_mean * TRADING_DAYS_PER_YEAR
+    omega_diag = (daily_var * TRADING_DAYS_PER_YEAR) / max(tail_n, 1)
+    return np.eye(N, dtype=np.float64), q, np.diag(omega_diag)
+
+
+def _winsorize_returns(
+    returns_matrix: np.ndarray, lower: float = 0.01, upper: float = 0.99,
+) -> np.ndarray:
+    """Column-wise winsorization at given percentiles for higher-moment estimation."""
+    if returns_matrix.shape[0] < 10:
+        return returns_matrix  # not enough observations to clip meaningfully
+    lo = np.quantile(returns_matrix, lower, axis=0)
+    hi = np.quantile(returns_matrix, upper, axis=0)
+    return np.clip(returns_matrix, lo, hi)
+
+
+async def _resolve_risk_aversion(
+    db: AsyncSession,
+    org_id: uuid.UUID | None,
+    actor_id: str | None = None,
+    request_id: str | None = None,
+) -> tuple[float, str]:
+    """Resolve γ from ConfigService with audit trail on override.
+
+    Default: RISK_AVERSION_INSTITUTIONAL_DEFAULT (2.5). ConfigService override
+    at wealth/construction.risk_aversion triggers an AuditEvent with before/after.
+
+    Returns (gamma, source).
+    """
+    if org_id is None:
+        return RISK_AVERSION_INSTITUTIONAL_DEFAULT, "institutional_default"
+
+    try:
+        from app.core.config.config_service import ConfigService
+    except ImportError:
+        return RISK_AVERSION_INSTITUTIONAL_DEFAULT, "institutional_default"
+
+    try:
+        result = await ConfigService(db=db).get("wealth", "construction", org_id=org_id)
+        cfg = result.value if hasattr(result, "value") else result
+        override = cfg.get("risk_aversion") if isinstance(cfg, dict) else None
+    except Exception as exc:
+        logger.debug("risk_aversion_config_fetch_failed", error=str(exc))
+        return RISK_AVERSION_INSTITUTIONAL_DEFAULT, "institutional_default"
+
+    if override is None:
+        return RISK_AVERSION_INSTITUTIONAL_DEFAULT, "institutional_default"
+
+    try:
+        gamma = float(override)
+    except (TypeError, ValueError):
+        return RISK_AVERSION_INSTITUTIONAL_DEFAULT, "institutional_default"
+
+    if gamma == RISK_AVERSION_INSTITUTIONAL_DEFAULT:
+        return gamma, "institutional_default"
+
+    # Audit every non-default γ value so the IC can trace every override.
+    try:
+        from app.core.db.audit import write_audit_event
+
+        await write_audit_event(
+            db,
+            actor_id=actor_id,
+            request_id=request_id,
+            action="risk_aversion_overridden",
+            entity_type="wealth_construction_config",
+            entity_id=str(org_id),
+            before={"risk_aversion": RISK_AVERSION_INSTITUTIONAL_DEFAULT},
+            after={"risk_aversion": gamma},
+            organization_id=org_id,
+        )
+    except Exception as exc:  # audit failure must not block estimator
+        logger.warning("risk_aversion_audit_failed", error=str(exc))
+
+    return gamma, "config_override"
+
+
 async def _fetch_returns_by_type(
     db: AsyncSession,
     instrument_ids: list[uuid.UUID],
@@ -462,46 +918,59 @@ async def fetch_strategic_weights_for_funds(
 async def compute_fund_level_inputs(
     db: AsyncSession,
     instrument_ids: list[uuid.UUID],
-    lookback_days: int = TRADING_DAYS_PER_YEAR,
+    *,
+    cov_lookback_days: int = COV_LOOKBACK_DAYS_5Y,
+    higher_moments_window: int = HIGHER_MOMENTS_WINDOW_3Y,
+    ewma_lambda: float = EWMA_LAMBDA_DEFAULT,
+    mu_prior: Literal["thbb", "historical_1y", "equilibrium"] = "thbb",
     as_of_date: date | None = None,
     config: dict[str, Any] | None = None,
     portfolio_id: uuid.UUID | None = None,
     profile: str | None = None,
-) -> tuple[np.ndarray, dict[str, float], list[str], np.ndarray, np.ndarray]:
-    """Compute covariance matrix, expected returns, and higher moments for individual funds.
+    organization_id: uuid.UUID | None = None,
+    actor_id: str | None = None,
+    request_id: str | None = None,
+) -> FundLevelInputs:
+    """Phase A multi-horizon Bayesian-factor estimator.
 
-    Unlike compute_inputs_from_nav (one proxy per block), this computes the
-    full NxN matrix across all provided instrument_ids so the optimizer can
-    allocate at fund level with inter-fund diversification.
+    Replaces the 1Y rectangular estimator with:
+      - 5Y EWMA covariance (λ=0.97 half-life ≈ 23d)
+      - Three-Horizon Bayesian Blend (THBB) for expected returns
+      - 3Y window for higher moments (skew/kurt) with 1%/99% winsorization
+      - κ(Σ) guardrail — warn > 1e3, raise > 1e4
 
-    Returns:
-        (annualized_cov_matrix, expected_returns_dict, ordered_fund_ids, skewness, excess_kurtosis)
-        - cov_matrix: NxN where N = number of funds with sufficient data
-        - expected_returns_dict: {instrument_id_str: annualized_return}
-        - ordered_fund_ids: fund IDs matching matrix rows/cols
-        - skewness: (N,) array of per-fund return skewness
-        - excess_kurtosis: (N,) array of per-fund excess kurtosis (Fisher)
+    Fundamental factor-model covariance is layered on top in PR-A3. In PR-A1
+    the covariance is 5Y EWMA with Ledoit-Wolf shrinkage fallback.
+
+    Returns a frozen FundLevelInputs dataclass. Raises IllConditionedCovarianceError
+    if κ(Σ) > 1e4 — the caller MUST NOT proceed to the optimizer in that case.
 
     Raises:
-        ValueError: If <2 funds have aligned data or <120 trading days.
-
+        ValueError: If <2 funds have aligned data or <MIN_OBSERVATIONS trading days.
+        IllConditionedCovarianceError: If κ(Σ) > KAPPA_ERROR_THRESHOLD.
     """
     from scipy import stats as sp_stats
 
     if as_of_date is None:
         as_of_date = date.today()
 
-    start_date = as_of_date - timedelta(days=int(lookback_days * 1.5))
+    lookback_start = as_of_date - timedelta(days=int(cov_lookback_days * 1.5))
 
-    # ── BL-3: Filter by return_type (log preferred, arithmetic fallback) ──
+    # ── 1. Fetch returns (log preferred, arithmetic fallback) ──────────────
     fund_returns, used_return_type = await _fetch_returns_by_type(
-        db, instrument_ids, start_date, as_of_date,
+        db, instrument_ids, lookback_start, as_of_date,
     )
 
-    # Keep only funds with data
-    available_ids = [str(iid) for iid in instrument_ids if str(iid) in fund_returns]
+    # ── 2. Exclude pathological funds (NaN/Inf/zero-var) pre-alignment ─────
+    fund_returns, clean_ids, excluded = _sanitize_returns(fund_returns, instrument_ids)
+
+    # Keep only funds with data (clean_ids already ordered by instrument_ids)
+    available_ids = clean_ids
     if len(available_ids) < 2:
-        raise ValueError(f"Need ≥2 funds with NAV data, found {len(available_ids)}")
+        raise ValueError(
+            f"Need ≥2 funds with usable NAV data, found {len(available_ids)} "
+            f"(excluded: {len(excluded)})",
+        )
 
     returns_matrix, common_dates = _align_returns_with_ffill(fund_returns, available_ids)
 
@@ -511,63 +980,82 @@ async def compute_fund_level_inputs(
             f"(minimum: {MIN_OBSERVATIONS})",
         )
 
-    # ── BL-2: Ledoit-Wolf shrinkage (configurable) ──
-    apply_shrinkage = True
-    if config:
-        apply_shrinkage = config.get("optimizer", {}).get("apply_shrinkage", True)
+    # Trim to the requested 5Y cov window (may have pulled more via ffill)
+    if returns_matrix.shape[0] > cov_lookback_days:
+        returns_matrix = returns_matrix[-cov_lookback_days:]
 
-    if apply_shrinkage:
-        daily_cov = _apply_ledoit_wolf(returns_matrix)
-    else:
-        daily_cov = np.cov(returns_matrix, rowvar=False)
-
+    # ── 3. EWMA covariance (annualized) ────────────────────────────────────
+    daily_cov = _compute_ewma_covariance(returns_matrix, lambda_=ewma_lambda)
     annual_cov = daily_cov * TRADING_DAYS_PER_YEAR
 
-    # PSD adjustment
-    eigenvalues = np.linalg.eigvalsh(annual_cov)
-    if eigenvalues.min() < -1e-10:
-        eigvals, eigvecs = np.linalg.eigh(annual_cov)
-        eigvals = np.maximum(eigvals, 1e-10)
-        annual_cov = eigvecs @ np.diag(eigvals) @ eigvecs.T
+    # PSD repair (pre-κ — a slightly non-PSD matrix must be clamped before the
+    # eigenvalue ratio guard is meaningful).
+    annual_cov, _was_repaired = _repair_psd(annual_cov)
 
-    daily_means = returns_matrix.mean(axis=0)
-    annual_returns = daily_means * TRADING_DAYS_PER_YEAR
-    expected_returns = {fid: float(annual_returns[i]) for i, fid in enumerate(available_ids)}
-
-    # ── BL-1: Compute higher moments for Cornish-Fisher CVaR ──
-    skewness = sp_stats.skew(returns_matrix, axis=0)              # (N,)
-    excess_kurtosis = sp_stats.kurtosis(returns_matrix, axis=0,
-                                        fisher=True)              # (N,)
-
-    # ── BL-5: Regime-conditioned covariance ──
+    # ── 4. Optional regime conditioning (runs on top of EWMA base) ─────────
     regime_cov = _maybe_regime_condition_cov(db, returns_matrix, annual_cov, config)
     if regime_cov is not None:
-        annual_cov = regime_cov
+        annual_cov, _ = _repair_psd(regime_cov)
 
-    # ── BL-4: Black-Litterman posterior returns ──
-    use_bl = False
-    if portfolio_id is not None and profile is not None:
-        bl_views = await fetch_bl_views_for_portfolio(db, portfolio_id, available_ids)
-        if bl_views:
-            w_market = await fetch_strategic_weights_for_funds(db, available_ids, profile)
-            from quant_engine.black_litterman_service import compute_bl_returns
+    # ── 5. κ(Σ) guardrail — raises on ill-conditioned matrix ───────────────
+    condition_number, kappa_warn, kappa_error = _guard_condition_number(
+        annual_cov, n_obs=returns_matrix.shape[0],
+    )
 
-            bl_config = config or {}
-            risk_aversion = bl_config.get("bl", {}).get("risk_aversion", 2.5)
-            tau = bl_config.get("bl", {}).get("tau", 0.05)
+    # ── 6. Higher moments on 3Y tail with 1%/99% winsorization ─────────────
+    tail_n = min(higher_moments_window, returns_matrix.shape[0])
+    higher_moments_tail = returns_matrix[-tail_n:]
+    winsorized_tail = _winsorize_returns(higher_moments_tail, lower=0.01, upper=0.99)
+    skewness = sp_stats.skew(winsorized_tail, axis=0, bias=False)
+    excess_kurtosis = sp_stats.kurtosis(winsorized_tail, axis=0, fisher=True, bias=False)
 
-            mu_bl = compute_bl_returns(
-                sigma=annual_cov,
-                w_market=w_market,
-                views=bl_views,
-                risk_aversion=risk_aversion,
-                tau=tau,
+    # ── 7. Risk aversion γ (config-overridable, audit on override) ─────────
+    gamma, gamma_source = await _resolve_risk_aversion(
+        db, organization_id, actor_id=actor_id, request_id=request_id,
+    )
+
+    # ── 8. Build expected returns per mu_prior mode ────────────────────────
+    mean_weights_used: dict[str, float]
+    n_funds_by_history: dict[str, int]
+
+    if mu_prior == "historical_1y":
+        # Legacy pre-Phase-A behavior — keep as an opt-in escape hatch.
+        hist_tail = returns_matrix[-min(TRADING_DAYS_PER_YEAR, returns_matrix.shape[0]):]
+        daily_means = hist_tail.mean(axis=0)
+        annual_returns = daily_means * TRADING_DAYS_PER_YEAR
+        mu_vec = annual_returns
+        mean_weights_used = {"10y": 0.0, "5y": 0.0, "eq": 0.0}
+        n_funds_by_history = {"10y+": 0, "5y+": 0, "1y_only": len(available_ids)}
+    else:
+        # Fetch strategic weights (benchmark) — equal-weight fallback if profile missing
+        if profile is not None:
+            w_benchmark = await fetch_strategic_weights_for_funds(db, available_ids, profile)
+        else:
+            w_benchmark = np.full(len(available_ids), 1.0 / len(available_ids))
+        if w_benchmark.sum() == 0:
+            w_benchmark = np.full(len(available_ids), 1.0 / len(available_ids))
+
+        if mu_prior == "equilibrium":
+            mu_vec = gamma * (annual_cov @ w_benchmark)
+            mean_weights_used = {"10y": 0.0, "5y": 0.0, "eq": 1.0}
+            n_funds_by_history = {"10y+": 0, "5y+": 0, "1y_only": len(available_ids)}
+        else:
+            # THBB (default) — per-fund availability-conditional blend
+            instrument_uuids = [uuid.UUID(fid) for fid in available_ids]
+            return_horizons = await _fetch_return_horizons(
+                db, instrument_uuids, as_of_date,
             )
-            expected_returns = {fid: float(mu_bl[i]) for i, fid in enumerate(available_ids)}
-            use_bl = True
+            mu_vec, mean_weights_used, n_funds_by_history = _build_thbb_prior(
+                available_ids,
+                return_horizons,
+                annual_cov,
+                w_benchmark,
+                risk_aversion=gamma,
+            )
 
-    # ── Fee adjustment: subtract expense ratio from expected returns ──
-    fee_adjusted = False
+    expected_returns = {fid: float(mu_vec[i]) for i, fid in enumerate(available_ids)}
+
+    # ── 9. Fee adjustment (expense ratio subtracted from μ) ────────────────
     if config and config.get("fee_adjustment", {}).get("enabled"):
         from app.domains.wealth.models.instrument import Instrument
 
@@ -584,22 +1072,52 @@ async def compute_fund_level_inputs(
             if inst and inst.attributes:
                 er = inst.attributes.get("expense_ratio_pct")
                 if er is not None:
-                    # er is pure decimal fraction (0.015 = 1.5% annual fee drag)
                     expected_returns[fid] -= float(er)
-                    fee_adjusted = True
+
+    # ── 10. Regime probability snapshot (for audit — best effort) ──────────
+    regime_probability_at_calc: float | None = None
+    if config and isinstance(config, dict):
+        probs = config.get("regime_cov", {}).get("_regime_probs")
+        if probs:
+            lookback = min(21, len(probs))
+            regime_probability_at_calc = float(np.mean(probs[-lookback:]))
 
     logger.info(
-        "fund_level_inputs_computed",
+        "fund_level_inputs_computed_phase_a",
         n_funds=len(available_ids),
-        observations=len(common_dates),
+        observations=returns_matrix.shape[0],
         return_type=used_return_type,
-        apply_shrinkage=apply_shrinkage,
-        use_bl=use_bl,
-        regime_conditioned=regime_cov is not None,
-        fee_adjusted=fee_adjusted,
+        mu_prior=mu_prior,
+        ewma_lambda=ewma_lambda,
+        condition_number=condition_number,
+        kappa_warn=kappa_warn,
+        gamma=gamma,
+        gamma_source=gamma_source,
+        excluded_count=len(excluded),
     )
 
-    return annual_cov, expected_returns, available_ids, skewness, excess_kurtosis
+    return FundLevelInputs(
+        cov_matrix=annual_cov,
+        expected_returns=expected_returns,
+        available_ids=available_ids,
+        skewness=np.asarray(skewness, dtype=np.float64),
+        excess_kurtosis=np.asarray(excess_kurtosis, dtype=np.float64),
+        condition_number=condition_number,
+        factor_loadings=None,  # Populated by PR-A3 (fundamental factor model)
+        factor_names=None,
+        residual_variance=None,
+        prior_weights_used=mean_weights_used,
+        n_funds_by_history=n_funds_by_history,
+        regime_probability_at_calc=regime_probability_at_calc,
+        used_return_type=used_return_type,
+        lookback_start_date=common_dates[0] if common_dates else lookback_start,
+        lookback_end_date=common_dates[-1] if common_dates else as_of_date,
+        risk_aversion_gamma=gamma,
+        risk_aversion_source=gamma_source,
+        kappa_warning_triggered=kappa_warn,
+        kappa_error_triggered=kappa_error,
+        funds_excluded=tuple(excluded),
+    )
 
 
 # ── Regime-conditioned covariance (BL-5) ─────────────────────────────

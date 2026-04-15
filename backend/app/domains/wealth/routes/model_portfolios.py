@@ -1998,15 +1998,22 @@ async def _run_construction_async(
         except Exception:
             logger.debug("regime_probs_fetch_failed_using_standard_cov")
 
-        cov_matrix, expected_returns, available_ids, fund_skewness, fund_excess_kurtosis = (
-            await compute_fund_level_inputs(
-                db,
-                fund_instrument_ids,
-                config=regime_config or None,
-                portfolio_id=portfolio_id,
-                profile=profile,
-            )
+        # Legacy route — stays on historical_1y μ prior so banker UI behavior is
+        # unchanged. The Phase A THBB prior is consumed exclusively by the
+        # terminal /construct/v2 route (PR-A4).
+        _fli = await compute_fund_level_inputs(
+            db,
+            fund_instrument_ids,
+            mu_prior="historical_1y",
+            config=regime_config or None,
+            portfolio_id=portfolio_id,
+            profile=profile,
         )
+        cov_matrix = _fli.cov_matrix
+        expected_returns = _fli.expected_returns
+        available_ids = _fli.available_ids
+        fund_skewness = _fli.skewness
+        fund_excess_kurtosis = _fli.excess_kurtosis
 
         # Filter to funds with NAV data
         opt_fund_ids = [fid for fid in available_ids if fid in fund_blocks]
