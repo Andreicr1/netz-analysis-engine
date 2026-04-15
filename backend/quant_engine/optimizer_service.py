@@ -326,8 +326,8 @@ async def optimize_fund_portfolio(
     fund_ids: list[str],
     fund_blocks: dict[str, str],
     expected_returns: dict[str, float],
-    cov_matrix: np.ndarray,
     constraints: ProfileConstraints,
+    cov_matrix: np.ndarray,
     risk_free_rate: float = 0.04,
     skewness: np.ndarray | None = None,
     excess_kurtosis: np.ndarray | None = None,
@@ -369,6 +369,28 @@ async def optimize_fund_portfolio(
             portfolio_volatility=0.0, sharpe_ratio=0.0,
             cvar_95=None, cvar_limit=cvar_limit,
             cvar_within_limit=True, status="empty",
+        )
+
+    # B.7 — caller is responsible for assembling Σ. The optimizer
+    # validates the matrix shape and enforces PSD before handing it to
+    # CVXPY (cp.psd_wrap raises late and unhelpfully). A negative
+    # eigenvalue beyond the float tolerance returns a ``psd_violation``
+    # status so callers can repair upstream rather than hide the bug.
+    if cov_matrix is None:
+        raise ValueError("optimize_fund_portfolio requires cov_matrix")
+    expected_shape = (n, n)
+    if cov_matrix.shape != expected_shape:
+        raise ValueError(
+            f"cov_matrix shape mismatch: expected {expected_shape}, got {cov_matrix.shape}"
+        )
+    min_eig = float(np.linalg.eigvalsh(cov_matrix).min())
+    if min_eig < -1e-10:
+        return FundOptimizationResult(
+            weights={}, block_weights={}, expected_return=0.0,
+            portfolio_volatility=0.0, sharpe_ratio=0.0,
+            cvar_95=None, cvar_limit=cvar_limit,
+            cvar_within_limit=False, status="psd_violation",
+            solver_info=f"min_eigenvalue={min_eig:.3e}",
         )
 
     mu = np.array([expected_returns.get(fid, 0.0) for fid in fund_ids])
