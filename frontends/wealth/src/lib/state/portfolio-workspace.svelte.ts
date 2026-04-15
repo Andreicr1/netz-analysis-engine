@@ -6,6 +6,7 @@
 
 import { createClientApiClient } from "$lib/api/client";
 import { BLOCK_LABELS } from "$lib/constants/blocks";
+import { parseSseStream } from "$lib/util/sse-reader";
 import type {
 	ModelPortfolio,
 	NAVPoint,
@@ -1578,58 +1579,29 @@ export class PortfolioWorkspaceState {
 				signal: abort.signal,
 			});
 
-			if (!res.ok || !res.body) {
-				throw new Error(`SSE stream failed: HTTP ${res.status}`);
-			}
+			const terminalBox: { event: ConstructRunEvent | null } = { event: null };
 
-			const reader = res.body.getReader();
-			const decoder = new TextDecoder();
-			let buffer = "";
-			let currentData = "";
-			let terminal: ConstructRunEvent | null = null;
-
-			streamLoop: while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				buffer += decoder.decode(value, { stream: true });
-				buffer = buffer.replace(/\r\n/g, "\n");
-				const lines = buffer.split("\n");
-				buffer = lines.pop() ?? "";
-
-				for (const line of lines) {
-					if (line.startsWith("data:")) {
-						currentData += (currentData ? "\n" : "") + line.slice(5).replace(/^ /, "");
-					} else if (line === "") {
-						if (currentData) {
-							let parsed: ConstructRunEvent | null = null;
-							try {
-								parsed = JSON.parse(currentData) as ConstructRunEvent;
-							} catch {
-								parsed = null;
-							}
-							if (parsed) {
-								this._applyRunEvent(parsed);
-								const ev = parsed.event;
-								if (
-									ev === "done" || ev === "error" ||
-									ev === "Construction succeeded" ||
-									ev === "Construction failed" ||
-									ev === "Construction cancelled"
-								) {
-									terminal = parsed;
-									break streamLoop;
-								}
-							}
-							currentData = "";
-						}
+			await parseSseStream(
+				res,
+				(raw) => {
+					const parsed = raw as ConstructRunEvent;
+					this._applyRunEvent(parsed);
+					const ev = parsed.event;
+					if (
+						ev === "done" || ev === "error" ||
+						ev === "Construction succeeded" ||
+						ev === "Construction failed" ||
+						ev === "Construction cancelled"
+					) {
+						terminalBox.event = parsed;
+						// Abort the reader — legacy behaviour kept intact
+						abort.abort();
 					}
-				}
-			}
+				},
+				abort.signal,
+			);
 
-			reader.cancel().catch(() => {
-				/* ignore abort noise */
-			});
-
+			const terminal = terminalBox.event;
 			if (!terminal) {
 				this.runPhase = "error";
 				this.runError = "Stream closed before terminal event";
