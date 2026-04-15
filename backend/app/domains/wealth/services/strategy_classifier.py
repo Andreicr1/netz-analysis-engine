@@ -251,14 +251,18 @@ def _classify_from_holdings(
     regex bungles bond subtype ("Voya US Bond Index" → generic
     Intermediate-Term Bond loses the Treasury/Muni/Corporate signal).
 
-    Priority (first match wins):
+    Priority (first match wins). All rules are strict patterns —
+    audited at >=85% accuracy on production data. Mixed-credit FI funds
+    and equity-with-cash-buffer funds fall through to Layer 1/2 rather
+    than accept a catch-all label with known noise.
+
       1. Global Macro — derivatives >60% with FX/IR mix
       2. Cash Equivalent — cash >=80%
       3. Target Date — balanced composition + date hint in name
-      4. Balanced — 30-70% equity AND 30-70% real-FI sleeve
-      5. Fixed-income-dominant (>=70% FI) → issuerCat dispatch:
+      4. Fixed-income-dominant (>=70% FI) → issuerCat dispatch:
            Emerging Markets Debt | European Bond | MBS | ABS |
            Government Bond | Municipal Bond | Investment Grade Bond
+         Mixed credit without a dominant subtype: fall through.
 
     Returns ``(label, pattern)`` or ``None`` when no signal qualifies.
     Equity-dominant funds always return ``None`` and fall through.
@@ -286,17 +290,26 @@ def _classify_from_holdings(
         ):
             return ("Target Date", "holdings:target_date_confirmed")
 
-    # Rule 4: Balanced — require *real* bond exposure (not cash buffers).
-    # ``fixed_income_pct`` includes loans, ABS, STIV-like positions;
-    # ``real_fi`` only counts genuine bond sleeves (Govt + Muni + Corp +
-    # MBS). Tightened bound (>=30 vs prior >=25) eliminated the bulk of
-    # equity-with-cash false positives in the Sprint B spot-check.
-    if 30 <= h.equity_pct <= 70 and 30 <= real_fi <= 70:
-        return ("Balanced", "holdings:balanced")
+    # NOTE: Balanced rule removed entirely after Sprint B audit. Even
+    # the tightened "diversified FI sleeve" version produced too few
+    # confident hits to justify the maintenance burden, and Layer 2's
+    # name regex catches genuine balanced funds (Wellington, allocation,
+    # 60/40 in the name) accurately. Reintroduce only after Phase 4.5
+    # data enrichment makes the equity sleeve discoverable.
 
     # Rule 5: Fixed-income-dominant — issuerCat-aware subtype dispatch.
     # All thresholds are share-of-NAV (not share-of-FI) for a stricter
     # gate; a fund needs absolute concentration to claim a subtype.
+    #
+    # NOTE: Generic FI catch-all (``holdings:fi_generic`` →
+    # Intermediate-Term Bond) was removed after Sprint B audit showed
+    # ~30% noise. Smart Backend / Dumb Frontend principle: do not emit
+    # Layer 0 unless we can stand behind the label at >=85% accuracy.
+    # Mixed-credit FI funds without a dominant subtype fall through to
+    # Layer 1 (Tiingo description) and Layer 2 (name regex), which
+    # already classify them adequately. Reintroduce the catch-all only
+    # after Phase 4.5 lands credit-rating enrichment that lets us split
+    # HY vs IG and resolves the trust-CIK contamination upstream.
     if h.fixed_income_pct >= 70:
         # Geography first (overrides subtype for cross-border funds)
         if h.geography_em_pct > 40:
@@ -310,7 +323,7 @@ def _classify_from_holdings(
         if h.fi_abs_pct >= 50:
             return ("Asset-Backed Securities", "holdings:fi_abs")
 
-        # IssuerCat dispatch by share-of-NAV
+        # IssuerCat dispatch by share-of-NAV — strict patterns only
         if h.fi_government_pct > 60:
             return ("Government Bond", "holdings:fi_government")
         if h.fi_municipal_pct > 50:
@@ -318,9 +331,8 @@ def _classify_from_holdings(
         if h.fi_corporate_pct > 60:
             return ("Investment Grade Bond", "holdings:fi_corporate")
 
-        # Mixed credit / generic default. Without ratings we can't split
-        # HY vs IG; Intermediate-Term Bond is the safest neutral label.
-        return ("Intermediate-Term Bond", "holdings:fi_generic")
+        # No strict pattern matched — fall through to Layer 1/2.
+        return None
 
     # Equity-dominant funds: deliberate fall-through to Layer 1/2.
     # See module docstring for rationale (ADR confounder, GICS gap,

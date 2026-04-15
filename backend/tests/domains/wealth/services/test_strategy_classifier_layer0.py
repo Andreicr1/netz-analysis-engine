@@ -165,13 +165,14 @@ class TestFixedIncomeSubtypeDispatch:
         assert result.strategy_label == "European Bond"
         assert result.matched_pattern == "holdings:european_bond"
 
-    def test_fi_dominant_mixed_credit_falls_to_generic(self):
-        """FI-dominant with no single subtype above threshold →
-        Intermediate-Term Bond (generic neutral label)."""
+    def test_fi_dominant_mixed_credit_falls_through(self):
+        """FI-dominant with NO subtype above the strict threshold must
+        fall through to Layer 1/2 — the prior ``fi_generic`` catch-all
+        was removed because audit showed ~30% noise on this bucket."""
         h = _ha(
             fixed_income_pct=92, cash_pct=8,
             fi_government_pct=30, fi_municipal_pct=10,
-            fi_corporate_pct=40, fi_mbs_pct=10,
+            fi_corporate_pct=40, fi_mbs_pct=10,  # all < strict thresholds
             geography_us_pct=100,
         )
         result = classify_fund(
@@ -180,8 +181,8 @@ class TestFixedIncomeSubtypeDispatch:
             tiingo_description=None,
             holdings_analysis=h,
         )
-        assert result.strategy_label == "Intermediate-Term Bond"
-        assert result.matched_pattern == "holdings:fi_generic"
+        # Must NOT classify via Layer 0 — no strict pattern matched.
+        assert result.source != "nport_holdings"
 
 
 # ───────────────────────────────────────────────────────────────────
@@ -223,11 +224,14 @@ class TestAssetMixDispatch:
         assert result.strategy_label == "Cash Equivalent"
         assert result.matched_pattern == "holdings:cash_dominant"
 
-    def test_balanced_with_real_bonds(self):
-        """60/40 with genuine bond sleeve (not cash buffer)."""
+    def test_balanced_rule_removed_falls_through_to_layer2(self):
+        """Wellington-class 60/40 fund — Balanced rule was removed after
+        Sprint B audit (Layer 2 name regex catches Wellington-named
+        funds accurately). Layer 0 abstains; Layer 2 picks up the
+        'Wellington' / 'Balanced' / 'Allocation' name keywords."""
         h = _ha(
             equity_pct=60, fixed_income_pct=40,
-            fi_government_pct=15, fi_corporate_pct=20, fi_mbs_pct=5,
+            fi_government_pct=15, fi_corporate_pct=15, fi_mbs_pct=10,
             geography_us_pct=100,
         )
         result = classify_fund(
@@ -236,7 +240,7 @@ class TestAssetMixDispatch:
             tiingo_description=None,
             holdings_analysis=h,
         )
-        assert result.strategy_label == "Balanced"
+        assert result.source != "nport_holdings"
 
     def test_target_date_with_name_hint_and_real_fi(self):
         h = _ha(
