@@ -228,12 +228,28 @@ export class NetzApiClient {
 		return handleResponse<T>(res);
 	}
 
-	async delete(path: string, extraHeaders?: Record<string, string>): Promise<void> {
-		const h = { ...await this.headers(), ...extraHeaders };
+	async delete(
+		path: string,
+		optionsOrHeaders?:
+			| Record<string, string>
+			| { headers?: Record<string, string>; timeoutMs?: number },
+	): Promise<void> {
+		// Back-compat: the legacy signature took a bare headers record.
+		// Distinguish by presence of the ``headers`` / ``timeoutMs`` keys.
+		const looksLikeOptions =
+			optionsOrHeaders !== undefined &&
+			("headers" in optionsOrHeaders || "timeoutMs" in optionsOrHeaders);
+		const extraHeaders = looksLikeOptions
+			? (optionsOrHeaders as { headers?: Record<string, string> }).headers
+			: (optionsOrHeaders as Record<string, string> | undefined);
+		const timeout = looksLikeOptions
+			? (optionsOrHeaders as { timeoutMs?: number }).timeoutMs ?? this.timeoutMs
+			: this.timeoutMs;
+		const h = { ...(await this.headers()), ...extraHeaders };
 		const res = await fetch(buildUrl(this.baseUrl, path), {
 			method: "DELETE",
 			headers: h,
-			signal: AbortSignal.timeout(this.timeoutMs),
+			signal: AbortSignal.timeout(timeout),
 		});
 		await handleResponse<void>(res);
 	}

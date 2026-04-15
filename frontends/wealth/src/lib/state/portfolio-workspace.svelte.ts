@@ -1686,6 +1686,31 @@ export class PortfolioWorkspaceState {
 		await this.runBuildJob();
 	}
 
+	/**
+	 * PR-A5 A.10 — Best-effort cancel of the active build.
+	 *
+	 * Fires ``DELETE /api/v1/jobs/{job_id}`` and returns. We intentionally
+	 * do NOT abort the SSE reader client-side; the server emits a
+	 * ``CANCELLED`` terminal event which drives the phase transition
+	 * through _applyBuildEvent. This preserves the audit trail and
+	 * lets the `portfolio_construction_runs` row settle to status
+	 * ``cancelled`` via the worker's finally block.
+	 *
+	 * If the DELETE itself fails, we tolerate silently — the backend
+	 * tracker.is_cancellation_requested flag will win next poll. UX
+	 * surfaces a warning after 30s without confirmation (spec D.5);
+	 * that timer lives in RunControls, not here.
+	 */
+	async cancelActiveBuild(): Promise<void> {
+		const jobId = this._activeBuildJobId;
+		if (!jobId) return;
+		try {
+			await this.api().delete(`/jobs/${jobId}`, { timeoutMs: 5_000 });
+		} catch {
+			// Best-effort — the SSE CANCELLED event is authoritative.
+		}
+	}
+
 	/** Apply a single SSE event to ``runPhase`` and cascade timeline. */
 	private _applyRunEvent(ev: ConstructRunEvent) {
 		const e = ev.event;
