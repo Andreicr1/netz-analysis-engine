@@ -735,11 +735,21 @@ async def execute_construction_run(
         )
         return run
 
-    run.status = "succeeded"
+    # Detect heuristic fallback — CLARABEL cascade exhausted, the run was
+    # "rescued" by the proportional heuristic. Per PR-A7 §B.1, this is a
+    # degraded outcome, not a success: the optimizer produced a sensible
+    # portfolio, but none of the formal phases (primary / robust / CVaR /
+    # min-variance) found a feasible solution on the input universe.
+    solver = (run.optimizer_trace or {}).get("solver")
+    run.status = "degraded" if solver == "heuristic_fallback" else "succeeded"
     run.completed_at = datetime.now(tz=timezone.utc)
     run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
     await db.flush()
 
+    # Keep the raw_type as ``run_succeeded`` so the existing frontend
+    # ``phase === "COMPLETED"`` mapping still terminates the builder flow;
+    # the ``status`` field on the payload carries the degraded signal so
+    # downstream UI can render a fallback badge (frontend work lands in PR-A8).
     await _publish_terminal_event_sanitized(
         db,
         run_id=run_id,
@@ -747,7 +757,7 @@ async def execute_construction_run(
         raw_type="run_succeeded",
         raw_payload={
             "run_id": str(run_id),
-            "status": "succeeded",
+            "status": run.status,
             "wall_clock_ms": run.wall_clock_ms,
         },
     )
@@ -757,6 +767,7 @@ async def execute_construction_run(
         extra={
             "run_id": str(run_id),
             "portfolio_id": str(portfolio_id),
+            "status": run.status,
             "wall_clock_ms": run.wall_clock_ms,
         },
     )
