@@ -20,11 +20,22 @@ _PRIVATE_FUND_TYPES = frozenset({
 _HYBRID_PREFIXES = ("Allocation--", "Target Date", "Retirement")
 
 
-def classify_block(instrument: dict[str, Any]) -> tuple[str | None, str]:
+def classify_block(
+    instrument: dict[str, Any],
+    valid_blocks: set[str] | None = None,
+) -> tuple[str | None, str]:
     """Return (block_id, decision_reason) for an instrument payload.
 
     The instrument dict must contain ``instrument_type``, ``asset_class``,
     and ``attributes`` (JSONB dict from instruments_universe).
+
+    When ``valid_blocks`` is supplied, any block_id not present in the set
+    is treated as unregistered. The strategy_label cascade then walks to
+    the next block in the list, or falls through to the cascade rules if
+    no candidate is valid. This keeps the classifier defensive against
+    drift between ``STRATEGY_LABEL_TO_BLOCKS`` and the seeded
+    ``allocation_blocks`` table — a mismatch would otherwise raise
+    ``ForeignKeyViolationError`` at UPSERT time.
     """
     attrs = instrument.get("attributes") or {}
     asset_class = instrument.get("asset_class", "")
@@ -33,6 +44,16 @@ def classify_block(instrument: dict[str, Any]) -> tuple[str | None, str]:
     fund_type = attrs.get("fund_type")
     name = instrument.get("name", "")
 
+    def _first_valid(blocks: list[str]) -> str | None:
+        if not blocks:
+            return None
+        if valid_blocks is None:
+            return blocks[0]
+        for b in blocks:
+            if b in valid_blocks:
+                return b
+        return None
+
     # Hybrid / multi-asset: skip
     if strategy_label and any(strategy_label.startswith(p) for p in _HYBRID_PREFIXES):
         return None, "hybrid_unsupported"
@@ -40,9 +61,15 @@ def classify_block(instrument: dict[str, Any]) -> tuple[str | None, str]:
         return None, "hybrid_unsupported"
 
     # 1. Strategy label mapping (most granular)
-    blocks = blocks_for_strategy_label(strategy_label)
-    if blocks:
-        return blocks[0], "strategy_label"
+    mapped = blocks_for_strategy_label(strategy_label)
+    primary = _first_valid(mapped)
+    if primary is not None:
+        return primary, "strategy_label"
+    if mapped:
+        # All candidate blocks unregistered — record before falling through.
+        unregistered_fall_through = True
+    else:
+        unregistered_fall_through = False
 
     # 2. Cash / money market
     if asset_class == "cash" or instrument_type == "money_market":
@@ -68,5 +95,7 @@ def classify_block(instrument: dict[str, Any]) -> tuple[str | None, str]:
     if instrument_type == "bdc":
         return None, "bdc_manual_only"
 
-    # 8. Unclassified
+    # 8. Unclassified — distinguish drift from true unknowns
+    if unregistered_fall_through:
+        return None, "block_not_registered"
     return None, "unclassified"

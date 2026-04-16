@@ -249,13 +249,18 @@ async def auto_import_for_org(
     if qualified is None:
         qualified = await fetch_qualified_instruments(db)
 
+    valid_blocks_result = await db.execute(
+        text("SELECT block_id FROM allocation_blocks"),
+    )
+    valid_blocks = {row[0] for row in valid_blocks_result.all()}
+
     added = 0
     updated = 0
     skipped = 0
     skipped_by_reason: dict[str, int] = {}
 
     for inst in qualified:
-        block_id, decision_reason = classify_block(inst)
+        block_id, decision_reason = classify_block(inst, valid_blocks=valid_blocks)
         if block_id is None:
             skipped += 1
             skipped_by_reason[decision_reason] = (

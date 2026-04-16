@@ -29,8 +29,16 @@ branch_labels = None
 depends_on = None
 
 
+_SYSTEM_ORG_UUID = "00000000-0000-0000-0000-000000000000"
+
+
 def _audit(conn: sa.engine.Connection, table: str, action: str, rows: int) -> None:
-    """Write audit event for each cleanup operation."""
+    """Write audit event for each cleanup operation.
+
+    Uses nil-UUID sentinel for organization_id because audit_events is a
+    hypertable with NOT NULL on organization_id. System-level migration
+    events are scoped to the nil org and never match any tenant RLS policy.
+    """
     conn.execute(
         sa.text("""
             INSERT INTO audit_events (
@@ -38,14 +46,14 @@ def _audit(conn: sa.engine.Connection, table: str, action: str, rows: int) -> No
                 entity_type, entity_id, before_state, after_state,
                 request_id, access_level, created_by, updated_by
             ) VALUES (
-                NULL, 'system:migration', '{system}', :action,
+                CAST(:system_org AS uuid), 'system:migration', '{system}', :action,
                 'universe_cleanup', :table,
                 jsonb_build_object('rows_affected', :rows, 'reason', 'pr_a6_pre_autoimport'),
                 NULL,
                 'migration:0139', 'internal', 'system:migration', 'system:migration'
             )
         """),
-        {"action": action, "table": table, "rows": rows},
+        {"action": action, "table": table, "rows": rows, "system_org": _SYSTEM_ORG_UUID},
     )
 
 
