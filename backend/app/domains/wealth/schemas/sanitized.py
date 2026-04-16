@@ -125,6 +125,8 @@ EVENT_TYPE_LABELS: dict[str, str] = {
     "run_cancelled": "Construction cancelled",
     "run_succeeded": "Construction succeeded",
     "run_failed": "Construction failed",
+    # Universe pre-filter (PR-A8 — Layer 3 correlation dedup)
+    "prefilter_dedup_completed": "Universe pre-filter completed",
     # Optimizer cascade
     "optimizer_started": "Optimizer started",
     "optimizer_phase_start": "Optimizer phase started",

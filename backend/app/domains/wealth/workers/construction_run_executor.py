@@ -816,6 +816,27 @@ async def _execute_inner(
         db, profile, str(organization_id), portfolio_id=portfolio_id,
     )
 
+    # PR-A8 — Layer 3 dedup telemetry. Surfaced as a sanitized SSE event
+    # so the frontend (PR-A9) can render the universe-size chip on the
+    # SHRINKAGE phase, and persisted to ``statistical_inputs.dedup`` so
+    # late subscribers and audit consumers can see what was pruned.
+    dedup_block = base_result.get("dedup") if isinstance(base_result, dict) else None
+    if isinstance(dedup_block, dict):
+        await _publish_event_sanitized(
+            db,
+            run_id=run.id,
+            job_id=job_id,
+            raw_type="prefilter_dedup_completed",
+            raw_payload={
+                "universe_size_before_dedup": dedup_block.get("n_input"),
+                "universe_size_after_dedup": dedup_block.get("n_kept"),
+                "n_clusters": dedup_block.get("n_clusters"),
+                "threshold": dedup_block.get("threshold_used"),
+                "pair_corr_p50": dedup_block.get("pair_corr_p50"),
+                "pair_corr_p95": dedup_block.get("pair_corr_p95"),
+            },
+        )
+
     optimizer_trace = {
         "solver": (base_result.get("optimization") or {}).get("solver"),
         "status": (base_result.get("optimization") or {}).get("status"),
@@ -926,6 +947,9 @@ async def _execute_inner(
     )
 
     # Build the JSONB-shaped payload the validation gate expects.
+    statistical_inputs_payload: dict[str, Any] = {}
+    if isinstance(dedup_block, dict):
+        statistical_inputs_payload["dedup"] = dedup_block
     validation_payload: dict[str, Any] = {
         "as_of_date": run.as_of_date.isoformat(),
         "profile": profile,
@@ -935,7 +959,7 @@ async def _execute_inner(
         "funds": funds,
         "stress_results": stress_results,
         "optimizer_trace": optimizer_trace,
-        "statistical_inputs": {},
+        "statistical_inputs": statistical_inputs_payload,
         "factor_exposure": factor_exposure,
     }
     validation_result = validate_construction(
@@ -972,7 +996,7 @@ async def _execute_inner(
     run.optimizer_trace = optimizer_trace
     run.binding_constraints = []
     run.regime_context = narrative_payload["regime_context"]
-    run.statistical_inputs = {}
+    run.statistical_inputs = statistical_inputs_payload
     run.ex_ante_metrics = ex_ante_metrics
     run.factor_exposure = factor_exposure
     run.stress_results = stress_results
