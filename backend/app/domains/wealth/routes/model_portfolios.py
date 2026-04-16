@@ -1855,8 +1855,10 @@ async def _run_construction_async(
     _regime_result = await db.execute(_regime_stmt)
     current_regime = _regime_result.scalar_one_or_none() or "RISK_ON"
 
-    # ── 2. Load approved universe (filtered by regime ELITE set) ──
-    universe_funds = await _load_universe_funds(db, org_id, regime=current_regime)
+    # ── 2. Load approved universe, pre-filtered by profile + top-N per block ──
+    universe_funds = await _load_universe_funds(
+        db, org_id, profile=profile, regime=current_regime,
+    )
     if not universe_funds:
         return {"funds": [], "profile": profile, "error": "No approved funds in universe"}
 
@@ -2297,28 +2299,57 @@ async def _compute_factor_exposures(
         return None
 
 
+#: Layer 2 cap — top-N funds per strategic block, ranked by manager_score desc.
+#: 7 populated blocks × 50 ≈ 350 CLARABEL inputs, inside the tractable band [200, 400]
+#: per the quant architect's empirical guidance (PR-A7 spec, 2026-04-16).
+LAYER_2_TOP_N_PER_BLOCK = 50
+
+
 async def _load_universe_funds(
     db: AsyncSession,
     org_id: str,
+    *,
+    profile: str,
     regime: str = "RISK_ON",
 ) -> list[dict[str, Any]]:
-    """Load approved universe instruments with manager_score from risk metrics.
+    """Load org universe funds with a two-layer deterministic pre-filter.
 
-    The optimizer works over the FULL approved universe — not just ELITE.
-    ELITE is a screener UX badge for analyst navigation, not a construction
-    constraint. More candidates = more degrees of freedom = better portfolio.
+    The optimizer works over the approved universe, but the raw cardinality
+    (~3,184 funds post auto-import) drowns ``_align_returns_with_ffill`` in
+    ``compute_fund_level_inputs`` — with heterogeneous NAV histories the
+    common-date intersection collapses and CLARABEL never runs. The two
+    layers below reduce the input to ~320 without losing the "best" funds
+    in any block.
+
+    * **Layer 0 — Strategic block filter.** JOIN against ``strategic_allocation``
+      for the caller's ``profile`` so funds sitting in blocks that aren't in
+      this profile's allocation are excluded at SQL time. The current
+      ``instruments_org`` population puts all imported funds in blocks that
+      all three profiles share, so Layer 0 is a near-no-op today — but it
+      future-proofs for profile-specific block menus.
+    * **Layer 2 — Top-N per block.** ``ROW_NUMBER() OVER (PARTITION BY block_id
+      ORDER BY manager_score DESC, instrument_id ASC)`` keeps at most
+      ``LAYER_2_TOP_N_PER_BLOCK`` rows per block. The ``instrument_id``
+      tiebreak makes the cut reproducible across planner choices.
+
+    ``manager_score`` is read from the same ``latest_risk`` CTE (global
+    rows, ``organization_id IS NULL``) that the JOIN already dedupes — no
+    separate second query.
 
     Liquid funds (registered_us, etf, ucits_eu, money_market) are approved
-    by default when imported to the org. Only private_us and bdc require
-    manual DD-gated approval via UniverseApproval.
+    at import time; private_us and bdc require DD-gated approval before
+    reaching ``instruments_org``. The gate is at IMPORT time, not here.
     """
     from sqlalchemy import func as sa_func
 
+    from app.domains.wealth.models.allocation import StrategicAllocation
     from app.domains.wealth.models.instrument import Instrument
     from app.domains.wealth.models.instrument_org import InstrumentOrg
     from app.domains.wealth.models.risk import FundRiskMetrics
 
-    # Subquery: latest risk metrics row per instrument (for manager_score)
+    today = date.today()
+
+    # Subquery: latest risk metrics row per instrument (global rows only)
     latest_risk = (
         select(
             FundRiskMetrics.instrument_id,
@@ -2329,11 +2360,21 @@ async def _load_universe_funds(
         .subquery("latest_risk")
     )
 
-    stmt = (
+    # Rank funds within each block by manager_score, tie-broken by instrument_id
+    # for deterministic ordering across query planner choices.
+    ranked_cte = (
         select(
-            Instrument.instrument_id,
-            Instrument.name,
-            InstrumentOrg.block_id,
+            Instrument.instrument_id.label("instrument_id"),
+            Instrument.name.label("name"),
+            InstrumentOrg.block_id.label("block_id"),
+            FundRiskMetrics.manager_score.label("manager_score"),
+            sa_func.row_number().over(
+                partition_by=InstrumentOrg.block_id,
+                order_by=(
+                    FundRiskMetrics.manager_score.desc().nulls_last(),
+                    Instrument.instrument_id.asc(),
+                ),
+            ).label("rn"),
         )
         .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
         .join(
@@ -2346,45 +2387,43 @@ async def _load_universe_funds(
             (latest_risk.c.instrument_id == FundRiskMetrics.instrument_id)
             & (latest_risk.c.max_date == FundRiskMetrics.calc_date),
         )
-        .where(
-            Instrument.is_active == True,
-            InstrumentOrg.block_id.isnot(None),
-            # All funds imported to the org (instruments_org with block_id)
-            # are eligible for construction. Liquid funds (MF/ETF/MMF/UCITS)
-            # are approved by default at import time. Private/BDC funds
-            # require DD-gated approval before instruments_org import.
-            # The gate is at IMPORT time, not at construction time.
+        # Layer 0 — only blocks present in this profile's strategic allocation
+        .join(
+            StrategicAllocation,
+            (StrategicAllocation.block_id == InstrumentOrg.block_id)
+            & (StrategicAllocation.profile == profile)
+            & (StrategicAllocation.effective_from <= today)
+            & (
+                StrategicAllocation.effective_to.is_(None)
+                | (StrategicAllocation.effective_to > today)
+            ),
         )
-    )
-    funds_result = await db.execute(stmt)
-    funds_rows = funds_result.all()
+        .where(
+            Instrument.is_active == True,  # noqa: E712 — SQLAlchemy boolean compare
+            InstrumentOrg.block_id.isnot(None),
+        )
+    ).cte("ranked_universe")
 
-    if not funds_rows:
-        return []
+    stmt = select(
+        ranked_cte.c.instrument_id,
+        ranked_cte.c.name,
+        ranked_cte.c.block_id,
+        ranked_cte.c.manager_score,
+    ).where(ranked_cte.c.rn <= LAYER_2_TOP_N_PER_BLOCK)
 
-    fund_ids = [r.instrument_id for r in funds_rows]
-
-    # Latest risk metrics for manager_score
-    risk_stmt = (
-        select(FundRiskMetrics.instrument_id, FundRiskMetrics.manager_score)
-        .where(FundRiskMetrics.instrument_id.in_(fund_ids))
-        .order_by(FundRiskMetrics.instrument_id, FundRiskMetrics.calc_date.desc())
-        .distinct(FundRiskMetrics.instrument_id)
-    )
-    risk_result = await db.execute(risk_stmt)
-    score_map = {
-        r.instrument_id: float(r.manager_score) if r.manager_score else None
-        for r in risk_result.all()
-    }
+    result = await db.execute(stmt)
+    rows = result.all()
 
     return [
         {
             "instrument_id": str(r.instrument_id),
             "fund_name": r.name,
             "block_id": r.block_id,
-            "manager_score": score_map.get(r.instrument_id),
+            "manager_score": (
+                float(r.manager_score) if r.manager_score is not None else None
+            ),
         }
-        for r in funds_rows
+        for r in rows
     ]
 
 

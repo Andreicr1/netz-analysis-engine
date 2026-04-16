@@ -91,6 +91,9 @@ filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore:The garbage collector is trying to clean up non-checked-in connection:sqlalchemy.exc.SAWarning",
 ]
+markers = [
+    "integration: tests that hit the live docker-compose database (use '-m integration' to select, '-m \"not integration\"' to skip)",
+]
 addopts = "-v --tb=short"
 
 # ── Coverage ────────────────────────────────────────────────────
