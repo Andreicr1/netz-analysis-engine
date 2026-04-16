@@ -1832,7 +1832,10 @@ async def _run_construction_async(
     6. Fallback to block-level heuristic if fund-level optimization fails
     """
     from app.domains.wealth.models.allocation import TaaRegimeState as _TaaRS
-    from app.domains.wealth.services.quant_queries import compute_fund_level_inputs
+    from app.domains.wealth.services.quant_queries import (
+        IllConditionedCovarianceError,
+        compute_fund_level_inputs,
+    )
     from quant_engine.optimizer_service import (
         BlockConstraint,
         FundOptimizationResult,
@@ -1861,6 +1864,57 @@ async def _run_construction_async(
     )
     if not universe_funds:
         return {"funds": [], "profile": profile, "error": "No approved funds in universe"}
+
+    # ── 2b. Layer 3 — correlation dedup (PR-A8) ──
+    # Layers 0+2 (load_universe_funds) cap at ~320 funds across blocks; many of
+    # those share substantial common variance (S&P 500 trackers, AGG-like bond
+    # funds, etc.) and produce κ(Σ) > 1e4 at the optimizer, which fails the
+    # PR-A1 conditioning guardrail. Layer 3 collapses |ρ| > 0.95 peers via
+    # union-find, keeping the highest manager_score per cluster.
+    from app.domains.wealth.services.correlation_dedup_service import (
+        DedupResult,
+        dedup_correlated_funds,
+    )
+
+    _dedup_input_ids = [uuid.UUID(f["instrument_id"]) for f in universe_funds]
+    _manager_scores: dict[uuid.UUID, float | None] = {
+        uuid.UUID(f["instrument_id"]): (
+            float(f["manager_score"]) if f.get("manager_score") is not None else None
+        )
+        for f in universe_funds
+    }
+    dedup_outcome: DedupResult = await dedup_correlated_funds(
+        db, _dedup_input_ids, _manager_scores,
+    )
+
+    dedup_metrics: dict[str, Any] = {
+        "threshold_used": dedup_outcome.threshold_used,
+        "n_input": dedup_outcome.n_input,
+        "n_kept": len(dedup_outcome.kept_ids),
+        "n_clusters": dedup_outcome.n_clusters,
+        "pair_corr_p50": dedup_outcome.pair_corr_p50,
+        "pair_corr_p95": dedup_outcome.pair_corr_p95,
+        "skipped_no_data": [str(uid) for uid in dedup_outcome.skipped_no_data],
+        "duration_ms": dedup_outcome.duration_ms,
+    }
+    # Spec §F bullet 10 — never feed a sub-2 universe to the optimizer.
+    # Surface as a structured failure reason so the executor records it.
+    if len(dedup_outcome.kept_ids) < 2:
+        logger.warning(
+            "correlation_dedup_collapsed_too_far",
+            profile=profile,
+            n_input=dedup_outcome.n_input,
+            n_kept=len(dedup_outcome.kept_ids),
+            pair_corr_p95=round(dedup_outcome.pair_corr_p95, 3),
+        )
+        return {
+            "funds": [],
+            "profile": profile,
+            "error": "dedup_collapsed_too_far",
+            "dedup": dedup_metrics,
+        }
+    _kept_strs = {str(uid) for uid in dedup_outcome.kept_ids}
+    universe_funds = [f for f in universe_funds if f["instrument_id"] in _kept_strs]
 
     # ── 3. Query strategic allocation for this profile ──
     today = date.today()
@@ -2176,6 +2230,19 @@ async def _run_construction_async(
             profile=profile,
             error=str(e),
         )
+    except IllConditionedCovarianceError as e:
+        # PR-A8 — Layer 3 dedup reduced κ but not enough for the optimizer.
+        # Treat as a recoverable degradation (heuristic fallback) rather
+        # than an unhandled exception so the dedup telemetry below is
+        # persisted and the operator can observe p50/p95 for §C.2 tuning.
+        logger.warning(
+            "fund_level_optimizer_ill_conditioned",
+            profile=profile,
+            error=str(e),
+            n_kept_after_dedup=dedup_metrics.get("n_kept"),
+            pair_corr_p50=round(dedup_metrics.get("pair_corr_p50") or 0.0, 3),
+            pair_corr_p95=round(dedup_metrics.get("pair_corr_p95") or 0.0, 3),
+        )
 
     # ── 5. Fallback to block-level heuristic if fund-level failed ──
     if composition is None:
@@ -2212,6 +2279,10 @@ async def _run_construction_async(
 
     # Include TAA provenance for calibration_snapshot enrichment
     result["taa"] = taa_provenance
+
+    # Layer 3 dedup telemetry (PR-A8). Always present so callers can rely
+    # on the key (the early return on dedup_collapsed_too_far also sets it).
+    result["dedup"] = dedup_metrics
 
     if composition.optimization:
         result["optimization"] = {
