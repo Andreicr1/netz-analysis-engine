@@ -51,6 +51,9 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
     from app.domains.wealth.workers.sec_refresh import run_sec_refresh
     from app.domains.wealth.workers.tiingo_enrichment import run_tiingo_enrichment
     from app.domains.wealth.workers.treasury_ingestion import run_treasury_ingestion
+    from app.domains.wealth.workers.universe_auto_import import (
+        run_universe_auto_import,
+    )
     from app.domains.wealth.workers.universe_sync import run_universe_sync
     from app.domains.wealth.workers.watchlist_batch import run_watchlist_check
     from app.domains.wealth.workers.wealth_embedding_worker import run_wealth_embedding
@@ -58,6 +61,7 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
     return {
         # ── Global workers (no org_id) ────────────────────────
         "universe_sync": (run_universe_sync, "global", _HEAVY),
+        "universe_auto_import": (run_universe_auto_import, "global", _HEAVY),
         "tiingo_enrichment": (run_tiingo_enrichment, "global", _HEAVY),
         "macro_ingestion": (run_macro_ingestion, "global", _HEAVY),
         "benchmark_ingest": (run_benchmark_ingest, "global", _HEAVY),

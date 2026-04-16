@@ -45,6 +45,9 @@ from app.domains.admin.routes.health import router as admin_health_router
 from app.domains.admin.routes.inspect import router as admin_inspect_router
 from app.domains.admin.routes.prompts import router as admin_prompts_router
 from app.domains.admin.routes.tenants import router as admin_tenants_router
+from app.domains.admin.routes.universe_auto_import import (
+    router as admin_universe_auto_import_router,
+)
 
 # Actions
 from app.domains.credit.actions.routes.actions import router as credit_actions_router
@@ -531,6 +534,7 @@ api_v1.include_router(admin_prompts_router)
 api_v1.include_router(admin_health_router)
 api_v1.include_router(admin_audit_router)
 api_v1.include_router(admin_inspect_router)
+api_v1.include_router(admin_universe_auto_import_router)
 
 # ── Mount wealth domain routes ───────────────────────────────
 
