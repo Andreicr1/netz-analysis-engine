@@ -10,6 +10,15 @@
 	import { formatNumber, formatPercent } from "@investintell/ui";
 
 	const run = $derived(workspace.constructionRun);
+	// PR-A5 B.5 — phase gating: distinguish idle vs in-flight.
+	const isIdle = $derived(run === null && workspace.runPhase === "idle");
+	const isInFlight = $derived(
+		run === null &&
+			workspace.runPhase !== "idle" &&
+			workspace.runPhase !== "done" &&
+			workspace.runPhase !== "error" &&
+			workspace.runPhase !== "cancelled",
+	);
 	const narrative = $derived(run?.narrative ?? null);
 	const metrics = $derived(run?.ex_ante_metrics ?? null);
 	const deltas = $derived(run?.ex_ante_vs_previous ?? null);
@@ -70,7 +79,15 @@
 
 <svelte:boundary>
 	<div class="at-root">
-		{#if !run}
+		{#if isIdle}
+			<div class="at-empty">Aguardando construction run</div>
+		{:else if isInFlight}
+			<div class="at-skeleton" aria-busy="true">
+				<div class="at-skeleton-line at-skeleton-line--wide"></div>
+				<div class="at-skeleton-line"></div>
+				<div class="at-skeleton-line at-skeleton-line--narrow"></div>
+			</div>
+		{:else if !run}
 			<div class="at-empty">Run construction to see advisor analysis</div>
 		{:else if !narrative}
 			<div class="at-empty">No narrative in this construction run</div>
@@ -83,7 +100,7 @@
 			<!-- Key points -->
 			{#if narrative.key_points && narrative.key_points.length > 0}
 				<ul class="at-points">
-					{#each narrative.key_points as point}
+					{#each narrative.key_points as point, i (i)}
 						<li class="at-point">{point}</li>
 					{/each}
 				</ul>
@@ -354,5 +371,40 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	/* ── PR-A5 B.5 — shimmer skeleton ────────────────── */
+
+	.at-skeleton {
+		display: flex;
+		flex-direction: column;
+		gap: var(--terminal-space-2);
+		padding: var(--terminal-space-4);
+	}
+
+	.at-skeleton-line {
+		height: 12px;
+		background: linear-gradient(
+			90deg,
+			var(--terminal-bg-panel-raised) 0%,
+			var(--terminal-fg-muted) 50%,
+			var(--terminal-bg-panel-raised) 100%
+		);
+		background-size: 200% 100%;
+		animation: at-shimmer 1.4s linear infinite;
+		opacity: 0.4;
+	}
+
+	.at-skeleton-line--wide {
+		width: 80%;
+	}
+
+	.at-skeleton-line--narrow {
+		width: 45%;
+	}
+
+	@keyframes at-shimmer {
+		0% { background-position: 200% 0; }
+		100% { background-position: -200% 0; }
 	}
 </style>

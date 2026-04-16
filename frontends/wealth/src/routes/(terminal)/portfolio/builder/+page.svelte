@@ -10,6 +10,7 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
+	import { SvelteSet } from "svelte/reactivity";
 	import { page } from "$app/state";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
@@ -85,6 +86,81 @@
 	// Cascade timeline phases from workspace
 	const cascadePhases = $derived(workspace.optimizerPhases);
 	const showCascade = $derived(workspace.runPhase !== "idle");
+	// PR-A5 A.8 — thin progress bar visible only while a build is in-flight.
+	const showProgress = $derived(
+		workspace.runPhase !== "idle" &&
+			workspace.runPhase !== "done" &&
+			workspace.runPhase !== "error",
+	);
+	const runProgress = $derived(workspace.runProgress);
+
+	// ── PR-A5 B.1/B.2 — pipeline phase tracking ───────────────────
+	/** Map the workspace runPhase to the backend BuildPhase used by the strip. */
+	const pipelinePhase = $derived.by<
+		| "IDLE"
+		| "FACTOR_MODELING"
+		| "SHRINKAGE"
+		| "SOCP_OPTIMIZATION"
+		| "BACKTESTING"
+		| "COMPLETED"
+	>(() => {
+		switch (workspace.runPhase) {
+			case "factor_modeling":
+				return "FACTOR_MODELING";
+			case "shrinkage":
+				return "SHRINKAGE";
+			case "optimizer":
+				return "SOCP_OPTIMIZATION";
+			case "stress":
+				return "BACKTESTING";
+			case "done":
+				return "COMPLETED";
+			default:
+				return "IDLE";
+		}
+	});
+	const pipelineErrored = $derived(workspace.runPhase === "error");
+
+	/** PR-A5 B.1 — tabs that should pulse while their upstream phase runs. */
+	const pulsingTabs = $derived.by<SvelteSet<TabId>>(() => {
+		const set = new SvelteSet<TabId>();
+		switch (workspace.runPhase) {
+			case "factor_modeling":
+			case "shrinkage":
+				set.add("RISK");
+				break;
+			case "optimizer":
+				set.add("WEIGHTS");
+				break;
+			case "stress":
+				set.add("STRESS");
+				set.add("BACKTEST");
+				break;
+			default:
+				break;
+		}
+		return set;
+	});
+
+	// PR-A5 B.1 — auto-switch to WEIGHTS on COMPLETED unless user already moved.
+	let userSwitchedTab = $state(false);
+	function setActiveTab(t: TabId) {
+		activeTab = t;
+		userSwitchedTab = true;
+	}
+
+	$effect(() => {
+		if (workspace.runPhase === "done" && !userSwitchedTab && activeTab === "REGIME") {
+			activeTab = "WEIGHTS";
+		}
+	});
+
+	// Reset the user-switch guard whenever a fresh build begins.
+	$effect(() => {
+		if (workspace.runPhase === "running") {
+			userSwitchedTab = false;
+		}
+	});
 </script>
 
 <svelte:head>
@@ -148,9 +224,12 @@
 					class="builder-tab"
 					class:builder-tab--active={activeTab === tab}
 					aria-selected={activeTab === tab}
-					onclick={() => { activeTab = tab; }}
+					onclick={() => setActiveTab(tab)}
 				>
 					{tab}
+					{#if pulsingTabs.has(tab)}
+						<span class="builder-tab-pulse" aria-label="Dados deste tab estão sendo preparados"></span>
+					{/if}
 				</button>
 			{/each}
 		</div>
@@ -158,7 +237,13 @@
 		<!-- Zone D: Cascade Timeline (visible during/after run) -->
 		{#if showCascade}
 			<div in:fly={{ y: -8, ...svelteTransitionFor("primary", { duration: "update" }) }}>
-				<CascadeTimeline phases={cascadePhases} />
+				<CascadeTimeline
+					phases={cascadePhases}
+					{runProgress}
+					{showProgress}
+					{pipelinePhase}
+					{pipelineErrored}
+				/>
 			</div>
 		{/if}
 
@@ -305,8 +390,10 @@
 	}
 
 	.builder-tab {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
+		gap: var(--terminal-space-1);
 		padding: 0 var(--terminal-space-3);
 		background: transparent;
 		border: none;
@@ -343,4 +430,18 @@
 		padding: var(--terminal-space-2);
 	}
 
+	/* PR-A5 B.1 — pulsing dot on tab headers whose upstream phase is in-flight. */
+	.builder-tab-pulse {
+		display: inline-block;
+		width: 4px;
+		height: 4px;
+		border-radius: 50%;
+		background: var(--terminal-status-warn, var(--terminal-accent-amber));
+		animation: builder-tab-pulse 1s ease-in-out infinite;
+	}
+
+	@keyframes builder-tab-pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.4; }
+	}
 </style>

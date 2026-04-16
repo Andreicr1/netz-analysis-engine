@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
+	import { v4 as uuidv4 } from "uuid";
 	import { invalidateAll } from "$app/navigation";
 	import {
 		formatPercent, formatNumber, ConsequenceDialog, Toast,
@@ -213,8 +214,12 @@
 				addedFunds = new Set([...addedFunds, candidate.instrument_id]);
 			}
 
-			// Re-construct
-			await api.post(`/model-portfolios/${portfolioId}/construct`, {});
+			// Re-construct via the hardened build endpoint (PR-A5 E.3).
+			// Idempotency-Key is per-click so a double-tap during batch-add
+			// still coalesces server-side to the same job_id.
+			await api.post(`/portfolios/${portfolioId}/build`, undefined, {
+				headers: { "Idempotency-Key": uuidv4() },
+			});
 			await invalidateAll();
 			onReconstruct?.();
 

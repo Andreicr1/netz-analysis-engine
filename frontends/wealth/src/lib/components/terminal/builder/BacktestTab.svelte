@@ -31,6 +31,20 @@
 	const metrics = $derived(data?.metrics ?? null);
 	const isEmpty = $derived(!data || data.dates.length === 0);
 
+	// PR-A5 B.5 — phase gating for the pre-run empty states.
+	const run = $derived(workspace.constructionRun);
+	const isIdle = $derived(
+		run === null && workspace.runPhase === "idle" && isEmpty,
+	);
+	const isInFlight = $derived(
+		run === null &&
+			workspace.runPhase !== "idle" &&
+			workspace.runPhase !== "done" &&
+			workspace.runPhase !== "error" &&
+			workspace.runPhase !== "cancelled" &&
+			isEmpty,
+	);
+
 	// Equity curve chart option
 	const navOption = $derived.by<EChartsOption>(() => {
 		if (isEmpty || !data) return createTerminalChartOptions({ series: [] });
@@ -85,7 +99,15 @@
 </script>
 
 <div class="bt-root">
-	{#if isEmpty && !workspace.isLoadingBacktest}
+	{#if isIdle && !workspace.isLoadingBacktest}
+		<div class="bt-empty">Aguardando construction run</div>
+	{:else if isInFlight && !workspace.isLoadingBacktest}
+		<div class="bt-skeleton" aria-busy="true">
+			<div class="bt-skeleton-line bt-skeleton-line--wide"></div>
+			<div class="bt-skeleton-line"></div>
+			<div class="bt-skeleton-line bt-skeleton-line--narrow"></div>
+		</div>
+	{:else if isEmpty && !workspace.isLoadingBacktest}
 		<div class="bt-empty">Run the NAV synthesizer to see historical performance</div>
 	{:else}
 		<div class="bt-layout">
@@ -262,5 +284,40 @@
 		font-size: var(--terminal-text-14);
 		font-weight: 700;
 		color: var(--terminal-fg-primary);
+	}
+
+	/* ── PR-A5 B.5 — shimmer skeleton ────────────────── */
+
+	.bt-skeleton {
+		display: flex;
+		flex-direction: column;
+		gap: var(--terminal-space-2);
+		padding: var(--terminal-space-4);
+	}
+
+	.bt-skeleton-line {
+		height: 12px;
+		background: linear-gradient(
+			90deg,
+			var(--terminal-bg-panel-raised) 0%,
+			var(--terminal-fg-muted) 50%,
+			var(--terminal-bg-panel-raised) 100%
+		);
+		background-size: 200% 100%;
+		animation: bt-shimmer 1.4s linear infinite;
+		opacity: 0.4;
+	}
+
+	.bt-skeleton-line--wide {
+		width: 80%;
+	}
+
+	.bt-skeleton-line--narrow {
+		width: 45%;
+	}
+
+	@keyframes bt-shimmer {
+		0% { background-position: 200% 0; }
+		100% { background-position: -200% 0; }
 	}
 </style>

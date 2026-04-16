@@ -144,6 +144,9 @@ importers:
       marked:
         specifier: ^17.0.5
         version: 17.0.5
+      uuid:
+        specifier: ^10.0.0
+        version: 10.0.0
     devDependencies:
       '@fontsource-variable/inter':
         specifier: ^5.0.0
@@ -163,6 +166,9 @@ importers:
       '@types/dompurify':
         specifier: ^3.2.0
         version: 3.2.0
+      '@types/uuid':
+        specifier: ^10.0.0
+        version: 10.0.0
       '@typescript-eslint/parser':
         specifier: ^8.58.1
         version: 8.58.1(eslint@10.0.3(jiti@2.6.1))(typescript@5.9.3)
@@ -4546,6 +4552,10 @@ packages:
     resolution: {integrity: sha512-pMZTvIkT1d+TFGvDOqodOclx0QWkkgi6Tdoa8gC8ffGAAqz9pzPTZWAybbsHHoED/ztMtkv/VoYTYyShUn81hA==}
     engines: {node: '>= 0.4.0'}
 
+  uuid@10.0.0:
+    resolution: {integrity: sha512-8XkAphELsDnEGrDxUOHB3RGvXz6TeuYSGEZBOjtTtPm2lwhGBjLgOzLHB63IUWfBpNucQjND6d3AOudO+H3RWQ==}
+    hasBin: true
+
   uuid@11.1.0:
     resolution: {integrity: sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A==}
     hasBin: true
@@ -5660,7 +5670,7 @@ snapshots:
       debug: 4.4.3(supports-color@10.2.2)
       invariant: 2.2.4
       metro: 0.83.5(bufferutil@4.1.0)
-      metro-config: 0.83.5(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      metro-config: 0.83.5(bufferutil@4.1.0)
       metro-core: 0.83.5
       semver: 7.7.4
     transitivePeerDependencies:
@@ -8490,6 +8500,21 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  metro-config@0.83.5(bufferutil@4.1.0):
+    dependencies:
+      connect: 3.7.0
+      flow-enums-runtime: 0.0.6
+      jest-validate: 29.7.0
+      metro: 0.83.5(bufferutil@4.1.0)
+      metro-cache: 0.83.5
+      metro-core: 0.83.5
+      metro-runtime: 0.83.5
+      yaml: 2.8.2
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
   metro-config@0.83.5(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       connect: 3.7.0
@@ -8641,7 +8666,7 @@ snapshots:
       metro-babel-transformer: 0.83.5
       metro-cache: 0.83.5
       metro-cache-key: 0.83.5
-      metro-config: 0.83.5(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      metro-config: 0.83.5(bufferutil@4.1.0)
       metro-core: 0.83.5
       metro-file-map: 0.83.5
       metro-resolver: 0.83.5
@@ -9779,6 +9804,8 @@ snapshots:
   util-deprecate@1.0.2: {}
 
   utils-merge@1.0.1: {}
+
+  uuid@10.0.0: {}
 
   uuid@11.1.0: {}
 

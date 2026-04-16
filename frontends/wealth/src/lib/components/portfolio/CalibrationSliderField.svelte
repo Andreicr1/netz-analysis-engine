@@ -34,6 +34,7 @@
 		edgeLabels?: [string, string];
 		disabled?: boolean;
 		accent?: "primary" | "danger" | "success";
+		originalValue?: number;
 	}
 
 	let {
@@ -50,7 +51,26 @@
 		edgeLabels,
 		disabled = false,
 		accent = "primary",
+		originalValue,
 	}: Props = $props();
+
+	const showOriginal = $derived(
+		originalValue !== undefined && originalValue !== value,
+	);
+	const originalDisplay = $derived.by(() => {
+		if (!showOriginal || originalValue === undefined) return null;
+		switch (displayFormat) {
+			case "percent":
+				return formatPercent(originalValue, digits ?? 2);
+			case "bps":
+				return formatBps(originalValue);
+			case "x":
+				return `${formatNumber(originalValue, digits ?? 2)}x`;
+			case "raw":
+			default:
+				return formatNumber(originalValue, digits ?? 2);
+		}
+	});
 
 	const display = $derived.by(() => {
 		switch (displayFormat) {
@@ -87,6 +107,11 @@
 	<div class="csf-header">
 		<label class="csf-label" for={id}>{label}</label>
 		<span class="csf-value" data-accent={accent}>{display}</span>
+		{#if showOriginal && originalDisplay !== null}
+			<span class="csf-original-chip" title="Valor da última construção">
+				Anteriormente: {originalDisplay}
+			</span>
+		{/if}
 	</div>
 	{#if description}
 		<p class="csf-description">{description}</p>
@@ -253,5 +278,20 @@
 		font-size: 10px;
 		font-weight: 500;
 		color: var(--terminal-fg-muted);
+	}
+
+	.csf-original-chip {
+		margin-left: 8px;
+		padding: 2px 6px;
+		font-size: 10px;
+		font-weight: 500;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--terminal-fg-muted);
+		background: var(--terminal-bg-panel-raised);
+		border: 1px solid var(--terminal-fg-muted);
+		border-radius: 2px;
+		font-family: var(--terminal-font-mono);
+		white-space: nowrap;
 	}
 </style>

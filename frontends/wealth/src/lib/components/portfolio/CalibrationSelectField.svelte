@@ -22,6 +22,7 @@
 		options: readonly Option[];
 		placeholder?: string;
 		disabled?: boolean;
+		originalValue?: string;
 	}
 
 	let {
@@ -33,12 +34,27 @@
 		options,
 		placeholder = "Select...",
 		disabled = false,
+		originalValue,
 	}: Props = $props();
+
+	const showOriginal = $derived(
+		originalValue !== undefined && originalValue !== value,
+	);
+	const originalLabel = $derived(
+		showOriginal && originalValue !== undefined
+			? (options.find((o) => o.value === originalValue)?.label ?? originalValue)
+			: null,
+	);
 </script>
 
 <div class="csf-root" class:csf-root--disabled={disabled}>
 	<div class="csf-header">
 		<label class="csf-label" for={id}>{label}</label>
+		{#if showOriginal && originalLabel !== null}
+			<span class="csf-original-chip" title="Valor da última construção">
+				Anteriormente: {originalLabel}
+			</span>
+		{/if}
 	</div>
 	{#if description}
 		<p class="csf-description">{description}</p>
@@ -107,5 +123,19 @@
 	.csf-select:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
+	}
+	.csf-original-chip {
+		margin-left: 8px;
+		padding: 2px 6px;
+		font-size: 10px;
+		font-weight: 500;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--terminal-fg-muted);
+		background: var(--terminal-bg-panel-raised);
+		border: 1px solid var(--terminal-fg-muted);
+		border-radius: 2px;
+		font-family: var(--terminal-font-mono);
+		white-space: nowrap;
 	}
 </style>
