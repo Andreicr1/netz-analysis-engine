@@ -14,9 +14,70 @@
 	import { formatNumber, readTerminalTokens, createTerminalChartOptions } from "@investintell/ui";
 	import TerminalChart from "$lib/components/terminal/charts/TerminalChart.svelte";
 	import type { EChartsOption } from "echarts";
+	import {
+		translateKappa,
+		translateShrinkageLambda,
+		translateRegime,
+		translateFactorCoverage,
+		translateRSquaredMedian,
+		type TranslatedMetric,
+	} from "$lib/util/metric-translators";
 
 	const run = $derived(workspace.constructionRun);
 	const funds = $derived(workspace.funds);
+
+	// ── PR-A5 B.3 — in-flight chip strip from buildMetrics ──────
+	const factorMetrics = $derived(workspace.buildMetrics.factor);
+	const shrinkageMetrics = $derived(workspace.buildMetrics.shrinkage);
+	const inFlightPhase = $derived(
+		workspace.runPhase === "factor_modeling" || workspace.runPhase === "shrinkage",
+	);
+
+	type Chip = TranslatedMetric & { rawTitle?: string };
+
+	const chips = $derived.by<Chip[]>(() => {
+		const out: Chip[] = [];
+		if (factorMetrics) {
+			const effRaw = factorMetrics.k_factors_effective;
+			const totRaw = factorMetrics.k_factors;
+			if (typeof effRaw === "number" && typeof totRaw === "number") {
+				out.push({
+					...translateFactorCoverage(effRaw, totRaw),
+					rawTitle: `k_factors_effective=${effRaw}, k_factors=${totRaw}`,
+				});
+			}
+			const regime = factorMetrics.regime;
+			if (typeof regime === "string") {
+				out.push({ ...translateRegime(regime), rawTitle: `regime=${regime}` });
+			}
+			const kappa = factorMetrics.kappa;
+			if (typeof kappa === "number") {
+				out.push({
+					...translateKappa(kappa),
+					rawTitle: `kappa=${formatNumber(kappa, 0)}`,
+				});
+			}
+			const r2 = factorMetrics.r_squared_p50;
+			if (typeof r2 === "number") {
+				out.push({
+					...translateRSquaredMedian(r2),
+					rawTitle: `r_squared_p50=${formatNumber(r2, 3)}`,
+				});
+			}
+		}
+		if (shrinkageMetrics) {
+			const lambda = shrinkageMetrics.shrinkage_lambda;
+			if (typeof lambda === "number") {
+				out.push({
+					...translateShrinkageLambda(lambda),
+					rawTitle: `shrinkage_lambda=${formatNumber(lambda, 4)}`,
+				});
+			}
+		}
+		return out;
+	});
+
+	const showChips = $derived(chips.length > 0);
 
 	/** Sanitized factor category labels (PC1/PC2/PC3 → Market/Style/Sector). */
 	const FACTOR_LABELS: Record<string, string> = {
@@ -151,8 +212,27 @@
 
 <svelte:boundary>
 	<div class="rt-root">
+		{#if showChips}
+			<!-- PR-A5 B.3 — phase-aware chip strip, pinned above the charts. -->
+			<section class="rt-chips" aria-label="Risk model diagnostics">
+				{#each chips as chip, i (i)}
+					<span class="rt-chip rt-chip--{chip.tone}" title={chip.rawTitle ?? ""}>
+						{chip.label}
+					</span>
+				{/each}
+			</section>
+		{/if}
+
 		{#if !run}
-			<div class="rt-empty">Run construction to see risk analysis</div>
+			{#if inFlightPhase}
+				<div class="rt-skeleton" aria-busy="true">
+					<div class="rt-skeleton-line rt-skeleton-line--wide"></div>
+					<div class="rt-skeleton-line"></div>
+					<div class="rt-skeleton-line rt-skeleton-line--narrow"></div>
+				</div>
+			{:else}
+				<div class="rt-empty">Run construction to see risk analysis</div>
+			{/if}
 		{:else if !hasData}
 			<div class="rt-empty">No risk data in this construction run</div>
 		{:else}
@@ -226,5 +306,84 @@
 	.rt-subtitle {
 		font-size: var(--terminal-text-11);
 		color: var(--terminal-fg-muted);
+	}
+
+	/* ── PR-A5 B.3 — diagnostics chip strip ─────────────── */
+
+	.rt-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--terminal-space-2);
+		padding-bottom: var(--terminal-space-2);
+		border-bottom: 1px dashed var(--terminal-fg-muted);
+	}
+
+	.rt-chip {
+		display: inline-flex;
+		align-items: center;
+		padding: 4px 8px;
+		font-size: var(--terminal-text-10);
+		font-weight: 600;
+		letter-spacing: 0.02em;
+		border: 1px solid var(--terminal-fg-muted);
+		border-radius: 2px;
+		background: var(--terminal-bg-panel-raised);
+		font-family: var(--terminal-font-mono);
+		white-space: nowrap;
+	}
+
+	.rt-chip--success {
+		border-color: var(--terminal-status-success);
+		color: var(--terminal-fg-primary);
+	}
+
+	.rt-chip--neutral {
+		border-color: var(--terminal-fg-muted);
+		color: var(--terminal-fg-secondary);
+	}
+
+	.rt-chip--warning {
+		border-color: var(--terminal-status-warn);
+		color: var(--terminal-status-warn);
+	}
+
+	.rt-chip--danger {
+		border-color: var(--terminal-status-error);
+		color: var(--terminal-status-error);
+	}
+
+	/* ── PR-A5 B.3/B.5 — shimmer skeleton ─────────────── */
+
+	.rt-skeleton {
+		display: flex;
+		flex-direction: column;
+		gap: var(--terminal-space-2);
+		padding: var(--terminal-space-4) 0;
+	}
+
+	.rt-skeleton-line {
+		height: 12px;
+		background: linear-gradient(
+			90deg,
+			var(--terminal-bg-panel-raised) 0%,
+			var(--terminal-fg-muted) 50%,
+			var(--terminal-bg-panel-raised) 100%
+		);
+		background-size: 200% 100%;
+		animation: rt-shimmer 1.4s linear infinite;
+		opacity: 0.4;
+	}
+
+	.rt-skeleton-line--wide {
+		width: 80%;
+	}
+
+	.rt-skeleton-line--narrow {
+		width: 45%;
+	}
+
+	@keyframes rt-shimmer {
+		0% { background-position: 200% 0; }
+		100% { background-position: -200% 0; }
 	}
 </style>

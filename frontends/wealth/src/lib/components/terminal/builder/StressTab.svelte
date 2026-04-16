@@ -21,6 +21,25 @@
 	const run = $derived(workspace.constructionRun);
 	const stressResults = $derived(run?.stress_results ?? []);
 
+	// ── PR-A5 B.4 — in-flight scenario grid (before run loads) ──
+	const inFlight = $derived(workspace.runPhase === "stress");
+	const backtestMetrics = $derived(workspace.buildMetrics.backtest);
+	const liveScenarioResults = $derived.by<Record<string, unknown> | null>(() => {
+		if (!backtestMetrics) return null;
+		const raw = backtestMetrics.scenario_results;
+		if (raw && typeof raw === "object") return raw as Record<string, unknown>;
+		return null;
+	});
+	const STRESS_KEYS: ReadonlyArray<string> = [
+		"gfc_2008",
+		"covid_2020",
+		"taper_2013",
+		"rate_shock_200bps",
+	];
+	function isScenarioDone(key: string): boolean {
+		return !!liveScenarioResults && liveScenarioResults[key] != null;
+	}
+
 	interface StressRow {
 		scenario: string;
 		label: string;
@@ -62,7 +81,25 @@
 
 <svelte:boundary>
 	<div class="st-root">
-		{#if !run}
+		{#if !run && inFlight}
+			<!-- PR-A5 B.4 — live scenario grid while BACKTESTING runs. -->
+			<section class="st-live" aria-label="Cenários em execução">
+				<header class="st-live-header">Executando 4 cenários de stress…</header>
+				<div class="st-live-grid">
+					{#each STRESS_KEYS as key (key)}
+						{@const done = isScenarioDone(key)}
+						<div class="st-live-cell" class:st-live-cell--done={done}>
+							<span
+								class="st-live-icon"
+								class:st-live-icon--done={done}
+								aria-hidden="true"
+							>{done ? "\u2713" : "\u25CF"}</span>
+							<span class="st-live-label">{SCENARIO_LABELS[key]}</span>
+						</div>
+					{/each}
+				</div>
+			</section>
+		{:else if !run}
 			<div class="st-empty">Run construction to see stress analysis</div>
 		{:else if rows.length === 0}
 			<div class="st-empty">No active stress scenarios in this run</div>
@@ -165,5 +202,64 @@
 
 	.st-impact--none {
 		color: var(--terminal-fg-muted);
+	}
+
+	/* ── PR-A5 B.4 — in-flight scenario grid ──────────── */
+
+	.st-live {
+		display: flex;
+		flex-direction: column;
+		gap: var(--terminal-space-3);
+		padding: var(--terminal-space-4);
+	}
+
+	.st-live-header {
+		font-size: var(--terminal-text-11);
+		font-weight: 600;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		color: var(--terminal-fg-tertiary);
+		animation: st-live-pulse 1.5s ease-in-out infinite;
+	}
+
+	.st-live-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--terminal-space-2);
+	}
+
+	.st-live-cell {
+		display: flex;
+		align-items: center;
+		gap: var(--terminal-space-2);
+		padding: var(--terminal-space-2) var(--terminal-space-3);
+		border: 1px solid var(--terminal-fg-muted);
+		background: var(--terminal-bg-panel-raised);
+		font-size: var(--terminal-text-11);
+	}
+
+	.st-live-cell--done {
+		border-color: var(--terminal-status-success);
+	}
+
+	.st-live-icon {
+		display: inline-flex;
+		width: 16px;
+		font-size: var(--terminal-text-12);
+		color: var(--terminal-fg-muted);
+	}
+
+	.st-live-icon--done {
+		color: var(--terminal-status-success);
+	}
+
+	.st-live-label {
+		font-weight: 600;
+		color: var(--terminal-fg-primary);
+	}
+
+	@keyframes st-live-pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.5; }
 	}
 </style>

@@ -9,6 +9,7 @@
 -->
 <script lang="ts">
 	import type { CascadePhase } from "$lib/state/portfolio-workspace.svelte";
+	import type { BuildPhase } from "$lib/types/portfolio-build";
 	import { formatNumber } from "@investintell/ui";
 
 	interface Props {
@@ -17,9 +18,51 @@
 		runProgress?: number;
 		/** PR-A5 A.8 — whether the thin progress bar should render. */
 		showProgress?: boolean;
+		/** PR-A5 B.2 — current pipeline phase (drives the upper strip). */
+		pipelinePhase?: BuildPhase | "IDLE";
+		/** PR-A5 B.2 — whether the pipeline phase has entered a terminal error state. */
+		pipelineErrored?: boolean;
 	}
 
-	let { phases, runProgress = 0, showProgress = false }: Props = $props();
+	let {
+		phases,
+		runProgress = 0,
+		showProgress = false,
+		pipelinePhase = "IDLE",
+		pipelineErrored = false,
+	}: Props = $props();
+
+	// PR-A5 B.2 — pipeline strip: 5 chips mapping each top-level phase.
+	const PIPELINE_STRIP: ReadonlyArray<{ key: BuildPhase; label: string }> = [
+		{ key: "FACTOR_MODELING", label: "FACTOR MODEL" },
+		{ key: "SHRINKAGE", label: "COVARIANCE" },
+		{ key: "SOCP_OPTIMIZATION", label: "OPTIMIZER" },
+		{ key: "BACKTESTING", label: "BACKTEST" },
+		{ key: "COMPLETED", label: "COMPLETE" },
+	];
+
+	type StripStatus = "pending" | "running" | "succeeded" | "failed" | "skipped";
+
+	const currentIdx = $derived.by(() => {
+		const idx = PIPELINE_STRIP.findIndex((c) => c.key === pipelinePhase);
+		return idx;
+	});
+
+	const stripStatuses = $derived.by<StripStatus[]>(() => {
+		return PIPELINE_STRIP.map((chip, i) => {
+			if (pipelinePhase === "COMPLETED") return "succeeded";
+			if (pipelineErrored) {
+				if (currentIdx < 0) return "failed";
+				if (i < currentIdx) return "succeeded";
+				if (i === currentIdx) return "failed";
+				return "skipped";
+			}
+			if (currentIdx < 0) return "pending";
+			if (i < currentIdx) return "succeeded";
+			if (i === currentIdx) return "running";
+			return "pending";
+		});
+	});
 
 	const progressPct = $derived(Math.max(0, Math.min(1, runProgress)) * 100);
 
@@ -42,6 +85,21 @@
 </script>
 
 <div class="ct-root" role="group" aria-label="Construction phase timeline">
+	<!-- PR-A5 B.2 — pipeline phase strip (coarse top-level). -->
+	<div class="ct-strip" aria-label="Pipeline phases">
+		{#each PIPELINE_STRIP as chip, i (chip.key)}
+			<div
+				class="ct-strip-chip ct-strip-chip--{stripStatuses[i]}"
+				aria-current={stripStatuses[i] === "running" ? "step" : undefined}
+			>
+				<span class="ct-strip-label">{chip.label}</span>
+			</div>
+			{#if i < PIPELINE_STRIP.length - 1}
+				<span class="ct-strip-sep" aria-hidden="true">&rarr;</span>
+			{/if}
+		{/each}
+	</div>
+
 	<!-- Connector rail -->
 	<div class="ct-rail">
 		<div class="ct-rail-bg"></div>
@@ -257,5 +315,70 @@
 	@keyframes ct-pulse {
 		0%, 100% { opacity: 1; }
 		50% { opacity: 0.5; }
+	}
+
+	/* ── Pipeline strip (PR-A5 B.2) ──────────────────── */
+
+	.ct-strip {
+		display: flex;
+		align-items: center;
+		gap: var(--terminal-space-1);
+		margin-bottom: var(--terminal-space-2);
+		padding-bottom: var(--terminal-space-2);
+		border-bottom: 1px dashed var(--terminal-fg-muted);
+	}
+
+	.ct-strip-chip {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		height: 24px;
+		padding: 0 var(--terminal-space-2);
+		border: 1px solid var(--terminal-fg-muted);
+		background: transparent;
+		transition:
+			border-color 0.3s ease,
+			color 0.3s ease,
+			opacity 0.3s ease;
+	}
+
+	.ct-strip-chip--pending {
+		opacity: 0.45;
+		color: var(--terminal-fg-muted);
+	}
+
+	.ct-strip-chip--running {
+		border-color: var(--terminal-accent-amber);
+		color: var(--terminal-accent-amber);
+		animation: ct-pulse 1.5s ease-in-out infinite;
+	}
+
+	.ct-strip-chip--succeeded {
+		border-color: var(--terminal-status-success);
+		color: var(--terminal-fg-primary);
+	}
+
+	.ct-strip-chip--failed {
+		border-color: var(--terminal-status-error);
+		color: var(--terminal-status-error);
+	}
+
+	.ct-strip-chip--skipped {
+		opacity: 0.35;
+		border-style: dashed;
+		color: var(--terminal-fg-muted);
+	}
+
+	.ct-strip-label {
+		font-size: var(--terminal-text-10);
+		font-weight: 600;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		line-height: 1;
+	}
+
+	.ct-strip-sep {
+		color: var(--terminal-fg-muted);
+		font-size: var(--terminal-text-10);
 	}
 </style>
