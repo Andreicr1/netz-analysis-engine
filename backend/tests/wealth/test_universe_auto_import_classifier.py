@@ -156,3 +156,27 @@ def test_classify_block_empty_attributes() -> None:
     block_id, reason = classify_block(inst)
     assert block_id == "na_equity_large"
     assert reason == "fallback_equity"
+
+
+def test_valid_blocks_filters_primary_to_secondary() -> None:
+    """Long/Short Equity maps to [alt_hedge_fund, na_equity_large]; when the
+    primary block is not seeded in allocation_blocks, classify_block must
+    fall back to the first valid secondary rather than raising.
+    """
+    inst = _inst(strategy_label="Long/Short Equity")
+    valid = {"na_equity_large", "fi_us_aggregate", "cash"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == "na_equity_large"
+    assert reason == "strategy_label"
+
+
+def test_valid_blocks_no_valid_candidate_surfaces_block_not_registered() -> None:
+    """Multi-Strategy only maps to [alt_hedge_fund]; when none of the
+    candidate blocks are seeded the classifier must skip the row with a
+    distinct reason so the admin dashboard can surface the drift.
+    """
+    inst = _inst(strategy_label="Multi-Strategy", asset_class="alternatives")
+    valid = {"na_equity_large", "fi_us_aggregate", "cash"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id is None
+    assert reason == "block_not_registered"
