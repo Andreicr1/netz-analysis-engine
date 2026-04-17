@@ -384,6 +384,12 @@ def _build_cascade_telemetry(
     winning_phase = block.get("winning_phase")
     min_achievable_cvar = block.get("min_achievable_cvar")
     achievable_return_band = block.get("achievable_return_band")
+    # PR-A14 — universe coverage surface (routes/model_portfolios.py
+    # ``coverage_payload``). None on legacy/test paths that didn't emit it.
+    raw_coverage = block.get("coverage")
+    coverage: dict[str, Any] | None = (
+        dict(raw_coverage) if isinstance(raw_coverage, dict) else None
+    )
 
     # Legacy/test path: no cascade info at all → return empty telemetry
     # with a sentinel status so the caller falls back to the solver-string
@@ -471,11 +477,24 @@ def _build_cascade_telemetry(
     elif cascade_summary == "upstream_heuristic":
         # compute_fund_level_inputs raised before cascade ran (e.g.
         # ill-conditioned Σ, too few funds with NAV data).
-        operator_signal = {
-            "kind": "upstream_data_missing",
-            "binding": "returns_quality",
-            "message_key": "statistical_inputs_unavailable",
-        }
+        # PR-A14 — swap primary kind when the heuristic fired because the
+        # approved universe fell below the 20% coverage floor, so operators
+        # see "import funds into the missing blocks" instead of a generic
+        # "statistics unavailable" message.
+        if coverage and bool(coverage.get("hard_fail")):
+            operator_signal = {
+                "kind": "universe_coverage_insufficient",
+                "binding": "universe_coverage",
+                "message_key": "universe_coverage_hard_fail",
+                "pct_covered": coverage.get("pct_covered"),
+                "missing_blocks_count": len(coverage.get("missing_blocks") or []),
+            }
+        else:
+            operator_signal = {
+                "kind": "upstream_data_missing",
+                "binding": "returns_quality",
+                "message_key": "statistical_inputs_unavailable",
+            }
     else:  # constraint_polytope_empty
         operator_signal = {
             "kind": "constraint_polytope_empty",
@@ -483,12 +502,45 @@ def _build_cascade_telemetry(
             "message_key": "block_bands_unsatisfiable",
         }
 
+    # PR-A14 — secondary operator_signal: non-blocking warning when the
+    # approved universe covers < 85% of the profile's strategic allocation
+    # targets. Additive field; primary keeps its existing contract so
+    # frontend callers that only look at ``kind`` continue to work.
+    if (
+        coverage is not None
+        and coverage.get("pct_covered") is not None
+        and float(coverage["pct_covered"]) < 0.85
+        # Hard-fail already surfaces as primary kind — don't duplicate.
+        and not (operator_signal and operator_signal.get("kind") == "universe_coverage_insufficient")
+    ):
+        secondary = {
+            "kind": "universe_coverage_insufficient",
+            "binding": "universe_coverage",
+            "message_key": "expand_universe_recommended",
+            "pct_covered": coverage.get("pct_covered"),
+            "missing_blocks_count": len(coverage.get("missing_blocks") or []),
+        }
+        if operator_signal is None:
+            # Primary was "implicit feasible" (e.g. phase_1_succeeded).
+            # Synthesise a feasible primary so consumers always find the
+            # secondary under operator_signal.secondary.
+            operator_signal = {
+                "kind": "feasible",
+                "binding": None,
+                "message_key": "feasible",
+                "secondary": secondary,
+            }
+        else:
+            operator_signal = {**operator_signal, "secondary": secondary}
+
     telemetry = {
         "phase_attempts": public_attempts,
         "cascade_summary": cascade_summary,
         "min_achievable_cvar": min_achievable_cvar,
         "achievable_return_band": achievable_return_band,
         "operator_signal": operator_signal,
+        # PR-A14 — universe coverage JSONB (nullable for legacy runs).
+        "coverage": coverage,
     }
     return telemetry, run_status
 

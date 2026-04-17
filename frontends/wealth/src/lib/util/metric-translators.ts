@@ -257,9 +257,37 @@ export function translateOperatorSignalKind(value: string): TranslatedMetric {
 				label: "Soma das bandas por bloco não fecha em 100% — revisar bandas",
 				tone: "danger",
 			};
+		case "universe_coverage_insufficient":
+			return {
+				label:
+					"Universo aprovado não cobre todos os blocos deste perfil — importe fundos nos blocos ausentes",
+				tone: "warning",
+			};
 		default:
 			return { label: value, tone: "neutral" };
 	}
+}
+
+/**
+ * PR-A14 — copy for the non-blocking secondary signal surfaced when the
+ * approved universe covers < 85% of the profile's strategic allocation
+ * blocks. Renders next to (not replacing) the primary signal.
+ */
+export function translateCoverageSecondary(
+	pctCovered: number | null | undefined,
+	missingBlocksCount: number | null | undefined,
+): TranslatedMetric {
+	const pct =
+		typeof pctCovered === "number"
+			? Math.round(pctCovered * 100)
+			: null;
+	const n = typeof missingBlocksCount === "number" ? missingBlocksCount : null;
+	const pctFragment = pct !== null ? ` (${pct}% coberto)` : "";
+	const nFragment = n !== null && n > 0 ? ` — ${n} blocos ausentes` : "";
+	return {
+		label: `Universo aprovado parcial${pctFragment}${nFragment}`,
+		tone: "warning",
+	};
 }
 
 /**
