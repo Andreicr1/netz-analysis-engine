@@ -2043,6 +2043,11 @@ async def _run_construction_async(
 
     # ── 3+4. Fund-level optimization ──
     composition = None
+    # PR-A9 — default conditioning payload for the SHRINKAGE SSE event even
+    # when the optimizer can't run (ValueError: insufficient data, or the
+    # inner try never reaches compute_fund_level_inputs). Overwritten by the
+    # successful path below.
+    shrinkage_metrics: dict[str, Any] = {}
 
     try:
         # ── BL-5: Fetch regime probs for regime-conditioned covariance ──
@@ -2095,6 +2100,9 @@ async def _run_construction_async(
         available_ids = _fli.available_ids
         fund_skewness = _fli.skewness
         fund_excess_kurtosis = _fli.excess_kurtosis
+        # PR-A9 — surface the three-tier conditioning decision so the run
+        # executor can persist + emit it on the SHRINKAGE SSE phase.
+        shrinkage_metrics = dict(_fli.inputs_metadata.get("conditioning") or {})
 
         # Filter to funds with NAV data
         opt_fund_ids = [fid for fid in available_ids if fid in fund_blocks]
@@ -2283,6 +2291,11 @@ async def _run_construction_async(
     # Layer 3 dedup telemetry (PR-A8). Always present so callers can rely
     # on the key (the early return on dedup_collapsed_too_far also sets it).
     result["dedup"] = dedup_metrics
+
+    # PR-A9 — three-tier κ(Σ) conditioning telemetry. Populated from
+    # ``FundLevelInputs.inputs_metadata.conditioning`` when the optimizer
+    # reached the covariance stage; empty dict otherwise (caller checks).
+    result["shrinkage"] = shrinkage_metrics
 
     if composition.optimization:
         result["optimization"] = {
