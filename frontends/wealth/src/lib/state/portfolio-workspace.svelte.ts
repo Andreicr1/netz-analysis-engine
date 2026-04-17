@@ -38,6 +38,7 @@ import type {
 	CascadeTelemetry,
 	AchievableReturnBand,
 	OperatorSignal,
+	PreviewCvarResponse,
 } from "$lib/types/cascade-telemetry";
 import type {
 	RegimeBands,
@@ -1048,6 +1049,34 @@ export class PortfolioWorkspaceState {
 		} finally {
 			this.isApplyingCalibration = false;
 		}
+	}
+
+	/**
+	 * PR-A13.2 — Live drag preview for the Builder risk budget slider.
+	 *
+	 * Calls ``POST /portfolios/{id}/preview-cvar`` to compute the
+	 * achievable_return_band for a probed cvar_limit without persisting
+	 * to portfolio_calibration. Backed by a 5-min Redis cache; cold wall
+	 * is ~4s on a typical universe, hot is ~12ms. The caller is
+	 * responsible for debouncing and for threading an AbortController
+	 * signal to cancel stale in-flight requests when the operator drags
+	 * past the quantized value.
+	 *
+	 * Returns ``null`` when no portfolio is selected or the token
+	 * provider isn't configured (matches the rest of the workspace loader
+	 * contract).
+	 */
+	async previewCvar(
+		cvarLimit: number,
+		signal?: AbortSignal,
+	): Promise<PreviewCvarResponse | null> {
+		if (!this._getToken || !this.portfolioId) return null;
+		const api = this.api();
+		return await api.post<PreviewCvarResponse>(
+			`/portfolios/${this.portfolioId}/preview-cvar`,
+			{ cvar_limit: cvarLimit },
+			{ signal, timeoutMs: 20_000 },
+		);
 	}
 
 	// ── TAA Sprint 4 — Regime visualization loaders ─────────────────

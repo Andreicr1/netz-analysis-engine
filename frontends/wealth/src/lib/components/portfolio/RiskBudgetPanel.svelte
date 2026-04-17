@@ -1,21 +1,26 @@
 <!--
-  RiskBudgetPanel — PR-A13 state owner for the Builder risk budget
-  surface. Composes:
+  RiskBudgetPanel — Builder risk budget surface. Composes:
     1. RiskBudgetSlider (operator edits the tail loss limit)
-    2. AchievableReturnBandChart (derived from latest cascade_telemetry)
+    2. AchievableReturnBandChart (derived from live preview ?? latest
+       cascade_telemetry)
     3. Signal banner (operator_signal → copy + tone)
 
-  Two-channel state design is deliberate: ``previewBand`` is reserved for
-  PR-A13.2 (live drag preview via POST /preview-cvar). A13 never writes to
-  it, but the ``previewBand ?? serverBand`` precedence means A13.2 can
-  wire in without rewriting the dependency graph.
+  PR-A13 shipped the static form; PR-A13.2 wires the live drag preview
+  via POST /preview-cvar. ``previewBand ?? serverBand`` precedence lets
+  the drag-derived band override the last completed run's band, while
+  clearing ``previewBand`` on ``runPhase === "done"`` re-grants authority
+  to the fresh server band (closes the two-channel state gap from
+  PR-A13 Section B.2).
 -->
 <script lang="ts">
 	import { formatPercent } from "@investintell/ui";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 	import type { PortfolioCalibration } from "$lib/types/portfolio-calibration";
-	import type { AchievableReturnBand } from "$lib/types/cascade-telemetry";
+	import type {
+		AchievableReturnBand,
+		OperatorSignal,
+	} from "$lib/types/cascade-telemetry";
 	import { defaultCvarForProfile } from "$lib/util/profile-defaults";
 	import RiskBudgetSlider from "./RiskBudgetSlider.svelte";
 	import AchievableReturnBandChart from "./AchievableReturnBandChart.svelte";
@@ -32,23 +37,96 @@
 	const profileDefault = $derived(defaultCvarForProfile(portfolio.profile));
 	const cvarLimit = $derived(calibration.cvar_limit);
 
+	// ── Server-channel state (authoritative when no live preview) ──
 	const serverBand = $derived(
 		workspace.constructionRun?.cascade_telemetry?.achievable_return_band ?? null,
 	);
 	const serverSignal = $derived(
 		workspace.constructionRun?.cascade_telemetry?.operator_signal ?? null,
 	);
-	const minAchievableCvar = $derived(
+	const serverMinCvar = $derived(
 		workspace.constructionRun?.cascade_telemetry?.min_achievable_cvar ?? null,
 	);
 
-	// PR-A13.2 slot — reserved for live preview. A13 never writes here.
+	// ── Preview-channel state (PR-A13.2 live drag) ─────────────────
 	let previewBand = $state<AchievableReturnBand | null>(null);
-	const band = $derived(previewBand ?? serverBand);
+	let previewSignal = $state<OperatorSignal | null>(null);
+	let previewMinCvar = $state<number | null>(null);
+	let previewing = $state(false);
+	let previewError = $state<string | null>(null);
 
-	const belowFloor = $derived(serverSignal?.kind === "cvar_limit_below_universe_floor");
-	const dataMissing = $derived(serverSignal?.kind === "upstream_data_missing");
-	const polytopeEmpty = $derived(serverSignal?.kind === "constraint_polytope_empty");
+	const band = $derived(previewBand ?? serverBand);
+	const signal = $derived(previewSignal ?? serverSignal);
+	const minAchievableCvar = $derived(previewMinCvar ?? serverMinCvar);
+
+	const belowFloor = $derived(signal?.kind === "cvar_limit_below_universe_floor");
+	const dataMissing = $derived(signal?.kind === "upstream_data_missing");
+	const polytopeEmpty = $derived(signal?.kind === "constraint_polytope_empty");
+
+	// ── Debounced preview fetch ────────────────────────────────────
+	// 250ms debounce on slider mutations. AbortController cancels stale
+	// in-flight requests so rapid drags don't produce a late response that
+	// overwrites a newer one.
+	let previewTimer: ReturnType<typeof setTimeout> | null = null;
+	let previewAbort: AbortController | null = null;
+	let lastPreviewedCvar: number | null = null;
+
+	$effect(() => {
+		const cv = cvarLimit;
+		// Skip when the operator hasn't moved from the current calibration
+		// value — server band is already authoritative in that case.
+		if (cv === null || cv === undefined) return;
+		if (cv === lastPreviewedCvar) return;
+		if (previewTimer) clearTimeout(previewTimer);
+		previewTimer = setTimeout(() => {
+			void runPreview(cv);
+		}, 250);
+		return () => {
+			if (previewTimer) {
+				clearTimeout(previewTimer);
+				previewTimer = null;
+			}
+		};
+	});
+
+	// Clear the preview channel once a new construction completes so the
+	// freshly-authoritative server band wins. Without this, a stale drag
+	// preview would continue masking the real completed-run band.
+	$effect(() => {
+		if (workspace.runPhase === "done") {
+			previewBand = null;
+			previewSignal = null;
+			previewMinCvar = null;
+			previewError = null;
+			lastPreviewedCvar = null;
+		}
+	});
+
+	async function runPreview(cv: number): Promise<void> {
+		previewAbort?.abort();
+		const ac = new AbortController();
+		previewAbort = ac;
+		previewing = true;
+		previewError = null;
+		try {
+			const res = await workspace.previewCvar(cv, ac.signal);
+			if (ac.signal.aborted) return;
+			if (res === null) return;
+			previewBand = res.achievable_return_band;
+			previewSignal = res.operator_signal;
+			previewMinCvar = res.min_achievable_cvar;
+			lastPreviewedCvar = cv;
+		} catch (err) {
+			if (ac.signal.aborted) return;
+			if (err instanceof DOMException && err.name === "AbortError") return;
+			// Preserve last good preview; surface a non-blocking chip.
+			previewError =
+				err instanceof Error ? err.message : "Live preview unavailable";
+		} finally {
+			if (previewAbort === ac) previewAbort = null;
+			previewing = false;
+		}
+	}
 </script>
 
 <div class="rbp-root">
@@ -76,12 +154,25 @@
 			</p>
 		</div>
 	{:else}
-		<AchievableReturnBandChart
-			{band}
-			{cvarLimit}
-			{minAchievableCvar}
-			height={220}
-		/>
+		<div class="rbp-chart-frame" class:rbp-chart-frame--previewing={previewing}>
+			<AchievableReturnBandChart
+				{band}
+				{cvarLimit}
+				{minAchievableCvar}
+				height={220}
+			/>
+			{#if previewing}
+				<div class="rbp-preview-pulse" aria-label="Updating preview" data-testid="rbp-preview-spinner"></div>
+			{/if}
+		</div>
+		{#if previewError}
+			<div class="rbp-banner rbp-banner--preview-error" role="status" data-testid="rbp-preview-error">
+				<p class="rbp-banner__msg">
+					Live preview unavailable — showing the last completed run's band. Adjust
+					the slider or trigger a full build.
+				</p>
+			</div>
+		{/if}
 		<div class="rbp-stats" data-testid="rbp-stats">
 			{#if band}
 				<div class="rbp-stats__primary">
@@ -155,5 +246,29 @@
 		font-size: 11px;
 		line-height: 1.45;
 		color: var(--terminal-fg-secondary);
+	}
+	.rbp-banner--preview-error {
+		border-left-color: var(--terminal-status-warning);
+	}
+	.rbp-chart-frame {
+		position: relative;
+	}
+	.rbp-chart-frame--previewing {
+		opacity: 0.85;
+	}
+	.rbp-preview-pulse {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: var(--terminal-status-info, var(--terminal-fg-muted));
+		animation: rbp-preview-pulse 1.2s ease-in-out infinite;
+		pointer-events: none;
+	}
+	@keyframes rbp-preview-pulse {
+		0%, 100% { opacity: 0.3; transform: scale(0.85); }
+		50%      { opacity: 1;   transform: scale(1);    }
 	}
 </style>
