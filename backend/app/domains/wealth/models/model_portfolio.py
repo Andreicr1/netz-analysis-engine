@@ -64,6 +64,33 @@ class ModelPortfolio(OrganizationScopedMixin, Base):
     created_by: Mapped[str | None] = mapped_column(String(128))
 
 
+# ── PR-A12.2 — profile-differentiated CVaR defaults ─────────────────────
+# Institutional starting points for the portfolio-construction CVaR_95
+# budget. Operators override per-portfolio via the Builder slider
+# (PR-A13). Uniform 5% across all profiles defeated the operator's
+# mandate intent — Conservative expects tighter tail-loss containment
+# (~2.5%); Growth accepts more (~8%).
+_CVAR_DEFAULT_BY_PROFILE: dict[str, Decimal] = {
+    "conservative": Decimal("0.0250"),
+    "moderate": Decimal("0.0500"),
+    "growth": Decimal("0.0800"),
+    "aggressive": Decimal("0.1000"),
+}
+
+
+def default_cvar_limit_for_profile(profile: str | None) -> Decimal:
+    """Return the institutional CVaR_95 starting default for ``profile``.
+
+    Falls back to ``Decimal("0.0500")`` (moderate) for None / unknown
+    values so code paths without a resolved profile (legacy fixtures,
+    future profiles not yet calibrated) get a safe value rather than
+    KeyError. Lookup is case-insensitive.
+    """
+    if profile is None:
+        return Decimal("0.0500")
+    return _CVAR_DEFAULT_BY_PROFILE.get(profile.lower(), Decimal("0.0500"))
+
+
 class PortfolioCalibration(OrganizationScopedMixin, Base):
     """Tiered calibration surface for the Builder's CalibrationPanel.
 
