@@ -190,18 +190,22 @@ export class NetzApiClient {
 	async post<T>(
 		path: string,
 		body?: unknown,
-		options?: { timeoutMs?: number; headers?: Record<string, string> },
+		options?: { timeoutMs?: number; headers?: Record<string, string>; signal?: AbortSignal },
 	): Promise<T> {
 		const timeout = options?.timeoutMs ?? this.timeoutMs;
 		const baseHeaders = await this.headers();
 		const headers = options?.headers
 			? { ...baseHeaders, ...options.headers }
 			: baseHeaders;
+		// Caller-supplied AbortSignal wins over the default timeout. Required
+		// for debounced drag-preview patterns that need to cancel in-flight
+		// requests when a newer request supersedes (PR-A13.2).
+		const signal = options?.signal ?? AbortSignal.timeout(timeout);
 		const res = await fetch(buildUrl(this.baseUrl, path), {
 			method: "POST",
 			headers,
 			body: body !== undefined ? JSON.stringify(body) : undefined,
-			signal: AbortSignal.timeout(timeout),
+			signal,
 		});
 		return handleResponse<T>(res);
 	}

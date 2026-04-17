@@ -52,3 +52,17 @@ export interface CascadeTelemetry {
 	achievable_return_band: AchievableReturnBand | null;
 	operator_signal: OperatorSignal | null;
 }
+
+/**
+ * PR-A13.2 — POST /preview-cvar response. Mirrors
+ * ``backend/app/domains/wealth/schemas/preview.py``. Used by the Builder
+ * RiskBudgetPanel to populate the ``previewBand ?? serverBand`` channel
+ * while the operator drags the slider.
+ */
+export interface PreviewCvarResponse {
+	achievable_return_band: AchievableReturnBand;
+	min_achievable_cvar: number;
+	operator_signal: OperatorSignal;
+	cached: boolean;
+	wall_ms: number;
+}
