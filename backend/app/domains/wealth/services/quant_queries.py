@@ -1210,6 +1210,49 @@ async def fetch_strategic_weights_for_funds(
     return w_market
 
 
+# ── PR-A19 μ-trace instrumentation (diagnose-only) ───────────────────
+# Canonical trace tickers: SPY (S&P 500), VTEB (muni bonds), GLD (gold).
+# PR-A19 wires per-asset audit logs for these three through the entire
+# μ construction pipeline so operators can see exactly where the prior
+# collapses. No production logic is gated on these values; missing trace
+# assets emit ``mu_trace_asset_missing`` and are silently skipped.
+TRACE_TICKERS: tuple[str, ...] = ("SPY", "VTEB", "GLD")
+
+
+async def _resolve_trace_instrument_ids(
+    db: AsyncSession,
+    candidate_ids: list[uuid.UUID],
+) -> dict[str, str]:
+    """Resolve {ticker: instrument_id_str} for TRACE_TICKERS present in ``candidate_ids``.
+
+    Callers that don't hold Instrument rows can just pass the UUIDs they
+    already know about; we look up tickers in one query. Missing tickers
+    (excluded funds, not-in-universe, no NAV) are emitted as
+    ``mu_trace_asset_missing`` and skipped — the caller stays robust.
+    """
+    from app.domains.wealth.models.instrument import Instrument
+
+    if not candidate_ids:
+        return {}
+    stmt = select(Instrument.instrument_id, Instrument.ticker).where(
+        Instrument.instrument_id.in_(candidate_ids),
+        Instrument.ticker.in_(TRACE_TICKERS),
+    )
+    rows = (await db.execute(stmt)).all()
+    resolved: dict[str, str] = {}
+    for iid, ticker in rows:
+        if ticker:
+            resolved[ticker] = str(iid)
+    for ticker in TRACE_TICKERS:
+        if ticker not in resolved:
+            logger.info(
+                "mu_trace_asset_missing",
+                ticker=ticker,
+                reason="not_in_candidate_ids_or_no_ticker_match",
+            )
+    return resolved
+
+
 async def compute_fund_level_inputs(
     db: AsyncSession,
     instrument_ids: list[uuid.UUID],
@@ -1261,6 +1304,29 @@ async def compute_fund_level_inputs(
 
     # Keep only funds with data (clean_ids already ordered by instrument_ids)
     available_ids = clean_ids
+
+    # ── PR-A19 — resolve μ-trace instrument ids for SPY/VTEB/GLD ───────────
+    # trace_ticker_by_sid: {sid: ticker}; trace_indices: {ticker: idx in available_ids}.
+    _trace_sid_to_ticker = await _resolve_trace_instrument_ids(db, instrument_ids)
+    _trace_sid_to_ticker_inv = {sid: tkr for tkr, sid in _trace_sid_to_ticker.items()}
+    _available_set = set(available_ids)
+    trace_indices: dict[str, int] = {}
+    for _tkr, _sid in _trace_sid_to_ticker.items():
+        if _sid in _available_set:
+            trace_indices[_tkr] = available_ids.index(_sid)
+        else:
+            logger.info(
+                "mu_trace_asset_missing",
+                ticker=_tkr,
+                instrument_id=_sid,
+                reason="excluded_or_no_nav",
+            )
+    logger.info(
+        "mu_trace_bl_path",
+        path="multi_view_posterior",
+        legacy_path_called=False,
+        trace_resolved=list(trace_indices.keys()),
+    )
     if len(available_ids) < 2:
         raise ValueError(
             f"Need ≥2 funds with usable NAV data, found {len(available_ids)} "
@@ -1567,6 +1633,35 @@ async def compute_fund_level_inputs(
         mu_vec = annual_returns
         mean_weights_used = {"10y": 0.0, "5y": 0.0, "eq": 0.0}
         n_funds_by_history = {"10y+": 0, "5y+": 0, "1y_only": len(available_ids)}
+
+        # ── PR-A19 — legacy-path trace (historical_1y is the prod caller today) ─
+        _tail_n_leg = int(hist_tail.shape[0])
+        for _tkr, _idx in trace_indices.items():
+            _dmean = float(hist_tail[:, _idx].mean())
+            _dvar = float(hist_tail[:, _idx].var(ddof=1)) if _tail_n_leg > 1 else 0.0
+            logger.info(
+                "mu_trace_data_view",
+                ticker=_tkr,
+                instrument_id=available_ids[_idx],
+                daily_mean=_dmean,
+                daily_var=_dvar,
+                tail_n=_tail_n_leg,
+                q_annualized=float(annual_returns[_idx]),
+                omega_diag=None,
+                return_type_used=used_return_type,
+                legacy_historical_1y=True,
+            )
+            logger.info(
+                "mu_trace_bl_result",
+                ticker=_tkr,
+                instrument_id=available_ids[_idx],
+                mu_prior_i=None,
+                mu_posterior_i=float(annual_returns[_idx]),
+                mu_delta=None,
+                ic_views_count=0,
+                data_view_dominant=None,
+                legacy_historical_1y=True,
+            )
     else:
         # Fetch strategic weights (benchmark) — equal-weight fallback if profile missing
         if profile is not None:
@@ -1587,12 +1682,71 @@ async def compute_fund_level_inputs(
             return_horizons = await _fetch_return_horizons(
                 db, instrument_uuids, as_of_date,
             )
+
+            # ── L1 — mu_trace_horizons (per-trace asset 5Y/10Y raw + final) ─────
+            for _tkr, _idx in trace_indices.items():
+                _sid = available_ids[_idx]
+                _h = return_horizons.get(_sid, {"5y": None, "10y": None})
+                logger.info(
+                    "mu_trace_horizons",
+                    ticker=_tkr,
+                    instrument_id=_sid,
+                    calc_date_used=str(as_of_date),
+                    r5y_final=_h.get("5y"),
+                    r10y_final=_h.get("10y"),
+                    has_5y=_h.get("5y") is not None,
+                    has_10y=_h.get("10y") is not None,
+                    fund_risk_metrics_row_found=(_sid in return_horizons),
+                )
+
             mu_prior_vec, mean_weights_used, n_funds_by_history = _build_thbb_prior(
                 available_ids,
                 return_horizons,
                 annual_cov,
                 w_benchmark,
                 risk_aversion=gamma,
+            )
+
+            # ── L2/L3 — mu_trace_thbb_per_fund + mu_trace_thbb_buckets ─────────
+            # Recompute π slice + per-fund weights for trace assets only. Pure
+            # read-through; production path is unaffected.
+            _pi_vec = gamma * (annual_cov @ w_benchmark)
+            _trace_bucket_snapshot: dict[str, str] = {}
+            for _tkr, _idx in trace_indices.items():
+                _sid = available_ids[_idx]
+                _h = return_horizons.get(_sid, {"5y": None, "10y": None})
+                _r5 = _h.get("5y")
+                _r10 = _h.get("10y")
+                _has_10y = _r10 is not None
+                _has_5y = _r5 is not None
+                _w10, _w5, _weq = _thbb_weights_for_fund(_has_10y, _has_5y)
+                _bucket = "10y+" if _has_10y else ("5y+" if _has_5y else "1y_only")
+                _trace_bucket_snapshot[_tkr] = _bucket
+                logger.info(
+                    "mu_trace_thbb_per_fund",
+                    ticker=_tkr,
+                    instrument_id=_sid,
+                    w10=_w10, w5=_w5, weq=_weq,
+                    r10y=_r10, r5y=_r5,
+                    pi_i=float(_pi_vec[_idx]),
+                    mu_prior_i=float(mu_prior_vec[_idx]),
+                    bucket=_bucket,
+                    w_benchmark_i=float(w_benchmark[_idx]),
+                    gamma=float(gamma),
+                )
+            _trace_eq_in_1y_only = [
+                t for t, b in _trace_bucket_snapshot.items()
+                if b == "1y_only" and t in ("SPY", "GLD")
+            ]
+            logger.info(
+                "mu_trace_thbb_buckets",
+                n_10y_plus=int(n_funds_by_history.get("10y+", 0)),
+                n_5y_plus=int(n_funds_by_history.get("5y+", 0)),
+                n_1y_only=int(n_funds_by_history.get("1y_only", 0)),
+                n_total=len(available_ids),
+                mean_weights_used=mean_weights_used,
+                trace_buckets=_trace_bucket_snapshot,
+                trace_equities_in_1y_only_bucket=_trace_eq_in_1y_only,
             )
 
             from quant_engine.black_litterman_service import (
@@ -1608,6 +1762,24 @@ async def compute_fund_level_inputs(
                 source="data_view", confidence=None,
             )
 
+            # ── L4 — mu_trace_data_view (annualized Q + Ω_ii per trace asset) ──
+            _tail_n = min(TRADING_DAYS_PER_YEAR, returns_matrix.shape[0])
+            _tail = returns_matrix[-_tail_n:]
+            for _tkr, _idx in trace_indices.items():
+                _daily_mean = float(_tail[:, _idx].mean())
+                _daily_var = float(_tail[:, _idx].var(ddof=1)) if _tail_n > 1 else 0.0
+                logger.info(
+                    "mu_trace_data_view",
+                    ticker=_tkr,
+                    instrument_id=available_ids[_idx],
+                    daily_mean=_daily_mean,
+                    daily_var=_daily_var,
+                    tail_n=int(_tail_n),
+                    q_annualized=float(Q_data[_idx]),
+                    omega_diag=float(Omega_data[_idx, _idx]),
+                    return_type_used=used_return_type,
+                )
+
             # IC views from portfolio_views (empty list if no portfolio_id)
             ic_views = await _build_ic_views(
                 db, portfolio_id, available_ids, annual_cov, tau=TAU_PHASE_A,
@@ -1618,12 +1790,39 @@ async def compute_fund_level_inputs(
                 sigma=annual_cov,
                 views=[data_view, *ic_views],
                 tau=TAU_PHASE_A,
+                trace_indices=trace_indices,
             )
+
+            # ── L6 — mu_trace_bl_result (prior vs posterior per trace asset) ───
+            _tau_sigma_diag = TAU_PHASE_A * np.diag(annual_cov)
+            for _tkr, _idx in trace_indices.items():
+                _prior = float(mu_prior_vec[_idx])
+                _post = float(mu_vec[_idx])
+                _omega_ii = float(Omega_data[_idx, _idx])
+                _tau_sig_ii = float(_tau_sigma_diag[_idx])
+                logger.info(
+                    "mu_trace_bl_result",
+                    ticker=_tkr,
+                    instrument_id=available_ids[_idx],
+                    mu_prior_i=_prior,
+                    mu_posterior_i=_post,
+                    mu_delta=_post - _prior,
+                    ic_views_count=len(ic_views),
+                    data_view_dominant=(_omega_ii < _tau_sig_ii),
+                    omega_ii=_omega_ii,
+                    tau_sigma_ii=_tau_sig_ii,
+                )
 
     expected_returns = {fid: float(mu_vec[i]) for i, fid in enumerate(available_ids)}
 
     # ── 9. Fee adjustment (expense ratio subtracted from μ) ────────────────
-    if config and config.get("fee_adjustment", {}).get("enabled"):
+    _fee_enabled = bool(config and config.get("fee_adjustment", {}).get("enabled"))
+    _pre_fee_for_trace = {
+        tkr: expected_returns[available_ids[idx]]
+        for tkr, idx in trace_indices.items()
+    }
+    _er_for_trace: dict[str, float | None] = {tkr: None for tkr in trace_indices}
+    if _fee_enabled:
         from app.domains.wealth.models.instrument import Instrument
 
         inst_rows = (
@@ -1640,6 +1839,27 @@ async def compute_fund_level_inputs(
                 er = inst.attributes.get("expense_ratio_pct")
                 if er is not None:
                     expected_returns[fid] -= float(er)
+        for _tkr, _idx in trace_indices.items():
+            _sid = available_ids[_idx]
+            _inst = instruments_by_id.get(_sid)
+            _er = None
+            if _inst and _inst.attributes:
+                _er_val = _inst.attributes.get("expense_ratio_pct")
+                _er = float(_er_val) if _er_val is not None else None
+            _er_for_trace[_tkr] = _er
+
+    # ── L7 — mu_trace_fee_adj (one log per trace asset) ────────────────────
+    for _tkr, _idx in trace_indices.items():
+        _sid = available_ids[_idx]
+        logger.info(
+            "mu_trace_fee_adj",
+            ticker=_tkr,
+            instrument_id=_sid,
+            mu_pre_fee=_pre_fee_for_trace[_tkr],
+            expense_ratio_pct=_er_for_trace[_tkr],
+            mu_post_fee=expected_returns[_sid],
+            fee_adjustment_enabled=_fee_enabled,
+        )
 
     # ── 10. Regime probability snapshot (for audit — best effort) ──────────
     regime_probability_at_calc: float | None = None
@@ -1717,6 +1937,18 @@ async def compute_fund_level_inputs(
                 ),
                 "covariance_source": covariance_source,
                 "warn": bool(kappa_warn),
+            },
+            # PR-A19 — μ-trace plumbing for downstream LP invariant (L8).
+            "mu_trace": {
+                "tickers": TRACE_TICKERS,
+                "indices": dict(trace_indices),
+                "instrument_ids": {
+                    tkr: available_ids[idx] for tkr, idx in trace_indices.items()
+                },
+                "mu_after_quant_queries": {
+                    tkr: float(expected_returns[available_ids[idx]])
+                    for tkr, idx in trace_indices.items()
+                },
             },
         },
     )

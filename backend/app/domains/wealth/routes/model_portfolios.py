@@ -2318,6 +2318,22 @@ async def _run_construction_async(
             n_funds=len(opt_fund_ids),
         )
 
+        # PR-A19 — forward μ-trace plumbing so optimizer can emit L8 invariant
+        # check. Re-map trace_indices from ``available_ids`` space into
+        # ``opt_fund_ids`` space; drop tickers that fell out of the sub-slice.
+        _mu_trace_meta = _fli.inputs_metadata.get("mu_trace") or {}
+        _trace_sid_by_ticker = _mu_trace_meta.get("instrument_ids") or {}
+        _sub_id_to_idx = {fid: i for i, fid in enumerate(opt_fund_ids)}
+        _trace_indices_sub: dict[str, int] = {}
+        for _tkr, _sid in _trace_sid_by_ticker.items():
+            if _sid in _sub_id_to_idx:
+                _trace_indices_sub[_tkr] = _sub_id_to_idx[_sid]
+        _mu_trace_reference = {
+            tkr: float(sub_returns[_trace_sid_by_ticker[tkr]])
+            for tkr in _trace_indices_sub
+            if _trace_sid_by_ticker[tkr] in sub_returns
+        }
+
         fund_result = await optimize_fund_portfolio(
             fund_ids=opt_fund_ids,
             fund_blocks=sub_blocks,
@@ -2328,6 +2344,8 @@ async def _run_construction_async(
             skewness=sub_skewness,
             excess_kurtosis=sub_excess_kurtosis,
             caller_kind="construction_run",
+            trace_indices=_trace_indices_sub,
+            mu_trace_reference=_mu_trace_reference,
         )
 
         # PR-A12.4 — ``degraded`` is also a valid terminal status (Phase 3

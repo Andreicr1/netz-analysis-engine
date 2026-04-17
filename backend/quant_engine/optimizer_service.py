@@ -381,6 +381,8 @@ async def optimize_fund_portfolio(
     mandate: str | None = None,
     risk_aversion: float | None = None,
     caller_kind: str = "unspecified",
+    trace_indices: dict[str, int] | None = None,
+    mu_trace_reference: dict[str, float] | None = None,
 ) -> FundOptimizationResult:
     """Optimize fund-level weights with block-group sum constraints.
 
@@ -466,6 +468,45 @@ async def optimize_fund_portfolio(
         )
 
     mu = np.array([expected_returns.get(fid, 0.0) for fid in fund_ids])
+
+    # ── PR-A19 L8 — mu_trace_lp_input + invariant check (diagnose-only) ────
+    # Confirms nothing between ``compute_fund_level_inputs`` and the LP
+    # mutates μ. ``mu_trace_reference`` is optional: when present it holds
+    # ``{ticker: mu_after_quant_queries[ticker]}``. Any drift is logged but
+    # never raises — diagnostic first, fix second (per A19 spec non-goals).
+    if trace_indices:
+        _mu_min = float(mu.min()) if mu.size else 0.0
+        _mu_max = float(mu.max()) if mu.size else 0.0
+        _mu_median = float(np.median(mu)) if mu.size else 0.0
+        _mu_argmax_idx = int(np.argmax(mu)) if mu.size else -1
+        for _tkr, _idx in trace_indices.items():
+            if not (0 <= _idx < n):
+                continue
+            _mu_i = float(mu[_idx])
+            _cov_ii = float(cov_matrix[_idx, _idx]) if cov_matrix is not None else 0.0
+            _reference = (mu_trace_reference or {}).get(_tkr)
+            _invariant_delta = (
+                abs(_mu_i - _reference) if _reference is not None else None
+            )
+            _invariant_ok = (
+                _invariant_delta is not None and _invariant_delta < 1e-12
+            )
+            logger.info(
+                "mu_trace_lp_input",
+                ticker=_tkr,
+                fund_id=fund_ids[_idx],
+                mu_lp_i=_mu_i,
+                cov_diag_i=_cov_ii,
+                mu_reference=_reference,
+                invariant_delta=_invariant_delta,
+                invariant_ok=_invariant_ok,
+                mu_min=_mu_min,
+                mu_max=_mu_max,
+                mu_median=_mu_median,
+                mu_argmax_idx=_mu_argmax_idx,
+                mu_argmax_ticker_match=(_mu_argmax_idx == _idx),
+            )
+
     max_fund_w = constraints.max_single_fund_weight
     psd_cov = cp.psd_wrap(cov_matrix)
 
