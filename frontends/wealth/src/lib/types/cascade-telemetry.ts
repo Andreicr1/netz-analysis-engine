@@ -20,12 +20,48 @@ export type OperatorSignalKind =
 	| "feasible"
 	| "cvar_limit_below_universe_floor"
 	| "upstream_data_missing"
-	| "constraint_polytope_empty";
+	| "constraint_polytope_empty"
+	// PR-A14 — surfaces only when coverage < 0.20 (hard-fail).
+	| "universe_coverage_insufficient";
+
+/**
+ * PR-A14 — non-blocking secondary signal flagged by the executor when the
+ * approved universe covers < 85% of the profile's strategic allocation
+ * targets. Primary signal keeps its existing contract; consumers opt in
+ * to the secondary by reading ``operator_signal.secondary``.
+ */
+export interface OperatorSignalSecondary {
+	kind: "universe_coverage_insufficient";
+	binding: string | null;
+	message_key: string;
+	pct_covered: number | null;
+	missing_blocks_count: number | null;
+}
 
 export interface OperatorSignal {
 	kind: OperatorSignalKind;
 	binding: string | null;
 	message_key: string;
+	// PR-A14 — additive, None outside the coverage-warning window.
+	secondary?: OperatorSignalSecondary | null;
+	// PR-A14 — populated only when ``kind === "universe_coverage_insufficient"``.
+	pct_covered?: number | null;
+	missing_blocks_count?: number | null;
+}
+
+/**
+ * PR-A14 — universe coverage payload. Surfaces the structural fit between
+ * the approved universe (instruments_org) and the profile's strategic
+ * allocation blocks. Nullable for legacy runs that predate the surface.
+ */
+export interface CoverageTelemetry {
+	pct_covered: number;
+	n_total_blocks: number;
+	n_covered_blocks: number;
+	covered_blocks: string[];
+	missing_blocks: string[];
+	renormalization_scale: number | null;
+	hard_fail: boolean;
 }
 
 export type CascadeSummary =
@@ -51,6 +87,8 @@ export interface CascadeTelemetry {
 	min_achievable_cvar: number | null;
 	achievable_return_band: AchievableReturnBand | null;
 	operator_signal: OperatorSignal | null;
+	// PR-A14 — universe coverage surface (nullable for legacy runs).
+	coverage?: CoverageTelemetry | null;
 }
 
 /**

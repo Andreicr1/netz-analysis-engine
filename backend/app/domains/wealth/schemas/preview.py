@@ -42,6 +42,18 @@ class AchievableReturnBandDTO(BaseModel):
     upper_at_cvar: float
 
 
+class OperatorSignalSecondaryDTO(BaseModel):
+    """PR-A14 — non-blocking secondary signal (universe coverage gap)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["universe_coverage_insufficient"]
+    binding: str | None = None
+    message_key: str
+    pct_covered: float | None = None
+    missing_blocks_count: int | None = None
+
+
 class OperatorSignalDTO(BaseModel):
     """Sanitised operator signal — same enum as the persisted telemetry."""
 
@@ -52,9 +64,19 @@ class OperatorSignalDTO(BaseModel):
         "cvar_limit_below_universe_floor",
         "upstream_data_missing",
         "constraint_polytope_empty",
+        # PR-A14 — primary kind only when coverage < 0.20 (hard-fail).
+        "universe_coverage_insufficient",
     ]
     binding: str | None = None
     message_key: str
+    # PR-A14 — additive; None when coverage >= 0.85 or primary is already
+    # the coverage signal itself.
+    secondary: OperatorSignalSecondaryDTO | None = None
+    # PR-A14 — populated only when ``kind == universe_coverage_insufficient``
+    # (hard-fail path); primary carries the coverage numbers so the panel
+    # doesn't need to consult cascade_telemetry.coverage separately.
+    pct_covered: float | None = None
+    missing_blocks_count: int | None = None
 
 
 class PreviewCvarResponse(BaseModel):

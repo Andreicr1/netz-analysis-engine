@@ -2077,6 +2077,47 @@ async def _run_construction_async(
             fund_blocks[fid] = f["block_id"]
         fund_instrument_ids.append(uuid.UUID(fid))
 
+    # ── PR-A14: Universe coverage telemetry ──
+    # PR-A7 already renormalises block max_weights when the approved universe
+    # covers a subset of strategic blocks. A14 surfaces the gap to operators
+    # without changing the optimizer math:
+    #   - ``coverage_payload`` is attached to ``result["cascade"]`` below so
+    #     the executor can emit ``cascade_telemetry.coverage`` + a secondary
+    #     ``operator_signal`` when pct_covered < 0.85.
+    #   - Hard-fail at pct_covered < 0.20 (scale factor > 5×) — below that
+    #     floor the renormalisation violates block-max bands and the LP
+    #     result stops being meaningful. Signalled via a sentinel ValueError
+    #     that routes to the ``upstream_heuristic`` fallback below.
+    _coverage_covered_block_ids = sorted({b for b in fund_blocks.values() if b})
+    _coverage_all_block_ids = sorted(strategic_targets.keys())
+    _coverage_missing_block_ids = sorted(
+        bid for bid in _coverage_all_block_ids if bid not in _coverage_covered_block_ids
+    )
+    _coverage_raw_sum = sum(
+        strategic_targets.get(bid, 0.0) for bid in _coverage_covered_block_ids
+    )
+    _coverage_scale = (1.0 / _coverage_raw_sum) if _coverage_raw_sum > 0 else None
+    coverage_payload: dict[str, Any] = {
+        "pct_covered": round(float(_coverage_raw_sum), 4),
+        "n_total_blocks": len(_coverage_all_block_ids),
+        "n_covered_blocks": len(_coverage_covered_block_ids),
+        "covered_blocks": _coverage_covered_block_ids,
+        "missing_blocks": _coverage_missing_block_ids,
+        "renormalization_scale": (
+            round(float(_coverage_scale), 4) if _coverage_scale is not None else None
+        ),
+        "hard_fail": _coverage_raw_sum < 0.20,
+    }
+    logger.info(
+        "universe_coverage_audit",
+        profile=profile,
+        pct_covered=coverage_payload["pct_covered"],
+        n_covered=coverage_payload["n_covered_blocks"],
+        n_total=coverage_payload["n_total_blocks"],
+        missing=coverage_payload["missing_blocks"],
+        hard_fail=coverage_payload["hard_fail"],
+    )
+
     # ── 3+4. Fund-level optimization ──
     composition = None
     # PR-A9 — default conditioning payload for the SHRINKAGE SSE event even
@@ -2168,6 +2209,16 @@ async def _run_construction_async(
         # sum to 1.0 → infeasible.  Rescale proportionally so the optimizer
         # can find a valid fully-invested allocation.
         covered_blocks = set(sub_blocks.values())
+        # PR-A14: hard-fail at pct_covered < 0.20 — the renormalisation below
+        # produces scale factors > 5× which violate block-max invariants and
+        # make the LP result structurally meaningless. Route to the
+        # ``upstream_heuristic`` fallback with the coverage payload intact so
+        # the executor can swap the primary signal kind.
+        if coverage_payload["hard_fail"]:
+            raise ValueError(
+                "universe_coverage_insufficient: "
+                f"pct_covered={coverage_payload['pct_covered']} < 0.20 floor",
+            )
         active_raw = [bc for bc in block_constraints if bc.block_id in covered_blocks]
 
         target_sum = sum(
@@ -2441,6 +2492,10 @@ async def _run_construction_async(
         "winning_phase": cascade_winning,
         "min_achievable_cvar": cascade_min_cvar,
         "achievable_return_band": cascade_band,
+        # PR-A14 — coverage surface consumed by _build_cascade_telemetry to
+        # populate cascade_telemetry.coverage and drive the secondary
+        # operator signal.
+        "coverage": coverage_payload,
     }
 
     # Include TAA provenance for calibration_snapshot enrichment
