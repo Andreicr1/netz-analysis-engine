@@ -2392,6 +2392,33 @@ async def _run_construction_async(
 
     # ── 5. Fallback to block-level heuristic if fund-level failed ──
     if composition is None:
+        # PR-A17.1 C.3 — diagnose the post-A17 regression where every
+        # canonical portfolio lands on upstream_heuristic despite Phase 3
+        # succeeding. Capture fund_result state so we can attribute the
+        # fallback to the right cause (raised exception vs. status/weight
+        # gate miss vs. never-ran).
+        logger.info(
+            "construction_fell_to_heuristic_fallback",
+            portfolio_id=str(portfolio_id) if portfolio_id else None,
+            profile=profile,
+            fund_result_present=(fund_result is not None),
+            fund_result_status=(
+                fund_result.status if fund_result is not None else None
+            ),
+            fund_result_winning_phase=(
+                fund_result.winning_phase if fund_result is not None else None
+            ),
+            fund_result_weight_count=(
+                len(fund_result.weights) if fund_result is not None and fund_result.weights else 0
+            ),
+            fund_result_weight_sum=(
+                float(sum(fund_result.weights.values()))
+                if fund_result is not None and fund_result.weights else None
+            ),
+            fund_result_cvar_95=(
+                fund_result.cvar_95 if fund_result is not None else None
+            ),
+        )
         fallback_meta = OptimizationMeta(
             expected_return=0.0,
             portfolio_volatility=0.0,

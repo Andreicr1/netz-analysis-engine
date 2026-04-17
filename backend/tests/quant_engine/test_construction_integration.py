@@ -101,21 +101,24 @@ async def test_compute_fund_level_inputs_happy_path_20_fund_synthetic() -> None:
 
 @pytest.mark.asyncio
 async def test_compute_fund_level_inputs_collinear_funds_raises() -> None:
-    """Two exactly-collinear fund series must trip the κ error guard."""
+    """Pathologically rank-deficient series must trip the kappa error guard.
+
+    PR-A17.1 raised KAPPA_FALLBACK_THRESHOLD from 5e4 to 1e5. The previous
+    rank-3-in-R^4 fixture produced kappa post-Ledoit-Wolf that was tolerable
+    on the new ladder (decision='sample', no raise). Strengthen the fixture
+    to rank-1-in-R^4 (all series exact duplicates of series 0) so kappa
+    exceeds the pathological ceiling (1e6) even after shrinkage.
+    """
     rng = np.random.default_rng(11)
     n_days = 1260
-    base = rng.standard_normal(n_days) * 0.01
     ids = [uuid.uuid4() for _ in range(4)]
     start = date(2021, 4, 14)
     dates = [start + timedelta(days=i) for i in range(n_days)]
     returns: dict[str, dict[date, float]] = {}
-    # 3 independent + 1 exact duplicate of fund 0 → rank-3 matrix in R^4
-    for col, iid in enumerate(ids):
-        if col < 3:
-            series = rng.standard_normal(n_days) * 0.01
-        else:
-            series = np.array(list(returns[str(ids[0])].values()))
-        returns[str(iid)] = {d: float(series[i]) for i, d in enumerate(dates)}
+    # Rank-1: every fund is an exact copy of the first series.
+    base_series = rng.standard_normal(n_days) * 0.01
+    for iid in ids:
+        returns[str(iid)] = {d: float(base_series[i]) for i, d in enumerate(dates)}
 
     db = AsyncMock()
     with patch(

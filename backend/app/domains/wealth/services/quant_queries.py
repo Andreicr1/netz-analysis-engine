@@ -149,8 +149,20 @@ RISK_AVERSION_INSTITUTIONAL_DEFAULT = 2.5
 # original 1e4 error threshold fired spuriously on well-behaved institutional
 # universes. The fallback tier hands off to PR-A3 factor covariance (PSD-clamped)
 # when sample Σ is too collinear but not pathologically singular.
-KAPPA_WARN_THRESHOLD = 1e4        # proceed with sample Σ, emit warning
-KAPPA_FALLBACK_THRESHOLD = 5e4    # switch to factor covariance if available
+KAPPA_WARN_THRESHOLD = 1e4        # proceed with sample Sigma, emit warning
+# PR-A17.1 — raised 5e4 -> 1e5. The original 5e4 cutoff was aspirational: it
+# assumed the factor-model fallback would catch kappa in [5e4, 1e6). In
+# practice the factor_returns ingestion has a pre-existing dedup bug
+# ("Index contains duplicate entries", docs/ux/logs.txt:245, pre-A17) so
+# fit_available is False and the fallback path raises every time. Post-A17
+# the expanded universe (135-146 funds / T/N ~= 4.0-4.5) pushes sample kappa
+# into 5e4-1e5 legitimately — Ledoit-Wolf shrinkage + _repair_psd + CLARABEL
+# regularisation handle that band safely, and the empirical RU CVaR verifier
+# (realized_cvar_from_weights) catches downstream violations. Raise to 1e5
+# to unblock production construction until PR-A15 restores factor fallback.
+# ERROR threshold 1e6 intentionally unchanged — truly pathological cases
+# still raise.
+KAPPA_FALLBACK_THRESHOLD = 1e5    # switch to factor covariance if available
 KAPPA_ERROR_THRESHOLD = 1e6       # raise — truly pathological rank deficiency
 # Survivorship bias estimate (bps/year) — see design doc 2026-04-14
 SURVIVORSHIP_BIAS_BPS_RANGE = (50, 150)
@@ -178,7 +190,7 @@ class IllConditionedCovarianceError(Exception):
         self.n_obs = n_obs
         self.worst_eigenvalues = worst_eigenvalues or []
         detail = (
-            f"κ(Σ)={condition_number:.3e} exceeds error threshold ({KAPPA_ERROR_THRESHOLD:.0e}); "
+            f"kappa(Sigma)={condition_number:.3e} exceeds error threshold ({KAPPA_ERROR_THRESHOLD:.0e}); "
             f"N={n_funds}, T={n_obs}"
         )
         if self.worst_eigenvalues:
@@ -614,7 +626,7 @@ def check_covariance_conditioning(
             n_obs=0,
             worst_eigenvalues=worst,
             message=(
-                f"κ(Σ)={kappa:.3e} exceeds pathological threshold "
+                f"kappa(Sigma)={kappa:.3e} exceeds pathological threshold "
                 f"({KAPPA_ERROR_THRESHOLD:.0e}); rank deficient, not recoverable."
             ),
         )
@@ -628,6 +640,19 @@ def check_covariance_conditioning(
         )
 
     if kappa >= KAPPA_WARN_THRESHOLD:
+        # PR-A17.1 — surface the extended warn band [5e4, 1e5) that was
+        # previously routed to factor_fallback. Tracks how often sample
+        # Sigma is pushed into the harder region post-universe-expansion
+        # so we can see if the increase is transient or a new baseline.
+        if kappa >= 5e4:
+            logger.warning(
+                "kappa_in_extended_warn_band",
+                kappa=kappa,
+                min_eigenvalue=min_eig,
+                n_funds=cov_matrix.shape[0],
+                warn_threshold=KAPPA_WARN_THRESHOLD,
+                fallback_threshold=KAPPA_FALLBACK_THRESHOLD,
+            )
         return CovarianceConditioningResult(
             kappa=kappa,
             decision="sample",
@@ -1457,7 +1482,7 @@ async def compute_fund_level_inputs(
                 n_funds=annual_cov.shape[0],
                 n_obs=returns_matrix.shape[0],
                 message=(
-                    f"κ(Σ)={cond_primary.kappa:.3e} in fallback band "
+                    f"kappa(Sigma)={cond_primary.kappa:.3e} in fallback band "
                     f"[{KAPPA_FALLBACK_THRESHOLD:.0e}, {KAPPA_ERROR_THRESHOLD:.0e}) "
                     f"but factor fallback unavailable (source={covariance_source}, "
                     f"fit={'set' if fit is not None else 'none'}, "
@@ -1485,8 +1510,8 @@ async def compute_fund_level_inputs(
                 n_funds=annual_cov.shape[0],
                 n_obs=returns_matrix.shape[0],
                 message=(
-                    f"Both sample (κ={cond_primary.kappa:.3e}) and factor "
-                    f"(κ≥{KAPPA_ERROR_THRESHOLD:.0e}) covariances are "
+                    f"Both sample (kappa={cond_primary.kappa:.3e}) and factor "
+                    f"(kappa>={KAPPA_ERROR_THRESHOLD:.0e}) covariances are "
                     f"ill-conditioned."
                 ),
             ) from factor_exc
@@ -1496,8 +1521,8 @@ async def compute_fund_level_inputs(
                 n_funds=annual_cov.shape[0],
                 n_obs=returns_matrix.shape[0],
                 message=(
-                    f"Both sample (κ={cond_primary.kappa:.3e}) and factor "
-                    f"(κ={cond_factor.kappa:.3e}) covariances are "
+                    f"Both sample (kappa={cond_primary.kappa:.3e}) and factor "
+                    f"(kappa={cond_factor.kappa:.3e}) covariances are "
                     f"ill-conditioned."
                 ),
             )

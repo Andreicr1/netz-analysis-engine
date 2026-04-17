@@ -924,6 +924,32 @@ async def optimize_fund_portfolio(
     min_achievable_cvar: float | None = None
     if status3 in ("optimal", "optimal_inaccurate"):
         opt_w3 = _extract_weights(w3)
+        # PR-A17.1 C.1 — Phase 3 post-solve inspection. Diagnoses the
+        # "objective_value=0.0 → upstream_heuristic" regression: logs the
+        # extracted weight vector's shape (sum, max, nonzero count) plus
+        # the LP's empirical realized CVaR (daily + annualized) so we can
+        # distinguish genuine near-zero min-CVaR from degenerate solver output.
+        logger.info(
+            "phase_3_post_solve_inspection",
+            prob_status=str(prob3.status),
+            prob_value=float(prob3.value) if prob3.value is not None else None,
+            extracted_is_none=(opt_w3 is None),
+            weights_sum=float(opt_w3.sum()) if opt_w3 is not None else None,
+            weights_max=float(opt_w3.max()) if opt_w3 is not None else None,
+            weights_nonzero_count=int((opt_w3 > 1e-6).sum()) if opt_w3 is not None else None,
+            realized_cvar_daily=(
+                float(realized_cvar_from_weights(opt_w3, returns_scenarios, cvar_alpha))
+                if opt_w3 is not None else None
+            ),
+            realized_cvar_annual=(
+                float(realized_cvar_from_weights(opt_w3, returns_scenarios, cvar_alpha) * SQRT_252)
+                if opt_w3 is not None else None
+            ),
+            n_funds=n,
+            n_scenarios=int(returns_scenarios.shape[0]),
+            cvar_alpha=cvar_alpha,
+            effective_cvar_limit=effective_cvar_limit,
+        )
         if opt_w3 is not None:
             phase3_weights = opt_w3
             # prob3.value is the daily RU-LP objective; annualize to match
@@ -1019,6 +1045,33 @@ async def optimize_fund_portfolio(
             else True
         )
         winner_status = "optimal" if within_limit else "degraded"
+
+    # PR-A17.1 C.2 — winner-selection trace. Captures which phase won,
+    # whether each upstream phase was usable, and the full post-gate state
+    # that feeds _build_result. Pairs with the executor's cascade_summary
+    # mapping so we can see end-to-end how phase_3_min_cvar with
+    # objective_value=0.0 resolves.
+    logger.info(
+        "phase_winner_selection_trace",
+        phase1_usable=bool(_phase1_usable),
+        phase1_weights_valid=(phase1_weights is not None),
+        phase1_within_limit=_phase1_within_limit,
+        phase2_usable=bool(_phase2_usable),
+        phase2_weights_valid=(phase2_weights is not None),
+        phase2_within_limit=_phase2_within_limit,
+        phase3_weights_valid=(phase3_weights is not None),
+        phase3_weights_sum=(
+            float(phase3_weights.sum()) if phase3_weights is not None else None
+        ),
+        phase3_weights_nonzero=(
+            int((phase3_weights > 1e-6).sum()) if phase3_weights is not None else None
+        ),
+        min_achievable_cvar=min_achievable_cvar,
+        effective_cvar_limit=effective_cvar_limit,
+        winning_phase=winner_phase,
+        winner_status=winner_status,
+        winner_return=winner_return,
+    )
 
     assert winner_return is not None
     winner_cvar_ru = _cvar_from_ru(winner_w)
