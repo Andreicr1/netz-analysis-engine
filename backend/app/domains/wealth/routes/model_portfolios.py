@@ -2279,7 +2279,17 @@ async def _run_construction_async(
             caller_kind="construction_run",
         )
 
-        if fund_result.status.startswith("optimal") and fund_result.weights:
+        # PR-A12.4 — ``degraded`` is also a valid terminal status (Phase 3
+        # min-CVaR winner with cvar_above_limit). Treat it as a real result
+        # so the ``phase_3_min_cvar_above_limit`` signal reaches the
+        # executor instead of being swallowed by the upstream_heuristic
+        # fallback. Without this, the A12 always-solvable cascade collapses
+        # to a false "data missing" narrative whenever the universe floor
+        # exceeds the operator's CVaR limit.
+        if (
+            (fund_result.status.startswith("optimal") or fund_result.status == "degraded")
+            and fund_result.weights
+        ):
             opt_meta = OptimizationMeta(
                 expected_return=fund_result.expected_return,
                 portfolio_volatility=fund_result.portfolio_volatility,

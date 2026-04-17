@@ -694,6 +694,19 @@ async def optimize_fund_portfolio(
         """Annualized RU-empirical CVaR (matches Phase 1/3 LP objective, √252 scaled)."""
         return realized_cvar_from_weights(w_arr, returns_scenarios, cvar_alpha) * SQRT_252
 
+    # PR-A12.4 — winner-selection must verify realized CVaR against the
+    # operator's limit before promoting Phase 1 / Phase 2. The SCS fallback
+    # (CLARABEL → SCS) can return ``status=optimal`` with realized CVaR
+    # violating the constraint by orders of magnitude at its loose tolerance
+    # (eps=1e-5). Before this PR, the gate was ``phase1_weights is not None``
+    # — any optimal-looking solution was promoted, even when it delivered
+    # 2× the operator's CVaR budget. These flags are hoisted to function
+    # scope so winner selection can read them uniformly.
+    _phase1_within_limit: bool | None = None
+    _phase2_within_limit: bool | None = None
+    _USABLE_TOLERANCE = 1e-4  # annualized; tight enough to reject 2× violations,
+                              # loose enough to accept CLARABEL precision (~1e-6).
+
     phase1_weights: np.ndarray | None = None
     phase1_solver: str | None = None
     phase1_expected_return: float | None = None
@@ -762,10 +775,11 @@ async def optimize_fund_portfolio(
                 sum_weights=float(opt_w1.sum()),
             )
             phase1_within = (
-                phase1_cvar_ru <= effective_cvar_limit
+                phase1_cvar_ru <= effective_cvar_limit + _USABLE_TOLERANCE
                 if effective_cvar_limit is not None
                 else True
             )
+            _phase1_within_limit = phase1_within  # PR-A12.4 winner gate
             attempts.append(PhaseAttempt(
                 phase="phase_1_ru_max_return",
                 status="succeeded",
@@ -849,10 +863,11 @@ async def optimize_fund_portfolio(
                     phase2_cvar_ru = _cvar_from_ru(opt_w2)
                     phase2_cvar_cf = _compute_cvar(opt_w2)
                     phase2_within = (
-                        phase2_cvar_ru <= effective_cvar_limit
+                        phase2_cvar_ru <= effective_cvar_limit + _USABLE_TOLERANCE
                         if effective_cvar_limit is not None
                         else True
                     )
+                    _phase2_within_limit = phase2_within  # PR-A12.4 winner gate
                     attempts.append(PhaseAttempt(
                         phase="phase_2_ru_robust",
                         status="succeeded",
@@ -963,13 +978,31 @@ async def optimize_fund_portfolio(
     phase3_expected_return = float(mu @ phase3_weights)
 
     # ── Winner selection (Phase 1 > Phase 2 > Phase 3) ───────────────────
-    if phase1_weights is not None:
+    # PR-A12.4 — gate Phase 1 / Phase 2 promotion on realized CVaR honouring
+    # the operator's limit. Without this gate, the CLARABEL → SCS fallback
+    # could return ``status=optimal`` with realized CVaR >> limit (SCS's
+    # ``eps=1e-5`` tolerance is loose enough to admit large violations on
+    # heavy-tailed universes). Observed on Growth 2026-04-17 post PR-A12.3:
+    # Phase 1 (SCS) ``status=optimal``, realized 0.1714 vs limit 0.08 —
+    # 2.14× overshoot silently promoted. Phase 3 is always-solvable by
+    # construction (min-CVaR on the base polytope) and does not need
+    # a within-limit gate — its below-floor state is reflected in the
+    # ``phase_3_min_cvar_above_limit`` cascade summary downstream.
+    _phase1_usable = (
+        phase1_weights is not None
+        and (effective_cvar_limit is None or _phase1_within_limit is True)
+    )
+    _phase2_usable = (
+        phase2_weights is not None
+        and (effective_cvar_limit is None or _phase2_within_limit is True)
+    )
+    if _phase1_usable:
         winner_w = phase1_weights
         winner_phase = "phase_1_ru_max_return"
         winner_solver = phase1_solver
         winner_return = phase1_expected_return
         winner_status = "optimal"
-    elif phase2_weights is not None:
+    elif _phase2_usable:
         winner_w = phase2_weights
         winner_phase = "phase_2_ru_robust"
         winner_solver = phase2_solver
