@@ -133,6 +133,8 @@ EVENT_TYPE_LABELS: dict[str, str] = {
     "optimizer_phase_complete": "Optimizer phase completed",
     "optimizer_phase_completed": "Optimizer phase completed",
     "optimizer_cascade_completed": "Optimizer cascade completed",
+    # PR-A11 — cascade telemetry (sanitized operator-facing event)
+    "cascade_telemetry_completed": "Optimizer cascade summary",
     # Stress suite
     "stress_started": "Stress tests started",
     "stress_scenario_completed": "Stress scenario completed",

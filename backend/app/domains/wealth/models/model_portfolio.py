@@ -214,6 +214,13 @@ class PortfolioConstructionRun(OrganizationScopedMixin, Base):
     binding_constraints: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default="[]",
     )
+    # PR-A11 — cascade telemetry: per-phase audit trail + operator signal.
+    # Shape: {phase_attempts: [...], cascade_summary: str, phase2_max_var,
+    # min_achievable_variance, feasibility_gap_pct, operator_signal}.
+    # Legacy rows transparently carry the ``{}`` default.
+    cascade_telemetry: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default="{}",
+    )
     regime_context: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default="{}",
     )
