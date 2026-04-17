@@ -12,6 +12,7 @@ def _inst(
     name: str = "Test Fund",
     strategy_label: str | None = None,
     fund_type: str | None = None,
+    investment_geography: str | None = None,
     **extra_attrs: str,
 ) -> dict:
     attrs: dict = {k: v for k, v in {
@@ -19,12 +20,15 @@ def _inst(
         "fund_type": fund_type,
         **extra_attrs,
     }.items() if v is not None}
-    return {
+    payload: dict = {
         "asset_class": asset_class,
         "instrument_type": instrument_type,
         "name": name,
         "attributes": attrs,
     }
+    if investment_geography is not None:
+        payload["investment_geography"] = investment_geography
+    return payload
 
 
 @pytest.mark.parametrize(
@@ -167,6 +171,73 @@ def test_valid_blocks_filters_primary_to_secondary() -> None:
     valid = {"na_equity_large", "fi_us_aggregate", "cash"}
     block_id, reason = classify_block(inst, valid_blocks=valid)
     assert block_id == "na_equity_large"
+    assert reason == "strategy_label"
+
+
+@pytest.mark.parametrize(
+    "geography, expected_block, reason_suffix",
+    [
+        ("US", "na_equity_large", "us"),
+        ("North America", "na_equity_large", "north_america"),
+        ("Emerging Markets", "em_equity", "emerging_markets"),
+        ("Latin America", "em_equity", "latin_america"),
+        ("Europe", "dm_europe_equity", "europe"),
+        ("Asia Pacific", "dm_asia_equity", "asia_pacific"),
+        ("Japan", "dm_asia_equity", "japan"),
+        ("Global", "na_equity_large", "global"),
+    ],
+)
+def test_equity_geography_routing(
+    geography: str, expected_block: str, reason_suffix: str,
+) -> None:
+    inst = _inst(asset_class="equity", investment_geography=geography)
+    valid = {"na_equity_large", "em_equity", "dm_europe_equity", "dm_asia_equity"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == expected_block
+    assert reason == f"fallback_equity_{reason_suffix}"
+
+
+def test_equity_unknown_geography_falls_through_to_default() -> None:
+    inst = _inst(asset_class="equity", investment_geography="Antarctica")
+    valid = {"na_equity_large", "em_equity", "dm_europe_equity", "dm_asia_equity"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == "na_equity_large"
+    assert reason == "fallback_equity"
+
+
+def test_equity_missing_geography_falls_through_to_default() -> None:
+    """Legacy rows without investment_geography keep current PR-A6 behaviour."""
+    inst = _inst(asset_class="equity")  # investment_geography omitted
+    block_id, reason = classify_block(inst)
+    assert block_id == "na_equity_large"
+    assert reason == "fallback_equity"
+
+
+def test_equity_geography_mapped_block_not_registered_falls_through() -> None:
+    """When the mapped geography block is not in valid_blocks, fall
+    through to the plain ``na_equity_large`` default rather than silently
+    dropping the fund.
+    """
+    inst = _inst(asset_class="equity", investment_geography="Emerging Markets")
+    valid = {"na_equity_large"}  # em_equity intentionally absent
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == "na_equity_large"
+    assert reason == "fallback_equity"
+
+
+def test_strategy_label_beats_geography() -> None:
+    """Strategy-label cascade must run first; geography routing is
+    fallback-only so funds with granular labels are not re-routed by
+    their domicile region.
+    """
+    inst = _inst(
+        asset_class="equity",
+        investment_geography="Emerging Markets",
+        strategy_label="Growth",
+    )
+    valid = {"na_equity_large", "na_equity_growth", "em_equity"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == "na_equity_growth"
     assert reason == "strategy_label"
 
 

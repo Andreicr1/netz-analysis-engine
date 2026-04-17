@@ -80,6 +80,7 @@ _QUALIFIED_QUERY = text(
             iu.instrument_id,
             iu.instrument_type,
             iu.asset_class,
+            iu.investment_geography,
             iu.name,
             iu.attributes
         FROM instruments_universe iu
@@ -120,6 +121,7 @@ _QUALIFIED_QUERY = text(
         c.instrument_id,
         c.instrument_type,
         c.asset_class,
+        c.investment_geography,
         c.name,
         c.attributes
     FROM candidates c

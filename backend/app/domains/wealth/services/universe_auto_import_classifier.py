@@ -19,6 +19,20 @@ _PRIVATE_FUND_TYPES = frozenset({
 
 _HYBRID_PREFIXES = ("Allocation--", "Target Date", "Retirement")
 
+# Equity geography → block_id fallback map (consulted only when
+# strategy_label produces no valid block). Unknown geographies fall
+# through to na_equity_large, preserving PR-A6 behaviour for legacy rows.
+_EQUITY_GEOGRAPHY_BLOCK = {
+    "US": "na_equity_large",
+    "North America": "na_equity_large",
+    "Emerging Markets": "em_equity",
+    "Latin America": "em_equity",
+    "Europe": "dm_europe_equity",
+    "Asia Pacific": "dm_asia_equity",
+    "Japan": "dm_asia_equity",
+    "Global": "na_equity_large",
+}
+
 
 def classify_block(
     instrument: dict[str, Any],
@@ -79,8 +93,15 @@ def classify_block(
     if asset_class == "fixed_income":
         return "fi_us_aggregate", "fallback_fi"
 
-    # 4. Equity without strategy_label
+    # 4. Equity without strategy_label — geography-aware routing
     if asset_class == "equity":
+        geography = instrument.get("investment_geography") or ""
+        mapped_block = _EQUITY_GEOGRAPHY_BLOCK.get(geography)
+        if mapped_block is not None:
+            target = _first_valid([mapped_block])
+            if target is not None:
+                reason_geo = geography.lower().replace(" ", "_")
+                return target, f"fallback_equity_{reason_geo}"
         return "na_equity_large", "fallback_equity"
 
     # 5. Real estate fund type
