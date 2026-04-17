@@ -9,6 +9,7 @@
 	import { formatPercent, formatNumber } from "@investintell/ui";
 	import { BLOCK_GROUPS, blockDisplay, groupDisplay } from "$lib/constants/blocks";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import AchievableReturnBandChart from "$lib/components/portfolio/AchievableReturnBandChart.svelte";
 
 	// ── Build 3-level tree (same logic as BuilderTable, DnD stripped) ──
 
@@ -108,6 +109,30 @@
 
 	const hasRun = $derived(workspace.constructionRun !== null);
 
+	// PR-A13 — echo the achievable return band from the completed run so the
+	// operator can see their delivered return against the modeled band.
+	const echoBand = $derived(
+		workspace.constructionRun?.cascade_telemetry?.achievable_return_band ?? null,
+	);
+	const echoMinCvar = $derived(
+		workspace.constructionRun?.cascade_telemetry?.min_achievable_cvar ?? null,
+	);
+	const echoCvarLimit = $derived.by<number>(() => {
+		const snap = workspace.constructionRun?.calibration_snapshot as
+			| { cvar_limit?: number }
+			| null;
+		return typeof snap?.cvar_limit === "number" ? snap.cvar_limit : 0.05;
+	});
+	const realizedReturn = $derived.by<number | null>(() => {
+		const metrics = workspace.constructionRun?.ex_ante_metrics ?? null;
+		const r = metrics?.expected_return ?? metrics?.ann_return ?? null;
+		return typeof r === "number" ? r : null;
+	});
+	const realizedWithinBand = $derived.by<boolean | null>(() => {
+		if (realizedReturn === null || !echoBand) return null;
+		return realizedReturn >= echoBand.lower && realizedReturn <= echoBand.upper;
+	});
+
 	// ── Run diff data for Previous column (Session 3) ──
 	// Fetch diff when a construction run completes
 	$effect(() => {
@@ -157,6 +182,32 @@
 </script>
 
 <div class="wt-root">
+	{#if hasRun && echoBand}
+		<section class="wt-band-echo" aria-label="Achievable return band">
+			<header class="wt-band-echo__header">
+				<h4 class="wt-band-echo__title">Achievable return band</h4>
+				{#if realizedReturn !== null && realizedWithinBand !== null}
+					<span
+						class="wt-band-echo__chip"
+						class:wt-band-echo__chip--within={realizedWithinBand}
+						class:wt-band-echo__chip--below={!realizedWithinBand}
+					>
+						{#if realizedWithinBand}
+							Delivered {formatPercent(realizedReturn, 2)} — within band
+						{:else}
+							Delivered {formatPercent(realizedReturn, 2)} — below modeled band
+						{/if}
+					</span>
+				{/if}
+			</header>
+			<AchievableReturnBandChart
+				band={echoBand}
+				cvarLimit={echoCvarLimit}
+				minAchievableCvar={echoMinCvar}
+				height={180}
+			/>
+		</section>
+	{/if}
 	{#if tree.length === 0}
 		<div class="wt-empty">
 			{#if hasRun}
@@ -256,6 +307,45 @@
 		font-family: var(--terminal-font-mono);
 		font-size: var(--terminal-text-11);
 		color: var(--terminal-fg-secondary);
+	}
+
+	.wt-band-echo {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 12px 0 16px 0;
+		border-bottom: 1px solid var(--terminal-fg-muted);
+		margin-bottom: 12px;
+	}
+	.wt-band-echo__header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+	.wt-band-echo__title {
+		margin: 0;
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--terminal-fg-primary);
+	}
+	.wt-band-echo__chip {
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+		padding: 2px 8px;
+		border: 1px solid var(--terminal-fg-muted);
+		border-radius: 2px;
+	}
+	.wt-band-echo__chip--within {
+		color: var(--terminal-status-success);
+		border-color: var(--terminal-status-success);
+	}
+	.wt-band-echo__chip--below {
+		color: var(--terminal-status-warning);
+		border-color: var(--terminal-status-warning);
 	}
 
 	.wt-empty {

@@ -36,6 +36,7 @@
 	import CalibrationSelectField from "./CalibrationSelectField.svelte";
 	import CalibrationToggleField from "./CalibrationToggleField.svelte";
 	import CalibrationScenarioGroup from "./CalibrationScenarioGroup.svelte";
+	import RiskBudgetPanel from "./RiskBudgetPanel.svelte";
 
 	// ── Tier + preview state ─────────────────────────────────────
 	let tier = $state<"basic" | "advanced" | "expert">("basic");
@@ -309,21 +310,14 @@
 						originalValue={snapshot?.mandate as string | undefined}
 					/>
 
-					<CalibrationSliderField
-						id="cp-cvar-limit"
-						label="Tail loss budget"
-						description="Maximum tail loss (95% confidence) the portfolio may carry."
-						value={draft.cvar_limit}
-						onChange={(v) => update({ cvar_limit: v })}
-						min={0.02}
-						max={0.25}
-						step={0.005}
-						displayFormat="percent"
-						digits={2}
-						edgeLabels={["Tighter", "Looser"]}
-						accent="danger"
-						originalValue={snapshot?.cvar_limit as number | undefined}
-					/>
+					{#if workspace.portfolio}
+						<RiskBudgetPanel
+							portfolio={workspace.portfolio}
+							calibration={draft}
+							snapshot={snapshot}
+							onChange={(patch) => update(patch)}
+						/>
+					{/if}
 
 					<CalibrationSliderField
 						id="cp-max-weight"
