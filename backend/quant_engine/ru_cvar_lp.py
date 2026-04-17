@@ -25,6 +25,9 @@ from __future__ import annotations
 
 import cvxpy as cp
 import numpy as np
+import structlog
+
+_log = structlog.get_logger(__name__)
 
 
 def build_ru_cvar_constraints(
@@ -51,6 +54,19 @@ def build_ru_cvar_constraints(
         raise ValueError(f"alpha must be in (0, 1), got {alpha}")
     if cvar_limit <= 0.0:
         raise ValueError(f"cvar_limit must be > 0, got {cvar_limit}")
+
+    _log.info(
+        "ru_cvar_constraint_built",
+        function="build_ru_cvar_constraints",
+        alpha_input=float(alpha),
+        tail_fraction_used=float(1.0 - alpha),
+        T=int(T),
+        N=int(N),
+        cvar_limit_input=float(cvar_limit),
+        R_mean=float(returns_scenarios.mean()),
+        R_std=float(returns_scenarios.std()),
+        loss_sign_convention="L_i = -R_i @ w",
+    )
 
     zeta = cp.Variable()
     u = cp.Variable(T, nonneg=True)
@@ -111,7 +127,20 @@ def realized_cvar_from_weights(
     # For CVaR: average of losses exceeding VaR.
     var_threshold = float(np.quantile(losses, alpha))
     tail = losses[losses >= var_threshold]
-    if tail.size == 0:
+    tail_count = int(tail.size)
+    expected_tail_mass = (1.0 - alpha) * T
+    _log.info(
+        "ru_cvar_realized_verifier",
+        function="realized_cvar_from_weights",
+        alpha_input=float(alpha),
+        tail_fraction_used=float(1.0 - alpha),
+        T=int(T),
+        var_threshold=var_threshold,
+        tail_count_observed=tail_count,
+        tail_count_expected=float(expected_tail_mass),
+        loss_sign_convention="L_i = -R_i @ weights",
+    )
+    if tail_count == 0:
         return float(var_threshold)
     # RU definition equivalent: CVaR = zeta + mean(max(L - zeta, 0)) / (1 - alpha)
     # At zeta = VaR, this reduces to mean of tail losses when tail mass = (1-alpha).

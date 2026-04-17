@@ -732,6 +732,35 @@ async def optimize_fund_portfolio(
             phase1_expected_return = float(mu @ opt_w1)
             phase1_cvar_ru = _cvar_from_ru(opt_w1)
             phase1_cvar_cf = _compute_cvar(opt_w1)  # legacy comparator (positive = loss)
+            # PR-A12.3 diag — post-solve verification + solver-vs-verifier
+            # divergence check. Kept until live smoke confirms the
+            # annualization fix binds the constraint in production.
+            losses_p1 = -returns_scenarios @ opt_w1
+            realized_daily_p1 = float(
+                realized_cvar_from_weights(opt_w1, returns_scenarios, cvar_alpha),
+            )
+            zeta_star_p1 = float(np.quantile(losses_p1, cvar_alpha))
+            u_star_p1 = np.maximum(losses_p1 - zeta_star_p1, 0.0)
+            ru_direct_daily = float(
+                zeta_star_p1
+                + u_star_p1.sum() / ((1.0 - cvar_alpha) * losses_p1.shape[0])
+            )
+            logger.info(
+                "phase_1_post_solve_cvar_verification",
+                realized_daily=realized_daily_p1,
+                realized_annual=realized_daily_p1 * SQRT_252,
+                ru_direct_daily=ru_direct_daily,
+                ru_direct_annual=ru_direct_daily * SQRT_252,
+                lp_constraint_rhs_daily=lp_cvar_limit_daily,
+                lp_constraint_rhs_annual=effective_cvar_limit,
+                delta_annual_vs_limit=(realized_daily_p1 * SQRT_252)
+                - (effective_cvar_limit or 0.0),
+                cvar_alpha=cvar_alpha,
+                n_funds=int(opt_w1.shape[0]),
+                T=int(returns_scenarios.shape[0]),
+                solver=phase1_solver,
+                sum_weights=float(opt_w1.sum()),
+            )
             phase1_within = (
                 phase1_cvar_ru <= effective_cvar_limit
                 if effective_cvar_limit is not None
