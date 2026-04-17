@@ -22,6 +22,25 @@ _HYBRID_PREFIXES = ("Allocation--", "Target Date", "Retirement")
 # Equity geography → block_id fallback map (consulted only when
 # strategy_label produces no valid block). Unknown geographies fall
 # through to na_equity_large, preserving PR-A6 behaviour for legacy rows.
+# FI name heuristics — substring, case-insensitive, ordered by specificity
+# (specific patterns like TIPS / TREASURY checked before generic). When the
+# target block is not registered in ``allocation_blocks``, the classifier
+# falls through to the next heuristic and ultimately to ``fi_us_aggregate``.
+_FI_NAME_HEURISTICS: tuple[tuple[str, str], ...] = (
+    ("TIPS", "fi_us_tips"),
+    ("INFLATION-PROTECTED", "fi_us_tips"),
+    ("INFLATION PROTECTED", "fi_us_tips"),
+    ("TREASURY", "fi_us_treasury"),
+    ("T-BILL", "fi_us_treasury"),
+    ("GOVT", "fi_us_treasury"),
+    ("GOVERNMENT BOND", "fi_us_treasury"),
+    ("HIGH YIELD", "fi_us_high_yield"),
+    ("HIGH-YIELD", "fi_us_high_yield"),
+    ("JUNK BOND", "fi_us_high_yield"),
+    ("MUNICIPAL", "fi_us_muni"),
+    ("MUNI BOND", "fi_us_muni"),
+)
+
 _EQUITY_GEOGRAPHY_BLOCK = {
     "US": "na_equity_large",
     "North America": "na_equity_large",
@@ -89,9 +108,32 @@ def classify_block(
     if asset_class == "cash" or instrument_type == "money_market":
         return "cash", "asset_class_cash"
 
-    # 3. Fixed income without strategy_label
+    # 3. Fixed income without strategy_label — geography + name heuristics
     if asset_class == "fixed_income":
-        return "fi_us_aggregate", "fallback_fi"
+        geography = instrument.get("investment_geography") or ""
+
+        # 3a. Non-US FI via geography (falls through if the target block
+        # is not seeded in allocation_blocks).
+        if geography == "Emerging Markets":
+            target = _first_valid(["fi_em_debt"])
+            if target is not None:
+                return target, "fallback_fi_em"
+        elif geography == "Europe":
+            target = _first_valid(["fi_europe_aggregate"])
+            if target is not None:
+                return target, "fallback_fi_europe"
+
+        # 3b. US FI sub-classification via fund name (deterministic
+        # substring, case-insensitive, specificity order).
+        name_upper = (name or "").upper()
+        for needle, target_block in _FI_NAME_HEURISTICS:
+            if needle in name_upper:
+                target = _first_valid([target_block])
+                if target is not None:
+                    return target, f"fallback_fi_name_{target_block}"
+
+        # 3c. Default — aggregate US bond bucket.
+        return "fi_us_aggregate", "fallback_fi_aggregate"
 
     # 4. Equity without strategy_label — geography-aware routing
     if asset_class == "equity":

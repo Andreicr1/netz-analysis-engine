@@ -188,6 +188,7 @@ async def fetch_qualified_instruments(db: AsyncSession) -> list[dict[str, Any]]:
             "instrument_id": row["instrument_id"],
             "instrument_type": row["instrument_type"],
             "asset_class": row["asset_class"],
+            "investment_geography": row["investment_geography"] or "",
             "name": row["name"] or "",
             "attributes": row["attributes"] or {},
         })
