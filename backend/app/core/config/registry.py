@@ -131,7 +131,7 @@ _REGISTRY: tuple[ConfigDomain, ...] = (
         config_type="optimizer",
         ownership="config_service",
         client_visible=False,
-        description="Wealth construction-engine optimizer tunables (cf_relaxation_factor, etc.)",
+        description="Wealth construction-engine optimizer tunables (reserved for future per-tenant overrides)",
         required=False,
     ),
 )

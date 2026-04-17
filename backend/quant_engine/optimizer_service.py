@@ -193,7 +193,6 @@ async def optimize_portfolio(
     objective: str = "max_sharpe",
     mandate: str | None = None,
     risk_aversion: float | None = None,
-    cf_relaxation_factor: float = 1.3,
 ) -> OptimizationResult:
     """Optimize portfolio weights using cvxpy.
 
@@ -381,7 +380,7 @@ async def optimize_fund_portfolio(
     cvar_alpha: float = 0.95,
     mandate: str | None = None,
     risk_aversion: float | None = None,
-    cf_relaxation_factor: float = 1.3,
+    caller_kind: str = "unspecified",
 ) -> FundOptimizationResult:
     """Optimize fund-level weights with block-group sum constraints.
 
@@ -404,8 +403,11 @@ async def optimize_fund_portfolio(
     feasibility reasons — only for upstream data failures (no funds, PSD
     violation, empty polytope).
 
-    ``cf_relaxation_factor`` is retained in the signature for one release
-    of backwards compatibility; PR-A12 ignores it (dead param).
+    ``caller_kind`` tags the call site so the auto-synthesis warning
+    ("returns_scenarios_missing_using_covariance_synth") can be filtered
+    by dashboard. Production construction runs should always pass
+    ``caller_kind="construction_run"`` AND ``returns_scenarios`` — if
+    the warning fires with that tag it is a P1 bug.
 
     Constraints:
         sum(w) == 1                          (fully invested)
@@ -414,7 +416,6 @@ async def optimize_fund_portfolio(
         sum(w[funds_in_block]) >= block_min  (block floor)
         sum(w[funds_in_block]) <= block_max  (block ceiling)
     """
-    del cf_relaxation_factor  # PR-A12: dead param, kept for compat
     n = len(fund_ids)
     cvar_limit = constraints.cvar_limit
 
@@ -617,6 +618,7 @@ async def optimize_fund_portfolio(
         logger.warning(
             "returns_scenarios_missing_using_covariance_synth",
             n_funds=n,
+            caller_kind=caller_kind,
         )
         # Deterministic seed derived from fund_ids so repeated calls match.
         seed = int(abs(hash(tuple(fund_ids))) % (2**32 - 1))

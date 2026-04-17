@@ -82,9 +82,12 @@ class TestRegistryLookup:
         assert "wealth" in verticals
 
     def test_wealth_optimizer_registered_as_optional(self):
-        """PR-A9.1: wealth/optimizer must be registered (otherwise construction
-        runs raise ConfigMissError). It must be required=False so that absence
-        of seed/override falls through to in-code default cf_relaxation_factor=1.3.
+        """PR-A9.1: wealth/optimizer must be registered (otherwise any future
+        ``config_svc.get("wealth", "optimizer", ...)`` call would raise
+        ConfigMissError). Currently there is no production reader, but the
+        domain is reserved for future per-tenant overrides. required=False
+        so absence of seed/override returns an empty ConfigResult instead
+        of raising.
         """
         domain = ConfigRegistry.get("wealth", "optimizer")
         assert domain is not None, "wealth/optimizer must be registered"
