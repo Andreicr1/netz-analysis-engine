@@ -1969,13 +1969,20 @@ async def _run_construction_async(
 
     strategic_targets = {a.block_id: float(a.target_weight) for a in allocations}
 
-    # ── Resolve CVaR limit from profile config ──
+    # ── Resolve CVaR limit via the institutional priority chain ──
     # PR-A13.1 — honour the preview override when supplied so the drag-band
     # endpoint can probe arbitrary operator CVaR limits without persisting.
+    # PR-A12.3 round-2 — ``_resolve_cvar_limit`` now consults
+    # ``portfolio_calibration.cvar_limit`` first (Layer 1, per-portfolio
+    # override seeded by A12.2), then the ConfigService profile default,
+    # then the hardcoded safety net. Before this change, only the middle
+    # layer was read and the A12.2 per-portfolio column was dead.
     if cvar_limit_override is not None:
-        cvar_limit = float(cvar_limit_override)
+        cvar_limit = float(abs(cvar_limit_override))
     else:
-        cvar_limit = await _resolve_cvar_limit(db, profile)
+        cvar_limit = await _resolve_cvar_limit(
+            db, profile, portfolio_id=portfolio_id, org_id=org_id,
+        )
 
     # ── TAA: Resolve dynamic regime bands (or fallback to static IPS) ──
     from app.domains.wealth.models.allocation import TaaRegimeState
@@ -2655,23 +2662,70 @@ async def _load_universe_funds(
 async def _resolve_cvar_limit(
     db: AsyncSession,
     profile: str,
+    *,
+    portfolio_id: uuid.UUID | None = None,
+    org_id: str | None = None,
 ) -> float:
-    """Resolve CVaR limit from ConfigService, falling back to hardcoded defaults."""
+    """Resolve the effective CVaR limit for a construction run.
+
+    Priority chain (institutional asset-management convention):
+
+    1. ``portfolio_calibration.cvar_limit`` — per-portfolio override. Seeded
+       by PR-A12.2 per-profile defaults (Conservative 2.5% / Moderate 5% /
+       Growth 8%) and further customized by the operator via the Builder
+       slider (PR-A13). Positive magnitude; normalized via ``abs()``.
+    2. ``vertical_config_defaults.liquid_funds/portfolio_profiles`` — org-wide
+       per-profile default. Signed (negative P/L). Normalized via ``abs()``.
+    3. Hardcoded safety net (``0.05``) — covers uncovered/unknown profiles
+       and silences ``config_service`` cold starts.
+
+    Signed vs. unsigned is canonicalized at every return site. The optimizer
+    takes ``abs()`` again defensively, but this function guarantees the
+    output is already a positive magnitude.
+
+    PR-A12.3 — before this fix, the function consulted ONLY Layer 2. The
+    per-portfolio column (written by PR-A12.2 migration 0143) was a dead
+    field in the hot path; every construction run received the profile-
+    wide ConfigService default regardless of the operator's calibration.
+    Observed on 2026-04-17: Conservative (operator 2.5%) → LP 8% (3.2×),
+    Moderate (5%) → 6% (1.2×), Growth (8%) → 12% (1.5×).
+    """
+    # Layer 1 — per-portfolio override.
+    if portfolio_id is not None:
+        try:
+            cal_row = await db.execute(
+                select(PortfolioCalibration.cvar_limit).where(
+                    PortfolioCalibration.portfolio_id == portfolio_id,
+                ),
+            )
+            per_portfolio = cal_row.scalar_one_or_none()
+            if per_portfolio is not None:
+                return float(abs(per_portfolio))
+        except Exception:  # pragma: no cover — defensive
+            logger.debug(
+                "resolve_cvar_limit_calibration_read_failed",
+                portfolio_id=str(portfolio_id),
+            )
+
+    # Layer 2 — org-wide profile default via ConfigService.
     try:
         from app.core.config.config_service import ConfigService
 
         config_svc = ConfigService(db)
-        result = await config_svc.get("liquid_funds", "portfolio_profiles")
+        result = await config_svc.get(
+            "liquid_funds", "portfolio_profiles", org_id,
+        )
         profiles = result.value.get("profiles", {})
         profile_cfg = profiles.get(profile, {})
         cvar_cfg = profile_cfg.get("cvar", {})
         limit = cvar_cfg.get("limit")
         if limit is not None:
-            return float(limit)
+            return float(abs(limit))
     except Exception:
         logger.debug("config_service_cvar_fallback", profile=profile)
 
-    return _DEFAULT_CVAR_LIMITS.get(profile, -0.08)
+    # Layer 3 — hardcoded safety net.
+    return float(abs(_DEFAULT_CVAR_LIMITS.get(profile, -0.05)))
 
 
 async def _resolve_all_cvar_limits(db: AsyncSession) -> dict[str, float]:
