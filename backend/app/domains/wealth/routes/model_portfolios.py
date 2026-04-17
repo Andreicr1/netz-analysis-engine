@@ -251,10 +251,16 @@ async def create_model_portfolio(
     # provided so the new draft inherits the calibration discipline
     # of the source model. ``expert_overrides`` is also copied so any
     # JSONB knobs survive the fork.
+    # PR-A12.2 — seed the per-profile institutional CVaR default when
+    # there is no source calibration to clone from.
+    from app.domains.wealth.models.model_portfolio import (
+        default_cvar_limit_for_profile,
+    )
     calibration = PortfolioCalibration(
         organization_id=org_uuid,
         portfolio_id=portfolio.id,
         updated_by=actor.actor_id,
+        cvar_limit=default_cvar_limit_for_profile(portfolio.profile),
     )
     if source_calibration is not None:
         for column in (
@@ -638,7 +644,10 @@ _ADVANCED_FIELDS: tuple[str, ...] = (
 
 
 async def _ensure_calibration(
-    db: AsyncSession, portfolio_id: uuid.UUID, organization_id: uuid.UUID | str,
+    db: AsyncSession,
+    portfolio_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
+    profile: str | None = None,
 ) -> PortfolioCalibration:
     """Fetch-or-create the ``portfolio_calibration`` row for a portfolio.
 
@@ -648,6 +657,11 @@ async def _ensure_calibration(
     Basic tier starts from the org-wide institutional baseline instead
     of an empty form. The frontend never needs to handle the
     ``no calibration`` case.
+
+    PR-A12.2 — when ``profile`` is provided and a new row is created,
+    ``cvar_limit`` is seeded with the institutional default for that
+    profile (Conservative 2.5%, Moderate 5%, Growth 8%, Aggressive 10%).
+    Existing rows are returned unchanged.
     """
     existing = await db.execute(
         select(PortfolioCalibration).where(
@@ -663,9 +677,13 @@ async def _ensure_calibration(
         if isinstance(organization_id, uuid.UUID)
         else uuid.UUID(str(organization_id))
     )
+    from app.domains.wealth.models.model_portfolio import (
+        default_cvar_limit_for_profile,
+    )
     row = PortfolioCalibration(
         organization_id=org_uuid,
         portfolio_id=portfolio_id,
+        cvar_limit=default_cvar_limit_for_profile(profile),
     )
     db.add(row)
     await db.flush()
@@ -700,7 +718,7 @@ async def get_portfolio_calibration(
             detail=f"Model portfolio {portfolio_id} not found",
         )
 
-    row = await _ensure_calibration(db, portfolio_id, org_id)
+    row = await _ensure_calibration(db, portfolio_id, org_id, profile=portfolio.profile)
     return PortfolioCalibrationRead.model_validate(row)
 
 
@@ -739,7 +757,7 @@ async def update_portfolio_calibration(
             detail=f"Model portfolio {portfolio_id} not found",
         )
 
-    row = await _ensure_calibration(db, portfolio_id, org_id)
+    row = await _ensure_calibration(db, portfolio_id, org_id, profile=portfolio.profile)
 
     data = payload.model_dump(exclude_unset=True)
 
