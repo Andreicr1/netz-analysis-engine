@@ -559,12 +559,25 @@ async def optimize_fund_portfolio(
         min_achievable_cvar: float | None = None,
         achievable_return_band: dict[str, float] | None = None,
     ) -> FundOptimizationResult:
-        """Build FundOptimizationResult from optimized weights."""
+        """Build FundOptimizationResult from optimized weights.
+
+        PR-A12.3 — ``cvar_95`` is the **empirical** RU CVaR annualized via
+        √252, reported with P/L sign (negative = loss). Previously returned
+        the Cornish-Fisher parametric CVaR on annual moments, which could
+        diverge silently from the value the LP actually constrained.
+        """
         ret = float(mu @ w_arr)
         vol = float(np.sqrt(w_arr @ cov_matrix @ w_arr))
         sharpe = (ret - risk_free_rate) / vol if vol > 0 else 0.0
-        cvar_neg = _compute_cvar(w_arr)
-        cvar_ok = cvar_neg >= cvar_limit if cvar_limit is not None else True
+        # Empirical annualized CVaR magnitude (matches the LP's realized value).
+        cvar_emp_annual = realized_cvar_from_weights(w_arr, returns_scenarios, cvar_alpha) * SQRT_252
+        # P/L sign convention: loss expressed as a negative number.
+        cvar_95_neg = -cvar_emp_annual
+        cvar_ok = (
+            cvar_emp_annual <= effective_cvar_limit + 1e-4
+            if effective_cvar_limit is not None
+            else True
+        )
 
         fw = {fid: round(float(w_arr[i]), 6) for i, fid in enumerate(fund_ids)}
         bw: dict[str, float] = {}
@@ -578,7 +591,7 @@ async def optimize_fund_portfolio(
             expected_return=round(ret, 6),
             portfolio_volatility=round(vol, 6),
             sharpe_ratio=round(sharpe, 4),
-            cvar_95=round(cvar_neg, 6),
+            cvar_95=round(cvar_95_neg, 6),
             cvar_limit=cvar_limit,
             cvar_within_limit=cvar_ok,
             status=status,
@@ -613,6 +626,18 @@ async def optimize_fund_portfolio(
         build_ru_cvar_objective,
         realized_cvar_from_weights,
     )
+
+    # PR-A12.3 — annualization convention for the RU CVaR cascade.
+    #
+    # Inputs and outputs are annualized to match the operator's mental model
+    # (``cvar_limit`` expresses an annual tail loss). The RU LP internally
+    # operates on daily scenarios, so the limit is rescaled to daily before
+    # entering the constraint and every CVaR the function returns is rescaled
+    # back to annual via sqrt(252). Scenarios are NEVER rescaled in place —
+    # that would break the iid distributional assumption. This docstring is
+    # load-bearing for PR-A13/A13.1; changing the convention here requires
+    # updating the Builder slider ranges and the preview endpoint in lockstep.
+    SQRT_252 = float(np.sqrt(252.0))
 
     if returns_scenarios is None or returns_scenarios.size == 0:
         logger.warning(
@@ -657,11 +682,17 @@ async def optimize_fund_portfolio(
     elif cvar_limit is not None:
         effective_cvar_limit = float(abs(cvar_limit))
 
+    # Daily-scale limit fed into the LP constraint; annual limit preserved for
+    # telemetry + within-limit checks against annualized realized CVaR.
+    lp_cvar_limit_daily: float | None = (
+        effective_cvar_limit / SQRT_252 if effective_cvar_limit is not None else None
+    )
+
     lambda_risk = resolve_risk_aversion(risk_aversion, mandate)  # Phase 2 only
 
     def _cvar_from_ru(w_arr: np.ndarray) -> float:
-        """RU-empirical CVaR (matches Phase 1/3 LP objective)."""
-        return realized_cvar_from_weights(w_arr, returns_scenarios, cvar_alpha)
+        """Annualized RU-empirical CVaR (matches Phase 1/3 LP objective, √252 scaled)."""
+        return realized_cvar_from_weights(w_arr, returns_scenarios, cvar_alpha) * SQRT_252
 
     phase1_weights: np.ndarray | None = None
     phase1_solver: str | None = None
@@ -673,12 +704,12 @@ async def optimize_fund_portfolio(
     # ── Phase 1 — RU CVaR-constrained max return ──────────────────────────
     w1 = cp.Variable(n, nonneg=True)
     phase1_constraints = _build_base_constraints(w1)
-    if effective_cvar_limit is not None:
+    if lp_cvar_limit_daily is not None:
         ru_cs, _, _ = build_ru_cvar_constraints(
             w_var=w1,
             returns_scenarios=returns_scenarios,
             alpha=cvar_alpha,
-            cvar_limit=effective_cvar_limit,
+            cvar_limit=lp_cvar_limit_daily,
         )
         phase1_constraints.extend(ru_cs)
 
@@ -701,6 +732,35 @@ async def optimize_fund_portfolio(
             phase1_expected_return = float(mu @ opt_w1)
             phase1_cvar_ru = _cvar_from_ru(opt_w1)
             phase1_cvar_cf = _compute_cvar(opt_w1)  # legacy comparator (positive = loss)
+            # PR-A12.3 diag — post-solve verification + solver-vs-verifier
+            # divergence check. Kept until live smoke confirms the
+            # annualization fix binds the constraint in production.
+            losses_p1 = -returns_scenarios @ opt_w1
+            realized_daily_p1 = float(
+                realized_cvar_from_weights(opt_w1, returns_scenarios, cvar_alpha),
+            )
+            zeta_star_p1 = float(np.quantile(losses_p1, cvar_alpha))
+            u_star_p1 = np.maximum(losses_p1 - zeta_star_p1, 0.0)
+            ru_direct_daily = float(
+                zeta_star_p1
+                + u_star_p1.sum() / ((1.0 - cvar_alpha) * losses_p1.shape[0])
+            )
+            logger.info(
+                "phase_1_post_solve_cvar_verification",
+                realized_daily=realized_daily_p1,
+                realized_annual=realized_daily_p1 * SQRT_252,
+                ru_direct_daily=ru_direct_daily,
+                ru_direct_annual=ru_direct_daily * SQRT_252,
+                lp_constraint_rhs_daily=lp_cvar_limit_daily,
+                lp_constraint_rhs_annual=effective_cvar_limit,
+                delta_annual_vs_limit=(realized_daily_p1 * SQRT_252)
+                - (effective_cvar_limit or 0.0),
+                cvar_alpha=cvar_alpha,
+                n_funds=int(opt_w1.shape[0]),
+                T=int(returns_scenarios.shape[0]),
+                solver=phase1_solver,
+                sum_weights=float(opt_w1.sum()),
+            )
             phase1_within = (
                 phase1_cvar_ru <= effective_cvar_limit
                 if effective_cvar_limit is not None
@@ -762,12 +822,12 @@ async def optimize_fund_portfolio(
 
             w2 = cp.Variable(n, nonneg=True)
             constraints2 = _build_base_constraints(w2)
-            if effective_cvar_limit is not None:
+            if lp_cvar_limit_daily is not None:
                 ru_cs2, _, _ = build_ru_cvar_constraints(
                     w_var=w2,
                     returns_scenarios=returns_scenarios,
                     alpha=cvar_alpha,
-                    cvar_limit=effective_cvar_limit,
+                    cvar_limit=lp_cvar_limit_daily,
                 )
                 constraints2.extend(ru_cs2)
 
@@ -851,7 +911,13 @@ async def optimize_fund_portfolio(
         opt_w3 = _extract_weights(w3)
         if opt_w3 is not None:
             phase3_weights = opt_w3
-            min_achievable_cvar = float(prob3.value) if prob3.value is not None else _cvar_from_ru(opt_w3)
+            # prob3.value is the daily RU-LP objective; annualize to match
+            # effective_cvar_limit and the band panel's operator-facing units.
+            min_achievable_cvar = (
+                float(prob3.value) * SQRT_252
+                if prob3.value is not None
+                else _cvar_from_ru(opt_w3)
+            )
             phase3_cvar_cf = _compute_cvar(opt_w3)
             phase3_within = (
                 min_achievable_cvar <= effective_cvar_limit
