@@ -273,3 +273,41 @@ def test_polytope_empty_returns_constraint_polytope_empty() -> None:
 
     assert result.status == "constraint_polytope_empty"
     assert result.weights == {}
+
+
+# ── PR-A12.1 — caller_kind propagates to synthesis warning ──────────
+
+
+def test_caller_kind_tag_flows_to_scenarios_synth_warning(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When ``returns_scenarios=None`` the synthesizer fires a warning.
+    The ``caller_kind`` kwarg must appear on the structured record so a
+    dashboard alert can filter production-path invocations vs intentional
+    screener / block-pareto calls."""
+    fund_ids = ["X", "Y"]
+    fund_blocks = {"X": "b", "Y": "b"}
+    expected_returns = {"X": 0.08, "Y": 0.10}
+    cov = np.array([[0.04, 0.01], [0.01, 0.03]])
+    constraints = ProfileConstraints(
+        blocks=[BlockConstraint("b", 0.0, 1.0)],
+        cvar_limit=0.10, max_single_fund_weight=1.0,
+    )
+
+    asyncio.run(
+        optimize_fund_portfolio(
+            fund_ids=fund_ids, fund_blocks=fund_blocks,
+            expected_returns=expected_returns, cov_matrix=cov,
+            returns_scenarios=None,
+            constraints=constraints,
+            caller_kind="screener_preview",
+        ),
+    )
+    captured = capsys.readouterr()
+    combined = captured.out + captured.err
+    assert "returns_scenarios_missing_using_covariance_synth" in combined, (
+        "synth warning must fire when returns_scenarios is None"
+    )
+    assert "caller_kind=screener_preview" in combined, (
+        "caller_kind tag missing from synth warning output"
+    )

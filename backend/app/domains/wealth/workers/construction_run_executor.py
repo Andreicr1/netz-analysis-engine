@@ -928,20 +928,30 @@ async def execute_construction_run(
         )
         return run
 
-    # Detect heuristic fallback + PR-A11 Phase 3 min-variance fallback. Both
-    # outcomes produced weights but fail to honor the CVaR objective, so
-    # persist as ``degraded``. ``run.cascade_telemetry`` (set in the inner
-    # executor) drives the decision; the legacy solver-string check remains
-    # as a defensive fallback for pre-A11 code paths (empty telemetry).
+    # PR-A12 cascade summary enum drives run.status. Post-A12 there is no
+    # cvar-blind fallback that produced weights — Phase 3 always runs
+    # CVaR-aware, so ``phase_3_min_cvar_above_limit`` and ``upstream_heuristic``
+    # are the only ``degraded`` outcomes; ``constraint_polytope_empty`` is the
+    # only remaining terminal failure. The legacy solver-string check stays
+    # as a defensive fallback for empty cascade_telemetry (pre-A11 mocks).
     telemetry_summary = (run.cascade_telemetry or {}).get("cascade_summary")
     solver = (run.optimizer_trace or {}).get("solver")
-    if telemetry_summary in ("phase_3_fallback", "heuristic_fallback"):
+    if telemetry_summary in (
+        "phase_3_min_cvar_above_limit",
+        "upstream_heuristic",
+    ):
         run.status = "degraded"
-    elif telemetry_summary == "cascade_exhausted":
+    elif telemetry_summary == "constraint_polytope_empty":
         run.status = "failed"
-    elif telemetry_summary in ("phase_1_succeeded", "phase_1_5_robust_succeeded", "phase_2_succeeded"):
+    elif telemetry_summary in (
+        "phase_1_succeeded",
+        "phase_2_robust_succeeded",
+        "phase_3_min_cvar_within_limit",
+    ):
         run.status = "succeeded"
     elif solver == "heuristic_fallback":
+        # Defensive: legacy path where cascade_telemetry is empty but the
+        # upstream-bailout composition was built (solver tag set by the route).
         run.status = "degraded"
     else:
         run.status = "succeeded"
