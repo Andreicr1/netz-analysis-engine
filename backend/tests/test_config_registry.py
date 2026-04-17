@@ -79,6 +79,18 @@ class TestRegistryLookup:
         verticals = ConfigRegistry.verticals()
         assert "liquid_funds" in verticals
         assert "private_credit" in verticals
+        assert "wealth" in verticals
+
+    def test_wealth_optimizer_registered_as_optional(self):
+        """PR-A9.1: wealth/optimizer must be registered (otherwise construction
+        runs raise ConfigMissError). It must be required=False so that absence
+        of seed/override falls through to in-code default cf_relaxation_factor=1.3.
+        """
+        domain = ConfigRegistry.get("wealth", "optimizer")
+        assert domain is not None, "wealth/optimizer must be registered"
+        assert domain.required is False, "must be optional — no seed data exists"
+        assert domain.client_visible is False, "optimizer internals are IP-protected"
+        assert domain.ownership == "config_service"
 
     def test_config_service_domains_excludes_prompt_service(self):
         for d in ConfigRegistry.config_service_domains():

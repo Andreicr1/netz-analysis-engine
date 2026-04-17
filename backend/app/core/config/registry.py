@@ -125,6 +125,15 @@ _REGISTRY: tuple[ConfigDomain, ...] = (
         description="Tenant branding: logos, colors, display name",
         required=False,
     ),
+    # ── wealth: ConfigService-managed ────────────────────────────────────
+    ConfigDomain(
+        vertical="wealth",
+        config_type="optimizer",
+        ownership="config_service",
+        client_visible=False,
+        description="Wealth construction-engine optimizer tunables (cf_relaxation_factor, etc.)",
+        required=False,
+    ),
 )
 
 
