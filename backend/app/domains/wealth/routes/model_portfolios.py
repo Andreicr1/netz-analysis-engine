@@ -2223,6 +2223,43 @@ async def _run_construction_async(
             max_single_fund=active_constraints.max_single_fund_weight,
         )
 
+        # ── PR-A12.3 diagnostic trace — cvar_limit wiring audit ──
+        # Captures every step of the cvar_limit transform:
+        #   DB (portfolio_calibration) → _resolve_cvar_limit (ConfigService)
+        #     → local ``cvar_limit`` → active_constraints.cvar_limit → LP
+        # The reviewer's question: does some transformation between DB and
+        # the LP call inflate the limit (observed 3.2×/1.2×/1.5× divergence
+        # on 2026-04-17 logs)? This log line answers it on the next run.
+        _db_cal_cvar: float | None = None
+        _db_cal_mandate: str | None = None
+        if portfolio_id is not None:
+            try:
+                _cal_row = (await db.execute(
+                    select(
+                        PortfolioCalibration.cvar_limit,
+                        PortfolioCalibration.mandate,
+                    ).where(PortfolioCalibration.portfolio_id == portfolio_id),
+                )).one_or_none()
+                if _cal_row is not None:
+                    _db_cal_cvar = (
+                        float(_cal_row[0]) if _cal_row[0] is not None else None
+                    )
+                    _db_cal_mandate = _cal_row[1]
+            except Exception as _cal_exc:
+                logger.debug("optimizer_input_cvar_trace_db_read_failed", error=str(_cal_exc))
+        logger.info(
+            "optimizer_input_cvar_trace",
+            portfolio_id=str(portfolio_id) if portfolio_id else None,
+            profile=profile,
+            mandate=_db_cal_mandate,
+            db_calibration_cvar_limit=_db_cal_cvar,
+            resolved_cvar_limit=cvar_limit,
+            override_cvar_limit=cvar_limit_override,
+            passed_cvar_limit=active_constraints.cvar_limit,
+            current_regime=current_regime,
+            n_funds=len(opt_fund_ids),
+        )
+
         fund_result = await optimize_fund_portfolio(
             fund_ids=opt_fund_ids,
             fund_blocks=sub_blocks,
