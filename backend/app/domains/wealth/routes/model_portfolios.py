@@ -2105,6 +2105,8 @@ async def _run_construction_async(
         available_ids = _fli.available_ids
         fund_skewness = _fli.skewness
         fund_excess_kurtosis = _fli.excess_kurtosis
+        # PR-A12 — raw scenario matrix driving the RU CVaR LP cascade.
+        returns_scenarios_full = _fli.returns_scenarios
         # PR-A9 — surface the three-tier conditioning decision so the run
         # executor can persist + emit it on the SHRINKAGE SSE phase.
         shrinkage_metrics = dict(_fli.inputs_metadata.get("conditioning") or {})
@@ -2122,6 +2124,8 @@ async def _run_construction_async(
         sub_blocks = {fid: fund_blocks[fid] for fid in opt_fund_ids}
         sub_skewness = fund_skewness[indices]
         sub_excess_kurtosis = fund_excess_kurtosis[indices]
+        # PR-A12 — slice scenario matrix to the same funds ordered as sub_cov.
+        sub_returns_scenarios = returns_scenarios_full[:, indices]
 
         # Filter and rescale constraints to covered blocks only.
         # When universe covers a subset of blocks, original min/max don't
@@ -2201,10 +2205,11 @@ async def _run_construction_async(
             fund_blocks=sub_blocks,
             expected_returns=sub_returns,
             cov_matrix=sub_cov,
+            returns_scenarios=sub_returns_scenarios,
             constraints=active_constraints,
             skewness=sub_skewness,
             excess_kurtosis=sub_excess_kurtosis,
-            cf_relaxation_factor=cf_factor,
+            cf_relaxation_factor=cf_factor,  # PR-A12: retained for one release, ignored
         )
 
         if fund_result.status.startswith("optimal") and fund_result.weights:
@@ -2294,7 +2299,12 @@ async def _run_construction_async(
     # fund-level optimizer produced the composition or the heuristic fallback
     # fired. The executor reads this block to build ``cascade_telemetry``.
     from dataclasses import asdict as _asdict
-    _cascade_phase_order = ("primary", "robust", "variance_capped", "min_variance")
+    # PR-A12 — 3-phase RU cascade. Heuristic/variance-capped/min-variance retired.
+    _cascade_phase_order = (
+        "phase_1_ru_max_return",
+        "phase_2_ru_robust",
+        "phase_3_min_cvar",
+    )
 
     def _skipped_attempts_all() -> list[dict[str, Any]]:
         return [
@@ -2302,11 +2312,9 @@ async def _run_construction_async(
                 "phase": p, "status": "skipped", "solver": None,
                 "objective_value": None, "wall_ms": 0,
                 "infeasibility_reason": None,
-                "cvar_at_solution": None, "cvar_limit_effective": None,
-                "cvar_within_limit": None, "max_var": None,
-                "max_vol_target": None, "cvar_coeff": None,
-                "cf_normal_ratio": None, "phase2_limit": None,
-                "min_achievable_variance": None, "min_achievable_vol": None,
+                "cvar_at_solution": None, "cvar_at_solution_cf": None,
+                "cvar_limit_effective": None,
+                "cvar_within_limit": None,
                 "kappa_used": None,
             }
             for p in _cascade_phase_order
@@ -2319,6 +2327,12 @@ async def _run_construction_async(
         cascade_attempts = _skipped_attempts_all()
         cascade_winning = None
 
+    # PR-A12 — the optimizer always produces RU/min-CVaR weights. The legacy
+    # "heuristic" fallback path (surfaced via composition.optimization.solver
+    # == "heuristic_fallback") is now exclusively an upstream/data failure
+    # marker — it means compute_fund_level_inputs raised before the cascade
+    # ever ran. Emit it as a distinct attempt so the executor can flag
+    # ``operator_signal.kind = "upstream_data_missing"`` downstream.
     used_heuristic = (
         composition is not None
         and composition.optimization is not None
@@ -2327,22 +2341,29 @@ async def _run_construction_async(
     )
     if used_heuristic:
         cascade_attempts.append({
-            "phase": "heuristic", "status": "succeeded",
+            "phase": "upstream_heuristic", "status": "succeeded",
             "solver": "heuristic_fallback",
             "objective_value": None, "wall_ms": 0,
             "infeasibility_reason": None,
-            "cvar_at_solution": None, "cvar_limit_effective": None,
-            "cvar_within_limit": None, "max_var": None,
-            "max_vol_target": None, "cvar_coeff": None,
-            "cf_normal_ratio": None, "phase2_limit": None,
-            "min_achievable_variance": None, "min_achievable_vol": None,
+            "cvar_at_solution": None, "cvar_at_solution_cf": None,
+            "cvar_limit_effective": None,
+            "cvar_within_limit": None,
             "kappa_used": None,
         })
-        cascade_winning = "heuristic"
+        cascade_winning = "upstream_heuristic"
+
+    # PR-A12 — achievable-return band + min-CVaR surface directly from optimizer.
+    cascade_min_cvar: float | None = None
+    cascade_band: dict[str, float] | None = None
+    if fund_result is not None:
+        cascade_min_cvar = fund_result.min_achievable_cvar
+        cascade_band = fund_result.achievable_return_band
 
     result["cascade"] = {
         "phase_attempts": cascade_attempts,
         "winning_phase": cascade_winning,
+        "min_achievable_cvar": cascade_min_cvar,
+        "achievable_return_band": cascade_band,
     }
 
     # Include TAA provenance for calibration_snapshot enrichment

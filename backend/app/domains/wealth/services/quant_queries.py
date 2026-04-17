@@ -197,6 +197,12 @@ class FundLevelInputs:
     cov_matrix: npt.NDArray[np.float64]
     expected_returns: dict[str, float]
     available_ids: list[str]
+    # PR-A12 — raw scenario matrix (T, N) driving the Rockafellar-Uryasev
+    # CVaR LP. Same window + forward-fill used for Σ, trimmed to
+    # ``cov_lookback_days``. Trading-day rows where every fund is NaN are
+    # dropped upstream. T_effective >= 252 is enforced; 252 <= T < 504
+    # emits a warning (short-history universe).
+    returns_scenarios: npt.NDArray[np.float64]
     skewness: npt.NDArray[np.float64]
     excess_kurtosis: npt.NDArray[np.float64]
     condition_number: float
@@ -1653,10 +1659,24 @@ async def compute_fund_level_inputs(
         excluded_count=len(excluded),
     )
 
+    # PR-A12 — warn on short history (T < 504 = 2Y daily). The RU LP still
+    # works but CVaR tail is estimated from <2 full credit cycles. Hard
+    # floor MIN_OBSERVATIONS (252 = 1Y) is enforced earlier in this
+    # function; anything below that has already raised ValueError.
+    T_effective = int(returns_matrix.shape[0])
+    if T_effective < 504:
+        logger.warning(
+            "fund_level_inputs_short_history",
+            t_effective=T_effective,
+            recommended_min=504,
+            hard_floor=MIN_OBSERVATIONS,
+        )
+
     return FundLevelInputs(
         cov_matrix=annual_cov,
         expected_returns=expected_returns,
         available_ids=available_ids,
+        returns_scenarios=np.ascontiguousarray(returns_matrix, dtype=np.float64),
         skewness=np.asarray(skewness, dtype=np.float64),
         excess_kurtosis=np.asarray(excess_kurtosis, dtype=np.float64),
         condition_number=condition_number,

@@ -318,7 +318,11 @@ class PhaseAttempt:
     failed.
     """
 
-    phase: str                         # "primary"|"robust"|"variance_capped"|"min_variance"|"heuristic"
+    # PR-A12 phase keys: "phase_1_ru_max_return" | "phase_2_ru_robust"
+    # | "phase_3_min_cvar". Legacy keys (primary/robust/variance_capped/
+    # min_variance/heuristic) are retired. Kept as ``str`` to preserve A11
+    # dataclass discipline.
+    phase: str
     status: str                        # "succeeded"|"infeasible"|"solver_failed"|"skipped"
     solver: str | None
     objective_value: float | None
@@ -328,14 +332,10 @@ class PhaseAttempt:
     cvar_at_solution: float | None = None
     cvar_limit_effective: float | None = None
     cvar_within_limit: bool | None = None
-    max_var: float | None = None
-    max_vol_target: float | None = None
-    cvar_coeff: float | None = None
-    cf_normal_ratio: float | None = None
-    phase2_limit: float | None = None
-    min_achievable_variance: float | None = None
-    min_achievable_vol: float | None = None
     kappa_used: float | None = None
+    # PR-A12 — CF CVaR kept as legacy comparator alongside RU-empirical
+    # ``cvar_at_solution``. Populated only on succeeded phases.
+    cvar_at_solution_cf: float | None = None
 
 
 @dataclass
@@ -352,12 +352,15 @@ class FundOptimizationResult:
     cvar_within_limit: bool
     status: str
     solver_info: str | None = None
-    # PR-A11 — cascade audit trail. ``phase_attempts`` contains one entry
-    # per cascade phase including skipped ones (>= 4 for the standard
-    # 4-phase cascade). ``winning_phase`` is one of:
-    # "primary"|"robust"|"variance_capped"|"min_variance"|"heuristic"|None.
+    # PR-A11 — cascade audit trail. Post-PR-A12 the cascade has 3 phases:
+    # "phase_1_ru_max_return" | "phase_2_ru_robust" | "phase_3_min_cvar".
+    # ``winning_phase`` is one of those keys or None (pre-solve failure).
     phase_attempts: list[PhaseAttempt] = field(default_factory=list)
     winning_phase: str | None = None
+    # PR-A12 — Phase 3 (min-CVaR) ALWAYS runs for telemetry. These fields
+    # populate the achievable-return band the Builder slider uses.
+    min_achievable_cvar: float | None = None
+    achievable_return_band: dict[str, float] | None = None
 
 
 async def optimize_fund_portfolio(
@@ -366,6 +369,7 @@ async def optimize_fund_portfolio(
     expected_returns: dict[str, float],
     constraints: ProfileConstraints,
     cov_matrix: np.ndarray,
+    returns_scenarios: np.ndarray | None = None,
     risk_free_rate: float = 0.04,
     skewness: np.ndarray | None = None,
     excess_kurtosis: np.ndarray | None = None,
@@ -374,22 +378,34 @@ async def optimize_fund_portfolio(
     robust: bool = False,
     uncertainty_level: float | None = None,
     regime_cvar_multiplier: float = 1.0,
+    cvar_alpha: float = 0.95,
     mandate: str | None = None,
     risk_aversion: float | None = None,
     cf_relaxation_factor: float = 1.3,
 ) -> FundOptimizationResult:
     """Optimize fund-level weights with block-group sum constraints.
 
-    Unlike optimize_portfolio() which works at block level, this optimizes
-    individual fund weights while enforcing block-level allocation bands
-    from StrategicAllocation.
+    PR-A12 — always-solvable Rockafellar-Uryasev cascade:
 
-    CVaR enforcement cascade:
-    1. Solve max risk-adjusted return (primary)
-    2. If CVaR violates limit → re-solve with variance ceiling derived from
-       cvar_limit (max return subject to σ² ≤ σ²_max)
-    3. If variance-capped solve infeasible → solve min_variance (safest
-       allocation within block constraints)
+    1. **Phase 1 (RU max-return LP)**: maximize μᵀw s.t. empirical
+       CVaR_α(w) ≤ limit via the RU auxiliary-variable linearization.
+       Pure LP, no variance proxy, no Cornish-Fisher approximation.
+    2. **Phase 2 (robust RU, opt-in)**: adds PR-A3 ellipsoidal uncertainty
+       penalty ``κ·‖Lᵀw‖₂`` to Phase 1's objective. SOCP.
+    3. **Phase 3 (min-CVaR LP, ALWAYS runs)**: minimizes empirical CVaR
+       on the base polytope. Feasible for any non-empty polytope;
+       populates ``achievable_return_band`` for the Builder slider.
+
+    When ``cvar_limit`` is None, Phase 1 becomes unconstrained max-return;
+    Phase 3 still runs for the band. When Phase 1/2 both fail (the
+    polytope is non-empty but the CVaR band is binding), Phase 3 wins
+    with ``status=degraded`` and ``operator_signal`` flags the universe
+    floor. The cascade never produces ``status=failed`` for solver /
+    feasibility reasons — only for upstream data failures (no funds, PSD
+    violation, empty polytope).
+
+    ``cf_relaxation_factor`` is retained in the signature for one release
+    of backwards compatibility; PR-A12 ignores it (dead param).
 
     Constraints:
         sum(w) == 1                          (fully invested)
@@ -398,6 +414,7 @@ async def optimize_fund_portfolio(
         sum(w[funds_in_block]) >= block_min  (block floor)
         sum(w[funds_in_block]) <= block_max  (block ceiling)
     """
+    del cf_relaxation_factor  # PR-A12: dead param, kept for compat
     n = len(fund_ids)
     cvar_limit = constraints.cvar_limit
 
@@ -412,7 +429,7 @@ async def optimize_fund_portfolio(
                     phase=p, status="skipped", solver=None,
                     objective_value=None, wall_ms=0, infeasibility_reason=None,
                 )
-                for p in ("primary", "robust", "variance_capped", "min_variance")
+                for p in ("phase_1_ru_max_return", "phase_2_ru_robust", "phase_3_min_cvar")
             ],
             winning_phase=None,
         )
@@ -442,7 +459,7 @@ async def optimize_fund_portfolio(
                     phase=p, status="skipped", solver=None,
                     objective_value=None, wall_ms=0, infeasibility_reason="psd_violation",
                 )
-                for p in ("primary", "robust", "variance_capped", "min_variance")
+                for p in ("phase_1_ru_max_return", "phase_2_ru_robust", "phase_3_min_cvar")
             ],
             winning_phase=None,
         )
@@ -513,7 +530,11 @@ async def optimize_fund_portfolio(
     # completes (or is skipped); ``_pad_skipped`` backfills the remaining
     # cascade slots at every return site so the shape is uniform.
     attempts: list[PhaseAttempt] = []
-    _CASCADE_PHASE_ORDER = ("primary", "robust", "variance_capped", "min_variance")
+    _CASCADE_PHASE_ORDER = (
+        "phase_1_ru_max_return",
+        "phase_2_ru_robust",
+        "phase_3_min_cvar",
+    )
 
     def _pad_skipped() -> list[PhaseAttempt]:
         seen = {a.phase for a in attempts}
@@ -534,6 +555,8 @@ async def optimize_fund_portfolio(
     def _build_result(
         w_arr: np.ndarray, solver: str | None, status: str,
         winning_phase: str | None = None,
+        min_achievable_cvar: float | None = None,
+        achievable_return_band: dict[str, float] | None = None,
     ) -> FundOptimizationResult:
         """Build FundOptimizationResult from optimized weights."""
         ret = float(mu @ w_arr)
@@ -561,6 +584,8 @@ async def optimize_fund_portfolio(
             solver_info=solver,
             phase_attempts=_pad_skipped(),
             winning_phase=winning_phase,
+            min_achievable_cvar=min_achievable_cvar,
+            achievable_return_band=achievable_return_band,
         )
 
     def _empty_result(
@@ -576,413 +601,348 @@ async def optimize_fund_portfolio(
             winning_phase=winning_phase,
         )
 
-    # ── Phase 1: Max risk-adjusted return (with optional turnover penalty) ──
-    w1 = cp.Variable(n, nonneg=True)
-    # S2-C: λ must be mandate-sensitive. Historical hardcoded λ=2 treated every
-    # client identically regardless of risk tolerance — a fiduciary bug.
-    lambda_risk = resolve_risk_aversion(risk_aversion, mandate)
-    objective_expr = mu @ w1 - lambda_risk * cp.quad_form(w1, psd_cov)
-    phase1_constraints = _build_base_constraints(w1)
+    # ── PR-A12 cascade bootstrap ──────────────────────────────────────────
+    # The Rockafellar-Uryasev LP needs a raw scenario matrix. The legacy
+    # entry points for ``optimize_fund_portfolio`` (screener drill-downs,
+    # block-level allocations) never supplied one; synthesize it from the
+    # covariance when absent so those callers still work while
+    # construction runs pass the real series.
+    from quant_engine.ru_cvar_lp import (
+        build_ru_cvar_constraints,
+        build_ru_cvar_objective,
+        realized_cvar_from_weights,
+    )
 
-    if current_weights is not None and turnover_cost > 0:
-        t1 = cp.Variable(n, nonneg=True)  # slack for |w - w_current|
-        phase1_constraints += [
-            t1 >= w1 - current_weights,
-            t1 >= current_weights - w1,
-        ]
-        objective_expr = objective_expr - turnover_cost * cp.sum(t1)
+    if returns_scenarios is None or returns_scenarios.size == 0:
+        logger.warning(
+            "returns_scenarios_missing_using_covariance_synth",
+            n_funds=n,
+        )
+        # Deterministic seed derived from fund_ids so repeated calls match.
+        seed = int(abs(hash(tuple(fund_ids))) % (2**32 - 1))
+        rng = np.random.default_rng(seed)
+        try:
+            L_synth = np.linalg.cholesky(cov_matrix / 252.0)
+        except np.linalg.LinAlgError:
+            eig_v, eig_vec = np.linalg.eigh(cov_matrix / 252.0)
+            eig_v = np.maximum(eig_v, 1e-10)
+            L_synth = eig_vec @ np.diag(np.sqrt(eig_v))
+        returns_scenarios = (rng.standard_normal((504, n)) @ L_synth.T) + (mu / 252.0)
 
-    prob1 = cp.Problem(cp.Maximize(objective_expr), phase1_constraints)
+    if returns_scenarios.shape[1] != n:
+        raise ValueError(
+            f"returns_scenarios has {returns_scenarios.shape[1]} columns, expected {n}",
+        )
+    T = int(returns_scenarios.shape[0])
+    if T < 252:
+        logger.error(
+            "returns_scenarios_below_minimum_observations",
+            t=T, min_required=252,
+        )
+        return _empty_result("insufficient_scenarios")
 
-    _t_p1 = time.perf_counter()
-    status1 = await _solve_problem(prob1)
-    _wall_p1 = int((time.perf_counter() - _t_p1) * 1000)
-    if status1 in (None, "solver_error"):
-        attempts.append(PhaseAttempt(
-            phase="primary", status="solver_failed", solver=None,
-            objective_value=None, wall_ms=_wall_p1,
-            infeasibility_reason="Both CLARABEL and SCS failed",
-        ))
-        return _empty_result("solver_failed", "Both CLARABEL and SCS failed")
-    if status1 not in ("optimal", "optimal_inaccurate"):
-        # If turnover penalty caused infeasibility, retry without it
-        if current_weights is not None and turnover_cost > 0:
-            logger.warning("turnover_penalty_infeasible_retrying_without")
-            w1_retry = cp.Variable(n, nonneg=True)
-            prob1_retry = cp.Problem(
-                cp.Maximize(mu @ w1_retry - lambda_risk * cp.quad_form(w1_retry, psd_cov)),
-                _build_base_constraints(w1_retry),
-            )
-            status1 = await _solve_problem(prob1_retry)
-            if status1 in ("optimal", "optimal_inaccurate"):
-                w1 = w1_retry
-                prob1 = prob1_retry
-            else:
-                attempts.append(PhaseAttempt(
-                    phase="primary", status="infeasible", solver=None,
-                    objective_value=None, wall_ms=_wall_p1,
-                    infeasibility_reason=str(status1),
-                ))
-                return _empty_result(f"infeasible: {status1}")
-        else:
-            attempts.append(PhaseAttempt(
-                phase="primary", status="infeasible", solver=None,
-                objective_value=None, wall_ms=_wall_p1,
-                infeasibility_reason=str(status1),
-            ))
-            return _empty_result(f"infeasible: {status1}")
-
-    opt_w = _extract_weights(w1)
-    if opt_w is None:
-        attempts.append(PhaseAttempt(
-            phase="primary", status="infeasible", solver=None,
-            objective_value=None, wall_ms=_wall_p1,
-            infeasibility_reason="zero weights after clipping",
-        ))
-        return _empty_result("infeasible: zero weights")
-
-    solver_name = prob1.solver_stats.solver_name if prob1.solver_stats else None
-
-    # Check CVaR against limit
-    cvar_neg = _compute_cvar(opt_w)
-    cvar_ok = cvar_neg >= cvar_limit if cvar_limit is not None else True
-
-    # Apply regime CVaR multiplier (tighter limit in adverse regimes)
-    effective_cvar_limit = cvar_limit
+    # Regime-adjusted effective CVaR limit — same semantics as the legacy
+    # cascade so downstream telemetry keeps its meaning.
+    effective_cvar_limit: float | None = cvar_limit
     if cvar_limit is not None and regime_cvar_multiplier != 1.0:
-        effective_cvar_limit = cvar_limit * regime_cvar_multiplier
+        effective_cvar_limit = float(abs(cvar_limit)) * regime_cvar_multiplier
         logger.info(
             "regime_cvar_multiplier_applied",
             original_limit=cvar_limit,
             effective_limit=effective_cvar_limit,
             multiplier=regime_cvar_multiplier,
         )
-        # Re-check with effective limit
-        cvar_ok = cvar_neg >= effective_cvar_limit
+    elif cvar_limit is not None:
+        effective_cvar_limit = float(abs(cvar_limit))
 
-    # PR-A11 — record Phase 1 attempt now that CVaR check has run so we can
-    # capture ``cvar_at_solution`` / ``cvar_within_limit`` on the attempt.
-    attempts.append(PhaseAttempt(
-        phase="primary",
-        status="succeeded",
-        solver=solver_name,
-        objective_value=(float(prob1.value) if prob1.value is not None else None),
-        wall_ms=_wall_p1,
-        infeasibility_reason=None,
-        cvar_at_solution=round(cvar_neg, 6),
-        cvar_limit_effective=effective_cvar_limit,
-        cvar_within_limit=cvar_ok,
-    ))
+    lambda_risk = resolve_risk_aversion(risk_aversion, mandate)  # Phase 2 only
 
-    if cvar_ok or effective_cvar_limit is None:
-        result = _build_result(opt_w, solver_name, "optimal", winning_phase="primary")
-        logger.info(
-            "fund_portfolio_optimized",
-            n_funds=n, sharpe=result.sharpe_ratio,
-            cvar_95=result.cvar_95, cvar_limit=effective_cvar_limit,
-            solver=solver_name, status="optimal",
+    def _cvar_from_ru(w_arr: np.ndarray) -> float:
+        """RU-empirical CVaR (matches Phase 1/3 LP objective)."""
+        return realized_cvar_from_weights(w_arr, returns_scenarios, cvar_alpha)
+
+    phase1_weights: np.ndarray | None = None
+    phase1_solver: str | None = None
+    phase1_expected_return: float | None = None
+    phase2_weights: np.ndarray | None = None
+    phase2_solver: str | None = None
+    phase2_expected_return: float | None = None
+
+    # ── Phase 1 — RU CVaR-constrained max return ──────────────────────────
+    w1 = cp.Variable(n, nonneg=True)
+    phase1_constraints = _build_base_constraints(w1)
+    if effective_cvar_limit is not None:
+        ru_cs, _, _ = build_ru_cvar_constraints(
+            w_var=w1,
+            returns_scenarios=returns_scenarios,
+            alpha=cvar_alpha,
+            cvar_limit=effective_cvar_limit,
         )
-        return result
+        phase1_constraints.extend(ru_cs)
 
-    # ── Phase 1.5: Robust optimization (ellipsoidal uncertainty set) ──
+    objective_expr1 = mu @ w1
+    if current_weights is not None and turnover_cost > 0:
+        t1 = cp.Variable(n, nonneg=True)
+        phase1_constraints += [t1 >= w1 - current_weights, t1 >= current_weights - w1]
+        objective_expr1 = objective_expr1 - turnover_cost * cp.sum(t1)
+
+    prob1 = cp.Problem(cp.Maximize(objective_expr1), phase1_constraints)
+    _t_p1 = time.perf_counter()
+    status1 = await _solve_problem(prob1)
+    _wall_p1 = int((time.perf_counter() - _t_p1) * 1000)
+
+    if status1 in ("optimal", "optimal_inaccurate"):
+        opt_w1 = _extract_weights(w1)
+        if opt_w1 is not None:
+            phase1_weights = opt_w1
+            phase1_solver = prob1.solver_stats.solver_name if prob1.solver_stats else "CLARABEL"
+            phase1_expected_return = float(mu @ opt_w1)
+            phase1_cvar_ru = _cvar_from_ru(opt_w1)
+            phase1_cvar_cf = _compute_cvar(opt_w1)  # legacy comparator (positive = loss)
+            phase1_within = (
+                phase1_cvar_ru <= effective_cvar_limit
+                if effective_cvar_limit is not None
+                else True
+            )
+            attempts.append(PhaseAttempt(
+                phase="phase_1_ru_max_return",
+                status="succeeded",
+                solver=phase1_solver,
+                objective_value=round(phase1_expected_return, 6),
+                wall_ms=_wall_p1,
+                infeasibility_reason=None,
+                cvar_at_solution=round(phase1_cvar_ru, 6),
+                cvar_at_solution_cf=round(abs(phase1_cvar_cf), 6),
+                cvar_limit_effective=effective_cvar_limit,
+                cvar_within_limit=phase1_within,
+            ))
+        else:
+            attempts.append(PhaseAttempt(
+                phase="phase_1_ru_max_return", status="infeasible",
+                solver=None, objective_value=None, wall_ms=_wall_p1,
+                infeasibility_reason="zero weights after clipping",
+                cvar_limit_effective=effective_cvar_limit,
+            ))
+    elif status1 in (None, "solver_error"):
+        attempts.append(PhaseAttempt(
+            phase="phase_1_ru_max_return", status="solver_failed", solver=None,
+            objective_value=None, wall_ms=_wall_p1,
+            infeasibility_reason="Both CLARABEL and SCS failed",
+            cvar_limit_effective=effective_cvar_limit,
+        ))
+    else:
+        attempts.append(PhaseAttempt(
+            phase="phase_1_ru_max_return", status="infeasible", solver=None,
+            objective_value=None, wall_ms=_wall_p1,
+            infeasibility_reason=str(status1),
+            cvar_limit_effective=effective_cvar_limit,
+        ))
+
+    # ── Phase 2 — Robust RU (ellipsoidal uncertainty on μ) ────────────────
     if not robust:
         attempts.append(PhaseAttempt(
-            phase="robust", status="skipped", solver=None,
+            phase="phase_2_ru_robust", status="skipped", solver=None,
             objective_value=None, wall_ms=0, infeasibility_reason=None,
         ))
-    if robust:
+    else:
         try:
-            # S2-E: Ben-Tal & Nemirovski's robust counterpart for a Gaussian
-            # uncertainty set at confidence (1-α) uses
-            #       κ = √χ²_{1-α, n}
-            # where n is the dimensionality of the uncertain mean vector.
-            # This guarantees the true mean lies inside the ellipsoid with
-            # probability 1-α under multivariate normal assumptions. The
-            # previous formulation (κ = c·√n with c=0.5) was dimensionally
-            # correct but miscalibrated — at n=4 it gave κ=1.0 which only
-            # covers ≈39% of the uncertainty set, far below the 95% target.
-            #
-            # We preserve the ``uncertainty_level`` hook as a confidence
-            # *override* multiplier: None → 95% (institutional default);
-            # otherwise κ is rescaled proportionally so callers who already
-            # tuned uncertainty_level in production keep their behaviour.
             from scipy.stats import chi2 as sp_chi2
             kappa_95 = float(np.sqrt(sp_chi2.ppf(0.95, df=max(n, 1))))
-            if uncertainty_level is None:
-                kappa = kappa_95
-                _kappa_source = "chi2_95"
-            else:
-                # Legacy callers: uncertainty_level=0.5 was the old default,
-                # so we rescale against that to avoid silent behaviour drift
-                # while still routing through the statistically-sound base.
-                kappa = float(uncertainty_level) * (kappa_95 / 0.5) * 0.5
-                _kappa_source = f"legacy({uncertainty_level})"
-            # Cholesky of PSD-wrapped covariance for SOCP norm
-            try:
-                L = np.linalg.cholesky(cov_matrix)
-            except np.linalg.LinAlgError:
-                # Fallback: eigenvalue clipping for near-PSD matrices
-                eigvals, eigvecs = np.linalg.eigh(cov_matrix)
-                eigvals = np.maximum(eigvals, 1e-8)
-                L = eigvecs @ np.diag(np.sqrt(eigvals))
-
-            w_robust = cp.Variable(n, nonneg=True)
-            robust_penalty = kappa * cp.norm(L.T @ w_robust, 2)
-            robust_obj = cp.Maximize(
-                mu @ w_robust - robust_penalty - lambda_risk * cp.quad_form(w_robust, psd_cov)
+            kappa = kappa_95 if uncertainty_level is None else (
+                float(uncertainty_level) * (kappa_95 / 0.5) * 0.5
             )
-            robust_constraints = _build_base_constraints(w_robust)
-            prob_robust = cp.Problem(robust_obj, robust_constraints)
+            try:
+                L_chol = np.linalg.cholesky(cov_matrix)
+            except np.linalg.LinAlgError:
+                eig_v, eig_vec = np.linalg.eigh(cov_matrix)
+                eig_v = np.maximum(eig_v, 1e-8)
+                L_chol = eig_vec @ np.diag(np.sqrt(eig_v))
 
-            _t_pr = time.perf_counter()
-            status_robust = await _solve_problem(prob_robust)
-            _wall_pr = int((time.perf_counter() - _t_pr) * 1000)
-            if status_robust in ("optimal", "optimal_inaccurate"):
-                opt_w_robust = _extract_weights(w_robust)
-                if opt_w_robust is not None:
-                    cvar_robust = _compute_cvar(opt_w_robust)
-                    cvar_ok_robust = (
-                        cvar_robust >= effective_cvar_limit
+            w2 = cp.Variable(n, nonneg=True)
+            constraints2 = _build_base_constraints(w2)
+            if effective_cvar_limit is not None:
+                ru_cs2, _, _ = build_ru_cvar_constraints(
+                    w_var=w2,
+                    returns_scenarios=returns_scenarios,
+                    alpha=cvar_alpha,
+                    cvar_limit=effective_cvar_limit,
+                )
+                constraints2.extend(ru_cs2)
+
+            robust_obj = cp.Maximize(
+                mu @ w2 - kappa * cp.norm(L_chol.T @ w2, 2)
+            )
+            prob2 = cp.Problem(robust_obj, constraints2)
+
+            _t_p2 = time.perf_counter()
+            status2 = await _solve_problem(prob2)
+            _wall_p2 = int((time.perf_counter() - _t_p2) * 1000)
+
+            if status2 in ("optimal", "optimal_inaccurate"):
+                opt_w2 = _extract_weights(w2)
+                if opt_w2 is not None:
+                    phase2_weights = opt_w2
+                    phase2_solver = prob2.solver_stats.solver_name if prob2.solver_stats else "CLARABEL"
+                    phase2_expected_return = float(mu @ opt_w2)
+                    phase2_cvar_ru = _cvar_from_ru(opt_w2)
+                    phase2_cvar_cf = _compute_cvar(opt_w2)
+                    phase2_within = (
+                        phase2_cvar_ru <= effective_cvar_limit
                         if effective_cvar_limit is not None
                         else True
                     )
-                    if cvar_ok_robust:
-                        attempts.append(PhaseAttempt(
-                            phase="robust", status="succeeded",
-                            solver="CLARABEL:robust",
-                            objective_value=(float(prob_robust.value) if prob_robust.value is not None else None),
-                            wall_ms=_wall_pr,
-                            infeasibility_reason=None,
-                            cvar_at_solution=round(cvar_robust, 6),
-                            cvar_limit_effective=effective_cvar_limit,
-                            cvar_within_limit=True,
-                            kappa_used=round(kappa, 6),
-                        ))
-                        result = _build_result(opt_w_robust, "CLARABEL:robust", "optimal:robust", winning_phase="robust")
-                        logger.info(
-                            "robust_optimization_succeeded",
-                            sharpe=result.sharpe_ratio,
-                            cvar_95=result.cvar_95,
-                            kappa=round(kappa, 4),
-                            kappa_source=_kappa_source,
-                        )
-                        return result
-                    else:
-                        attempts.append(PhaseAttempt(
-                            phase="robust", status="infeasible",
-                            solver="CLARABEL:robust",
-                            objective_value=(float(prob_robust.value) if prob_robust.value is not None else None),
-                            wall_ms=_wall_pr,
-                            infeasibility_reason="cvar_still_violated",
-                            cvar_at_solution=round(cvar_robust, 6),
-                            cvar_limit_effective=effective_cvar_limit,
-                            cvar_within_limit=False,
-                            kappa_used=round(kappa, 6),
-                        ))
-                        logger.warning(
-                            "robust_cvar_still_violated",
-                            cvar_95=round(cvar_robust, 6),
-                            limit=effective_cvar_limit,
-                        )
+                    attempts.append(PhaseAttempt(
+                        phase="phase_2_ru_robust",
+                        status="succeeded",
+                        solver=phase2_solver,
+                        objective_value=round(phase2_expected_return, 6),
+                        wall_ms=_wall_p2,
+                        infeasibility_reason=None,
+                        cvar_at_solution=round(phase2_cvar_ru, 6),
+                        cvar_at_solution_cf=round(abs(phase2_cvar_cf), 6),
+                        cvar_limit_effective=effective_cvar_limit,
+                        cvar_within_limit=phase2_within,
+                        kappa_used=round(kappa, 6),
+                    ))
                 else:
                     attempts.append(PhaseAttempt(
-                        phase="robust", status="infeasible",
-                        solver="CLARABEL:robust",
-                        objective_value=None, wall_ms=_wall_pr,
+                        phase="phase_2_ru_robust", status="infeasible",
+                        solver=phase2_solver, objective_value=None, wall_ms=_wall_p2,
                         infeasibility_reason="zero weights after clipping",
                         kappa_used=round(kappa, 6),
+                        cvar_limit_effective=effective_cvar_limit,
                     ))
             else:
                 attempts.append(PhaseAttempt(
-                    phase="robust", status="infeasible",
-                    solver="CLARABEL:robust",
-                    objective_value=None, wall_ms=_wall_pr,
-                    infeasibility_reason=str(status_robust),
+                    phase="phase_2_ru_robust", status="infeasible",
+                    solver=None, objective_value=None, wall_ms=_wall_p2,
+                    infeasibility_reason=str(status2),
                     kappa_used=round(kappa, 6),
+                    cvar_limit_effective=effective_cvar_limit,
                 ))
-                logger.warning("robust_optimization_infeasible", status=status_robust)
         except Exception as e:
             attempts.append(PhaseAttempt(
-                phase="robust", status="solver_failed",
+                phase="phase_2_ru_robust", status="solver_failed",
                 solver=None, objective_value=None, wall_ms=0,
                 infeasibility_reason=str(e),
-            ))
-            logger.warning("robust_optimization_failed", error=str(e))
-
-    # ── Phase 2: CVaR violated — re-solve with variance ceiling ──
-    # Derive σ_max from the CVaR limit under a parametric approximation:
-    # CVaR_95 ≈ σ · c − μ   →   σ_max ≈ |limit| / c
-    #
-    # S2-G: the limit MUST be the regime-adjusted ``effective_cvar_limit``.
-    # The previous code fell back to the *relaxed* ``cvar_limit`` after Phase 1
-    # had tightened it for stress regimes — silently defeating the whole
-    # purpose of ``regime_cvar_multiplier``. We now anchor every derivation
-    # to ``phase2_limit`` and keep ``cvar_limit`` only for the result payload.
-    #
-    # S2-D: Phase 1 measures CVaR with Cornish-Fisher (accommodates skew and
-    # kurtosis). Deriving σ_max with the pure Normal coefficient
-    # ``c_N = −z_α + φ(z_α)/α ≈ 3.71`` introduces a calibration mismatch: at
-    # realistic equity kurtosis the CF CVaR is ≈1.3× the Normal CVaR for the
-    # same σ, so using c_N over-restricts (it assumes a thinner tail than
-    # Phase 1 uses to verify). We apply a conservative CF relaxation factor
-    # so Phase 2 produces feasible, tail-aware candidates instead of
-    # collapsing to min-variance. The exact factor is taken from the
-    # expected CF/Normal ratio for the portfolio moments; we fall back to
-    # the injected `cf_relaxation_factor` (default 1.3) when moments are zero.
-    from scipy.stats import norm as sp_norm
-
-    assert cvar_limit is not None  # Phase 2 only reached when cvar_limit was set
-    phase2_limit = effective_cvar_limit if effective_cvar_limit is not None else cvar_limit
-
-    z_alpha = sp_norm.ppf(0.05)  # -1.645
-    phi_z = sp_norm.pdf(z_alpha)
-    cvar_coeff_normal = -z_alpha + phi_z / 0.05  # ≈ 3.71 (pure Normal)
-
-    # Estimate the portfolio-level CF/Normal ratio using the Phase-1 weights
-    # (opt_w), which is the best feasible proxy available at this point. If
-    # the moment arrays are zero, fall back to the conservative parameter
-    # `cf_relaxation_factor`.
-    _port_skew = float(opt_w @ _skew)
-    _port_kurt = float(opt_w @ _kurt)
-    _z_cf = (
-        z_alpha
-        + (z_alpha**2 - 1) * _port_skew / 6
-        + (z_alpha**3 - 3 * z_alpha) * _port_kurt / 24
-        - (2 * z_alpha**3 - 5 * z_alpha) * _port_skew**2 / 36
-    )
-    _cvar_coeff_cf = -_z_cf + sp_norm.pdf(_z_cf) / 0.05
-    _cf_normal_ratio = _cvar_coeff_cf / cvar_coeff_normal
-    if not np.isfinite(_cf_normal_ratio) or _cf_normal_ratio < 1.05:
-        _cf_normal_ratio = cf_relaxation_factor
-
-    # Relax the Normal coefficient so σ_max reflects the CF-measured tail.
-    cvar_coeff = cvar_coeff_normal / _cf_normal_ratio
-    max_var = (abs(phase2_limit) / cvar_coeff) ** 2
-
-    logger.warning(
-        "cvar_violation_re_optimizing",
-        cvar_95=round(cvar_neg, 6),
-        cvar_limit=cvar_limit,
-        phase2_limit=round(phase2_limit, 6),
-        cf_normal_ratio=round(_cf_normal_ratio, 4),
-        max_vol_target=round(abs(phase2_limit) / cvar_coeff, 6),
-    )
-
-    w2 = cp.Variable(n, nonneg=True)
-    constraints2 = _build_base_constraints(w2)
-    constraints2.append(cp.quad_form(w2, psd_cov) <= max_var)
-
-    prob2 = cp.Problem(cp.Maximize(mu @ w2), constraints2)
-    _t_p2 = time.perf_counter()
-    status2 = await _solve_problem(prob2)
-    _wall_p2 = int((time.perf_counter() - _t_p2) * 1000)
-
-    _max_vol_target = float(abs(phase2_limit) / cvar_coeff)
-
-    if status2 in ("optimal", "optimal_inaccurate"):
-        opt_w2 = _extract_weights(w2)
-        if opt_w2 is not None:
-            solver2 = prob2.solver_stats.solver_name if prob2.solver_stats else solver_name
-            _cvar_p2 = _compute_cvar(opt_w2)
-            attempts.append(PhaseAttempt(
-                phase="variance_capped", status="succeeded",
-                solver=solver2,
-                objective_value=(float(prob2.value) if prob2.value is not None else None),
-                wall_ms=_wall_p2,
-                infeasibility_reason=None,
-                cvar_at_solution=round(_cvar_p2, 6),
                 cvar_limit_effective=effective_cvar_limit,
-                cvar_within_limit=(_cvar_p2 >= effective_cvar_limit if effective_cvar_limit is not None else True),
-                max_var=round(max_var, 9),
-                max_vol_target=round(_max_vol_target, 6),
-                cvar_coeff=round(float(cvar_coeff), 6),
-                cf_normal_ratio=round(float(_cf_normal_ratio), 4),
-                phase2_limit=round(float(phase2_limit), 6),
             ))
-            result = _build_result(opt_w2, solver2, "optimal:cvar_constrained", winning_phase="variance_capped")
-            logger.info(
-                "cvar_constrained_re_optimization_succeeded",
-                cvar_95=result.cvar_95, cvar_limit=cvar_limit,
-                cvar_within_limit=result.cvar_within_limit,
-                sharpe=result.sharpe_ratio,
-            )
-            return result
-        else:
-            attempts.append(PhaseAttempt(
-                phase="variance_capped", status="infeasible",
-                solver=None, objective_value=None, wall_ms=_wall_p2,
-                infeasibility_reason="zero weights after clipping",
-                max_var=round(max_var, 9),
-                max_vol_target=round(_max_vol_target, 6),
-                cvar_coeff=round(float(cvar_coeff), 6),
-                cf_normal_ratio=round(float(_cf_normal_ratio), 4),
-                phase2_limit=round(float(phase2_limit), 6),
-            ))
-    else:
-        attempts.append(PhaseAttempt(
-            phase="variance_capped", status="infeasible",
-            solver="CLARABEL",
-            objective_value=None, wall_ms=_wall_p2,
-            infeasibility_reason=str(status2),
-            max_var=round(max_var, 9),
-            max_vol_target=round(_max_vol_target, 6),
-            cvar_coeff=round(float(cvar_coeff), 6),
-            cf_normal_ratio=round(float(_cf_normal_ratio), 4),
-            phase2_limit=round(float(phase2_limit), 6),
-        ))
+            logger.warning("phase_2_ru_robust_failed", error=str(e))
 
-    # ── Phase 3: Variance-capped infeasible — fall back to min_variance ──
-    logger.warning("cvar_capped_infeasible_falling_back_to_min_variance")
-
+    # ── Phase 3 — Min-CVaR LP (ALWAYS runs for telemetry band) ────────────
     w3 = cp.Variable(n, nonneg=True)
-    prob3 = cp.Problem(
-        cp.Minimize(cp.quad_form(w3, psd_cov)),
-        _build_base_constraints(w3),
+    cvar_expr3, slack_cs3, _zeta3, _u3 = build_ru_cvar_objective(
+        w_var=w3,
+        returns_scenarios=returns_scenarios,
+        alpha=cvar_alpha,
     )
+    constraints3 = _build_base_constraints(w3) + slack_cs3
+    prob3 = cp.Problem(cp.Minimize(cvar_expr3), constraints3)
+
     _t_p3 = time.perf_counter()
     status3 = await _solve_problem(prob3)
     _wall_p3 = int((time.perf_counter() - _t_p3) * 1000)
 
+    phase3_weights: np.ndarray | None = None
+    min_achievable_cvar: float | None = None
     if status3 in ("optimal", "optimal_inaccurate"):
         opt_w3 = _extract_weights(w3)
         if opt_w3 is not None:
-            _min_var = float(prob3.value) if prob3.value is not None else float(opt_w3 @ cov_matrix @ opt_w3)
+            phase3_weights = opt_w3
+            min_achievable_cvar = float(prob3.value) if prob3.value is not None else _cvar_from_ru(opt_w3)
+            phase3_cvar_cf = _compute_cvar(opt_w3)
+            phase3_within = (
+                min_achievable_cvar <= effective_cvar_limit
+                if effective_cvar_limit is not None
+                else True
+            )
             attempts.append(PhaseAttempt(
-                phase="min_variance", status="succeeded",
+                phase="phase_3_min_cvar",
+                status="succeeded",
                 solver="CLARABEL",
-                objective_value=round(_min_var, 9),
+                objective_value=round(min_achievable_cvar, 6),
                 wall_ms=_wall_p3,
                 infeasibility_reason=None,
-                min_achievable_variance=round(_min_var, 9),
-                min_achievable_vol=round(float(np.sqrt(max(_min_var, 0.0))), 6),
+                cvar_at_solution=round(min_achievable_cvar, 6),
+                cvar_at_solution_cf=round(abs(phase3_cvar_cf), 6),
+                cvar_limit_effective=effective_cvar_limit,
+                cvar_within_limit=phase3_within,
             ))
-            result = _build_result(opt_w3, "min_variance_fallback", "optimal:min_variance_fallback", winning_phase="min_variance")
-            logger.warning(
-                "min_variance_fallback_used",
-                cvar_95=result.cvar_95, cvar_limit=cvar_limit,
-                cvar_within_limit=result.cvar_within_limit,
-            )
-            return result
         else:
             attempts.append(PhaseAttempt(
-                phase="min_variance", status="infeasible",
-                solver="CLARABEL",
-                objective_value=None, wall_ms=_wall_p3,
+                phase="phase_3_min_cvar", status="infeasible",
+                solver="CLARABEL", objective_value=None, wall_ms=_wall_p3,
                 infeasibility_reason="zero weights after clipping",
+                cvar_limit_effective=effective_cvar_limit,
             ))
     else:
         attempts.append(PhaseAttempt(
-            phase="min_variance", status="solver_failed",
-            solver="CLARABEL",
-            objective_value=None, wall_ms=_wall_p3,
+            phase="phase_3_min_cvar", status="solver_failed",
+            solver="CLARABEL", objective_value=None, wall_ms=_wall_p3,
             infeasibility_reason=str(status3),
+            cvar_limit_effective=effective_cvar_limit,
         ))
 
-    # All three phases failed — return original Phase 1 result with violation flag
-    result = _build_result(opt_w, solver_name, "optimal:cvar_violated", winning_phase="heuristic")
-    logger.error(
-        "all_cvar_enforcement_phases_failed",
-        cvar_95=result.cvar_95, cvar_limit=cvar_limit,
+    # If Phase 3 failed, the constraint polytope is malformed (block bands
+    # sum > 1 etc.). This is the ONLY failure mode in PR-A12.
+    if phase3_weights is None:
+        logger.error(
+            "constraint_polytope_empty",
+            n_funds=n,
+        )
+        return _empty_result("constraint_polytope_empty", "CLARABEL")
+    assert min_achievable_cvar is not None  # non-None whenever phase3_weights is set
+    phase3_expected_return = float(mu @ phase3_weights)
+
+    # ── Winner selection (Phase 1 > Phase 2 > Phase 3) ───────────────────
+    if phase1_weights is not None:
+        winner_w = phase1_weights
+        winner_phase = "phase_1_ru_max_return"
+        winner_solver = phase1_solver
+        winner_return = phase1_expected_return
+        winner_status = "optimal"
+    elif phase2_weights is not None:
+        winner_w = phase2_weights
+        winner_phase = "phase_2_ru_robust"
+        winner_solver = phase2_solver
+        winner_return = phase2_expected_return
+        winner_status = "optimal"
+    else:
+        winner_w = phase3_weights
+        winner_phase = "phase_3_min_cvar"
+        winner_solver = "CLARABEL"
+        winner_return = phase3_expected_return
+        within_limit = (
+            min_achievable_cvar <= effective_cvar_limit
+            if effective_cvar_limit is not None
+            else True
+        )
+        winner_status = "optimal" if within_limit else "degraded"
+
+    assert winner_return is not None
+    winner_cvar_ru = _cvar_from_ru(winner_w)
+    band: dict[str, float] = {
+        "lower": round(phase3_expected_return, 6),
+        "upper": round(float(winner_return), 6),
+        "lower_at_cvar": round(min_achievable_cvar, 6),
+        "upper_at_cvar": round(winner_cvar_ru, 6),
+    }
+
+    result = _build_result(
+        winner_w, winner_solver, winner_status,
+        winning_phase=winner_phase,
+        min_achievable_cvar=round(min_achievable_cvar, 6),
+        achievable_return_band=band,
+    )
+
+    logger.info(
+        "fund_portfolio_optimized",
+        n_funds=n, sharpe=result.sharpe_ratio,
+        cvar_95=result.cvar_95, cvar_limit=effective_cvar_limit,
+        solver=winner_solver, status=winner_status,
+        winning_phase=winner_phase,
+        min_achievable_cvar=round(min_achievable_cvar, 6),
+        band_upper=band["upper"], band_lower=band["lower"],
     )
     return result
 
