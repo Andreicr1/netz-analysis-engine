@@ -81,6 +81,8 @@ def compute_bl_posterior_multi_view(
     sigma: np.ndarray,
     views: list[View],
     tau: float = TAU_PHASE_A,
+    *,
+    trace_indices: dict[str, int] | None = None,
 ) -> np.ndarray:
     """Multi-view Black-Litterman posterior.
 
@@ -114,7 +116,23 @@ def compute_bl_posterior_multi_view(
     n = sigma.shape[0]
 
     if not views:
-        return np.asarray(mu_prior, dtype=np.float64)
+        mu_out = np.asarray(mu_prior, dtype=np.float64)
+        if trace_indices:
+            for _tkr, _idx in trace_indices.items():
+                if 0 <= _idx < mu_out.shape[0]:
+                    logger.info(
+                        "mu_trace_bl_posterior",
+                        ticker=_tkr,
+                        mu_prior_i=float(mu_prior[_idx]),
+                        mu_post_i=float(mu_out[_idx]),
+                        delta=0.0,
+                        tau=tau,
+                        omega_eps=0.0,
+                        n_views_total=0,
+                        n_view_groups=0,
+                        no_views=True,
+                    )
+        return mu_out
 
     P_stack = np.vstack([v.P for v in views])            # (K_total, N)
     Q_stack = np.concatenate([v.Q for v in views])       # (K_total,)
@@ -149,6 +167,22 @@ def compute_bl_posterior_multi_view(
         omega_eps=eps,
         sources=[v.source for v in views],
     )
+
+    if trace_indices:
+        for _tkr, _idx in trace_indices.items():
+            if 0 <= _idx < n:
+                logger.info(
+                    "mu_trace_bl_posterior",
+                    ticker=_tkr,
+                    mu_prior_i=float(mu_prior[_idx]),
+                    mu_post_i=float(mu_post[_idx]),
+                    delta=float(mu_post[_idx] - mu_prior[_idx]),
+                    tau=tau,
+                    omega_eps=eps,
+                    n_views_total=int(k),
+                    n_view_groups=len(views),
+                    no_views=False,
+                )
 
     return np.asarray(mu_post, dtype=np.float64)
 
