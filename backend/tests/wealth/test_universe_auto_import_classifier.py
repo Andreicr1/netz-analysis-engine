@@ -12,6 +12,7 @@ def _inst(
     name: str = "Test Fund",
     strategy_label: str | None = None,
     fund_type: str | None = None,
+    investment_geography: str | None = None,
     **extra_attrs: str,
 ) -> dict:
     attrs: dict = {k: v for k, v in {
@@ -19,12 +20,15 @@ def _inst(
         "fund_type": fund_type,
         **extra_attrs,
     }.items() if v is not None}
-    return {
+    payload: dict = {
         "asset_class": asset_class,
         "instrument_type": instrument_type,
         "name": name,
         "attributes": attrs,
     }
+    if investment_geography is not None:
+        payload["investment_geography"] = investment_geography
+    return payload
 
 
 @pytest.mark.parametrize(
@@ -54,11 +58,11 @@ def _inst(
             "cash",
             "asset_class_cash",
         ),
-        # 5. FI fallback (no strategy_label)
+        # 5. FI fallback (no strategy_label, no name match)
         (
             _inst(asset_class="fixed_income"),
             "fi_us_aggregate",
-            "fallback_fi",
+            "fallback_fi_aggregate",
         ),
         # 6. Equity fallback (no strategy_label)
         (
@@ -167,6 +171,175 @@ def test_valid_blocks_filters_primary_to_secondary() -> None:
     valid = {"na_equity_large", "fi_us_aggregate", "cash"}
     block_id, reason = classify_block(inst, valid_blocks=valid)
     assert block_id == "na_equity_large"
+    assert reason == "strategy_label"
+
+
+@pytest.mark.parametrize(
+    "geography, expected_block, reason_suffix",
+    [
+        ("US", "na_equity_large", "us"),
+        ("North America", "na_equity_large", "north_america"),
+        ("Emerging Markets", "em_equity", "emerging_markets"),
+        ("Latin America", "em_equity", "latin_america"),
+        ("Europe", "dm_europe_equity", "europe"),
+        ("Asia Pacific", "dm_asia_equity", "asia_pacific"),
+        ("Japan", "dm_asia_equity", "japan"),
+        ("Global", "na_equity_large", "global"),
+    ],
+)
+def test_equity_geography_routing(
+    geography: str, expected_block: str, reason_suffix: str,
+) -> None:
+    inst = _inst(asset_class="equity", investment_geography=geography)
+    valid = {"na_equity_large", "em_equity", "dm_europe_equity", "dm_asia_equity"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == expected_block
+    assert reason == f"fallback_equity_{reason_suffix}"
+
+
+def test_equity_unknown_geography_falls_through_to_default() -> None:
+    inst = _inst(asset_class="equity", investment_geography="Antarctica")
+    valid = {"na_equity_large", "em_equity", "dm_europe_equity", "dm_asia_equity"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == "na_equity_large"
+    assert reason == "fallback_equity"
+
+
+def test_equity_missing_geography_falls_through_to_default() -> None:
+    """Legacy rows without investment_geography keep current PR-A6 behaviour."""
+    inst = _inst(asset_class="equity")  # investment_geography omitted
+    block_id, reason = classify_block(inst)
+    assert block_id == "na_equity_large"
+    assert reason == "fallback_equity"
+
+
+def test_equity_geography_mapped_block_not_registered_falls_through() -> None:
+    """When the mapped geography block is not in valid_blocks, fall
+    through to the plain ``na_equity_large`` default rather than silently
+    dropping the fund.
+    """
+    inst = _inst(asset_class="equity", investment_geography="Emerging Markets")
+    valid = {"na_equity_large"}  # em_equity intentionally absent
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == "na_equity_large"
+    assert reason == "fallback_equity"
+
+
+def test_strategy_label_beats_geography() -> None:
+    """Strategy-label cascade must run first; geography routing is
+    fallback-only so funds with granular labels are not re-routed by
+    their domicile region.
+    """
+    inst = _inst(
+        asset_class="equity",
+        investment_geography="Emerging Markets",
+        strategy_label="Growth",
+    )
+    valid = {"na_equity_large", "na_equity_growth", "em_equity"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == "na_equity_growth"
+    assert reason == "strategy_label"
+
+
+@pytest.mark.parametrize(
+    "name, expected_block, expected_reason",
+    [
+        ("iShares 7-10 Year Treasury ETF", "fi_us_treasury", "fallback_fi_name_fi_us_treasury"),
+        ("Vanguard Short-Term Treasury Index", "fi_us_treasury", "fallback_fi_name_fi_us_treasury"),
+        ("SPDR Bloomberg 1-3 Month T-Bill ETF", "fi_us_treasury", "fallback_fi_name_fi_us_treasury"),
+        ("iShares Core U.S. GOVT Bond ETF", "fi_us_treasury", "fallback_fi_name_fi_us_treasury"),
+        ("SPDR Bloomberg TIPS ETF", "fi_us_tips", "fallback_fi_name_fi_us_tips"),
+        ("iShares Inflation-Protected Bond ETF", "fi_us_tips", "fallback_fi_name_fi_us_tips"),
+        ("PIMCO Inflation Protected Securities", "fi_us_tips", "fallback_fi_name_fi_us_tips"),
+        ("iShares iBoxx $ High Yield Corporate Bond ETF", "fi_us_high_yield", "fallback_fi_name_fi_us_high_yield"),
+        ("SPDR High-Yield Corporate", "fi_us_high_yield", "fallback_fi_name_fi_us_high_yield"),
+        ("AllianceBernstein Junk Bond Fund", "fi_us_high_yield", "fallback_fi_name_fi_us_high_yield"),
+        ("Vanguard Total Bond Market Index", "fi_us_aggregate", "fallback_fi_aggregate"),
+        ("PIMCO Total Return Fund", "fi_us_aggregate", "fallback_fi_aggregate"),
+    ],
+)
+def test_fi_name_heuristic(
+    name: str, expected_block: str, expected_reason: str,
+) -> None:
+    inst = _inst(
+        asset_class="fixed_income", investment_geography="US", name=name,
+    )
+    valid = {
+        "fi_us_aggregate", "fi_us_treasury", "fi_us_tips",
+        "fi_us_high_yield", "fi_em_debt",
+    }
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == expected_block
+    assert reason == expected_reason
+
+
+def test_fi_tips_beats_treasury_specificity() -> None:
+    """A fund titled 'Treasury Inflation-Protected' must route to
+    fi_us_tips, not fi_us_treasury — TIPS heuristic is checked first
+    because it's more specific.
+    """
+    inst = _inst(
+        asset_class="fixed_income", investment_geography="US",
+        name="iShares Treasury Inflation-Protected Securities ETF",
+    )
+    valid = {"fi_us_aggregate", "fi_us_treasury", "fi_us_tips", "fi_us_high_yield"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == "fi_us_tips"
+    assert reason == "fallback_fi_name_fi_us_tips"
+
+
+def test_fi_geography_em_routes_to_em_debt() -> None:
+    inst = _inst(
+        asset_class="fixed_income", investment_geography="Emerging Markets",
+        name="iShares JP Morgan EM Debt ETF",
+    )
+    valid = {"fi_us_aggregate", "fi_em_debt"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == "fi_em_debt"
+    assert reason == "fallback_fi_em"
+
+
+def test_fi_geography_em_falls_through_if_block_missing() -> None:
+    """If fi_em_debt is not registered, EM FI degrades gracefully to
+    name-heuristic / aggregate rather than silently dropping the fund.
+    """
+    inst = _inst(
+        asset_class="fixed_income", investment_geography="Emerging Markets",
+        name="Generic EM Bond Fund",
+    )
+    valid = {"fi_us_aggregate"}  # fi_em_debt intentionally absent
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == "fi_us_aggregate"
+    assert reason == "fallback_fi_aggregate"
+
+
+def test_fi_geography_europe_falls_through_if_block_missing() -> None:
+    """fi_europe_aggregate is NOT in the default seed; the classifier
+    must gracefully fall through to US name heuristics / aggregate.
+    """
+    inst = _inst(
+        asset_class="fixed_income", investment_geography="Europe",
+        name="iShares Euro Aggregate Bond ETF",
+    )
+    valid = {"fi_us_aggregate", "fi_us_treasury"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == "fi_us_aggregate"
+    assert reason == "fallback_fi_aggregate"
+
+
+def test_fi_strategy_label_beats_name_heuristic() -> None:
+    """Strategy-label cascade must still run first. A fund whose name
+    mentions 'Treasury' but has strategy_label='High Yield Bond' should
+    hit fi_us_high_yield via the label, not fi_us_treasury via the name.
+    """
+    inst = _inst(
+        asset_class="fixed_income", investment_geography="US",
+        name="Fictional Treasury High Yield Cross Fund",
+        strategy_label="High Yield Bond",
+    )
+    valid = {"fi_us_aggregate", "fi_us_treasury", "fi_us_high_yield"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == "fi_us_high_yield"
     assert reason == "strategy_label"
 
 

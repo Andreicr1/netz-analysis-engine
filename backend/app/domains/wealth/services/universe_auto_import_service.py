@@ -80,6 +80,7 @@ _QUALIFIED_QUERY = text(
             iu.instrument_id,
             iu.instrument_type,
             iu.asset_class,
+            iu.investment_geography,
             iu.name,
             iu.attributes
         FROM instruments_universe iu
@@ -120,6 +121,7 @@ _QUALIFIED_QUERY = text(
         c.instrument_id,
         c.instrument_type,
         c.asset_class,
+        c.investment_geography,
         c.name,
         c.attributes
     FROM candidates c
@@ -186,6 +188,7 @@ async def fetch_qualified_instruments(db: AsyncSession) -> list[dict[str, Any]]:
             "instrument_id": row["instrument_id"],
             "instrument_type": row["instrument_type"],
             "asset_class": row["asset_class"],
+            "investment_geography": row["investment_geography"] or "",
             "name": row["name"] or "",
             "attributes": row["attributes"] or {},
         })
