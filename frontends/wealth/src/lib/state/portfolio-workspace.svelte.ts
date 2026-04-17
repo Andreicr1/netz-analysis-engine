@@ -35,6 +35,11 @@ import type {
 	UnifiedAlertInbox,
 } from "$lib/types/alerts";
 import type {
+	CascadeTelemetry,
+	AchievableReturnBand,
+	OperatorSignal,
+} from "$lib/types/cascade-telemetry";
+import type {
 	RegimeBands,
 	TaaHistory,
 	EffectiveAllocationWithRegime,
@@ -71,6 +76,12 @@ export interface ConstructionRunPayload {
 	narrative: ConstructionNarrativeContent | null;
 	rationale_per_weight: Record<string, unknown> | null;
 	weights_proposed: Record<string, number> | null;
+	/**
+	 * PR-A11/A12 — cascade telemetry JSONB column. Drives the PR-A13
+	 * Risk Budget panel: achievable return band, operator signal, and
+	 * per-phase cascade trace.
+	 */
+	cascade_telemetry: CascadeTelemetry | null;
 }
 
 export interface ConstructionStressResult {
@@ -138,6 +149,11 @@ export interface ConstructRunEvent {
 	phase?: string;
 	phase_label?: string;
 	objective_value?: number | null;
+	// PR-A11 cascade_telemetry_completed payload
+	cascade_summary?: string | null;
+	operator_signal?: OperatorSignal | null;
+	min_achievable_cvar?: number | null;
+	achievable_return_band?: AchievableReturnBand | null;
 }
 
 /** Session 3 — NAV history response for Backtest tab. */
@@ -1730,6 +1746,28 @@ export class PortfolioWorkspaceState {
 		} else if (e === "error" || e === "Construction failed" || e === "Construction cancelled") {
 			this.runPhase = "error";
 			this.runError = ev.reason ?? "Construction failed";
+		}
+
+		// PR-A13 — hydrate cascade_telemetry on the dedicated SSE event so the
+		// Risk Budget panel updates before the final REST GET arrives. The
+		// backend only emits the subset needed by the panel
+		// (cascade_summary / achievable_return_band / operator_signal /
+		// min_achievable_cvar). ``phase_attempts`` lands via loadConstructionRun.
+		if (e === "cascade_telemetry_completed" || e === "Cascade telemetry completed") {
+			const run = this.constructionRun;
+			const summary = (ev.cascade_summary ?? null) as
+				| CascadeTelemetry["cascade_summary"]
+				| null;
+			const nextTelemetry: CascadeTelemetry = {
+				phase_attempts: run?.cascade_telemetry?.phase_attempts ?? [],
+				cascade_summary: summary ?? "upstream_heuristic",
+				min_achievable_cvar: ev.min_achievable_cvar ?? null,
+				achievable_return_band: ev.achievable_return_band ?? null,
+				operator_signal: ev.operator_signal ?? null,
+			};
+			this.constructionRun = run
+				? { ...run, cascade_telemetry: nextTelemetry }
+				: run;
 		}
 
 		// Per-phase optimizer cascade events → update timeline pills

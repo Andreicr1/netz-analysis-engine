@@ -236,6 +236,11 @@ export function translateCascadeSummary(value: string): TranslatedMetric {
  */
 export function translateOperatorSignalKind(value: string): TranslatedMetric {
 	switch (value) {
+		case "feasible":
+			return {
+				label: "Alocação viável dentro do limite de perda",
+				tone: "success",
+			};
 		case "cvar_limit_below_universe_floor":
 			return {
 				label:
