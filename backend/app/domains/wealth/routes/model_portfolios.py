@@ -2049,6 +2049,11 @@ async def _run_construction_async(
     # successful path below.
     shrinkage_metrics: dict[str, Any] = {}
 
+    # PR-A11 — cascade telemetry handle. Populated by the optimizer path
+    # below; synthesized on the heuristic fallback branch so every result
+    # dict carries a uniform ``cascade`` key consumed by the executor.
+    fund_result: FundOptimizationResult | None = None
+
     try:
         # ── BL-5: Fetch regime probs for regime-conditioned covariance ──
         regime_config: dict[str, Any] = {}
@@ -2191,7 +2196,7 @@ async def _run_construction_async(
         optimizer_config = optimizer_result.value if optimizer_result else {}
         cf_factor = float(optimizer_config.get("cf_relaxation_factor", 1.3))
 
-        fund_result: FundOptimizationResult = await optimize_fund_portfolio(
+        fund_result = await optimize_fund_portfolio(
             fund_ids=opt_fund_ids,
             fund_blocks=sub_blocks,
             expected_returns=sub_returns,
@@ -2283,6 +2288,61 @@ async def _run_construction_async(
             }
             for fw in composition.funds
         ],
+    }
+
+    # PR-A11 — cascade audit trail. Uniform shape regardless of whether the
+    # fund-level optimizer produced the composition or the heuristic fallback
+    # fired. The executor reads this block to build ``cascade_telemetry``.
+    from dataclasses import asdict as _asdict
+    _cascade_phase_order = ("primary", "robust", "variance_capped", "min_variance")
+
+    def _skipped_attempts_all() -> list[dict[str, Any]]:
+        return [
+            {
+                "phase": p, "status": "skipped", "solver": None,
+                "objective_value": None, "wall_ms": 0,
+                "infeasibility_reason": None,
+                "cvar_at_solution": None, "cvar_limit_effective": None,
+                "cvar_within_limit": None, "max_var": None,
+                "max_vol_target": None, "cvar_coeff": None,
+                "cf_normal_ratio": None, "phase2_limit": None,
+                "min_achievable_variance": None, "min_achievable_vol": None,
+                "kappa_used": None,
+            }
+            for p in _cascade_phase_order
+        ]
+
+    if fund_result is not None and fund_result.phase_attempts:
+        cascade_attempts = [_asdict(a) for a in fund_result.phase_attempts]
+        cascade_winning = fund_result.winning_phase
+    else:
+        cascade_attempts = _skipped_attempts_all()
+        cascade_winning = None
+
+    used_heuristic = (
+        composition is not None
+        and composition.optimization is not None
+        and (composition.optimization.solver == "heuristic_fallback"
+             or (composition.optimization.status or "").startswith("fallback"))
+    )
+    if used_heuristic:
+        cascade_attempts.append({
+            "phase": "heuristic", "status": "succeeded",
+            "solver": "heuristic_fallback",
+            "objective_value": None, "wall_ms": 0,
+            "infeasibility_reason": None,
+            "cvar_at_solution": None, "cvar_limit_effective": None,
+            "cvar_within_limit": None, "max_var": None,
+            "max_vol_target": None, "cvar_coeff": None,
+            "cf_normal_ratio": None, "phase2_limit": None,
+            "min_achievable_variance": None, "min_achievable_vol": None,
+            "kappa_used": None,
+        })
+        cascade_winning = "heuristic"
+
+    result["cascade"] = {
+        "phase_attempts": cascade_attempts,
+        "winning_phase": cascade_winning,
     }
 
     # Include TAA provenance for calibration_snapshot enrichment

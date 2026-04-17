@@ -6,7 +6,8 @@ Constraints: weights sum to 1, per-block bounds, portfolio CVaR <= limit, long-o
 """
 
 import asyncio
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from datetime import date as date_type
 from typing import Any
 
@@ -307,6 +308,37 @@ async def optimize_portfolio(
 
 
 @dataclass
+class PhaseAttempt:
+    """PR-A11 — per-phase audit trail entry for the optimizer cascade.
+
+    One instance per cascade phase (including skipped ones) is appended
+    to ``FundOptimizationResult.phase_attempts``. The executor persists
+    the list to ``portfolio_construction_runs.cascade_telemetry`` so
+    operators can see which phase actually won and why earlier phases
+    failed.
+    """
+
+    phase: str                         # "primary"|"robust"|"variance_capped"|"min_variance"|"heuristic"
+    status: str                        # "succeeded"|"infeasible"|"solver_failed"|"skipped"
+    solver: str | None
+    objective_value: float | None
+    wall_ms: int
+    infeasibility_reason: str | None   # raw CVXPY status string when status != "succeeded"
+    # Phase-specific fields (None when N/A):
+    cvar_at_solution: float | None = None
+    cvar_limit_effective: float | None = None
+    cvar_within_limit: bool | None = None
+    max_var: float | None = None
+    max_vol_target: float | None = None
+    cvar_coeff: float | None = None
+    cf_normal_ratio: float | None = None
+    phase2_limit: float | None = None
+    min_achievable_variance: float | None = None
+    min_achievable_vol: float | None = None
+    kappa_used: float | None = None
+
+
+@dataclass
 class FundOptimizationResult:
     """Result from fund-level CLARABEL optimization with block-group constraints."""
 
@@ -320,6 +352,12 @@ class FundOptimizationResult:
     cvar_within_limit: bool
     status: str
     solver_info: str | None = None
+    # PR-A11 — cascade audit trail. ``phase_attempts`` contains one entry
+    # per cascade phase including skipped ones (>= 4 for the standard
+    # 4-phase cascade). ``winning_phase`` is one of:
+    # "primary"|"robust"|"variance_capped"|"min_variance"|"heuristic"|None.
+    phase_attempts: list[PhaseAttempt] = field(default_factory=list)
+    winning_phase: str | None = None
 
 
 async def optimize_fund_portfolio(
@@ -369,6 +407,14 @@ async def optimize_fund_portfolio(
             portfolio_volatility=0.0, sharpe_ratio=0.0,
             cvar_95=None, cvar_limit=cvar_limit,
             cvar_within_limit=True, status="empty",
+            phase_attempts=[
+                PhaseAttempt(
+                    phase=p, status="skipped", solver=None,
+                    objective_value=None, wall_ms=0, infeasibility_reason=None,
+                )
+                for p in ("primary", "robust", "variance_capped", "min_variance")
+            ],
+            winning_phase=None,
         )
 
     # B.7 — caller is responsible for assembling Σ. The optimizer
@@ -391,6 +437,14 @@ async def optimize_fund_portfolio(
             cvar_95=None, cvar_limit=cvar_limit,
             cvar_within_limit=False, status="psd_violation",
             solver_info=f"min_eigenvalue={min_eig:.3e}",
+            phase_attempts=[
+                PhaseAttempt(
+                    phase=p, status="skipped", solver=None,
+                    objective_value=None, wall_ms=0, infeasibility_reason="psd_violation",
+                )
+                for p in ("primary", "robust", "variance_capped", "min_variance")
+            ],
+            winning_phase=None,
         )
 
     mu = np.array([expected_returns.get(fid, 0.0) for fid in fund_ids])
@@ -455,8 +509,31 @@ async def optimize_fund_portfolio(
         """Compute parametric CVaR (Cornish-Fisher)."""
         return -parametric_cvar_cf(w_arr, mu, cov_matrix, _skew, _kurt)
 
+    # PR-A11 — cascade audit trail. The list is appended to as each phase
+    # completes (or is skipped); ``_pad_skipped`` backfills the remaining
+    # cascade slots at every return site so the shape is uniform.
+    attempts: list[PhaseAttempt] = []
+    _CASCADE_PHASE_ORDER = ("primary", "robust", "variance_capped", "min_variance")
+
+    def _pad_skipped() -> list[PhaseAttempt]:
+        seen = {a.phase for a in attempts}
+        for phase in _CASCADE_PHASE_ORDER:
+            if phase not in seen:
+                attempts.append(
+                    PhaseAttempt(
+                        phase=phase,
+                        status="skipped",
+                        solver=None,
+                        objective_value=None,
+                        wall_ms=0,
+                        infeasibility_reason=None,
+                    ),
+                )
+        return attempts
+
     def _build_result(
         w_arr: np.ndarray, solver: str | None, status: str,
+        winning_phase: str | None = None,
     ) -> FundOptimizationResult:
         """Build FundOptimizationResult from optimized weights."""
         ret = float(mu @ w_arr)
@@ -482,14 +559,21 @@ async def optimize_fund_portfolio(
             cvar_within_limit=cvar_ok,
             status=status,
             solver_info=solver,
+            phase_attempts=_pad_skipped(),
+            winning_phase=winning_phase,
         )
 
-    def _empty_result(status: str, solver: str | None = None) -> FundOptimizationResult:
+    def _empty_result(
+        status: str, solver: str | None = None,
+        winning_phase: str | None = None,
+    ) -> FundOptimizationResult:
         return FundOptimizationResult(
             weights={}, block_weights={}, expected_return=0.0,
             portfolio_volatility=0.0, sharpe_ratio=0.0,
             cvar_95=None, cvar_limit=cvar_limit,
             cvar_within_limit=False, status=status, solver_info=solver,
+            phase_attempts=_pad_skipped(),
+            winning_phase=winning_phase,
         )
 
     # ── Phase 1: Max risk-adjusted return (with optional turnover penalty) ──
@@ -510,8 +594,15 @@ async def optimize_fund_portfolio(
 
     prob1 = cp.Problem(cp.Maximize(objective_expr), phase1_constraints)
 
+    _t_p1 = time.perf_counter()
     status1 = await _solve_problem(prob1)
+    _wall_p1 = int((time.perf_counter() - _t_p1) * 1000)
     if status1 in (None, "solver_error"):
+        attempts.append(PhaseAttempt(
+            phase="primary", status="solver_failed", solver=None,
+            objective_value=None, wall_ms=_wall_p1,
+            infeasibility_reason="Both CLARABEL and SCS failed",
+        ))
         return _empty_result("solver_failed", "Both CLARABEL and SCS failed")
     if status1 not in ("optimal", "optimal_inaccurate"):
         # If turnover penalty caused infeasibility, retry without it
@@ -527,12 +618,27 @@ async def optimize_fund_portfolio(
                 w1 = w1_retry
                 prob1 = prob1_retry
             else:
+                attempts.append(PhaseAttempt(
+                    phase="primary", status="infeasible", solver=None,
+                    objective_value=None, wall_ms=_wall_p1,
+                    infeasibility_reason=str(status1),
+                ))
                 return _empty_result(f"infeasible: {status1}")
         else:
+            attempts.append(PhaseAttempt(
+                phase="primary", status="infeasible", solver=None,
+                objective_value=None, wall_ms=_wall_p1,
+                infeasibility_reason=str(status1),
+            ))
             return _empty_result(f"infeasible: {status1}")
 
     opt_w = _extract_weights(w1)
     if opt_w is None:
+        attempts.append(PhaseAttempt(
+            phase="primary", status="infeasible", solver=None,
+            objective_value=None, wall_ms=_wall_p1,
+            infeasibility_reason="zero weights after clipping",
+        ))
         return _empty_result("infeasible: zero weights")
 
     solver_name = prob1.solver_stats.solver_name if prob1.solver_stats else None
@@ -554,8 +660,22 @@ async def optimize_fund_portfolio(
         # Re-check with effective limit
         cvar_ok = cvar_neg >= effective_cvar_limit
 
+    # PR-A11 — record Phase 1 attempt now that CVaR check has run so we can
+    # capture ``cvar_at_solution`` / ``cvar_within_limit`` on the attempt.
+    attempts.append(PhaseAttempt(
+        phase="primary",
+        status="succeeded",
+        solver=solver_name,
+        objective_value=(float(prob1.value) if prob1.value is not None else None),
+        wall_ms=_wall_p1,
+        infeasibility_reason=None,
+        cvar_at_solution=round(cvar_neg, 6),
+        cvar_limit_effective=effective_cvar_limit,
+        cvar_within_limit=cvar_ok,
+    ))
+
     if cvar_ok or effective_cvar_limit is None:
-        result = _build_result(opt_w, solver_name, "optimal")
+        result = _build_result(opt_w, solver_name, "optimal", winning_phase="primary")
         logger.info(
             "fund_portfolio_optimized",
             n_funds=n, sharpe=result.sharpe_ratio,
@@ -565,6 +685,11 @@ async def optimize_fund_portfolio(
         return result
 
     # ── Phase 1.5: Robust optimization (ellipsoidal uncertainty set) ──
+    if not robust:
+        attempts.append(PhaseAttempt(
+            phase="robust", status="skipped", solver=None,
+            objective_value=None, wall_ms=0, infeasibility_reason=None,
+        ))
     if robust:
         try:
             # S2-E: Ben-Tal & Nemirovski's robust counterpart for a Gaussian
@@ -609,7 +734,9 @@ async def optimize_fund_portfolio(
             robust_constraints = _build_base_constraints(w_robust)
             prob_robust = cp.Problem(robust_obj, robust_constraints)
 
+            _t_pr = time.perf_counter()
             status_robust = await _solve_problem(prob_robust)
+            _wall_pr = int((time.perf_counter() - _t_pr) * 1000)
             if status_robust in ("optimal", "optimal_inaccurate"):
                 opt_w_robust = _extract_weights(w_robust)
                 if opt_w_robust is not None:
@@ -620,7 +747,18 @@ async def optimize_fund_portfolio(
                         else True
                     )
                     if cvar_ok_robust:
-                        result = _build_result(opt_w_robust, "CLARABEL:robust", "optimal:robust")
+                        attempts.append(PhaseAttempt(
+                            phase="robust", status="succeeded",
+                            solver="CLARABEL:robust",
+                            objective_value=(float(prob_robust.value) if prob_robust.value is not None else None),
+                            wall_ms=_wall_pr,
+                            infeasibility_reason=None,
+                            cvar_at_solution=round(cvar_robust, 6),
+                            cvar_limit_effective=effective_cvar_limit,
+                            cvar_within_limit=True,
+                            kappa_used=round(kappa, 6),
+                        ))
+                        result = _build_result(opt_w_robust, "CLARABEL:robust", "optimal:robust", winning_phase="robust")
                         logger.info(
                             "robust_optimization_succeeded",
                             sharpe=result.sharpe_ratio,
@@ -630,14 +768,45 @@ async def optimize_fund_portfolio(
                         )
                         return result
                     else:
+                        attempts.append(PhaseAttempt(
+                            phase="robust", status="infeasible",
+                            solver="CLARABEL:robust",
+                            objective_value=(float(prob_robust.value) if prob_robust.value is not None else None),
+                            wall_ms=_wall_pr,
+                            infeasibility_reason="cvar_still_violated",
+                            cvar_at_solution=round(cvar_robust, 6),
+                            cvar_limit_effective=effective_cvar_limit,
+                            cvar_within_limit=False,
+                            kappa_used=round(kappa, 6),
+                        ))
                         logger.warning(
                             "robust_cvar_still_violated",
                             cvar_95=round(cvar_robust, 6),
                             limit=effective_cvar_limit,
                         )
+                else:
+                    attempts.append(PhaseAttempt(
+                        phase="robust", status="infeasible",
+                        solver="CLARABEL:robust",
+                        objective_value=None, wall_ms=_wall_pr,
+                        infeasibility_reason="zero weights after clipping",
+                        kappa_used=round(kappa, 6),
+                    ))
             else:
+                attempts.append(PhaseAttempt(
+                    phase="robust", status="infeasible",
+                    solver="CLARABEL:robust",
+                    objective_value=None, wall_ms=_wall_pr,
+                    infeasibility_reason=str(status_robust),
+                    kappa_used=round(kappa, 6),
+                ))
                 logger.warning("robust_optimization_infeasible", status=status_robust)
         except Exception as e:
+            attempts.append(PhaseAttempt(
+                phase="robust", status="solver_failed",
+                solver=None, objective_value=None, wall_ms=0,
+                infeasibility_reason=str(e),
+            ))
             logger.warning("robust_optimization_failed", error=str(e))
 
     # ── Phase 2: CVaR violated — re-solve with variance ceiling ──
@@ -704,13 +873,33 @@ async def optimize_fund_portfolio(
     constraints2.append(cp.quad_form(w2, psd_cov) <= max_var)
 
     prob2 = cp.Problem(cp.Maximize(mu @ w2), constraints2)
+    _t_p2 = time.perf_counter()
     status2 = await _solve_problem(prob2)
+    _wall_p2 = int((time.perf_counter() - _t_p2) * 1000)
+
+    _max_vol_target = float(abs(phase2_limit) / cvar_coeff)
 
     if status2 in ("optimal", "optimal_inaccurate"):
         opt_w2 = _extract_weights(w2)
         if opt_w2 is not None:
             solver2 = prob2.solver_stats.solver_name if prob2.solver_stats else solver_name
-            result = _build_result(opt_w2, solver2, "optimal:cvar_constrained")
+            _cvar_p2 = _compute_cvar(opt_w2)
+            attempts.append(PhaseAttempt(
+                phase="variance_capped", status="succeeded",
+                solver=solver2,
+                objective_value=(float(prob2.value) if prob2.value is not None else None),
+                wall_ms=_wall_p2,
+                infeasibility_reason=None,
+                cvar_at_solution=round(_cvar_p2, 6),
+                cvar_limit_effective=effective_cvar_limit,
+                cvar_within_limit=(_cvar_p2 >= effective_cvar_limit if effective_cvar_limit is not None else True),
+                max_var=round(max_var, 9),
+                max_vol_target=round(_max_vol_target, 6),
+                cvar_coeff=round(float(cvar_coeff), 6),
+                cf_normal_ratio=round(float(_cf_normal_ratio), 4),
+                phase2_limit=round(float(phase2_limit), 6),
+            ))
+            result = _build_result(opt_w2, solver2, "optimal:cvar_constrained", winning_phase="variance_capped")
             logger.info(
                 "cvar_constrained_re_optimization_succeeded",
                 cvar_95=result.cvar_95, cvar_limit=cvar_limit,
@@ -718,6 +907,29 @@ async def optimize_fund_portfolio(
                 sharpe=result.sharpe_ratio,
             )
             return result
+        else:
+            attempts.append(PhaseAttempt(
+                phase="variance_capped", status="infeasible",
+                solver=None, objective_value=None, wall_ms=_wall_p2,
+                infeasibility_reason="zero weights after clipping",
+                max_var=round(max_var, 9),
+                max_vol_target=round(_max_vol_target, 6),
+                cvar_coeff=round(float(cvar_coeff), 6),
+                cf_normal_ratio=round(float(_cf_normal_ratio), 4),
+                phase2_limit=round(float(phase2_limit), 6),
+            ))
+    else:
+        attempts.append(PhaseAttempt(
+            phase="variance_capped", status="infeasible",
+            solver="CLARABEL",
+            objective_value=None, wall_ms=_wall_p2,
+            infeasibility_reason=str(status2),
+            max_var=round(max_var, 9),
+            max_vol_target=round(_max_vol_target, 6),
+            cvar_coeff=round(float(cvar_coeff), 6),
+            cf_normal_ratio=round(float(_cf_normal_ratio), 4),
+            phase2_limit=round(float(phase2_limit), 6),
+        ))
 
     # ── Phase 3: Variance-capped infeasible — fall back to min_variance ──
     logger.warning("cvar_capped_infeasible_falling_back_to_min_variance")
@@ -727,21 +939,47 @@ async def optimize_fund_portfolio(
         cp.Minimize(cp.quad_form(w3, psd_cov)),
         _build_base_constraints(w3),
     )
+    _t_p3 = time.perf_counter()
     status3 = await _solve_problem(prob3)
+    _wall_p3 = int((time.perf_counter() - _t_p3) * 1000)
 
     if status3 in ("optimal", "optimal_inaccurate"):
         opt_w3 = _extract_weights(w3)
         if opt_w3 is not None:
-            result = _build_result(opt_w3, "min_variance_fallback", "optimal:min_variance_fallback")
+            _min_var = float(prob3.value) if prob3.value is not None else float(opt_w3 @ cov_matrix @ opt_w3)
+            attempts.append(PhaseAttempt(
+                phase="min_variance", status="succeeded",
+                solver="CLARABEL",
+                objective_value=round(_min_var, 9),
+                wall_ms=_wall_p3,
+                infeasibility_reason=None,
+                min_achievable_variance=round(_min_var, 9),
+                min_achievable_vol=round(float(np.sqrt(max(_min_var, 0.0))), 6),
+            ))
+            result = _build_result(opt_w3, "min_variance_fallback", "optimal:min_variance_fallback", winning_phase="min_variance")
             logger.warning(
                 "min_variance_fallback_used",
                 cvar_95=result.cvar_95, cvar_limit=cvar_limit,
                 cvar_within_limit=result.cvar_within_limit,
             )
             return result
+        else:
+            attempts.append(PhaseAttempt(
+                phase="min_variance", status="infeasible",
+                solver="CLARABEL",
+                objective_value=None, wall_ms=_wall_p3,
+                infeasibility_reason="zero weights after clipping",
+            ))
+    else:
+        attempts.append(PhaseAttempt(
+            phase="min_variance", status="solver_failed",
+            solver="CLARABEL",
+            objective_value=None, wall_ms=_wall_p3,
+            infeasibility_reason=str(status3),
+        ))
 
     # All three phases failed — return original Phase 1 result with violation flag
-    result = _build_result(opt_w, solver_name, "optimal:cvar_violated")
+    result = _build_result(opt_w, solver_name, "optimal:cvar_violated", winning_phase="heuristic")
     logger.error(
         "all_cvar_enforcement_phases_failed",
         cvar_95=result.cvar_95, cvar_limit=cvar_limit,

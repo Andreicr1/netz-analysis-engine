@@ -310,6 +310,193 @@ _STATUS_TO_WINNING_PHASE: dict[str, int] = {
 }
 
 
+# ── PR-A11 — cascade telemetry builder ──────────────────────────
+
+# Normalized public phase keys written to the persisted column. Internal
+# optimizer keys map into these via ``_PHASE_PUBLIC_KEY``. Skipped phases
+# are padded in the same order so consumers can rely on a uniform shape.
+_CASCADE_PHASE_ORDER_PUBLIC: tuple[str, ...] = (
+    "phase_1",
+    "phase_1_5_robust",
+    "phase_2_variance_capped",
+    "phase_3_min_variance",
+)
+
+_PHASE_PUBLIC_KEY: dict[str, str] = {
+    "primary": "phase_1",
+    "robust": "phase_1_5_robust",
+    "variance_capped": "phase_2_variance_capped",
+    "min_variance": "phase_3_min_variance",
+    "heuristic": "heuristic",
+}
+
+# run.status derived from cascade outcome. Phase 3 fallback and heuristic
+# fallback both produce weights but fail to honor the CVaR objective —
+# persist them as ``degraded`` so operators can gate activation.
+_STATUS_BY_SUMMARY: dict[str, str] = {
+    "phase_1_succeeded": "succeeded",
+    "phase_1_5_robust_succeeded": "succeeded",
+    "phase_2_succeeded": "succeeded",
+    "phase_3_fallback": "degraded",
+    "heuristic_fallback": "degraded",
+    "cascade_exhausted": "failed",
+}
+
+_SUMMARY_BY_WINNING_PHASE: dict[str, str] = {
+    "primary": "phase_1_succeeded",
+    "robust": "phase_1_5_robust_succeeded",
+    "variance_capped": "phase_2_succeeded",
+    "min_variance": "phase_3_fallback",
+    "heuristic": "heuristic_fallback",
+}
+
+
+def _build_cascade_telemetry(
+    *,
+    cascade_block: dict[str, Any] | None,
+    optimizer_trace: dict[str, Any],
+    cvar_limit: float | None,
+) -> tuple[dict[str, Any], str]:
+    """Build the persisted cascade_telemetry payload + derived run status.
+
+    Parameters
+    ----------
+    cascade_block
+        ``{"phase_attempts": [...], "winning_phase": str|None}`` from
+        ``_run_construction_async``. Skipped phases are present.
+    optimizer_trace
+        ``run.optimizer_trace`` (for the terminal status / error fallback).
+    cvar_limit
+        Configured CVaR limit (informational — not required to derive
+        summary / operator_signal).
+
+    Returns
+    -------
+    (telemetry_dict, run_status)
+        ``telemetry_dict`` matches the shape in PR-A11 Section A.2.
+        ``run_status`` is one of ``succeeded|degraded|failed``.
+    """
+    block = cascade_block or {}
+    raw_attempts: list[dict[str, Any]] = list(block.get("phase_attempts") or [])
+    winning_phase = block.get("winning_phase")
+
+    # Legacy/test path: no cascade info at all → return empty telemetry
+    # with a sentinel status so the caller falls back to the solver-string
+    # check (preserves pre-PR-A11 behavior for mocked _run_construction_async
+    # results that don't emit the ``cascade`` block).
+    if not raw_attempts and winning_phase is None:
+        return {}, "unknown"
+
+    # Normalize each attempt's phase key to the public naming, pad missing
+    # cascade slots with ``skipped`` so ``len(phase_attempts) >= 4`` always.
+    public_attempts: list[dict[str, Any]] = []
+    seen_public: set[str] = set()
+    for att in raw_attempts:
+        phase_raw = str(att.get("phase") or "")
+        phase_public = _PHASE_PUBLIC_KEY.get(phase_raw, phase_raw)
+        public_attempts.append({
+            "phase": phase_public,
+            "status": att.get("status"),
+            "solver": att.get("solver"),
+            "objective_value": att.get("objective_value"),
+            "wall_ms": att.get("wall_ms") or 0,
+            "infeasibility_reason": att.get("infeasibility_reason"),
+            "cvar_at_solution": att.get("cvar_at_solution"),
+            "cvar_limit_effective": att.get("cvar_limit_effective"),
+            "cvar_within_limit": att.get("cvar_within_limit"),
+            "max_var": att.get("max_var"),
+            "max_vol_target": att.get("max_vol_target"),
+            "cvar_coeff": att.get("cvar_coeff"),
+            "cf_normal_ratio": att.get("cf_normal_ratio"),
+            "phase2_limit": att.get("phase2_limit"),
+            "min_achievable_variance": att.get("min_achievable_variance"),
+            "min_achievable_vol": att.get("min_achievable_vol"),
+            "kappa_used": att.get("kappa_used"),
+        })
+        seen_public.add(phase_public)
+    for phase_public in _CASCADE_PHASE_ORDER_PUBLIC:
+        if phase_public not in seen_public:
+            public_attempts.append({
+                "phase": phase_public, "status": "skipped", "solver": None,
+                "objective_value": None, "wall_ms": 0,
+                "infeasibility_reason": None,
+                "cvar_at_solution": None, "cvar_limit_effective": None,
+                "cvar_within_limit": None, "max_var": None,
+                "max_vol_target": None, "cvar_coeff": None,
+                "cf_normal_ratio": None, "phase2_limit": None,
+                "min_achievable_variance": None, "min_achievable_vol": None,
+                "kappa_used": None,
+            })
+
+    # Order attempts canonically (standard 4 + heuristic last)
+    order_lookup = {
+        p: i for i, p in enumerate(_CASCADE_PHASE_ORDER_PUBLIC)
+    }
+    public_attempts.sort(
+        key=lambda a: order_lookup.get(a["phase"], len(_CASCADE_PHASE_ORDER_PUBLIC)),
+    )
+
+    cascade_summary = _SUMMARY_BY_WINNING_PHASE.get(
+        winning_phase or "", "cascade_exhausted",
+    )
+    run_status = _STATUS_BY_SUMMARY.get(cascade_summary, "failed")
+
+    # Phase 2 variance ceiling + universe min-variance (when relevant)
+    phase2_max_var: float | None = None
+    min_achievable_variance: float | None = None
+    for att in public_attempts:
+        if att["phase"] == "phase_2_variance_capped" and att.get("max_var") is not None:
+            phase2_max_var = float(att["max_var"])
+        if att["phase"] == "phase_3_min_variance" and att.get("min_achievable_variance") is not None:
+            min_achievable_variance = float(att["min_achievable_variance"])
+
+    # Feasibility gap only meaningful when Phase 3 actually fired. Guard
+    # against divide-by-zero for a degenerate universe.
+    feasibility_gap_pct: float | None = None
+    if (
+        cascade_summary == "phase_3_fallback"
+        and phase2_max_var is not None
+        and min_achievable_variance is not None
+        and min_achievable_variance > 0
+    ):
+        feasibility_gap_pct = round(
+            (1.0 - phase2_max_var / min_achievable_variance) * 100.0, 2,
+        )
+
+    # Operator signal — sanitized, translated by PR-A10 frontend copy.
+    operator_signal: dict[str, Any] | None
+    if cascade_summary in ("phase_1_succeeded", "phase_1_5_robust_succeeded", "phase_2_succeeded"):
+        operator_signal = None
+    elif cascade_summary == "phase_3_fallback":
+        operator_signal = {
+            "kind": "constraint_binding",
+            "binding": "risk_budget",
+            "message_key": "cvar_limit_below_universe_floor",
+        }
+    elif cascade_summary == "heuristic_fallback":
+        operator_signal = {
+            "kind": "constraint_binding",
+            "binding": "solver",
+            "message_key": "convex_phases_exhausted",
+        }
+    else:  # cascade_exhausted
+        operator_signal = {
+            "kind": "cascade_failure",
+            "binding": "solver",
+            "message_key": "no_feasible_allocation",
+        }
+
+    telemetry = {
+        "phase_attempts": public_attempts,
+        "cascade_summary": cascade_summary,
+        "phase2_max_var": phase2_max_var,
+        "min_achievable_variance": min_achievable_variance,
+        "feasibility_gap_pct": feasibility_gap_pct,
+        "operator_signal": operator_signal,
+    }
+    return telemetry, run_status
+
+
 async def _emit_cascade_phase_events(
     db: AsyncSession,
     *,
@@ -735,13 +922,23 @@ async def execute_construction_run(
         )
         return run
 
-    # Detect heuristic fallback — CLARABEL cascade exhausted, the run was
-    # "rescued" by the proportional heuristic. Per PR-A7 §B.1, this is a
-    # degraded outcome, not a success: the optimizer produced a sensible
-    # portfolio, but none of the formal phases (primary / robust / CVaR /
-    # min-variance) found a feasible solution on the input universe.
+    # Detect heuristic fallback + PR-A11 Phase 3 min-variance fallback. Both
+    # outcomes produced weights but fail to honor the CVaR objective, so
+    # persist as ``degraded``. ``run.cascade_telemetry`` (set in the inner
+    # executor) drives the decision; the legacy solver-string check remains
+    # as a defensive fallback for pre-A11 code paths (empty telemetry).
+    telemetry_summary = (run.cascade_telemetry or {}).get("cascade_summary")
     solver = (run.optimizer_trace or {}).get("solver")
-    run.status = "degraded" if solver == "heuristic_fallback" else "succeeded"
+    if telemetry_summary in ("phase_3_fallback", "heuristic_fallback"):
+        run.status = "degraded"
+    elif telemetry_summary == "cascade_exhausted":
+        run.status = "failed"
+    elif telemetry_summary in ("phase_1_succeeded", "phase_1_5_robust_succeeded", "phase_2_succeeded"):
+        run.status = "succeeded"
+    elif solver == "heuristic_fallback":
+        run.status = "degraded"
+    else:
+        run.status = "succeeded"
     run.completed_at = datetime.now(tz=timezone.utc)
     run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
     await db.flush()
@@ -904,6 +1101,25 @@ async def _execute_inner(
         objective_value=optimization.get("expected_return"),
     )
 
+    # ── 4c. PR-A11 cascade telemetry (structured + sanitized) ──
+    cascade_telemetry, derived_run_status = _build_cascade_telemetry(
+        cascade_block=base_result.get("cascade") or {},
+        optimizer_trace=optimizer_trace,
+        cvar_limit=calibration_snapshot.get("cvar_limit"),
+    )
+    if cascade_telemetry:
+        await _publish_event_sanitized(
+            db,
+            run_id=run.id,
+            job_id=job_id,
+            raw_type="cascade_telemetry_completed",
+            raw_payload={
+                "cascade_summary": cascade_telemetry.get("cascade_summary"),
+                "operator_signal": cascade_telemetry.get("operator_signal"),
+                "feasibility_gap_pct": cascade_telemetry.get("feasibility_gap_pct"),
+            },
+        )
+
     # ── 5. Stress suite (sequence: after optimizer, before advisor) ──
     await _check_cancellation(job_id, "pre_stress")
     await _publish_event_sanitized(
@@ -1033,6 +1249,9 @@ async def _execute_inner(
 
     # ── 9. Persist all enrichment on the run row ──
     run.optimizer_trace = optimizer_trace
+    # PR-A11 — cascade telemetry column (binding_constraints intentionally
+    # left untouched; keeps its existing list-of-strings semantics).
+    run.cascade_telemetry = cascade_telemetry
     run.binding_constraints = []
     run.regime_context = narrative_payload["regime_context"]
     run.statistical_inputs = statistical_inputs_payload
