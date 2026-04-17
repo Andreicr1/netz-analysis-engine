@@ -112,8 +112,9 @@ def test_zero_variance_fund_excluded() -> None:
 
 def test_kappa_at_warning_threshold_triggers_warn_flag() -> None:
     """κ between WARN and ERROR thresholds → returns warn=True, error=False."""
-    # Construct Σ with κ ≈ 5e3 — eigenvalues e.g. [5000, 1, 1]
-    e = np.array([5e3, 1.0, 1.0])
+    # Construct Σ with κ ≈ 2e4 — eigenvalues e.g. [2e4, 1, 1]
+    # (PR-A9 WARN threshold is 1e4, FALLBACK is 5e4; 2e4 sits in the warn-sample band)
+    e = np.array([2e4, 1.0, 1.0])
     # Random orthogonal V
     rng = np.random.default_rng(7)
     A = rng.standard_normal((3, 3))

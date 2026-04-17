@@ -17,7 +17,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 if TYPE_CHECKING:
     from quant_engine.drift_service import DriftReport
@@ -143,17 +143,26 @@ COV_LOOKBACK_DAYS_5Y = 1260
 HIGHER_MOMENTS_WINDOW_3Y = 756
 EWMA_LAMBDA_DEFAULT = 0.97
 RISK_AVERSION_INSTITUTIONAL_DEFAULT = 2.5
-KAPPA_WARN_THRESHOLD = 1e3
-KAPPA_ERROR_THRESHOLD = 1e4
+# PR-A9 three-tier ladder — recalibrated from PR-A1 aspirational bounds
+# based on empirical PR-A8 smoke evidence (3 portfolios: κ=2.4e4-3e4 post-dedup).
+# Academic reality: for sample cov with T/N ≈ 10, κ in 1e4-1e5 is normal; the
+# original 1e4 error threshold fired spuriously on well-behaved institutional
+# universes. The fallback tier hands off to PR-A3 factor covariance (PSD-clamped)
+# when sample Σ is too collinear but not pathologically singular.
+KAPPA_WARN_THRESHOLD = 1e4        # proceed with sample Σ, emit warning
+KAPPA_FALLBACK_THRESHOLD = 5e4    # switch to factor covariance if available
+KAPPA_ERROR_THRESHOLD = 1e6       # raise — truly pathological rank deficiency
 # Survivorship bias estimate (bps/year) — see design doc 2026-04-14
 SURVIVORSHIP_BIAS_BPS_RANGE = (50, 150)
 
 
 class IllConditionedCovarianceError(Exception):
-    """Raised when κ(Σ) exceeds KAPPA_ERROR_THRESHOLD (1e4).
+    """Raised when κ(Σ) >= KAPPA_ERROR_THRESHOLD (1e6) — pathological rank deficiency, not recoverable.
 
-    The caller MUST NOT proceed to the optimizer — extreme weights would result.
-    Phase A policy: fail loudly, write audit event, surface to IC in the terminal.
+    PR-A9 three-tier ladder: the two intermediate thresholds (1e4 WARN, 5e4 FALLBACK)
+    are recoverable and do NOT raise — they either warn-and-proceed with sample Σ
+    or swap in the PR-A3 factor-model covariance. This error fires only when both
+    covariance paths are ill-conditioned or no fallback is available.
     """
 
     def __init__(
@@ -440,6 +449,18 @@ def _apply_ledoit_wolf(
     except Exception:
         delta = 0.2
 
+    # PR-A9 §D — observability signal for κ-Σ calibration. If telemetry shows
+    # ``lambda_optimal`` < 0.1 consistently with the three-tier guardrail
+    # firing, PR-A10 will expose ``PortfolioCalibration.shrinkage_intensity_override``
+    # so operators can force a stronger floor. We do not wire that override
+    # here — this line is pure observability.
+    logger.info(
+        "ledoit_wolf.shrinkage_completed",
+        lambda_optimal=float(delta),
+        n_funds=int(N),
+        t_observations=int(T),
+    )
+
     shrunk_cov = (1 - delta) * sample_cov + delta * target_cov
     return shrunk_cov
 
@@ -529,49 +550,136 @@ def _repair_psd(
     return sigma, False
 
 
+class CovarianceConditioningResult(NamedTuple):
+    """Outcome of the three-tier κ(Σ) guardrail.
+
+    ``decision`` is the caller's hand-off:
+      - ``sample``          → proceed with the input Σ (warn flag may still be set)
+      - ``factor_fallback`` → caller should swap in PR-A3 factor covariance
+      - ``rejected``        → unused at the return site (we raise instead); reserved
+                              for future non-raising flows / test fixtures.
+    """
+
+    kappa: float
+    decision: Literal["sample", "factor_fallback", "rejected"]
+    warn: bool
+    min_eigenvalue: float
+
+
+def check_covariance_conditioning(
+    cov_matrix: npt.NDArray[np.float64],
+) -> CovarianceConditioningResult:
+    """Evaluate κ(Σ) against the PR-A9 three-tier ladder and recommend a decision.
+
+    Returns a ``CovarianceConditioningResult`` — the caller applies the decision.
+    Does NOT raise for recoverable bands (WARN, FALLBACK). Raises
+    ``IllConditionedCovarianceError`` only when κ >= ``KAPPA_ERROR_THRESHOLD`` (1e6),
+    which indicates true rank deficiency where even the factor fallback cannot help.
+
+    Tier boundaries (see PR-A9 spec §A.1):
+      * κ < 1e4              → decision=sample, warn=False (pristine)
+      * 1e4 ≤ κ < 5e4        → decision=sample, warn=True  (tolerable, log warning)
+      * 5e4 ≤ κ < 1e6        → decision=factor_fallback, warn=True
+      * κ ≥ 1e6              → raise IllConditionedCovarianceError
+    """
+    try:
+        eigvals = np.linalg.eigvalsh(cov_matrix)
+    except np.linalg.LinAlgError:
+        # Totally degenerate matrix — treat as pathological.
+        raise IllConditionedCovarianceError(
+            condition_number=float("inf"),
+            n_funds=cov_matrix.shape[0],
+            n_obs=0,
+            message=(
+                "np.linalg.eigvalsh failed — covariance matrix is numerically degenerate"
+            ),
+        )
+    min_eig = float(eigvals.min())
+    max_eig = float(eigvals.max())
+    # Guard against zero/negative min eigenvalue; _repair_psd should have clamped
+    # earlier, but the kappa ratio still must not blow up to NaN.
+    kappa = max_eig / max(min_eig, 1e-12)
+
+    if not np.isfinite(kappa) or kappa >= KAPPA_ERROR_THRESHOLD:
+        worst = sorted(eigvals.tolist())[:3]
+        raise IllConditionedCovarianceError(
+            condition_number=float(kappa) if np.isfinite(kappa) else float("inf"),
+            n_funds=cov_matrix.shape[0],
+            n_obs=0,
+            worst_eigenvalues=worst,
+            message=(
+                f"κ(Σ)={kappa:.3e} exceeds pathological threshold "
+                f"({KAPPA_ERROR_THRESHOLD:.0e}); rank deficient, not recoverable."
+            ),
+        )
+
+    if kappa >= KAPPA_FALLBACK_THRESHOLD:
+        return CovarianceConditioningResult(
+            kappa=kappa,
+            decision="factor_fallback",
+            warn=True,
+            min_eigenvalue=min_eig,
+        )
+
+    if kappa >= KAPPA_WARN_THRESHOLD:
+        return CovarianceConditioningResult(
+            kappa=kappa,
+            decision="sample",
+            warn=True,
+            min_eigenvalue=min_eig,
+        )
+
+    return CovarianceConditioningResult(
+        kappa=kappa,
+        decision="sample",
+        warn=False,
+        min_eigenvalue=min_eig,
+    )
+
+
 def _guard_condition_number(
     sigma: np.ndarray,
     n_obs: int,
 ) -> tuple[float, bool, bool]:
-    """Return (κ, warn_triggered, error_triggered). Raises on error.
+    """Back-compat shim returning (κ, warn, error) around the new three-tier ladder.
 
-    - κ > KAPPA_ERROR_THRESHOLD (1e4): raises IllConditionedCovarianceError
-    - κ > KAPPA_WARN_THRESHOLD (1e3): logs warning, returns warn=True
-    - otherwise: returns warn=False, error=False
+    Kept so non-fallback-aware callers (legacy terminal scripts, tests that
+    pin the old signature) keep working. Prefer ``check_covariance_conditioning``
+    for new code — it surfaces the factor-fallback band instead of collapsing it
+    into the sample path.
     """
-    kappa = _compute_condition_number(sigma)
-    n_funds = sigma.shape[0]
-
-    if kappa > KAPPA_ERROR_THRESHOLD:
-        # Grab the 3 smallest eigenvalues for the error detail
-        try:
-            e = np.linalg.eigvalsh(sigma)
-            worst = sorted(e.tolist())[:3]
-        except np.linalg.LinAlgError:
-            worst = []
+    try:
+        result = check_covariance_conditioning(sigma)
+    except IllConditionedCovarianceError as exc:
+        # ``check_covariance_conditioning`` doesn't know T, so the error it
+        # raises has ``n_obs=0``. Existing callers (and adversarial tests)
+        # expect the shim to enrich it with the observed T.
         logger.error(
             "construction_covariance_ill_conditioned",
-            kappa=kappa,
-            n_funds=n_funds,
+            kappa=exc.condition_number,
+            n_funds=sigma.shape[0],
             n_obs=n_obs,
         )
         raise IllConditionedCovarianceError(
-            condition_number=kappa,
-            n_funds=n_funds,
+            condition_number=exc.condition_number,
+            n_funds=exc.n_funds,
             n_obs=n_obs,
-            worst_eigenvalues=worst,
-        )
+            worst_eigenvalues=exc.worst_eigenvalues,
+            message=str(exc),
+        ) from exc
 
-    if kappa > KAPPA_WARN_THRESHOLD:
+    if result.warn:
         logger.warning(
             "construction_covariance_poorly_conditioned",
-            kappa=kappa,
-            n_funds=n_funds,
+            kappa=result.kappa,
+            decision=result.decision,
+            n_funds=sigma.shape[0],
             n_obs=n_obs,
         )
-        return kappa, True, False
-
-    return kappa, False, False
+    # The shim collapses factor_fallback into a warn-only signal for legacy
+    # callers that can't swap in factor cov — operationally equivalent to the
+    # pre-PR-A9 behaviour now that KAPPA_ERROR_THRESHOLD is 1e6.
+    return result.kappa, result.warn, False
 
 
 def _sanitize_returns(
@@ -1162,6 +1270,12 @@ async def compute_fund_level_inputs(
     factor_loadings = None
     factor_names = None
     residual_variance = None
+    # PR-A9 — hoisted factor fit reference so the κ guardrail below can swap in
+    # ``assemble_factor_covariance(fit)`` as a fallback when the primary Σ lands
+    # in the [5e4, 1e6) band. ``fit`` stays None in the LW-only branches where
+    # the factor model was unavailable; the fallback then raises per spec B.2.
+    fit = None
+    covariance_source: Literal["sample", "factor_model"] = "sample"
     # A.2 — metadata persisted on FundLevelInputs.inputs_metadata
     factor_model_meta: dict[str, Any] = {
         "k_factors": 8,
@@ -1210,6 +1324,7 @@ async def compute_fund_level_inputs(
                     ewma_lambda=ewma_lambda,
                 )
                 annual_cov = assemble_factor_covariance(fit)
+                covariance_source = "factor_model"
 
                 # A.2 — residual PCA diagnostic wired into metadata (was discarded)
                 pca_diag = compute_residual_pca(fit.residual_series)
@@ -1289,10 +1404,131 @@ async def compute_fund_level_inputs(
     if regime_cov is not None:
         annual_cov, _ = _repair_psd(regime_cov)
 
-    # ── 5. κ(Σ) guardrail — raises on ill-conditioned matrix ───────────────
-    condition_number, kappa_warn, kappa_error = _guard_condition_number(
-        annual_cov, n_obs=returns_matrix.shape[0],
-    )
+    # ── 5. κ(Σ) three-tier guardrail + lazy factor-model fallback ──────────
+    # PR-A9 — the primary covariance (factor or LW) is evaluated against the
+    # recalibrated ladder:
+    #   κ < 1e4              → pristine, no warn
+    #   1e4 ≤ κ < 5e4        → warn, proceed with primary Σ
+    #   5e4 ≤ κ < 1e6        → swap in PR-A3 factor covariance if we have a fit;
+    #                          otherwise raise per B.2 (fallback unavailable)
+    #   κ ≥ 1e6              → raise (pathological, not recoverable)
+    kappa_sample_observed = float(_compute_condition_number(annual_cov))
+    try:
+        cond_primary = check_covariance_conditioning(annual_cov)
+    except IllConditionedCovarianceError:
+        logger.error(
+            "construction_covariance_ill_conditioned",
+            kappa=kappa_sample_observed,
+            covariance_source=covariance_source,
+            n_funds=annual_cov.shape[0],
+            n_obs=returns_matrix.shape[0],
+        )
+        raise
+
+    kappa_factor_fallback: float | None = None
+    if cond_primary.decision == "factor_fallback":
+        fallback_available = (
+            covariance_source == "sample"
+            and fit is not None
+            and factor_model_meta.get("k_factors_effective", 0) > 0
+        )
+        if not fallback_available:
+            # Either already on factor cov (can't go further), or no factor fit
+            # was produced in this run — raise with the empirical κ so the
+            # operator can distinguish "sample too collinear, no factor help"
+            # from a true pathological rank deficiency.
+            logger.error(
+                "construction_covariance_fallback_unavailable",
+                kappa_sample=cond_primary.kappa,
+                covariance_source=covariance_source,
+                fit_available=fit is not None,
+                k_factors_effective=factor_model_meta.get("k_factors_effective", 0),
+                n_funds=annual_cov.shape[0],
+                n_obs=returns_matrix.shape[0],
+            )
+            raise IllConditionedCovarianceError(
+                condition_number=cond_primary.kappa,
+                n_funds=annual_cov.shape[0],
+                n_obs=returns_matrix.shape[0],
+                message=(
+                    f"κ(Σ)={cond_primary.kappa:.3e} in fallback band "
+                    f"[{KAPPA_FALLBACK_THRESHOLD:.0e}, {KAPPA_ERROR_THRESHOLD:.0e}) "
+                    f"but factor fallback unavailable (source={covariance_source}, "
+                    f"fit={'set' if fit is not None else 'none'}, "
+                    f"k_effective={factor_model_meta.get('k_factors_effective', 0)})"
+                ),
+            )
+
+        # Assemble the factor-cov candidate lazily (avoids wasted work when
+        # primary Σ was already acceptable). PR-A3 clamps PSD internally, but
+        # the regime-conditioning path further downstream assumes PSD input —
+        # run _repair_psd to keep the contract explicit.
+        assert fit is not None  # fallback_available guarantees this; narrows type for mypy
+        factor_cov_candidate = assemble_factor_covariance(fit)
+        factor_cov_candidate, _ = _repair_psd(factor_cov_candidate)
+        try:
+            cond_factor = check_covariance_conditioning(factor_cov_candidate)
+        except IllConditionedCovarianceError as factor_exc:
+            logger.error(
+                "construction_covariance_factor_fallback_pathological",
+                kappa_sample=cond_primary.kappa,
+                reason=str(factor_exc),
+            )
+            raise IllConditionedCovarianceError(
+                condition_number=cond_primary.kappa,
+                n_funds=annual_cov.shape[0],
+                n_obs=returns_matrix.shape[0],
+                message=(
+                    f"Both sample (κ={cond_primary.kappa:.3e}) and factor "
+                    f"(κ≥{KAPPA_ERROR_THRESHOLD:.0e}) covariances are "
+                    f"ill-conditioned."
+                ),
+            ) from factor_exc
+        if cond_factor.decision != "sample":
+            raise IllConditionedCovarianceError(
+                condition_number=cond_primary.kappa,
+                n_funds=annual_cov.shape[0],
+                n_obs=returns_matrix.shape[0],
+                message=(
+                    f"Both sample (κ={cond_primary.kappa:.3e}) and factor "
+                    f"(κ={cond_factor.kappa:.3e}) covariances are "
+                    f"ill-conditioned."
+                ),
+            )
+        logger.info(
+            "construction_covariance_factor_fallback_engaged",
+            kappa_sample=cond_primary.kappa,
+            kappa_factor=cond_factor.kappa,
+            n_funds=annual_cov.shape[0],
+            n_obs=returns_matrix.shape[0],
+        )
+        annual_cov = factor_cov_candidate
+        covariance_source = "factor_model"
+        kappa_factor_fallback = cond_factor.kappa
+        # Wire the factor provenance into metadata the return dataclass emits,
+        # so downstream (stats, audit, narrative) sees the real cov.
+        if factor_loadings is None:
+            factor_loadings = fit.loadings
+        if factor_names is None:
+            factor_names = fit.factor_names
+        if residual_variance is None:
+            residual_variance = fit.residual_variance
+    elif cond_primary.warn:
+        logger.warning(
+            "construction_covariance_poorly_conditioned",
+            kappa=cond_primary.kappa,
+            decision=cond_primary.decision,
+            covariance_source=covariance_source,
+            n_funds=annual_cov.shape[0],
+            n_obs=returns_matrix.shape[0],
+        )
+
+    kappa_final = kappa_factor_fallback if kappa_factor_fallback is not None else cond_primary.kappa
+    condition_number = kappa_final
+    # Legacy booleans on FundLevelInputs — retained for back-compat with PR-A4
+    # inputs_metadata readers. Semantics track the new three-tier ladder.
+    kappa_warn = kappa_final >= KAPPA_WARN_THRESHOLD
+    kappa_error = False  # would have raised above
 
     # ── 6. Higher moments on 3Y tail with 1%/99% winsorization ─────────────
     tail_n = min(higher_moments_window, returns_matrix.shape[0])
@@ -1408,6 +1644,9 @@ async def compute_fund_level_inputs(
         mu_prior=mu_prior,
         ewma_lambda=ewma_lambda,
         condition_number=condition_number,
+        kappa_sample=kappa_sample_observed,
+        kappa_final=kappa_final,
+        covariance_source=covariance_source,
         kappa_warn=kappa_warn,
         gamma=gamma,
         gamma_source=gamma_source,
@@ -1438,6 +1677,20 @@ async def compute_fund_level_inputs(
         inputs_metadata={
             "factor_model": factor_model_meta,
             "residual_pca": residual_pca_meta,
+            # PR-A9 — three-tier conditioning telemetry. Persisted in
+            # ``portfolio_construction_runs.statistical_inputs`` so the
+            # SHRINKAGE phase SSE payload (PR-A10) can format human labels.
+            "conditioning": {
+                "kappa_sample": float(kappa_sample_observed),
+                "kappa_final": float(kappa_final),
+                "kappa_factor_fallback": (
+                    float(kappa_factor_fallback)
+                    if kappa_factor_fallback is not None
+                    else None
+                ),
+                "covariance_source": covariance_source,
+                "warn": bool(kappa_warn),
+            },
         },
     )
 

@@ -837,6 +837,31 @@ async def _execute_inner(
             },
         )
 
+    # PR-A9 — three-tier κ(Σ) telemetry. Backend emits numeric metrics only;
+    # the frontend in PR-A10 formats the human "conditioning: good / acceptable
+    # / fallback applied" label. Raw `covariance_source` ∈ {"sample",
+    # "factor_model"} survives through ``sanitize_payload`` unchanged because
+    # neither is in the regime/jargon sanitiser allowlist.
+    shrinkage_block = (
+        base_result.get("shrinkage") if isinstance(base_result, dict) else None
+    )
+    if isinstance(shrinkage_block, dict) and shrinkage_block:
+        await _publish_event_sanitized(
+            db,
+            run_id=run.id,
+            job_id=job_id,
+            raw_type="shrinkage_completed",
+            raw_payload={
+                "kappa_sample": shrinkage_block.get("kappa_sample"),
+                "kappa_final": shrinkage_block.get("kappa_final"),
+                "kappa_factor_fallback": shrinkage_block.get(
+                    "kappa_factor_fallback",
+                ),
+                "covariance_source": shrinkage_block.get("covariance_source"),
+                "warn": shrinkage_block.get("warn"),
+            },
+        )
+
     optimizer_trace = {
         "solver": (base_result.get("optimization") or {}).get("solver"),
         "status": (base_result.get("optimization") or {}).get("status"),
@@ -950,6 +975,20 @@ async def _execute_inner(
     statistical_inputs_payload: dict[str, Any] = {}
     if isinstance(dedup_block, dict):
         statistical_inputs_payload["dedup"] = dedup_block
+    # PR-A9 — persist conditioning payload so Section F.1 SQL can query
+    # ``statistical_inputs->>'covariance_source'`` / ``->>'kappa_sample'``
+    # / ``->>'kappa_final'`` directly (no nested object walk needed).
+    if isinstance(shrinkage_block, dict) and shrinkage_block:
+        statistical_inputs_payload["shrinkage"] = shrinkage_block
+        statistical_inputs_payload["covariance_source"] = shrinkage_block.get(
+            "covariance_source",
+        )
+        statistical_inputs_payload["kappa_sample"] = shrinkage_block.get(
+            "kappa_sample",
+        )
+        statistical_inputs_payload["kappa_final"] = shrinkage_block.get(
+            "kappa_final",
+        )
     validation_payload: dict[str, Any] = {
         "as_of_date": run.as_of_date.isoformat(),
         "profile": profile,
