@@ -64,31 +64,32 @@ class ModelPortfolio(OrganizationScopedMixin, Base):
     created_by: Mapped[str | None] = mapped_column(String(128))
 
 
-# ── PR-A12.2 — profile-differentiated CVaR defaults ─────────────────────
-# Institutional starting points for the portfolio-construction CVaR_95
-# budget. Operators override per-portfolio via the Builder slider
-# (PR-A13). Uniform 5% across all profiles defeated the operator's
-# mandate intent — Conservative expects tighter tail-loss containment
-# (~2.5%); Growth accepts more (~8%).
+# ── PR-A18 — CVaR defaults recalibrated to institutional-realistic ──────
+# Post-A15 empirical universe floors (7.33/7.44/10.08% for
+# conservative/balanced/growth) showed A12.2's aspirational defaults
+# (2.5/5/8) forced all 3 profiles into phase_3_min_cvar_above_limit
+# permanently. Recalibrated to 5/7.5/10/12.5 to reflect achievable
+# tail-risk band for the current catalog + leave operator headroom
+# to tighten downward once A17.2 NEW (Tiingo catalog) adds bond depth.
 _CVAR_DEFAULT_BY_PROFILE: dict[str, Decimal] = {
-    "conservative": Decimal("0.0250"),
-    "moderate": Decimal("0.0500"),
-    "growth": Decimal("0.0800"),
-    "aggressive": Decimal("0.1000"),
+    "conservative": Decimal("0.0500"),  # PR-A18: was 0.0250 (A12.2)
+    "moderate": Decimal("0.0750"),      # PR-A18: was 0.0500
+    "growth": Decimal("0.1000"),        # PR-A18: was 0.0800
+    "aggressive": Decimal("0.1250"),    # PR-A18: was 0.1000
 }
 
 
 def default_cvar_limit_for_profile(profile: str | None) -> Decimal:
     """Return the institutional CVaR_95 starting default for ``profile``.
 
-    Falls back to ``Decimal("0.0500")`` (moderate) for None / unknown
-    values so code paths without a resolved profile (legacy fixtures,
-    future profiles not yet calibrated) get a safe value rather than
-    KeyError. Lookup is case-insensitive.
+    Falls back to ``Decimal("0.0750")`` (moderate, PR-A18) for None /
+    unknown values so code paths without a resolved profile (legacy
+    fixtures, future profiles not yet calibrated) get a safe value
+    rather than KeyError. Lookup is case-insensitive.
     """
     if profile is None:
-        return Decimal("0.0500")
-    return _CVAR_DEFAULT_BY_PROFILE.get(profile.lower(), Decimal("0.0500"))
+        return Decimal("0.0750")
+    return _CVAR_DEFAULT_BY_PROFILE.get(profile.lower(), Decimal("0.0750"))
 
 
 class PortfolioCalibration(OrganizationScopedMixin, Base):
