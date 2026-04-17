@@ -75,12 +75,36 @@ async def build_fundamental_factor_returns(
                 (
                     getattr(r, "nav_date", r[0]),
                     getattr(r, "benchmark_ticker", r[1]),
-                    getattr(r, "return_1d", r[2]),
+                    float(getattr(r, "return_1d", r[2])) if getattr(r, "return_1d", r[2]) is not None else None,
                 )
                 for r in benchmark_rows
             ],
             columns=["nav_date", "ticker", "return_1d"],
         )
+        # PR-A15 — pg numeric columns land as Decimal in SQLAlchemy rows;
+        # cast explicitly so downstream np.log / pivot operate on float64.
+        bench_df["return_1d"] = bench_df["return_1d"].astype("float64")
+        # PR-A15 defensive safeguard. allocation_blocks previously had legacy
+        # aliases (fi_aggregate / fi_high_yield / fi_tips) sharing benchmark
+        # tickers with their fi_us_* counterparts, producing duplicate
+        # (nav_date, ticker) rows and crashing pd.DataFrame.pivot with
+        # "Index contains duplicate entries". Migration 0144 cleaned the
+        # legacy rows; this groupby+mean keeps the query resilient if a
+        # future regression re-seeds an aliased block.
+        _raw_rows = len(bench_df)
+        bench_df = (
+            bench_df
+            .groupby(["nav_date", "ticker"], as_index=False)["return_1d"]
+            .mean()
+        )
+        if len(bench_df) != _raw_rows:
+            logger.warning(
+                "factor_returns_input_duplicates_deduped",
+                source="benchmark_nav",
+                raw_rows=_raw_rows,
+                deduped_rows=len(bench_df),
+                dropped=_raw_rows - len(bench_df),
+            )
         bench_pivot = bench_df.pivot(index="nav_date", columns="ticker", values="return_1d")
     else:
         bench_pivot = pd.DataFrame()
@@ -100,12 +124,28 @@ async def build_fundamental_factor_returns(
                 (
                     getattr(r, "obs_date", r[0]),
                     getattr(r, "series_id", r[1]),
-                    getattr(r, "value", r[2]),
+                    float(getattr(r, "value", r[2])) if getattr(r, "value", r[2]) is not None else None,
                 )
                 for r in macro_rows
             ],
             columns=["obs_date", "series_id", "value"],
         )
+        macro_df["value"] = macro_df["value"].astype("float64")
+        # PR-A15 — same safeguard as bench_df above (defense-in-depth).
+        _raw_macro_rows = len(macro_df)
+        macro_df = (
+            macro_df
+            .groupby(["obs_date", "series_id"], as_index=False)["value"]
+            .mean()
+        )
+        if len(macro_df) != _raw_macro_rows:
+            logger.warning(
+                "factor_returns_input_duplicates_deduped",
+                source="macro_data",
+                raw_rows=_raw_macro_rows,
+                deduped_rows=len(macro_df),
+                dropped=_raw_macro_rows - len(macro_df),
+            )
         macro_pivot = macro_df.pivot(index="obs_date", columns="series_id", values="value")
         macro_returns = np.log(macro_pivot / macro_pivot.shift(1))
     else:
