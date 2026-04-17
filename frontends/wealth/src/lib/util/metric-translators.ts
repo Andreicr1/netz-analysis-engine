@@ -154,11 +154,22 @@ export function translateRSquaredMedian(value: number): TranslatedMetric {
 
 /**
  * ``phase_used`` — which optimiser cascade phase produced the final
- * weights. Falling through to the heuristic is a visible signal that
- * the convex solvers could not land a feasible point.
+ * weights. PR-A12 reshaped the cascade into three Rockafellar-Uryasev
+ * phases; legacy keys are aliased for one release so stale runs still
+ * render a sensible label.
  */
 export function translateOptimizerPhase(value: string): TranslatedMetric {
 	switch (value) {
+		// PR-A12 canonical keys
+		case "phase_1_ru_max_return":
+			return { label: "Máximo retorno (risco limitado)", tone: "success" };
+		case "phase_2_ru_robust":
+			return { label: "Máximo retorno (robusto)", tone: "success" };
+		case "phase_3_min_cvar":
+			return { label: "Mínimo risco de cauda", tone: "neutral" };
+		case "upstream_heuristic":
+			return { label: "Fallback por dados insuficientes", tone: "warning" };
+		// Legacy aliases — drop after one release cycle
 		case "primary":
 			return { label: "Otimizador principal", tone: "success" };
 		case "robust":
@@ -171,6 +182,78 @@ export function translateOptimizerPhase(value: string): TranslatedMetric {
 			return { label: "Fallback heurístico", tone: "warning" };
 		default:
 			return { label: `Otimizador: ${value}`, tone: "neutral" };
+	}
+}
+
+/**
+ * ``cascade_summary`` (PR-A11/A12) — operator-vocabulary headline for the
+ * construction run's cascade outcome. Drives the Builder's cascade chip
+ * colour + top-line message. Allowed vocabulary only; never shows solver
+ * names, phase keys or math jargon.
+ */
+export function translateCascadeSummary(value: string): TranslatedMetric {
+	switch (value) {
+		case "phase_1_succeeded":
+			return {
+				label: "Otimizado para máximo retorno dentro do limite de risco",
+				tone: "success",
+			};
+		case "phase_2_robust_succeeded":
+			return {
+				label: "Otimizado com ajuste robusto conservador",
+				tone: "success",
+			};
+		case "phase_3_min_cvar_within_limit":
+			return {
+				label: "Alocação de mínimo risco de cauda dentro do limite",
+				tone: "success",
+			};
+		case "phase_3_min_cvar_above_limit":
+			return {
+				label:
+					"Limite de perda está abaixo do piso do universo — exibindo alocação de mínimo risco",
+				tone: "warning",
+			};
+		case "upstream_heuristic":
+			return {
+				label: "Dados insuficientes para otimização — alocação provisória",
+				tone: "warning",
+			};
+		case "constraint_polytope_empty":
+			return {
+				label: "Bandas por bloco incompatíveis — revisar estrutura de alocação",
+				tone: "danger",
+			};
+		default:
+			return { label: value, tone: "neutral" };
+	}
+}
+
+/**
+ * ``operator_signal.kind`` (PR-A11/A12) — structured signal driving the
+ * feedback panel next to the CVaR slider. Emits the copy the Builder
+ * surfaces; numeric values travel alongside in the signal payload.
+ */
+export function translateOperatorSignalKind(value: string): TranslatedMetric {
+	switch (value) {
+		case "cvar_limit_below_universe_floor":
+			return {
+				label:
+					"Seu limite de perda está abaixo do menor risco de cauda que o universo entrega",
+				tone: "warning",
+			};
+		case "upstream_data_missing":
+			return {
+				label: "Estatísticas de retorno indisponíveis para o universo atual",
+				tone: "warning",
+			};
+		case "constraint_polytope_empty":
+			return {
+				label: "Soma das bandas por bloco não fecha em 100% — revisar bandas",
+				tone: "danger",
+			};
+		default:
+			return { label: value, tone: "neutral" };
 	}
 }
 

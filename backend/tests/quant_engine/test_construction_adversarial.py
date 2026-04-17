@@ -364,6 +364,7 @@ def test_fund_level_inputs_is_frozen() -> None:
         cov_matrix=np.eye(2),
         expected_returns={"a": 0.05, "b": 0.07},
         available_ids=["a", "b"],
+        returns_scenarios=np.zeros((252, 2)),
         skewness=np.zeros(2),
         excess_kurtosis=np.zeros(2),
         condition_number=1.0,
