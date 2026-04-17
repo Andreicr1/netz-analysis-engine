@@ -211,7 +211,10 @@ def test_ru_cvar_constraint_matches_empirical() -> None:
     R_high = rng.normal(0.0008, 0.020, size=T)
     R = np.column_stack([R_low, R_high])
 
-    cvar_limit = 0.04
+    # PR-A12.3 — cvar_limit is ANNUALIZED; a 0.30 annual budget lets both
+    # funds enter the solution (low-risk ≈ 0.13 annual, high-risk ≈ 0.50
+    # annual) so Phase 1 can trade off return vs tail loss.
+    cvar_limit = 0.30
     fund_ids = ["LOW", "HIGH"]
     fund_blocks = {"LOW": "x", "HIGH": "x"}
     annual_mu = np.array([R_low.mean() * 252, R_high.mean() * 252])
@@ -233,10 +236,10 @@ def test_ru_cvar_constraint_matches_empirical() -> None:
 
     assert result.status == "optimal"
     weights = np.array([result.weights[fid] for fid in fund_ids])
-    realized = realized_cvar_from_weights(weights, R, alpha=0.95)
-    # LP enforces empirical CVaR <= limit; allow a small solver tolerance.
-    assert realized <= cvar_limit + 1e-3, (
-        f"realized CVaR {realized:.4f} breaches limit {cvar_limit}"
+    realized_annual = realized_cvar_from_weights(weights, R, alpha=0.95) * np.sqrt(252.0)
+    # LP enforces empirical annualized CVaR <= limit; allow solver tolerance.
+    assert realized_annual <= cvar_limit + 1e-3, (
+        f"realized annual CVaR {realized_annual:.4f} breaches limit {cvar_limit}"
     )
 
 
