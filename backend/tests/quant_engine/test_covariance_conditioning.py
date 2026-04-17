@@ -75,7 +75,7 @@ def test_warn_band_returns_sample_with_warn_flag() -> None:
 
 
 def test_fallback_band_recommends_factor_fallback() -> None:
-    cov = _diag_cov_with_kappa(2e5)  # inside [1e5, 1e6)
+    cov = _diag_cov_with_kappa(2e5)  # inside [5e4, 1e6)
     result = check_covariance_conditioning(cov)
     assert result.decision == "factor_fallback"
     assert result.warn is True
@@ -249,40 +249,34 @@ def test_factor_fallback_disabled_when_k_factors_effective_is_zero() -> None:
 
 
 def test_warn_threshold_constants_are_recalibrated() -> None:
-    """Sanity gate — PR-A17.1 raised FALLBACK from 5e4 to 1e5.
-
-    Rationale: the factor-model fallback that 5e4 assumed is not available
-    in practice (factor_returns has a pre-existing dedup bug — see PR-A15).
-    Post-A17 universe expansion (T/N ~= 4.0-4.5) puts sample kappa in the
-    5e4-1e5 band legitimately, where Ledoit-Wolf + PSD repair + CLARABEL
-    handle it safely. Raising the threshold unblocks production construction
-    without weakening the pathological (1e6) ceiling.
+    """Sanity gate — PR-A15 reverted FALLBACK to PR-A9's original 5e4 now
+    that the factor-model fallback is actually available (migration 0144
+    dropped legacy allocation_block aliases). PR-A17.1's temporary 1e5
+    was only needed while the fallback was silently dead.
     """
     assert KAPPA_WARN_THRESHOLD == 1e4
-    assert KAPPA_FALLBACK_THRESHOLD == 1e5  # PR-A17.1: raised from 5e4
+    assert KAPPA_FALLBACK_THRESHOLD == 5e4  # PR-A15: reverted from A17.1's 1e5
     assert KAPPA_ERROR_THRESHOLD == 1e6
     # Ordering invariant: warn < fallback < error
     assert KAPPA_WARN_THRESHOLD < KAPPA_FALLBACK_THRESHOLD < KAPPA_ERROR_THRESHOLD
 
 
 @pytest.mark.parametrize("observed_kappa", [5.7e4, 8.0e4, 8.4e4, 9.9e4])
-def test_pr_a17_1_extended_warn_band_decides_sample(
+def test_pr_a15_empirical_kappas_route_to_factor_fallback(
     observed_kappa: float,
 ) -> None:
-    """PR-A17.1 regression: sample kappa in [5e4, 1e5) must decide 'sample'.
-
-    These are the empirical kappa values observed on the 3 canonical portfolios
-    post-A17 universe expansion (Conservative 5.66e4, Balanced 8.03e4,
-    Growth 8.43e4). Pre-A17.1 they routed to factor_fallback, the fallback
-    was unavailable, and compute_fund_level_inputs raised — every run degraded
-    to upstream_heuristic. This test locks in the raised threshold.
+    """PR-A15 regression: sample kappa in [5e4, 1e5) must now route to
+    factor_fallback. These are the empirical kappa values observed on the
+    3 canonical portfolios post-A17 (Conservative 5.66e4, Balanced 8.03e4,
+    Growth 8.43e4). With the factor-model fallback restored by migration
+    0144, they should trigger the factor-cov swap rather than propagate
+    a poorly-conditioned sample matrix.
     """
     cov = _diag_cov_with_kappa(observed_kappa, n=5)
     result = check_covariance_conditioning(cov)
-    assert result.decision == "sample", (
-        f"kappa={observed_kappa:.2e} in PR-A17.1 extended warn band must "
-        f"decide 'sample' to avoid routing to upstream_heuristic, "
-        f"got {result.decision}"
+    assert result.decision == "factor_fallback", (
+        f"kappa={observed_kappa:.2e} >= 5e4 must recommend factor_fallback "
+        f"now that the factor path is available, got {result.decision}"
     )
     assert result.warn is True
     assert result.kappa == pytest.approx(observed_kappa, rel=1e-6)

@@ -150,19 +150,14 @@ RISK_AVERSION_INSTITUTIONAL_DEFAULT = 2.5
 # universes. The fallback tier hands off to PR-A3 factor covariance (PSD-clamped)
 # when sample Σ is too collinear but not pathologically singular.
 KAPPA_WARN_THRESHOLD = 1e4        # proceed with sample Sigma, emit warning
-# PR-A17.1 — raised 5e4 -> 1e5. The original 5e4 cutoff was aspirational: it
-# assumed the factor-model fallback would catch kappa in [5e4, 1e6). In
-# practice the factor_returns ingestion has a pre-existing dedup bug
-# ("Index contains duplicate entries", docs/ux/logs.txt:245, pre-A17) so
-# fit_available is False and the fallback path raises every time. Post-A17
-# the expanded universe (135-146 funds / T/N ~= 4.0-4.5) pushes sample kappa
-# into 5e4-1e5 legitimately — Ledoit-Wolf shrinkage + _repair_psd + CLARABEL
-# regularisation handle that band safely, and the empirical RU CVaR verifier
-# (realized_cvar_from_weights) catches downstream violations. Raise to 1e5
-# to unblock production construction until PR-A15 restores factor fallback.
-# ERROR threshold 1e6 intentionally unchanged — truly pathological cases
-# still raise.
-KAPPA_FALLBACK_THRESHOLD = 1e5    # switch to factor covariance if available
+# PR-A15 reverted the threshold back to PR-A9's original 5e4 now that the
+# factor-model fallback is actually available (migration 0144 dropped the
+# legacy allocation_block aliases that were Cartesian-multiplying the pivot
+# and causing factor_returns_fetch_failed). The PR-A17.1 temporary raise to
+# 1e5 was only needed while the fallback was silently dead; with it restored
+# the three-tier guardrail operates as designed — warn on sample kappa in
+# [1e4, 5e4), swap to factor covariance in [5e4, 1e6), raise above 1e6.
+KAPPA_FALLBACK_THRESHOLD = 5e4    # switch to factor covariance if available
 KAPPA_ERROR_THRESHOLD = 1e6       # raise — truly pathological rank deficiency
 # Survivorship bias estimate (bps/year) — see design doc 2026-04-14
 SURVIVORSHIP_BIAS_BPS_RANGE = (50, 150)
@@ -640,19 +635,6 @@ def check_covariance_conditioning(
         )
 
     if kappa >= KAPPA_WARN_THRESHOLD:
-        # PR-A17.1 — surface the extended warn band [5e4, 1e5) that was
-        # previously routed to factor_fallback. Tracks how often sample
-        # Sigma is pushed into the harder region post-universe-expansion
-        # so we can see if the increase is transient or a new baseline.
-        if kappa >= 5e4:
-            logger.warning(
-                "kappa_in_extended_warn_band",
-                kappa=kappa,
-                min_eigenvalue=min_eig,
-                n_funds=cov_matrix.shape[0],
-                warn_threshold=KAPPA_WARN_THRESHOLD,
-                fallback_threshold=KAPPA_FALLBACK_THRESHOLD,
-            )
         return CovarianceConditioningResult(
             kappa=kappa,
             decision="sample",
