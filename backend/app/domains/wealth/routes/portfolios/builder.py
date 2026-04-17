@@ -374,3 +374,318 @@ async def build_portfolio(
 def _accepted_response(payload: dict[str, Any]) -> JSONResponse:
     """Helper for callers wishing to wrap the dict into an explicit 202."""
     return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=payload)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PR-A13.1 — POST /{id}/preview-cvar (synchronous band preview)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Lightweight sibling of ``/build``. Returns only the
+# ``achievable_return_band + min_achievable_cvar + operator_signal`` for a
+# proposed ``cvar_limit`` — no stress tests, advisor, validation, narrative,
+# or persistence. Reuses the full ``_run_construction_async`` path so Phase 1
+# + Phase 3 math stays single-source-of-truth; the optimizer's
+# ``robust=False`` default already skips Phase 2 and composition work is
+# microseconds. Redis-cached on ``(org, portfolio, cvar_limit)`` with a
+# 5min TTL.
+#
+# Budget: 3s hard timeout (asyncio.wait_for). Target wall_ms < 500ms on a
+# typical Conservative/Balanced/Growth universe.
+
+# Cold-call wall time is dominated by `compute_fund_level_inputs` (NAV query
+# + Ledoit-Wolf + scenarios) — measured ~4.7s on Conservative Preservation's
+# universe during the local-DB smoke. Hot-call (Redis cache hit) is ~7ms.
+# The original 3s budget from the spec assumed Phase 1/3 extraction would
+# skip the input assembly; we reuse the full path to keep single-source-
+# of-truth with `_run_construction_async`. 15s leaves headroom for the
+# cold call on larger universes without masking a true pathology.
+#
+# PR-A13.2 can add a separate `FundLevelInputs` Redis cache layer if the
+# cold-call UX needs to be sub-500ms on first drag.
+_PREVIEW_TIMEOUT_S = 15
+_PREVIEW_CACHE_TTL_S = 300
+_preview_inflight: SingleFlightLock[str, dict[str, Any]] = SingleFlightLock()
+
+
+def _preview_cache_key(
+    org_id: str,
+    portfolio_id: str,
+    cvar_limit: float,
+) -> str:
+    """Deterministic cache key — ``zlib.crc32`` per Stability Guardrails §3.
+
+    ``cvar_limit`` is quantized to 4-decimal precision to match the
+    ``Numeric(6, 4)`` column + the slider step (1bp).
+    """
+    q_cvar = round(float(cvar_limit), 4)
+    raw = f"{org_id}|{portfolio_id}|{q_cvar:.4f}"
+    return f"preview_cvar:v1:{zlib.crc32(raw.encode('utf-8')):08x}"
+
+
+def _operator_signal_from_cascade(
+    cascade_block: dict[str, Any] | None,
+    fallback_reason: str | None,
+    cvar_limit: float,
+) -> dict[str, Any]:
+    """Translate cascade outcome → sanitised operator_signal DTO.
+
+    Mirrors ``_build_cascade_telemetry`` in the construction run executor
+    so frontend can merge preview and server telemetry without branching.
+    """
+    if fallback_reason is not None:
+        return {
+            "kind": "upstream_data_missing",
+            "binding": "universe",
+            "message_key": fallback_reason,
+        }
+    if not cascade_block:
+        return {
+            "kind": "upstream_data_missing",
+            "binding": "cascade",
+            "message_key": "cascade_missing",
+        }
+    winning = cascade_block.get("winning_phase")
+    if winning == "phase_1_ru_max_return" or winning == "phase_2_ru_robust":
+        return {"kind": "feasible", "binding": None, "message_key": "feasible"}
+    if winning == "phase_3_min_cvar":
+        phase3 = next(
+            (a for a in cascade_block.get("phase_attempts") or []
+             if a.get("phase") == "phase_3_min_cvar"),
+            None,
+        )
+        within_limit = bool(phase3 and phase3.get("cvar_within_limit"))
+        if within_limit:
+            return {"kind": "feasible", "binding": None, "message_key": "feasible"}
+        return {
+            "kind": "cvar_limit_below_universe_floor",
+            "binding": "tail_risk_floor",
+            "message_key": "cvar_limit_below_universe_floor",
+        }
+    if winning == "upstream_heuristic":
+        return {
+            "kind": "upstream_data_missing",
+            "binding": "returns_quality",
+            "message_key": "statistical_inputs_unavailable",
+        }
+    return {
+        "kind": "constraint_polytope_empty",
+        "binding": "block_bands",
+        "message_key": "block_bands_unsatisfiable",
+    }
+
+
+async def _compute_preview(
+    *,
+    org_id: str,
+    portfolio_id: str,
+    portfolio_profile: str,
+    cvar_limit: float,
+) -> dict[str, Any]:
+    """Run the A12 cascade (Phase 1 + Phase 3) at the probed cvar_limit.
+
+    Returns a dict shaped like ``PreviewCvarResponse`` minus the ``cached``
+    + ``wall_ms`` fields (caller stamps those). Raises on upstream data
+    failure (caller converts to 422).
+    """
+    from app.domains.wealth.routes.model_portfolios import _run_construction_async
+
+    async with async_session_factory() as session:
+        await _set_rls_org(session, org_id)
+        result = await _run_construction_async(
+            session,
+            profile=portfolio_profile,
+            org_id=org_id,
+            portfolio_id=uuid.UUID(portfolio_id),
+            cvar_limit_override=cvar_limit,
+        )
+        # Preview is ephemeral — do NOT commit. Abort any implicit state.
+        await session.rollback()
+
+    fallback_reason = result.get("error")
+    cascade_block = result.get("cascade") or {}
+    band = cascade_block.get("achievable_return_band")
+    min_cvar = cascade_block.get("min_achievable_cvar")
+
+    if band is None or min_cvar is None:
+        # Upstream path (no universe, no allocations, dedup collapsed) —
+        # signal to caller so it returns 422 with operator_signal.
+        raise _PreviewUpstreamError(fallback_reason or "cascade_missing")
+
+    signal = _operator_signal_from_cascade(cascade_block, fallback_reason, cvar_limit)
+    return {
+        "achievable_return_band": band,
+        "min_achievable_cvar": float(min_cvar),
+        "operator_signal": signal,
+    }
+
+
+class _PreviewUpstreamError(Exception):
+    """Preview failed before the cascade could produce a band."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+@router.post(
+    "/portfolios/{id}/preview-cvar",
+    summary="Preview achievable band for a proposed CVaR limit",
+)
+async def preview_cvar(
+    id: str,
+    request: Request,
+    actor: Actor = Depends(get_actor),
+    _ic: Any = Depends(require_ic_member()),
+) -> JSONResponse:
+    """Return the achievable return band + min CVaR at a probed limit.
+
+    Synchronous: no ``job_id``, no SSE, no DB writes. Redis-cached at
+    ``(org_id, portfolio_id, cvar_limit_q4)`` with 5-minute TTL.
+    """
+    # Lazy imports to keep the cold-import path of the build route unchanged.
+    import json as _json
+    import time as _time
+
+    import redis.asyncio as aioredis
+    from sqlalchemy import select
+
+    from app.core.jobs.tracker import get_redis_pool
+    from app.domains.wealth.models.model_portfolio import ModelPortfolio
+    from app.domains.wealth.schemas.preview import (
+        PreviewCvarRequest,
+        PreviewCvarResponse,
+    )
+
+    try:
+        body_raw = await request.json()
+    except Exception as err:
+        raise HTTPException(status_code=400, detail="invalid JSON body") from err
+    try:
+        body = PreviewCvarRequest.model_validate(body_raw)
+    except Exception as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+
+    try:
+        portfolio_uuid = uuid.UUID(id)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail="portfolio id must be a UUID") from err
+
+    org_id = str(actor.organization_id)
+    t_start = _time.perf_counter()
+
+    # ── Load portfolio (profile + org membership check) ──
+    async with async_session_factory() as session:
+        await _set_rls_org(session, org_id)
+        res = await session.execute(
+            select(ModelPortfolio).where(ModelPortfolio.id == portfolio_uuid),
+        )
+        portfolio = res.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(status_code=404, detail="portfolio not found")
+
+    cache_key = _preview_cache_key(org_id, str(portfolio_uuid), body.cvar_limit)
+
+    # ── Cache hit ──
+    cached_payload: dict[str, Any] | None = None
+    try:
+        redis = aioredis.Redis(connection_pool=get_redis_pool())
+        raw = await redis.get(cache_key)
+        if raw is not None:
+            cached_payload = _json.loads(raw)
+    except Exception as exc:
+        logger.debug("preview_cvar_cache_get_fail_open", error=str(exc))
+
+    if cached_payload is not None:
+        wall_ms = int((_time.perf_counter() - t_start) * 1000)
+        response = PreviewCvarResponse(
+            achievable_return_band=cached_payload["achievable_return_band"],
+            min_achievable_cvar=cached_payload["min_achievable_cvar"],
+            operator_signal=cached_payload["operator_signal"],
+            cached=True,
+            wall_ms=wall_ms,
+        )
+        logger.info(
+            "preview_cvar_invoked",
+            portfolio_id=str(portfolio_uuid),
+            cvar_limit=body.cvar_limit,
+            cache_hit=True,
+            wall_ms=wall_ms,
+            universe_size=None,
+        )
+        return JSONResponse(content=response.model_dump(mode="json"))
+
+    # ── Single-flight coalesce (in-process) ──
+    async def _run() -> dict[str, Any]:
+        return await asyncio.wait_for(
+            _compute_preview(
+                org_id=org_id,
+                portfolio_id=str(portfolio_uuid),
+                portfolio_profile=portfolio.profile,
+                cvar_limit=body.cvar_limit,
+            ),
+            timeout=_PREVIEW_TIMEOUT_S,
+        )
+
+    try:
+        payload = await _preview_inflight.run(cache_key, _run)
+    except _PreviewUpstreamError as exc:
+        logger.warning(
+            "preview_cvar_upstream_failure",
+            portfolio_id=str(portfolio_uuid),
+            cvar_limit=body.cvar_limit,
+            reason=exc.reason,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "operator_signal": {
+                    "kind": "upstream_data_missing",
+                    "binding": "universe",
+                    "message_key": exc.reason,
+                },
+            },
+        ) from exc
+    except asyncio.TimeoutError as exc:
+        logger.error(
+            "preview_cvar_timeout",
+            portfolio_id=str(portfolio_uuid),
+            cvar_limit=body.cvar_limit,
+            timeout_s=_PREVIEW_TIMEOUT_S,
+        )
+        raise HTTPException(
+            status_code=504, detail="preview exceeded 3s budget",
+        ) from exc
+
+    # ── Cache set (fail-open) ──
+    try:
+        redis = aioredis.Redis(connection_pool=get_redis_pool())
+        await redis.set(cache_key, _json.dumps(payload), ex=_PREVIEW_CACHE_TTL_S)
+    except Exception as exc:
+        logger.debug("preview_cvar_cache_set_fail_open", error=str(exc))
+
+    wall_ms = int((_time.perf_counter() - t_start) * 1000)
+    if wall_ms > 1000:
+        logger.warning(
+            "preview_cvar_slow",
+            portfolio_id=str(portfolio_uuid),
+            cvar_limit=body.cvar_limit,
+            wall_ms=wall_ms,
+        )
+
+    response = PreviewCvarResponse(
+        achievable_return_band=payload["achievable_return_band"],
+        min_achievable_cvar=payload["min_achievable_cvar"],
+        operator_signal=payload["operator_signal"],
+        cached=False,
+        wall_ms=wall_ms,
+    )
+    band = payload["achievable_return_band"]
+    logger.info(
+        "preview_cvar_invoked",
+        portfolio_id=str(portfolio_uuid),
+        cvar_limit=body.cvar_limit,
+        cache_hit=False,
+        wall_ms=wall_ms,
+        band_width=float(band.get("upper", 0)) - float(band.get("lower", 0)),
+    )
+    return JSONResponse(content=response.model_dump(mode="json"))

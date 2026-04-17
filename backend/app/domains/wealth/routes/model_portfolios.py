@@ -1838,6 +1838,7 @@ async def _run_construction_async(
     profile: str,
     org_id: str,
     portfolio_id: uuid.UUID | None = None,
+    cvar_limit_override: float | None = None,
 ) -> dict[str, Any]:
     """Run optimizer-driven portfolio construction (fully async).
 
@@ -1848,6 +1849,11 @@ async def _run_construction_async(
     4. Invoke CLARABEL fund-level optimizer with block-group constraints
     5. Build PortfolioComposition from optimizer output
     6. Fallback to block-level heuristic if fund-level optimization fails
+
+    PR-A13.1 — ``cvar_limit_override`` bypasses the calibration-resolved
+    CVaR limit for a single run. The POST ``/preview-cvar`` endpoint uses
+    this to render the Builder's live drag-preview without persisting the
+    operator's probe value into ``portfolio_calibration``.
     """
     from app.domains.wealth.models.allocation import TaaRegimeState as _TaaRS
     from app.domains.wealth.services.quant_queries import (
@@ -1964,7 +1970,12 @@ async def _run_construction_async(
     strategic_targets = {a.block_id: float(a.target_weight) for a in allocations}
 
     # ── Resolve CVaR limit from profile config ──
-    cvar_limit = await _resolve_cvar_limit(db, profile)
+    # PR-A13.1 — honour the preview override when supplied so the drag-band
+    # endpoint can probe arbitrary operator CVaR limits without persisting.
+    if cvar_limit_override is not None:
+        cvar_limit = float(cvar_limit_override)
+    else:
+        cvar_limit = await _resolve_cvar_limit(db, profile)
 
     # ── TAA: Resolve dynamic regime bands (or fallback to static IPS) ──
     from app.domains.wealth.models.allocation import TaaRegimeState
