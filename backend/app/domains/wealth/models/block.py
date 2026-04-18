@@ -14,3 +14,10 @@ class AllocationBlock(Base, AuditMetaMixin):
     description: Mapped[str | None] = mapped_column(Text)
     benchmark_ticker: Mapped[str | None] = mapped_column(String(20))
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
+    # PR-A25 (migration 0153) — canonical 18-block template flag. Every
+    # `(org, profile)` must have a strategic_allocation row for every
+    # is_canonical = true block. Triggered population via
+    # fn_enforce_allocation_template_*.
+    is_canonical: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false",
+    )
