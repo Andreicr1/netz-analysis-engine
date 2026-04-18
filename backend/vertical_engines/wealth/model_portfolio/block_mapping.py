@@ -38,6 +38,11 @@ STRATEGY_LABEL_TO_BLOCKS: dict[str, list[str]] = {
     "Mid-Cap Blend": ["na_equity_small"],
     "Mid-Cap Growth": ["na_equity_small"],
     "Mid-Cap Value": ["na_equity_small"],
+    # PR-A25 — catalog uses space-form variants alongside Morningstar's
+    # hyphenated names. Keep both keys so legacy rows carrying the exact
+    # hyphen-form label still map correctly.
+    "Mid Growth": ["na_equity_small", "na_equity_growth"],
+    "Mid Value": ["na_equity_small", "na_equity_value"],
     # Equity — Europe
     "Europe Stock": ["dm_europe_equity"],
     "Foreign Large Blend": ["dm_europe_equity"],
@@ -58,9 +63,14 @@ STRATEGY_LABEL_TO_BLOCKS: dict[str, list[str]] = {
     "Fixed Income": ["fi_us_aggregate"],
     "Multisector Bond": ["fi_us_aggregate"],
     # Fixed Income — Treasury
-    "Short Government": ["fi_us_treasury", "cash"],
+    # PR-A25 — Short Government remaps to the new canonical fi_us_short_term
+    # block (post-rename from fi_short_term). Long/Intermediate stay under
+    # fi_us_treasury.
+    "Short Government": ["fi_us_short_term"],
     "Long Government": ["fi_us_treasury"],
     "Intermediate Government": ["fi_us_treasury"],
+    # Fixed Income — Short-term
+    "Ultrashort Bond": ["fi_us_short_term"],
     # Fixed Income — TIPS
     "Inflation-Protected Bond": ["fi_us_tips"],
     # Fixed Income — High Yield
@@ -76,13 +86,16 @@ STRATEGY_LABEL_TO_BLOCKS: dict[str, list[str]] = {
     "Real Estate Fund": ["alt_real_estate"],
     # Alternatives — Commodities
     "Commodities Broad Basket": ["alt_commodities"],
+    # PR-A25 — catalog labels "Commodities" and "Commodities / Energy"
+    # alongside the Morningstar "Commodities Broad Basket" canonical name.
+    "Commodities": ["alt_commodities"],
+    "Commodities / Energy": ["alt_commodities"],
     "Natural Resources": ["alt_commodities"],
     "Infrastructure": ["alt_commodities"],
     # Alternatives — Gold
     "Precious Metals": ["alt_gold"],
     # Cash
     "Money Market": ["cash"],
-    "Ultrashort Bond": ["cash"],
     "Liquidity Fund": ["cash"],
 }
 
