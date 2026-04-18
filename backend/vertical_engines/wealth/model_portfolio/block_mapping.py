@@ -51,6 +51,7 @@ STRATEGY_LABEL_TO_BLOCKS: dict[str, list[str]] = {
     # Equity — Asia
     "Japan Stock": ["dm_asia_equity"],
     "Pacific/Asia ex-Japan Stock": ["dm_asia_equity"],
+    "Asian Equity": ["dm_asia_equity"],
     # Equity — Emerging Markets
     "Diversified Emerging Mkts": ["em_equity"],
     "Emerging Markets": ["em_equity"],
@@ -73,6 +74,7 @@ STRATEGY_LABEL_TO_BLOCKS: dict[str, list[str]] = {
     "Ultrashort Bond": ["fi_us_short_term"],
     # Fixed Income — TIPS
     "Inflation-Protected Bond": ["fi_us_tips"],
+    "Inflation-Linked Bond": ["fi_us_tips"],
     # Fixed Income — High Yield
     "High Yield Bond": ["fi_us_high_yield"],
     "Private Credit": ["fi_us_high_yield"],
@@ -97,6 +99,7 @@ STRATEGY_LABEL_TO_BLOCKS: dict[str, list[str]] = {
     # Cash
     "Money Market": ["cash"],
     "Liquidity Fund": ["cash"],
+    "Cash Equivalent": ["cash"],
 }
 
 
