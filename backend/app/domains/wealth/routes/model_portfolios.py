@@ -1841,6 +1841,55 @@ def _extract_fund_weights(
     return fund_ids, weights
 
 
+def _build_propose_block_constraints(
+    *,
+    allocations: list[Any],
+    canonical_block_ids: list[str],
+    block_constraint_cls: Any,
+) -> tuple[list[Any], list[str]]:
+    """PR-A26.2 Section D - build propose-mode block constraints.
+
+    For every canonical block:
+    * ``excluded_from_portfolio = True`` collapses to ``[0, 0]`` (exclusion
+      trumps override).
+    * Otherwise the bounds default to ``[0, 1]`` and tighten to the
+      operator-set ``override_min``/``override_max`` when present.
+
+    Returns ``(block_constraints, override_block_ids)`` — the second
+    tuple slot feeds the ``taa_provenance`` telemetry so downstream
+    consumers know which blocks were override-constrained without
+    re-walking the SA rows.
+    """
+    excluded_block_ids = {
+        a.block_id for a in allocations if a.excluded_from_portfolio
+    }
+    overrides_by_block: dict[str, tuple[float | None, float | None]] = {
+        a.block_id: (
+            float(a.override_min) if a.override_min is not None else None,
+            float(a.override_max) if a.override_max is not None else None,
+        )
+        for a in allocations
+        if a.override_min is not None or a.override_max is not None
+    }
+
+    constraints: list[Any] = []
+    for bid in canonical_block_ids:
+        if bid in excluded_block_ids:
+            constraints.append(
+                block_constraint_cls(block_id=bid, min_weight=0.0, max_weight=0.0),
+            )
+            continue
+        omin, omax = overrides_by_block.get(bid, (None, None))
+        constraints.append(
+            block_constraint_cls(
+                block_id=bid,
+                min_weight=omin if omin is not None else 0.0,
+                max_weight=omax if omax is not None else 1.0,
+            ),
+        )
+    return constraints, sorted(overrides_by_block.keys())
+
+
 async def _run_construction_async(
     db: AsyncSession,
     profile: str,
@@ -2030,23 +2079,24 @@ async def _run_construction_async(
         ).all()
         canonical_block_ids = sorted({r[0] for r in canonical_rows})
 
+        block_constraints, override_blocks = _build_propose_block_constraints(
+            allocations=allocations,
+            canonical_block_ids=canonical_block_ids,
+            block_constraint_cls=BlockConstraint,
+        )
         excluded_block_ids = {
             a.block_id for a in allocations if a.excluded_from_portfolio
         }
-
-        block_constraints = [
-            BlockConstraint(
-                block_id=bid,
-                min_weight=0.0,
-                max_weight=0.0 if bid in excluded_block_ids else 1.0,
-            )
-            for bid in canonical_block_ids
-        ]
         taa_provenance = {
             "mode": "propose_mode_skipped",
             "n_canonical_blocks": len(canonical_block_ids),
             "n_excluded_blocks": len(excluded_block_ids),
             "excluded_blocks": sorted(excluded_block_ids),
+            # PR-A26.2 - telemetry surfaces operator overrides so the
+            # Builder UI can render a "constrained by override" chip on
+            # the affected blocks in the proposal diff view.
+            "n_override_blocks": len(override_blocks),
+            "override_blocks": sorted(override_blocks),
         }
     else:
         # ── TAA: Resolve dynamic regime bands (or fallback to static IPS) ──
