@@ -96,6 +96,12 @@ class WinnerSignal(str, Enum):
     # expand the approved universe for those blocks or zero their
     # target_weight explicitly.
     BLOCK_COVERAGE_INSUFFICIENT = "block_coverage_insufficient"
+    # PR-A25 — cascade aborted because the ``(organization_id, profile)``
+    # pair is missing one or more canonical ``allocation_blocks`` rows.
+    # Structural failure that indicates the migration 0153 trigger did
+    # not run, not an operator misconfiguration. Handled upstream of the
+    # coverage gate so the stricter failure surfaces first.
+    TEMPLATE_INCOMPLETE = "template_incomplete"
 
 
 def compute_winner_signal(

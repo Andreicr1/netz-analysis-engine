@@ -79,6 +79,11 @@ from app.domains.wealth.schemas.sanitized import (
     humanize_event_type,
     sanitize_payload,
 )
+from quant_engine.allocation_template_service import (
+    TemplateReport,
+    build_template_operator_message,
+    validate_template_completeness,
+)
 from quant_engine.block_coverage_service import (
     CoverageReport,
     build_coverage_operator_message,
@@ -136,6 +141,22 @@ class CoverageInsufficientError(Exception):
         super().__init__(
             f"block_coverage_insufficient gaps={len(report.gaps)} "
             f"weight_at_risk={report.total_target_weight_at_risk:.4f}"
+        )
+        self.report = report
+
+
+class TemplateIncompleteError(Exception):
+    """PR-A25 — raised when the canonical template is incomplete.
+
+    Fires strictly before ``CoverageInsufficientError`` so operators
+    see the structural defect (missing canonical block rows) rather
+    than the downstream coverage gap it would otherwise manifest as.
+    """
+
+    def __init__(self, report: TemplateReport) -> None:
+        super().__init__(
+            "template_incomplete missing="
+            f"{len(report.missing_canonical_blocks)}"
         )
         self.report = report
 
@@ -885,6 +906,38 @@ async def _build_advisor_result(
     }
 
 
+async def _persist_template_failure(
+    db: AsyncSession,
+    *,
+    run: PortfolioConstructionRun,
+    report: TemplateReport,
+) -> None:
+    """PR-A25 — persist a template-incomplete failure to the run row.
+
+    Mirrors :func:`_persist_coverage_failure`: writes a structured
+    ``cascade_telemetry`` payload with ``winner_signal`` +
+    ``operator_message`` plus a ``template_report`` envelope, and
+    flips ``status = 'failed'`` with a compact ``failure_reason``.
+    """
+    operator_message = build_template_operator_message(report)
+    existing_telemetry = run.cascade_telemetry or {}
+    run.cascade_telemetry = {
+        **existing_telemetry,
+        "winner_signal": WinnerSignal.TEMPLATE_INCOMPLETE.value,
+        "operator_signal": WinnerSignal.TEMPLATE_INCOMPLETE.value,
+        "operator_message": operator_message,
+        "template_report": report.model_dump(mode="json"),
+        # Cascade never ran — signal to downstream consumers that
+        # stress / advisor / validation output should not be rendered.
+        "cascade_summary": "template_incomplete",
+    }
+    run.status = "failed"
+    run.failure_reason = (
+        f"template_incomplete: profile '{report.profile}' missing "
+        f"{len(report.missing_canonical_blocks)} canonical block(s)"
+    )
+
+
 async def _persist_coverage_failure(
     db: AsyncSession,
     *,
@@ -1031,6 +1084,37 @@ async def execute_construction_run(
         logger.warning(
             "construction_run_timeout",
             extra={"run_id": str(run_id), "portfolio_id": str(portfolio_id)},
+        )
+        return run
+    except TemplateIncompleteError as template_exc:
+        # PR-A25 — structural failure ahead of the coverage gate.
+        await _persist_template_failure(
+            db, run=run, report=template_exc.report,
+        )
+        run.completed_at = datetime.now(tz=timezone.utc)
+        run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
+        await db.flush()
+        await _publish_terminal_event_sanitized(
+            db,
+            run_id=run_id,
+            job_id=job_id,
+            raw_type="run_failed",
+            raw_payload={
+                "run_id": str(run_id),
+                "reason": "template_incomplete",
+                "winner_signal": WinnerSignal.TEMPLATE_INCOMPLETE.value,
+                "template_report": template_exc.report.model_dump(mode="json"),
+            },
+        )
+        logger.warning(
+            "construction_run_template_incomplete",
+            extra={
+                "run_id": str(run_id),
+                "portfolio_id": str(portfolio_id),
+                "missing_canonical_blocks": (
+                    template_exc.report.missing_canonical_blocks
+                ),
+            },
         )
         return run
     except CoverageInsufficientError as coverage_exc:
@@ -1196,6 +1280,18 @@ async def _execute_inner(
         raise LookupError(f"portfolio {portfolio_id} not found")
     profile = portfolio.profile
     organization_id = portfolio.organization_id
+
+    # ── PR-A25. Template completeness gate — runs BEFORE the coverage
+    # gate so structural defects (missing canonical blocks) surface as
+    # the dedicated ``template_incomplete`` signal. Post-migration 0153
+    # this should never fail; if it does the trigger is broken and the
+    # operator message directs them to engineering rather than to the
+    # universe editor.
+    template = await validate_template_completeness(
+        db, organization_id, profile,
+    )
+    if not template.is_complete:
+        raise TemplateIncompleteError(template)
 
     # ── PR-A22. Block coverage gate — fail fast if any block in the
     # profile's StrategicAllocation has zero approved candidates in
