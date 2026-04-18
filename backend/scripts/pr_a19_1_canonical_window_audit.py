@@ -42,20 +42,20 @@ WINDOW_SQL = text(
         LIMIT 1
     ),
     window_rows AS (
-        SELECT nt.date, nt.nav
+        SELECT nt.nav_date, nt.nav
         FROM nav_timeseries nt
         JOIN target ON nt.instrument_id = target.instrument_id
-        WHERE nt.date >= NOW() - INTERVAL '365 days'
-        ORDER BY nt.date
+        WHERE nt.nav_date >= NOW() - INTERVAL '365 days'
+        ORDER BY nt.nav_date
     ),
     endpoints AS (
         SELECT
-            (SELECT MIN(date) FROM window_rows) AS first_date,
-            (SELECT MAX(date) FROM window_rows) AS last_date,
+            (SELECT MIN(nav_date) FROM window_rows) AS first_date,
+            (SELECT MAX(nav_date) FROM window_rows) AS last_date,
             (SELECT COUNT(*) FROM window_rows) AS n_days,
-            (SELECT nav FROM window_rows ORDER BY date ASC LIMIT 1) AS first_nav,
-            (SELECT nav FROM window_rows ORDER BY date DESC LIMIT 1) AS last_nav,
-            (SELECT MAX(date) FROM nav_timeseries nt
+            (SELECT nav FROM window_rows ORDER BY nav_date ASC LIMIT 1) AS first_nav,
+            (SELECT nav FROM window_rows ORDER BY nav_date DESC LIMIT 1) AS last_nav,
+            (SELECT MAX(nt.nav_date) FROM nav_timeseries nt
              JOIN target ON nt.instrument_id = target.instrument_id) AS overall_last_date
     )
     SELECT * FROM endpoints
@@ -104,7 +104,7 @@ async def _audit_ticker(conn, ticker: str) -> dict[str, object]:
 
 
 async def main() -> None:
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    engine = create_async_engine(settings.database_url, echo=False)
     async with engine.connect() as conn:
         for ticker in CANONICAL_TICKERS:
             result = await _audit_ticker(conn, ticker)
