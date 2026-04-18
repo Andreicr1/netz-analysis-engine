@@ -259,6 +259,59 @@ class ConstructRunAccepted(BaseModel):
     run_url: str
 
 
+# ── PR-A26.1 — Propose Mode ──────────────────────────────────────────
+
+
+class ProposedBand(BaseModel):
+    """One block's proposed strategic anchor + drift band.
+
+    Emitted by the propose-mode optimizer for every block in the
+    canonical template (excluded blocks have ``target_weight = 0`` and
+    ``drift_min = drift_max = 0``). Drift band is the hybrid
+    ``max(0.02, 0.15 * target)`` derivation per A26.1 spec.
+    """
+
+    block_id: str
+    target_weight: float
+    drift_min: float
+    drift_max: float
+    rationale: str | None = None
+
+
+class ProposalMetrics(BaseModel):
+    """Headline ex-ante metrics for the propose-mode allocation.
+
+    ``cvar_feasible`` is False when the cascade fell through to the
+    Phase 3 min-CVaR fallback (universe floor exceeds the operator's
+    target); the bands are still returned so the operator can decide
+    whether to raise the limit or expand the universe.
+    """
+
+    expected_return: float | None = None
+    expected_cvar: float | None = None
+    expected_sharpe: float | None = None
+    target_cvar: float | None = None
+    cvar_feasible: bool
+
+
+class LatestProposalResponse(BaseModel):
+    """Response for ``GET /portfolio/profiles/{profile}/latest-proposal``."""
+
+    run_id: uuid.UUID
+    requested_at: datetime
+    winner_signal: str
+    proposed_bands: list[ProposedBand]
+    proposal_metrics: ProposalMetrics
+
+
+class JobCreatedResponse(BaseModel):
+    """Generic 202 response for async propose-mode dispatch."""
+
+    job_id: str
+    sse_url: str
+    run_id: uuid.UUID
+
+
 class StressScenarioCatalogEntry(BaseModel):
     """One entry in the stress catalog returned by GET /portfolio/stress-test/scenarios."""
 

@@ -102,6 +102,16 @@ class WinnerSignal(str, Enum):
     # not run, not an operator misconfiguration. Handled upstream of the
     # coverage gate so the stricter failure surfaces first.
     TEMPLATE_INCOMPLETE = "template_incomplete"
+    # PR-A26.1 — propose-mode terminal signals. Emitted only when the run
+    # was started with ``run_mode = 'propose'``. ``PROPOSAL_READY`` covers
+    # any cascade outcome where the optimizer found a feasible portfolio
+    # within the operator's CVaR target (Phase 1 or Phase 2 winner).
+    # ``PROPOSAL_CVAR_INFEASIBLE`` is the Phase 3 fallback: the universe
+    # cannot meet the requested CVaR target, but the min-CVaR portfolio
+    # is returned so the operator can either raise the limit or expand
+    # the universe.
+    PROPOSAL_READY = "proposal_ready"
+    PROPOSAL_CVAR_INFEASIBLE = "proposal_cvar_infeasible"
 
 
 def compute_winner_signal(
