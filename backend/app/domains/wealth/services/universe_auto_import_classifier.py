@@ -132,8 +132,10 @@ def classify_block(
                 if target is not None:
                     return target, f"fallback_fi_name_{target_block}"
 
-        # 3c. Default — aggregate US bond bucket.
-        return "fi_us_aggregate", "fallback_fi_aggregate"
+        # 3c. No granular signal — PR-A23 D1: silent ``fi_us_aggregate``
+        # default was miscategorising muni / non-aggregate bonds (VTEB,
+        # MUB). Surface for operator triage instead of silent default.
+        return None, "needs_human_review"
 
     # 4. Equity without strategy_label — geography-aware routing
     if asset_class == "equity":
@@ -144,7 +146,10 @@ def classify_block(
             if target is not None:
                 reason_geo = geography.lower().replace(" ", "_")
                 return target, f"fallback_equity_{reason_geo}"
-        return "na_equity_large", "fallback_equity"
+        # PR-A23 D2: silent ``na_equity_large`` default was dumping
+        # foreign-developed equities (EFA) into the US bucket. Surface
+        # for operator triage.
+        return None, "needs_human_review"
 
     # 5. Real estate fund type
     if fund_type == "Real Estate Fund":
