@@ -107,6 +107,11 @@ CANONICAL_REFERENCE: dict[str, tuple[str, str]] = {
 #
 # Extend this set if new muni labels surface.
 EXCLUDED_STRATEGY_LABELS: frozenset[str] = frozenset({
+    # Generic label used by the upstream ingestion worker when no
+    # Morningstar-level granularity is available (dev DB: 328 rows).
+    "Municipal Bond",
+    # Morningstar muni categories — surface post-0151 label corrections
+    # and once the upstream ingestion starts emitting granular labels.
     "Muni National Interm",
     "Muni National Short",
     "Muni National Long",
