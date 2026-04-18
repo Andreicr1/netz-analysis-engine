@@ -971,6 +971,141 @@ async def _persist_coverage_failure(
     )
 
 
+# ── PR-A26.1 — propose-mode band derivation ─────────────────────
+
+
+def _derive_drift_band(target: float) -> tuple[float, float]:
+    """Hybrid drift band per A26.1 spec: ``max(0.02, 0.15 * target)``.
+
+    Returned band is symmetric and clamped to ``[0, 1]``. A target of
+    zero collapses both edges to zero — used for excluded blocks and
+    blocks the optimizer chose not to fund.
+    """
+    if target <= 0.0:
+        return 0.0, 0.0
+    drift = max(0.02, 0.15 * target)
+    return max(0.0, target - drift), min(1.0, target + drift)
+
+
+_PROPOSAL_DEFAULT_RATIONALE = (
+    "Optimizer-proposed weight at this allocation under "
+    "the configured CVaR target."
+)
+_PROPOSAL_EXCLUDED_RATIONALE = (
+    "Block excluded by IPS — forced to zero exposure."
+)
+
+
+async def _build_propose_payload(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID | str,
+    profile: str,
+    base_result: dict[str, Any],
+    cascade_telemetry: dict[str, Any],
+    ex_ante_metrics: dict[str, Any],
+    calibration_snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the propose-mode payload merged into ``cascade_telemetry``.
+
+    Inputs come straight from the post-cascade state inside
+    ``_execute_inner``: the funds list (for block aggregation), the
+    canonical template + excluded-block set (re-queried RLS-aware), the
+    cascade winner (for ``cvar_feasible``), and the ex-ante metrics.
+
+    Returns a dict with three keys merged into cascade_telemetry:
+    ``proposed_bands``, ``proposal_metrics``, and ``winner_signal``.
+    The latter overrides the cascade-derived signal so propose runs
+    surface ``proposal_ready`` / ``proposal_cvar_infeasible`` instead
+    of the realize-mode operator signals.
+    """
+    from app.domains.wealth.models.allocation import StrategicAllocation
+    from app.domains.wealth.models.block import AllocationBlock
+
+    # 1. Aggregate optimizer weights to block level.
+    weights_by_block: dict[str, float] = {}
+    for fund in base_result.get("funds") or []:
+        bid = fund.get("block_id")
+        if not bid:
+            continue
+        w = float(fund.get("weight") or 0.0)
+        weights_by_block[bid] = weights_by_block.get(bid, 0.0) + w
+
+    # 2. Canonical block list + excluded set (RLS-aware via passed db).
+    canonical_rows = (
+        await db.execute(
+            select(AllocationBlock.block_id)
+            .where(AllocationBlock.is_canonical.is_(True))
+        )
+    ).all()
+    canonical_block_ids = sorted({r[0] for r in canonical_rows})
+
+    excluded_rows = (
+        await db.execute(
+            select(StrategicAllocation.block_id)
+            .where(
+                StrategicAllocation.profile == profile,
+                StrategicAllocation.excluded_from_portfolio.is_(True),
+            )
+        )
+    ).all()
+    excluded_block_ids = {r[0] for r in excluded_rows}
+
+    # 3. Build proposed bands per canonical block.
+    proposed_bands: list[dict[str, Any]] = []
+    for bid in canonical_block_ids:
+        if bid in excluded_block_ids:
+            proposed_bands.append({
+                "block_id": bid,
+                "target_weight": 0.0,
+                "drift_min": 0.0,
+                "drift_max": 0.0,
+                "rationale": _PROPOSAL_EXCLUDED_RATIONALE,
+            })
+            continue
+        target = float(weights_by_block.get(bid, 0.0))
+        drift_min, drift_max = _derive_drift_band(target)
+        proposed_bands.append({
+            "block_id": bid,
+            "target_weight": round(target, 6),
+            "drift_min": round(drift_min, 6),
+            "drift_max": round(drift_max, 6),
+            "rationale": _PROPOSAL_DEFAULT_RATIONALE,
+        })
+
+    # 4. cvar_feasible: True iff the cascade landed on Phase 1 or Phase 2.
+    # Phase 3 (min-CVaR fallback) means the universe floor exceeds the
+    # operator's CVaR target — return the bands but flag infeasibility.
+    winning_phase = (base_result.get("cascade") or {}).get("winning_phase")
+    cvar_feasible = winning_phase in {
+        "phase_1_ru_max_return",
+        "phase_2_ru_robust",
+    }
+
+    target_cvar = calibration_snapshot.get("cvar_limit")
+    expected_cvar = ex_ante_metrics.get("cvar_95")
+    proposal_metrics = {
+        "expected_return": ex_ante_metrics.get("expected_return"),
+        "expected_cvar": expected_cvar,
+        "expected_sharpe": ex_ante_metrics.get("sharpe_ratio"),
+        "target_cvar": float(target_cvar) if target_cvar is not None else None,
+        "cvar_feasible": bool(cvar_feasible),
+    }
+
+    winner_signal = (
+        WinnerSignal.PROPOSAL_READY.value
+        if cvar_feasible
+        else WinnerSignal.PROPOSAL_CVAR_INFEASIBLE.value
+    )
+
+    return {
+        "proposed_bands": proposed_bands,
+        "proposal_metrics": proposal_metrics,
+        "winner_signal": winner_signal,
+        "run_mode": "propose",
+    }
+
+
 # ── Main entry point ──────────────────────────────────────────
 
 
@@ -982,6 +1117,7 @@ async def execute_construction_run(
     requested_by: str,
     job_id: str | None = None,
     as_of_date: date | None = None,
+    propose_mode: bool = False,
 ) -> PortfolioConstructionRun:
     """Execute a full enriched construction run.
 
@@ -1037,6 +1173,7 @@ async def execute_construction_run(
         universe_fingerprint="pending",  # filled post-construction
         as_of_date=as_of_date,
         status="running",
+        run_mode="propose" if propose_mode else "realize",
         requested_by=requested_by,
         started_at=datetime.now(tz=timezone.utc),
     )
@@ -1063,6 +1200,7 @@ async def execute_construction_run(
                 portfolio_id=portfolio_id,
                 calibration_snapshot=calibration_snapshot,
                 job_id=job_id,
+                propose_mode=propose_mode,
             ),
             timeout=CONSTRUCTION_TIMEOUT_SECONDS,
         )
@@ -1260,6 +1398,7 @@ async def _execute_inner(
     portfolio_id: uuid.UUID,
     calibration_snapshot: dict[str, Any],
     job_id: str | None,
+    propose_mode: bool = False,
 ) -> None:
     """The inner pipeline — everything that runs inside the 120s bound.
 
@@ -1315,6 +1454,7 @@ async def _execute_inner(
     # ── 4. Optimizer cascade ──
     base_result = await _run_construction_async(
         db, profile, str(organization_id), portfolio_id=portfolio_id,
+        propose_mode=propose_mode,
     )
 
     # PR-A8 — Layer 3 dedup telemetry. Surfaced as a sanitized SSE event
@@ -1426,6 +1566,34 @@ async def _execute_inner(
                 # PR-A19.1 Section C — cascade-aware operator signal.
                 "winner_signal": cascade_telemetry.get("winner_signal"),
                 "operator_message": cascade_telemetry.get("operator_message"),
+            },
+        )
+
+    # ── PR-A26.1 — propose-mode payload (bands + metrics) ──
+    if propose_mode:
+        proposal_payload = await _build_propose_payload(
+            db,
+            organization_id=organization_id,
+            profile=profile,
+            base_result=base_result,
+            cascade_telemetry=cascade_telemetry,
+            ex_ante_metrics=ex_ante_metrics,
+            calibration_snapshot=calibration_snapshot,
+        )
+        cascade_telemetry = {**cascade_telemetry, **proposal_payload}
+        await _publish_event_sanitized(
+            db,
+            run_id=run.id,
+            job_id=job_id,
+            raw_type=(
+                "propose_ready"
+                if proposal_payload["proposal_metrics"]["cvar_feasible"]
+                else "propose_cvar_infeasible"
+            ),
+            raw_payload={
+                "winner_signal": proposal_payload["winner_signal"],
+                "proposal_metrics": proposal_payload["proposal_metrics"],
+                "n_bands": len(proposal_payload["proposed_bands"]),
             },
         )
 

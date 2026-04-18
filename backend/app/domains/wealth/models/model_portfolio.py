@@ -226,6 +226,12 @@ class PortfolioConstructionRun(OrganizationScopedMixin, Base):
 
     # Run lifecycle
     status: Mapped[str] = mapped_column(String(32), nullable=False)
+    # PR-A26.1 — 'realize' (default, IPS-anchored) vs 'propose' (optimizer
+    # explores freely under CVaR + exclusions only). CHECK constraint in
+    # migration 0154.
+    run_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="realize",
+    )
     requested_by: Mapped[str] = mapped_column(String(128), nullable=False)
     requested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
