@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from backend.app.domains.wealth.services import authoritative_label_map as m
-from backend.vertical_engines.wealth.model_portfolio.block_mapping import (
+from app.domains.wealth.services import authoritative_label_map as m
+from vertical_engines.wealth.model_portfolio.block_mapping import (
     STRATEGY_LABEL_TO_BLOCKS,
 )
 

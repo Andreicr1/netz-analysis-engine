@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from backend.vertical_engines.wealth.model_portfolio.block_mapping import (
+from vertical_engines.wealth.model_portfolio.block_mapping import (
     STRATEGY_LABEL_TO_BLOCKS,
 )
 
