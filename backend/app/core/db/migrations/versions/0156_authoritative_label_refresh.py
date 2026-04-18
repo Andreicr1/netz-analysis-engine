@@ -18,7 +18,6 @@ Reversible. Both tables drop cleanly on downgrade.
 """
 from __future__ import annotations
 
-import sqlalchemy as sa
 from alembic import op
 
 revision = "0156_authoritative_label_refresh"

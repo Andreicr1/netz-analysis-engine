@@ -4,13 +4,15 @@ description cascade only when no authoritative source is available.
 
 Priority ladder (per active instrument):
 
-1. ``sec_money_market_funds`` matched on ``attributes->>'sec_cik'``
-2. ``sec_etfs`` matched on ``ticker`` (only when ``strategy_label IS NOT NULL``)
-3. ``sec_bdcs`` matched on ``cik``
-4. ``esma_funds`` matched on ``isin``
+1. ``sec_money_market_funds`` matched on series_id (``iu.attributes->>'series_id'``
+   or ``iu.isin`` when it begins with ``S0``). CIK is intentionally NOT used
+   as a bridge — it is the issuer-level registrant identifier.
+2. ``sec_etfs`` matched on series_id first, then ``ticker`` as fallback.
+3. ``sec_bdcs`` matched on series_id.
+4. ``esma_funds`` matched on real ``isin`` (skips IU rows storing series_id).
 5. Most recent high-confidence ``strategy_reclassification_stage`` row
-   with ``classification_source='tiingo_description'``
-6. Else: NULL with ``attributes.needs_human_review = true``
+   with ``classification_source='tiingo_description'``.
+6. Else: NULL with ``attributes.needs_human_review = true``.
 
 Default mode is ``--dry-run``. ``--apply`` writes:
 
@@ -39,7 +41,6 @@ from sqlalchemy import text
 
 from app.core.db.engine import async_session_factory
 from app.domains.wealth.services.authoritative_label_map import (
-    LabelMapping,
     map_bdc_label,
     map_esma_label,
     map_etf_label,

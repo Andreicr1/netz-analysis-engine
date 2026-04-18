@@ -11,13 +11,13 @@ import os
 import pytest
 
 from scripts.refresh_authoritative_labels import (
-    InstrumentRow,
     SOURCE_BDC,
     SOURCE_ESMA,
     SOURCE_ETF,
     SOURCE_MMF,
     SOURCE_NEEDS_REVIEW,
     SOURCE_TIINGO,
+    InstrumentRow,
     _resolve,
 )
 
