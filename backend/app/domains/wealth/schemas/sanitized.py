@@ -90,6 +90,12 @@ class WinnerSignal(str, Enum):
     DEGRADED_OTHER = "degraded_other"
     # No winner at all: empty universe, PSD violation, polytope empty.
     PRE_SOLVE_FAILURE = "pre_solve_failure"
+    # PR-A22 — cascade aborted before the optimizer ran because one or
+    # more blocks in the profile's StrategicAllocation have zero
+    # approved candidates in ``instruments_org``. Operator remedy:
+    # expand the approved universe for those blocks or zero their
+    # target_weight explicitly.
+    BLOCK_COVERAGE_INSUFFICIENT = "block_coverage_insufficient"
 
 
 def compute_winner_signal(
