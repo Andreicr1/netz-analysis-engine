@@ -26,7 +26,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0151_fix_known_strategy_labels"
-down_revision = "0149_sanitize_org_universe"
+down_revision = "0150_winner_signal_block_coverage"
 branch_labels = None
 depends_on = None
 
