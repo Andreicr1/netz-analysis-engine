@@ -324,7 +324,7 @@ async def test_migration_0149_aborts_when_strategic_allocation_references_fi_gov
             """
             INSERT INTO strategic_allocation
                 (allocation_id, organization_id, profile, block_id,
-                 target_weight, min_weight, max_weight, effective_from)
+                 target_weight, drift_min, drift_max, effective_from)
             VALUES ($1, $2, 'moderate', 'fi_govt', 0.1, 0.05, 0.2, '2026-01-01')
             """,
             alloc_id, org_id,
