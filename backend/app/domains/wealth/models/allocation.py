@@ -3,7 +3,18 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    false as sa_false,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,15 +31,27 @@ class StrategicAllocation(OrganizationScopedMixin, Base):
     block_id: Mapped[str] = mapped_column(
         String(80), ForeignKey("allocation_blocks.block_id"), nullable=False,
     )
-    target_weight: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False)
-    min_weight: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False)
-    max_weight: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False)
+    # PR-A25 (migration 0153): weights relaxed to nullable so the canonical
+    # 18-block template can be seeded before the operator or PR-A26's
+    # propose-then-approve flow fills the bands.
+    target_weight: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
+    min_weight: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
+    max_weight: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
     risk_budget: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
     rationale: Mapped[str | None] = mapped_column(Text)
     approved_by: Mapped[str | None] = mapped_column(String(100))
     effective_from: Mapped[date] = mapped_column(Date, nullable=False)
     effective_to: Mapped[date | None] = mapped_column(Date)
     actor_source: Mapped[str | None] = mapped_column(String(20))
+    # PR-A25 — operator may mark a canonical block as intentionally excluded
+    # (forces zero exposure) without breaking template completeness. NULL
+    # weights + excluded_from_portfolio = true means "operator decided out".
+    excluded_from_portfolio: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=sa_false(),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
     )
