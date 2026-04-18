@@ -1437,9 +1437,13 @@ async def compute_fund_level_inputs(
             f"(minimum: {MIN_OBSERVATIONS})",
         )
 
-    # Trim to the requested 5Y cov window (may have pulled more via ffill)
+    # Trim to the requested 5Y cov window (may have pulled more via ffill).
+    # common_dates must be trimmed in lock-step so downstream date_to_idx
+    # maps into the same row space as returns_matrix (PR-A19.1 surfaced
+    # this via sanity gate → longer alignment window → trim path active).
     if returns_matrix.shape[0] > cov_lookback_days:
         returns_matrix = returns_matrix[-cov_lookback_days:]
+        common_dates = common_dates[-cov_lookback_days:]
 
     # ── 3. Covariance estimation (Fundamental Factor vs LW Fallback) ──────
     factor_loadings = None
