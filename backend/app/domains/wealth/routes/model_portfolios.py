@@ -1839,6 +1839,7 @@ async def _run_construction_async(
     org_id: str,
     portfolio_id: uuid.UUID | None = None,
     cvar_limit_override: float | None = None,
+    propose_mode: bool = False,
 ) -> dict[str, Any]:
     """Run optimizer-driven portfolio construction (fully async).
 
@@ -1854,6 +1855,16 @@ async def _run_construction_async(
     CVaR limit for a single run. The POST ``/preview-cvar`` endpoint uses
     this to render the Builder's live drag-preview without persisting the
     operator's probe value into ``portfolio_calibration``.
+
+    PR-A26.1 — ``propose_mode=True`` runs the optimizer with maximum
+    freedom: block bounds collapse to ``[0, 1]`` (except blocks marked
+    ``excluded_from_portfolio = True`` → ``[0, 0]``); TAA bands are
+    skipped; ``strategic_allocation.(target|min|max)_weight`` are NOT
+    consulted. The μ prior stays at ``historical_1y`` (the existing prod
+    default for this entry point) so the BL posterior + IC views path
+    is structurally bypassed — ``_build_ic_views`` is never reached
+    because it lives inside the ``mu_prior == "thbb"`` branch of
+    ``compute_fund_level_inputs``.
     """
     from app.domains.wealth.models.allocation import TaaRegimeState as _TaaRS
     from app.domains.wealth.services.quant_queries import (
@@ -1967,7 +1978,14 @@ async def _run_construction_async(
             seen_blocks[allocation.block_id] = allocation
     allocations = list(seen_blocks.values())
 
-    strategic_targets = {a.block_id: float(a.target_weight) for a in allocations}
+    # PR-A25: target_weight is nullable post-migration 0153 (canonical
+    # template seeds NULL bands until A26.2 fills them). Treat NULL as
+    # 0.0 for the realize-mode strategic_targets snapshot — propose mode
+    # ignores this dict entirely below.
+    strategic_targets = {
+        a.block_id: (float(a.target_weight) if a.target_weight is not None else 0.0)
+        for a in allocations
+    }
 
     # ── Resolve CVaR limit via the institutional priority chain ──
     # PR-A13.1 — honour the preview override when supplied so the drag-band
@@ -1984,77 +2002,116 @@ async def _run_construction_async(
             db, profile, portfolio_id=portfolio_id, org_id=org_id,
         )
 
-    # ── TAA: Resolve dynamic regime bands (or fallback to static IPS) ──
-    from app.domains.wealth.models.allocation import TaaRegimeState
-    from app.domains.wealth.models.block import AllocationBlock
-    from quant_engine.taa_band_service import resolve_effective_bands
+    # ── PR-A26.1 propose-mode constraint construction ──
+    # Bypass TAA bands and the strategic_allocation.(target|min|max)_weight
+    # layer entirely. The optimizer runs with maximum freedom subject only
+    # to (a) sum(w) = 1, (b) 0 ≤ w ≤ 1, (c) excluded blocks forced to 0,
+    # (d) the configured cvar_limit.
+    if propose_mode:
+        from app.domains.wealth.models.block import AllocationBlock
 
-    # Fetch block → asset_class mapping
-    block_ids = [a.block_id for a in allocations]
-    block_ac_result = await db.execute(
-        select(AllocationBlock.block_id, AllocationBlock.asset_class)
-        .where(AllocationBlock.block_id.in_(block_ids))
-    )
-    block_asset_classes = {bid: ac for bid, ac in block_ac_result.all()}
-
-    # Read taa_enabled from calibration (default True)
-    taa_enabled = True
-    if portfolio_id is not None:
-        cal_result = await db.execute(
-            select(PortfolioCalibration.expert_overrides)
-            .where(PortfolioCalibration.portfolio_id == portfolio_id)
-        )
-        expert_overrides = cal_result.scalar_one_or_none()
-        if isinstance(expert_overrides, dict):
-            taa_enabled = expert_overrides.get("taa_enabled", True)
-
-    # Fetch latest taa_regime_state for this org+profile
-    taa_state_row = None
-    if taa_enabled:
-        taa_stmt = (
-            select(TaaRegimeState)
-            .where(
-                TaaRegimeState.profile == profile,
+        # Authoritative block list = canonical template (post-migration
+        # 0153 these are guaranteed to exist for every (org, profile)
+        # pair via the strategic_allocation insert trigger; the upstream
+        # template gate also enforces it).
+        canonical_rows = (
+            await db.execute(
+                select(AllocationBlock.block_id)
+                .where(AllocationBlock.is_canonical.is_(True))
             )
-            .order_by(TaaRegimeState.as_of_date.desc())
-            .limit(1)
-        )
-        taa_result = await db.execute(taa_stmt)
-        taa_obj = taa_result.scalar_one_or_none()
-        if taa_obj is not None:
-            taa_state_row = {
-                "raw_regime": taa_obj.raw_regime,
-                "stress_score": float(taa_obj.stress_score) if taa_obj.stress_score is not None else None,
-                "smoothed_centers": taa_obj.smoothed_centers,
-                "effective_bands": taa_obj.effective_bands,
-            }
+        ).all()
+        canonical_block_ids = sorted({r[0] for r in canonical_rows})
 
-    # Fetch TAA config from ConfigService
-    taa_config = None
-    if taa_enabled:
-        from app.core.config.config_service import ConfigService as _CS
-        _cs = _CS(db)
-        taa_cfg_result = await _cs.get("liquid_funds", "taa_bands", org_id)
-        if taa_cfg_result:
-            taa_config = taa_cfg_result.value
-
-    alloc_dicts = [
-        {
-            "block_id": a.block_id,
-            "target_weight": float(a.target_weight),
-            "min_weight": float(a.min_weight),
-            "max_weight": float(a.max_weight),
+        excluded_block_ids = {
+            a.block_id for a in allocations if a.excluded_from_portfolio
         }
-        for a in allocations
-    ]
 
-    block_constraints, taa_provenance = resolve_effective_bands(
-        allocations=alloc_dicts,
-        block_asset_classes=block_asset_classes,
-        taa_regime_state=taa_state_row,
-        taa_config=taa_config,
-        taa_enabled=taa_enabled,
-    )
+        block_constraints = [
+            BlockConstraint(
+                block_id=bid,
+                min_weight=0.0,
+                max_weight=0.0 if bid in excluded_block_ids else 1.0,
+            )
+            for bid in canonical_block_ids
+        ]
+        taa_provenance = {
+            "mode": "propose_mode_skipped",
+            "n_canonical_blocks": len(canonical_block_ids),
+            "n_excluded_blocks": len(excluded_block_ids),
+            "excluded_blocks": sorted(excluded_block_ids),
+        }
+    else:
+        # ── TAA: Resolve dynamic regime bands (or fallback to static IPS) ──
+        from app.domains.wealth.models.allocation import TaaRegimeState
+        from app.domains.wealth.models.block import AllocationBlock
+        from quant_engine.taa_band_service import resolve_effective_bands
+
+        # Fetch block → asset_class mapping
+        block_ids = [a.block_id for a in allocations]
+        block_ac_result = await db.execute(
+            select(AllocationBlock.block_id, AllocationBlock.asset_class)
+            .where(AllocationBlock.block_id.in_(block_ids))
+        )
+        block_asset_classes = {bid: ac for bid, ac in block_ac_result.all()}
+
+        # Read taa_enabled from calibration (default True)
+        taa_enabled = True
+        if portfolio_id is not None:
+            cal_result = await db.execute(
+                select(PortfolioCalibration.expert_overrides)
+                .where(PortfolioCalibration.portfolio_id == portfolio_id)
+            )
+            expert_overrides = cal_result.scalar_one_or_none()
+            if isinstance(expert_overrides, dict):
+                taa_enabled = expert_overrides.get("taa_enabled", True)
+
+        # Fetch latest taa_regime_state for this org+profile
+        taa_state_row = None
+        if taa_enabled:
+            taa_stmt = (
+                select(TaaRegimeState)
+                .where(
+                    TaaRegimeState.profile == profile,
+                )
+                .order_by(TaaRegimeState.as_of_date.desc())
+                .limit(1)
+            )
+            taa_result = await db.execute(taa_stmt)
+            taa_obj = taa_result.scalar_one_or_none()
+            if taa_obj is not None:
+                taa_state_row = {
+                    "raw_regime": taa_obj.raw_regime,
+                    "stress_score": float(taa_obj.stress_score) if taa_obj.stress_score is not None else None,
+                    "smoothed_centers": taa_obj.smoothed_centers,
+                    "effective_bands": taa_obj.effective_bands,
+                }
+
+        # Fetch TAA config from ConfigService
+        taa_config = None
+        if taa_enabled:
+            from app.core.config.config_service import ConfigService as _CS
+            _cs = _CS(db)
+            taa_cfg_result = await _cs.get("liquid_funds", "taa_bands", org_id)
+            if taa_cfg_result:
+                taa_config = taa_cfg_result.value
+
+        alloc_dicts = [
+            {
+                "block_id": a.block_id,
+                "target_weight": float(a.target_weight) if a.target_weight is not None else 0.0,
+                "min_weight": float(a.min_weight) if a.min_weight is not None else 0.0,
+                "max_weight": float(a.max_weight) if a.max_weight is not None else 1.0,
+            }
+            for a in allocations
+        ]
+
+        block_constraints, taa_provenance = resolve_effective_bands(
+            allocations=alloc_dicts,
+            block_asset_classes=block_asset_classes,
+            taa_regime_state=taa_state_row,
+            taa_config=taa_config,
+            taa_enabled=taa_enabled,
+        )
 
     # Resolve max_single_fund_weight from profile config
     max_single_fund = await _resolve_max_single_fund(db, profile)
