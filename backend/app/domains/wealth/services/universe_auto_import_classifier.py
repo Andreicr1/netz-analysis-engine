@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from scripts._pr_a23_canonical_reference import EXCLUDED_STRATEGY_LABELS
 from vertical_engines.wealth.model_portfolio.block_mapping import blocks_for_strategy_label
 
 _PRIVATE_FUND_TYPES = frozenset({
@@ -86,6 +87,14 @@ def classify_block(
             if b in valid_blocks:
                 return b
         return None
+
+    # PR-A24 — mandate-level asset-class exclusion. Runs before every
+    # other cascade branch so excluded instruments never reach rule /
+    # cosine / LLM classification, and the service layer can skip row
+    # creation entirely. Distinct signal from ``needs_human_review`` —
+    # these rows are not candidates for operator triage.
+    if strategy_label and strategy_label in EXCLUDED_STRATEGY_LABELS:
+        return None, "excluded_asset_class"
 
     # Hybrid / multi-asset: skip
     if strategy_label and any(strategy_label.startswith(p) for p in _HYBRID_PREFIXES):
