@@ -34,7 +34,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.core.config import settings
 from scripts._pr_a23_canonical_reference import CANONICAL_REFERENCE
 
-
 _STRATEGY_MISMATCH_SQL = text(
     """
     SELECT iu.ticker,

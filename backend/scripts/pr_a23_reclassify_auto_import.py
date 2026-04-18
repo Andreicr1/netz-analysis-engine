@@ -45,7 +45,6 @@ from app.domains.wealth.services.universe_auto_import_classifier import (
     classify_block,
 )
 
-
 logger: Any = structlog.get_logger()
 
 
