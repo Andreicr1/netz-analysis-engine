@@ -82,6 +82,7 @@ _QUALIFIED_QUERY = text(
             iu.asset_class,
             iu.investment_geography,
             iu.name,
+            iu.ticker,
             iu.attributes
         FROM instruments_universe iu
         WHERE iu.is_active = TRUE
@@ -123,11 +124,41 @@ _QUALIFIED_QUERY = text(
         c.asset_class,
         c.investment_geography,
         c.name,
+        c.ticker,
         c.attributes
     FROM candidates c
     JOIN covered cov USING (instrument_id)
     """,
 )
+
+
+_FLAG_NEEDS_REVIEW_QUERY = text(
+    """
+    UPDATE instruments_universe
+       SET attributes = jsonb_set(
+           COALESCE(attributes, '{}'::jsonb),
+           '{needs_human_review}',
+           'true'::jsonb,
+           true
+       )
+     WHERE instrument_id = :instrument_id
+       AND COALESCE(attributes->>'needs_human_review', 'false') <> 'true'
+    """,
+)
+
+
+async def _flag_universe_needs_review(
+    db: AsyncSession, *, instrument_id: Any,
+) -> None:
+    """Set ``attributes.needs_human_review = true`` on the canonical
+    ``instruments_universe`` row via JSONB merge (no replacement of
+    sibling keys). Idempotent — repeated calls no-op thanks to the WHERE
+    clause.
+    """
+    await db.execute(
+        _FLAG_NEEDS_REVIEW_QUERY,
+        {"instrument_id": instrument_id},
+    )
 
 
 _UPSERT_QUERY = text(
@@ -190,6 +221,7 @@ async def fetch_qualified_instruments(db: AsyncSession) -> list[dict[str, Any]]:
             "asset_class": row["asset_class"],
             "investment_geography": row["investment_geography"] or "",
             "name": row["name"] or "",
+            "ticker": row["ticker"],
             "attributes": row["attributes"] or {},
         })
     return rows
@@ -269,6 +301,21 @@ async def auto_import_for_org(
             skipped_by_reason[decision_reason] = (
                 skipped_by_reason.get(decision_reason, 0) + 1
             )
+            # PR-A23 — when the classifier surfaces a row that previously
+            # would have landed in a silent fallback bucket, flag the
+            # canonical universe row so operators can triage, and log a
+            # structured event for observability.
+            if decision_reason == "needs_human_review":
+                await _flag_universe_needs_review(
+                    db, instrument_id=inst["instrument_id"],
+                )
+                logger.info(
+                    "classifier_needs_review",
+                    instrument_id=str(inst["instrument_id"]),
+                    ticker=inst.get("ticker") or inst.get("name"),
+                    reason=decision_reason,
+                    organization_id=str(org_id),
+                )
             continue
 
         row = await db.execute(

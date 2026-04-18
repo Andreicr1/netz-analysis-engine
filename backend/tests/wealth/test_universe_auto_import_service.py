@@ -53,6 +53,20 @@ def _mock_db(upsert_returns: list[Any]) -> tuple[AsyncMock, list]:
     captured: list[tuple[str, Any]] = []
     upsert_iter = iter(upsert_returns)
 
+    # Pre-seeded allocation_blocks snapshot — covers the strategy_label
+    # mappings used in this suite. PR-A23 makes equity / FI fallback
+    # paths return None when no valid block is available, so the tests
+    # need the classifier's ``valid_blocks`` to actually include the
+    # mapped targets.
+    _VALID_BLOCKS = [
+        ("na_equity_large",), ("na_equity_growth",), ("na_equity_value",),
+        ("na_equity_small",), ("dm_europe_equity",), ("dm_asia_equity",),
+        ("em_equity",), ("fi_us_aggregate",), ("fi_us_treasury",),
+        ("fi_us_tips",), ("fi_us_high_yield",), ("fi_em_debt",),
+        ("alt_real_estate",), ("alt_gold",), ("alt_commodities",),
+        ("alt_hedge_fund",), ("alt_managed_futures",), ("cash",),
+    ]
+
     async def _execute(stmt: Any, params: dict | None = None) -> MagicMock:
         sql_str = str(stmt)
         captured.append((sql_str, params))
@@ -60,6 +74,10 @@ def _mock_db(upsert_returns: list[Any]) -> tuple[AsyncMock, list]:
             return _mock_row(next(upsert_iter))
         if "statement_timeout" in sql_str:
             return _mock_row(None)
+        if "SELECT block_id FROM allocation_blocks" in sql_str:
+            res = MagicMock()
+            res.all.return_value = _VALID_BLOCKS
+            return res
         # audit / misc
         return _mock_row(None)
 
@@ -215,6 +233,38 @@ class TestAutoImportForOrg:
         assert after["aum_floor_usd"] == AUM_FLOOR_USD
         assert after["nav_coverage_min"] == NAV_COVERAGE_MIN
         assert after["added"] == metrics["added"]
+
+    async def test_pr_a23_needs_human_review_flags_universe(self) -> None:
+        """PR-A23: when the classifier surfaces a previously-silent
+        fallback case, the service must (a) count under
+        ``skipped_by_reason["needs_human_review"]`` and (b) issue an
+        UPDATE against ``instruments_universe`` to flag the row.
+        """
+        qualified = [
+            _inst(strategy_label=None, asset_class="fixed_income",
+                  name="PIMCO Total Return"),
+        ]
+        db, captured = _mock_db([])  # no UPSERT expected
+        org_id = uuid.uuid4()
+
+        with patch(
+            "app.domains.wealth.services.universe_auto_import_service.write_audit_event",
+            new=AsyncMock(),
+        ):
+            metrics = await auto_import_for_org(
+                db, org_id, reason="test", qualified=qualified,
+            )
+
+        assert metrics["added"] == 0
+        assert metrics["skipped"] == 1
+        assert metrics["skipped_by_reason"]["needs_human_review"] == 1
+
+        flag_updates = [
+            c for c in captured
+            if "UPDATE instruments_universe" in c[0]
+            and "needs_human_review" in c[0]
+        ]
+        assert len(flag_updates) == 1
 
     async def test_qualified_none_triggers_fetch(self) -> None:
         """When callers pass qualified=None, the service fetches the

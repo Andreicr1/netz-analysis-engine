@@ -58,17 +58,19 @@ def _inst(
             "cash",
             "asset_class_cash",
         ),
-        # 5. FI fallback (no strategy_label, no name match)
+        # 5. FI fallback (no strategy_label, no name match) — PR-A23
+        # surfaces to operator instead of silent fi_us_aggregate dump.
         (
             _inst(asset_class="fixed_income"),
-            "fi_us_aggregate",
-            "fallback_fi_aggregate",
+            None,
+            "needs_human_review",
         ),
-        # 6. Equity fallback (no strategy_label)
+        # 6. Equity fallback (no strategy_label) — PR-A23 surfaces to
+        # operator instead of silent na_equity_large dump.
         (
             _inst(asset_class="equity"),
-            "na_equity_large",
-            "fallback_equity",
+            None,
+            "needs_human_review",
         ),
         # 7. Real estate fund type
         (
@@ -158,8 +160,10 @@ def test_classify_block(
 def test_classify_block_empty_attributes() -> None:
     inst = {"asset_class": "equity", "instrument_type": "fund", "attributes": None, "name": "X"}
     block_id, reason = classify_block(inst)
-    assert block_id == "na_equity_large"
-    assert reason == "fallback_equity"
+    # PR-A23: equity with no signals surfaces for human review instead
+    # of silently dumping into na_equity_large.
+    assert block_id is None
+    assert reason == "needs_human_review"
 
 
 def test_valid_blocks_filters_primary_to_secondary() -> None:
@@ -198,31 +202,36 @@ def test_equity_geography_routing(
 
 
 def test_equity_unknown_geography_falls_through_to_default() -> None:
+    """PR-A23: unknown geography surfaces for human review, not
+    silently dumped into na_equity_large."""
     inst = _inst(asset_class="equity", investment_geography="Antarctica")
     valid = {"na_equity_large", "em_equity", "dm_europe_equity", "dm_asia_equity"}
     block_id, reason = classify_block(inst, valid_blocks=valid)
-    assert block_id == "na_equity_large"
-    assert reason == "fallback_equity"
+    assert block_id is None
+    assert reason == "needs_human_review"
 
 
 def test_equity_missing_geography_falls_through_to_default() -> None:
-    """Legacy rows without investment_geography keep current PR-A6 behaviour."""
+    """PR-A23: missing geography + no strategy_label surfaces for
+    operator triage rather than defaulting to na_equity_large."""
     inst = _inst(asset_class="equity")  # investment_geography omitted
     block_id, reason = classify_block(inst)
-    assert block_id == "na_equity_large"
-    assert reason == "fallback_equity"
+    assert block_id is None
+    assert reason == "needs_human_review"
 
 
 def test_equity_geography_mapped_block_not_registered_falls_through() -> None:
-    """When the mapped geography block is not in valid_blocks, fall
-    through to the plain ``na_equity_large`` default rather than silently
-    dropping the fund.
+    """PR-A23: when the mapped geography block is not seeded, surface
+    for operator triage instead of silently dropping into
+    na_equity_large — this is the D2 regression vector (EFA routed by
+    geography but em_equity missing would have landed in na_equity_large
+    pre-fix).
     """
     inst = _inst(asset_class="equity", investment_geography="Emerging Markets")
     valid = {"na_equity_large"}  # em_equity intentionally absent
     block_id, reason = classify_block(inst, valid_blocks=valid)
-    assert block_id == "na_equity_large"
-    assert reason == "fallback_equity"
+    assert block_id is None
+    assert reason == "needs_human_review"
 
 
 def test_strategy_label_beats_geography() -> None:
@@ -254,12 +263,14 @@ def test_strategy_label_beats_geography() -> None:
         ("iShares iBoxx $ High Yield Corporate Bond ETF", "fi_us_high_yield", "fallback_fi_name_fi_us_high_yield"),
         ("SPDR High-Yield Corporate", "fi_us_high_yield", "fallback_fi_name_fi_us_high_yield"),
         ("AllianceBernstein Junk Bond Fund", "fi_us_high_yield", "fallback_fi_name_fi_us_high_yield"),
-        ("Vanguard Total Bond Market Index", "fi_us_aggregate", "fallback_fi_aggregate"),
-        ("PIMCO Total Return Fund", "fi_us_aggregate", "fallback_fi_aggregate"),
+        # PR-A23: funds without a specific FI name signal now surface
+        # for operator review instead of silent fi_us_aggregate dump.
+        ("Vanguard Total Bond Market Index", None, "needs_human_review"),
+        ("PIMCO Total Return Fund", None, "needs_human_review"),
     ],
 )
 def test_fi_name_heuristic(
-    name: str, expected_block: str, expected_reason: str,
+    name: str, expected_block: str | None, expected_reason: str,
 ) -> None:
     inst = _inst(
         asset_class="fixed_income", investment_geography="US", name=name,
@@ -300,8 +311,9 @@ def test_fi_geography_em_routes_to_em_debt() -> None:
 
 
 def test_fi_geography_em_falls_through_if_block_missing() -> None:
-    """If fi_em_debt is not registered, EM FI degrades gracefully to
-    name-heuristic / aggregate rather than silently dropping the fund.
+    """PR-A23: if fi_em_debt is not registered and the fund name has no
+    specific FI signal, surface for operator review (was:
+    fi_us_aggregate silent default).
     """
     inst = _inst(
         asset_class="fixed_income", investment_geography="Emerging Markets",
@@ -309,13 +321,14 @@ def test_fi_geography_em_falls_through_if_block_missing() -> None:
     )
     valid = {"fi_us_aggregate"}  # fi_em_debt intentionally absent
     block_id, reason = classify_block(inst, valid_blocks=valid)
-    assert block_id == "fi_us_aggregate"
-    assert reason == "fallback_fi_aggregate"
+    assert block_id is None
+    assert reason == "needs_human_review"
 
 
 def test_fi_geography_europe_falls_through_if_block_missing() -> None:
-    """fi_europe_aggregate is NOT in the default seed; the classifier
-    must gracefully fall through to US name heuristics / aggregate.
+    """PR-A23: European FI without a specific name signal now surfaces
+    for operator review rather than silently dumping into
+    fi_us_aggregate.
     """
     inst = _inst(
         asset_class="fixed_income", investment_geography="Europe",
@@ -323,8 +336,8 @@ def test_fi_geography_europe_falls_through_if_block_missing() -> None:
     )
     valid = {"fi_us_aggregate", "fi_us_treasury"}
     block_id, reason = classify_block(inst, valid_blocks=valid)
-    assert block_id == "fi_us_aggregate"
-    assert reason == "fallback_fi_aggregate"
+    assert block_id is None
+    assert reason == "needs_human_review"
 
 
 def test_fi_strategy_label_beats_name_heuristic() -> None:
@@ -340,6 +353,50 @@ def test_fi_strategy_label_beats_name_heuristic() -> None:
     valid = {"fi_us_aggregate", "fi_us_treasury", "fi_us_high_yield"}
     block_id, reason = classify_block(inst, valid_blocks=valid)
     assert block_id == "fi_us_high_yield"
+    assert reason == "strategy_label"
+
+
+# ── PR-A23 regression tests ────────────────────────────────────────
+
+
+def test_pr_a23_muni_bond_fund_surfaces_for_review() -> None:
+    """A muni-style bond fund with no FI name signal (e.g. VTEB named
+    'Tax-Exempt Bond') would previously have landed in fi_us_aggregate
+    via the silent fallback. PR-A23 surfaces it for operator triage.
+    """
+    inst = _inst(
+        asset_class="fixed_income", investment_geography="US",
+        name="Vanguard Tax-Exempt Bond Index",
+    )
+    valid = {"fi_us_aggregate", "fi_us_treasury", "fi_us_tips", "fi_us_high_yield"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id is None
+    assert reason == "needs_human_review"
+
+
+def test_pr_a23_foreign_developed_equity_surfaces_for_review() -> None:
+    """Foreign-developed equity (e.g. EFA) with a corrupted
+    strategy_label and no other signals would previously have landed in
+    na_equity_large via the silent equity fallback. PR-A23 surfaces it
+    for operator triage.
+    """
+    inst = _inst(asset_class="equity", name="iShares MSCI EAFE")
+    valid = {"na_equity_large", "dm_europe_equity"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id is None
+    assert reason == "needs_human_review"
+
+
+def test_pr_a23_happy_path_spy_unchanged() -> None:
+    """Regression: well-classified equity with correct strategy_label
+    still lands in na_equity_large (no regression from the fallback
+    change)."""
+    inst = _inst(
+        asset_class="equity", strategy_label="Large Blend", name="SPDR S&P 500",
+    )
+    valid = {"na_equity_large"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id == "na_equity_large"
     assert reason == "strategy_label"
 
 
