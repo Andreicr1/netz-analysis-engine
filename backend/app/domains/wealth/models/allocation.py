@@ -12,8 +12,10 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    false as sa_false,
     func,
+)
+from sqlalchemy import (
+    false as sa_false,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column

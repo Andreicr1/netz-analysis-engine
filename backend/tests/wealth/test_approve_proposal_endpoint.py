@@ -20,7 +20,6 @@ from app.domains.wealth.models.model_portfolio import PortfolioConstructionRun
 from app.domains.wealth.routes.model_portfolios import approve_proposal
 from app.domains.wealth.schemas.model_portfolio import ApproveProposalRequest
 
-
 _CANONICAL_BLOCKS: tuple[str, ...] = (
     "na_equity_large", "na_equity_growth", "na_equity_value", "na_equity_small",
     "dm_europe_equity", "dm_asia_equity", "em_equity",

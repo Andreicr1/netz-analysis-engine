@@ -63,7 +63,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
 # ── PR-A19.1 Section C — cascade-aware operator signal ───────────────
 #
 # ``winner_status`` on the optimizer result only distinguishes

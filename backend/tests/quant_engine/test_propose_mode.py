@@ -27,7 +27,6 @@ from app.domains.wealth.workers.construction_run_executor import (
     _derive_drift_band,
 )
 
-
 # ── Drift band math ─────────────────────────────────────────────
 
 

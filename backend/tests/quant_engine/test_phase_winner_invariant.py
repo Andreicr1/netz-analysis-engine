@@ -14,8 +14,6 @@ solutions where SCS's looser tolerance admitted 2× constraint violations.
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import numpy as np
 import pytest
 

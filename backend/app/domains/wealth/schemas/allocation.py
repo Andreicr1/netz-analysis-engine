@@ -54,9 +54,9 @@ class StrategicAllocationRead(BaseModel):
             if hasattr(data, field_name):
                 mapping[field_name] = getattr(data, field_name)
         if hasattr(data, "drift_min"):
-            mapping["min_weight"] = getattr(data, "drift_min")
+            mapping["min_weight"] = data.drift_min
         if hasattr(data, "drift_max"):
-            mapping["max_weight"] = getattr(data, "drift_max")
+            mapping["max_weight"] = data.drift_max
         return mapping
 
 

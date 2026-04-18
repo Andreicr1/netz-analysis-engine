@@ -29,7 +29,6 @@ values are lost — documented in the downgrade docstring).
 """
 from __future__ import annotations
 
-import sqlalchemy as sa
 from alembic import op
 
 revision = "0155_strategic_allocation_approved_state"
