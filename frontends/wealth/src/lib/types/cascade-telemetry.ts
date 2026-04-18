@@ -93,7 +93,29 @@ export type WinnerSignal =
 	| "cvar_infeasible_min_var"
 	| "robustness_fallback"
 	| "degraded_other"
-	| "pre_solve_failure";
+	| "pre_solve_failure"
+	// PR-A22 — block coverage gate aborted the run before the optimizer.
+	| "block_coverage_insufficient";
+
+/**
+ * PR-A22 — per-block gap in the profile's StrategicAllocation. Surfaced
+ * when ``winner_signal === "block_coverage_insufficient"``.
+ */
+export interface BlockCoverageGap {
+	block_id: string;
+	target_weight: number;
+	suggested_strategy_labels: string[];
+	catalog_candidates_available: number;
+	example_tickers: string[];
+}
+
+export interface CoverageReport {
+	organization_id: string;
+	profile: string;
+	is_sufficient: boolean;
+	total_target_weight_at_risk: number;
+	gaps: BlockCoverageGap[];
+}
 
 export type OperatorMessageSeverity = "info" | "warning" | "error";
 
@@ -115,6 +137,8 @@ export interface CascadeTelemetry {
 	// PR-A19.1 — cascade-aware signal + backend-owned copy.
 	winner_signal?: WinnerSignal | null;
 	operator_message?: OperatorMessage | null;
+	// PR-A22 — populated only when ``winner_signal === "block_coverage_insufficient"``.
+	coverage_report?: CoverageReport | null;
 }
 
 /**

@@ -21,6 +21,7 @@
 	import { portfolioDisplayName } from "$lib/constants/blocks";
 	import { blockLabel } from "$lib/constants/blocks";
 	import { chartTokens } from "$lib/components/charts/chart-tokens";
+	import CoverageGapPanel from "./CoverageGapPanel.svelte";
 
 	interface Props {
 		onClose: () => void;
@@ -40,6 +41,17 @@
 	const metrics = $derived(run?.ex_ante_metrics ?? null);
 	const narrative = $derived(run?.narrative ?? null);
 	const stressResults = $derived(run?.stress_results ?? []);
+	// PR-A22 — pre-solve block-coverage failure. Takes priority over
+	// the normal KPI/allocation rendering: the cascade never ran, so
+	// there are no metrics to display — only the gap report.
+	const coverageReport = $derived(
+		run?.cascade_telemetry?.coverage_report ?? null,
+	);
+	const coverageMessage = $derived(run?.cascade_telemetry?.operator_message ?? null);
+	const coverageInsufficient = $derived(
+		run?.cascade_telemetry?.winner_signal === "block_coverage_insufficient"
+			&& coverageReport !== null,
+	);
 
 	const portfolioName = $derived(
 		workspace.portfolio
@@ -296,10 +308,14 @@
 	<header class="cro-header">
 		<div class="cro-header-left">
 			<h1 class="cro-title">{portfolioName}</h1>
-			<span class="cro-badge">
-				<CheckCircle size={14} />
-				Construction Successful
-			</span>
+			{#if coverageInsufficient}
+				<span class="cro-badge cro-badge--error">Construction Aborted</span>
+			{:else}
+				<span class="cro-badge">
+					<CheckCircle size={14} />
+					Construction Successful
+				</span>
+			{/if}
 		</div>
 		<button type="button" class="cro-close" onclick={onClose}>
 			<X size={18} />
@@ -309,6 +325,12 @@
 
 	<!-- ── Content ─────────────────────────────────────────── -->
 	<div class="cro-body">
+		{#if coverageInsufficient && coverageReport}
+			<CoverageGapPanel
+				report={coverageReport}
+				message={coverageMessage}
+			/>
+		{:else}
 		<!-- Row 1: KPI Strip -->
 		<div class="cro-kpi-strip">
 			<div class="cro-kpi">
@@ -382,6 +404,7 @@
 				{/if}
 			</div>
 		{/if}
+		{/if}
 	</div>
 </div>
 
@@ -450,6 +473,10 @@
 		font-weight: 600;
 		font-family: "Urbanist", sans-serif;
 		white-space: nowrap;
+	}
+	.cro-badge--error {
+		background: rgba(239, 68, 68, 0.12);
+		color: #ef4444;
 	}
 
 	.cro-close {
