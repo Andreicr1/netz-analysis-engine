@@ -143,6 +143,17 @@ COV_LOOKBACK_DAYS_5Y = 1260
 HIGHER_MOMENTS_WINDOW_3Y = 756
 EWMA_LAMBDA_DEFAULT = 0.97
 RISK_AVERSION_INSTITUTIONAL_DEFAULT = 2.5
+
+# ── PR-A19.1 Section B — μ sanity gate ───────────────────────────────
+# Institutional universes should not contain funds whose 1Y annualized
+# return exceeds MU_SANITY_BOUND_DEFAULT (|μ| > 40%). Observed cases
+# are 2x/3x leveraged ETFs, single-country ETFs on a tail rally, or
+# stale/split-adjusted NAV endpoints producing spurious 1Y log returns.
+# Such funds distort universe statistics (μ_max, covariance conditioning)
+# without ever being picked in meaningful weight by the CVaR LP.
+# Override: ConfigService key wealth.universe.mu_sanity_bound.
+MU_SANITY_BOUND_DEFAULT = 0.40
+NAV_DAYS_1Y_MIN = 200  # need ~80% of ~252 trading days to trust a 1Y window
 # PR-A9 three-tier ladder — recalibrated from PR-A1 aspirational bounds
 # based on empirical PR-A8 smoke evidence (3 portfolios: κ=2.4e4-3e4 post-dedup).
 # Academic reality: for sample cov with T/N ≈ 10, κ in 1e4-1e5 is normal; the
@@ -693,6 +704,73 @@ def _guard_condition_number(
     # callers that can't swap in factor cov — operationally equivalent to the
     # pre-PR-A9 behaviour now that KAPPA_ERROR_THRESHOLD is 1e6.
     return result.kappa, result.warn, False
+
+
+def _apply_mu_sanity_gate(
+    fund_returns: dict[str, dict[date, float]],
+    clean_ids: list[str],
+    as_of_date: date,
+    mu_sanity_bound: float = MU_SANITY_BOUND_DEFAULT,
+    nav_days_min: int = NAV_DAYS_1Y_MIN,
+) -> tuple[list[str], list[tuple[str, str, float | None]]]:
+    """PR-A19.1 Section B.2 — drop μ-outlier and short-history funds.
+
+    A fund is dropped when:
+      * its annualized 1Y log-return magnitude exceeds
+        ``mu_sanity_bound`` (default 0.40), or
+      * it has < ``nav_days_min`` observations in the trailing 365 days.
+
+    Returns (kept_ids, drops) where ``drops`` is a list of
+    ``(instrument_id, reason, mu_1y_or_None)`` for audit. A structured
+    ``mu_sanity_gate_drop`` log line is emitted per drop.
+    """
+    cutoff = as_of_date - timedelta(days=365)
+    kept: list[str] = []
+    drops: list[tuple[str, str, float | None]] = []
+    for sid in clean_ids:
+        series = fund_returns.get(sid)
+        if not series:
+            drops.append((sid, "no_series", None))
+            logger.info("mu_sanity_gate_drop", fund_id=sid, reason="no_series")
+            continue
+        recent = [r for d, r in series.items() if d >= cutoff]
+        if len(recent) < nav_days_min:
+            drops.append((sid, "short_history", None))
+            logger.info(
+                "mu_sanity_gate_drop", fund_id=sid,
+                reason="short_history", nav_days_1y=len(recent),
+            )
+            continue
+        mu_1y = float(np.mean(recent)) * TRADING_DAYS_PER_YEAR
+        if abs(mu_1y) > mu_sanity_bound:
+            drops.append((sid, "mu_outlier", mu_1y))
+            logger.info(
+                "mu_sanity_gate_drop", fund_id=sid,
+                reason="mu_outlier", mu=mu_1y, bound=mu_sanity_bound,
+            )
+            continue
+        kept.append(sid)
+    return kept, drops
+
+
+async def _resolve_mu_sanity_bound(
+    db: AsyncSession, org_id: uuid.UUID | None,
+) -> float:
+    """Read wealth.universe.mu_sanity_bound from ConfigService; fall back to default."""
+    if org_id is None:
+        return MU_SANITY_BOUND_DEFAULT
+    try:
+        from app.core.config.config_service import ConfigService
+
+        result = await ConfigService(db=db).get("wealth", "universe", org_id=org_id)
+        cfg = result.value if hasattr(result, "value") else result
+        override = cfg.get("mu_sanity_bound") if isinstance(cfg, dict) else None
+        if override is None:
+            return MU_SANITY_BOUND_DEFAULT
+        return float(override)
+    except Exception as exc:
+        logger.debug("mu_sanity_bound_config_fetch_failed", error=str(exc))
+        return MU_SANITY_BOUND_DEFAULT
 
 
 def _sanitize_returns(
@@ -1301,6 +1379,24 @@ async def compute_fund_level_inputs(
 
     # ── 2. Exclude pathological funds (NaN/Inf/zero-var) pre-alignment ─────
     fund_returns, clean_ids, excluded = _sanitize_returns(fund_returns, instrument_ids)
+
+    # ── PR-A19.1 Section B — μ sanity gate ─────────────────────────────
+    # Drop funds with |μ_1y| > bound OR < 200 NAV days in the trailing
+    # year. Protects universe statistics from leveraged/inverse ETFs and
+    # stale-endpoint NAV artefacts.
+    _mu_bound = await _resolve_mu_sanity_bound(db, organization_id)
+    clean_ids, _mu_drops = _apply_mu_sanity_gate(
+        fund_returns, clean_ids, as_of_date, mu_sanity_bound=_mu_bound,
+    )
+    fund_returns = {sid: fund_returns[sid] for sid in clean_ids if sid in fund_returns}
+    if _mu_drops:
+        logger.info(
+            "mu_sanity_gate_summary",
+            n_dropped=len(_mu_drops),
+            reasons={r: sum(1 for _, rr, _ in _mu_drops if rr == r)
+                     for r in ("mu_outlier", "short_history", "no_series")},
+            bound=_mu_bound,
+        )
 
     # Keep only funds with data (clean_ids already ordered by instrument_ids)
     available_ids = clean_ids
