@@ -32,7 +32,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import settings
-from scripts._pr_a23_canonical_reference import CANONICAL_REFERENCE
+from scripts._pr_a23_canonical_reference import (
+    CANONICAL_REFERENCE,
+    EXCLUDED_STRATEGY_LABELS,
+)
 
 _STRATEGY_MISMATCH_SQL = text(
     """
@@ -59,10 +62,36 @@ _BLOCK_MISMATCH_SQL = text(
 )
 
 
+# PR-A24 — categorical exclusion coverage. Surfaces three failure
+# modes: (1) excluded instruments still living in instruments_org via
+# auto-import; (2) excluded universe rows missing the
+# strategic_excluded_reason audit flag. Post-migration 0152 both should
+# be zero.
+_EXCLUDED_CONTAMINATION_SQL = text(
+    """
+    SELECT COUNT(*) AS n
+      FROM instruments_org io
+      JOIN instruments_universe iu USING (instrument_id)
+     WHERE iu.attributes->>'strategy_label' = ANY(:labels)
+       AND io.source = 'universe_auto_import'
+    """
+)
+
+_EXCLUDED_UNIVERSE_UNFLAGGED_SQL = text(
+    """
+    SELECT COUNT(*) AS n
+      FROM instruments_universe iu
+     WHERE iu.attributes->>'strategy_label' = ANY(:labels)
+       AND NOT (iu.attributes ? 'strategic_excluded_reason')
+    """
+)
+
+
 async def _run() -> dict[str, Any]:
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     tickers = sorted(CANONICAL_REFERENCE.keys())
 
+    excluded_labels = sorted(EXCLUDED_STRATEGY_LABELS)
     async with engine.connect() as conn:
         strategy_rows = (
             await conn.execute(_STRATEGY_MISMATCH_SQL, {"tickers": tickers})
@@ -70,6 +99,16 @@ async def _run() -> dict[str, Any]:
         block_rows = (
             await conn.execute(_BLOCK_MISMATCH_SQL, {"tickers": tickers})
         ).mappings().all()
+        excluded_contamination = (
+            await conn.execute(
+                _EXCLUDED_CONTAMINATION_SQL, {"labels": excluded_labels},
+            )
+        ).scalar_one()
+        excluded_unflagged = (
+            await conn.execute(
+                _EXCLUDED_UNIVERSE_UNFLAGGED_SQL, {"labels": excluded_labels},
+            )
+        ).scalar_one()
 
     await engine.dispose()
 
@@ -125,11 +164,21 @@ async def _run() -> dict[str, Any]:
         "tickers_missing_from_instruments_universe": tickers_missing_from_universe,
         "block_id_mismatches_in_instruments_org": block_mismatches,
         "fallback_bucket_contamination": contamination,
+        # PR-A24 — categorical exclusion coverage report.
+        "excluded_asset_class_contamination": {
+            "excluded_labels": excluded_labels,
+            "instruments_org_rows_remaining": int(excluded_contamination),
+            "instruments_universe_without_exclusion_flag": int(
+                excluded_unflagged,
+            ),
+        },
         "summary": {
             "strategy_mismatches": len(strategy_mismatches),
             "block_mismatches": len(block_mismatches),
             "tickers_missing": len(tickers_missing_from_universe),
             "contaminated_buckets": list(contamination.keys()),
+            "excluded_contamination_rows": int(excluded_contamination),
+            "excluded_universe_unflagged": int(excluded_unflagged),
         },
     }
 
@@ -152,6 +201,12 @@ def _print_human_summary(report: dict[str, Any]) -> None:
             f"  contaminated buckets:      {', '.join(s['contaminated_buckets'])}",
             file=sys.stderr,
         )
+    print(
+        f"  excluded contamination:    "
+        f"{s['excluded_contamination_rows']} instruments_org rows, "
+        f"{s['excluded_universe_unflagged']} universe rows unflagged",
+        file=sys.stderr,
+    )
 
 
 def main() -> int:
