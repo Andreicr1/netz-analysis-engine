@@ -8,14 +8,20 @@ Hardcoded from public fund fact sheets. Narrow, high-confidence patch.
 NOT a substitute for a full upstream fix in the SEC / ESMA ingestion
 workers — see PR-A23 prompt "Out of scope".
 
-VTEB/MUB map to ``None`` until the operator decides whether to split
-muni from aggregate — ``fi_us_aggregate_muni`` is intentionally NOT in
-``allocation_blocks`` in this PR.
+PR-A24 (2026-04-18): VTEB / MUB removed from ``CANONICAL_REFERENCE``
+because US muni bonds are now categorically excluded — see
+``EXCLUDED_STRATEGY_LABELS`` below. The canonical map only tracks
+instruments that have a valid destination block in
+``allocation_blocks``; exclusion is handled on a separate, mandate-level
+channel.
 """
 from __future__ import annotations
 
-# ticker -> (canonical_strategy_label, canonical_block_id_or_None)
-CANONICAL_REFERENCE: dict[str, tuple[str, str | None]] = {
+# ticker -> (canonical_strategy_label, canonical_block_id)
+#
+# Every entry must have a non-None block_id. Muni tickers that used to
+# map to ``(label, None)`` moved to EXCLUDED_STRATEGY_LABELS below.
+CANONICAL_REFERENCE: dict[str, tuple[str, str]] = {
     # Equity — US Blend
     "SPY": ("Large Blend", "na_equity_large"),
     "IVV": ("Large Blend", "na_equity_large"),
@@ -47,10 +53,6 @@ CANONICAL_REFERENCE: dict[str, tuple[str, str | None]] = {
     "TLT": ("Long Government", "fi_us_treasury"),
     "SHY": ("Short Government", "fi_us_treasury"),
     "GOVT": ("Intermediate Government", "fi_us_treasury"),
-    # Fixed Income — Muni (block_id=None until operator decides to split
-    # muni from aggregate; see PR-A23 prompt Section A note).
-    "VTEB": ("Muni National Interm", None),
-    "MUB": ("Muni National Interm", None),
     # Fixed Income — TIPS
     "TIP": ("Inflation-Protected Bond", "fi_us_tips"),
     "SCHP": ("Inflation-Protected Bond", "fi_us_tips"),
@@ -73,4 +75,51 @@ CANONICAL_REFERENCE: dict[str, tuple[str, str | None]] = {
 }
 
 
-__all__ = ["CANONICAL_REFERENCE"]
+# PR-A24 — mandate-level asset-class exclusion.
+#
+# US muni bonds are categorically excluded from the Netz wealth engine.
+# Rationale (Andrei, 2026-04-18):
+#
+#   - The tax-exempt premium that makes muni economically attractive
+#     applies only to US taxpayers.
+#   - Netz's client base is international portfolios (Brazilian PFICs /
+#     offshore structures) that do not benefit from US muni tax
+#     treatment.
+#   - Holding muni in an international structure introduces tax
+#     inefficiency vs. direct Treasury exposure at equivalent
+#     duration/credit.
+#   - No plan to create ``fi_us_aggregate_muni`` block.
+#
+# Exclusion is mandate-level, not a classification fallback:
+# ``universe_auto_import_classifier`` returns
+# ``(None, "excluded_asset_class")`` early — distinct from
+# ``needs_human_review`` — and the service skips row insertion in
+# ``instruments_org`` entirely. The global ``instruments_universe`` row
+# is preserved (catalog keeps everything) with an
+# ``attributes.strategic_excluded_reason`` audit breadcrumb.
+#
+# Muni labels were derived from Morningstar / Lipper muni categories
+# seen in the catalog. Verify coverage with::
+#
+#     SELECT DISTINCT attributes->>'strategy_label'
+#       FROM instruments_universe
+#      WHERE attributes->>'strategy_label' ILIKE '%muni%';
+#
+# Extend this set if new muni labels surface.
+EXCLUDED_STRATEGY_LABELS: frozenset[str] = frozenset({
+    "Muni National Interm",
+    "Muni National Short",
+    "Muni National Long",
+    "Muni Single State Interm",
+    "Muni Single State Short",
+    "Muni Single State Long",
+    "High Yield Muni",
+    "Muni California Intermediate",
+    "Muni California Long",
+    "Muni New York Intermediate",
+    "Muni New York Long",
+    "Muni Target Maturity",
+})
+
+
+__all__ = ["CANONICAL_REFERENCE", "EXCLUDED_STRATEGY_LABELS"]
