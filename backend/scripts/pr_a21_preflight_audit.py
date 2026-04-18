@@ -35,7 +35,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import settings
 
-
 D1_SQL = text(
     """
     WITH dupes AS (
