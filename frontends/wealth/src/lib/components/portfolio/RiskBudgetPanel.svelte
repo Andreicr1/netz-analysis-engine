@@ -19,7 +19,9 @@
 	import type { PortfolioCalibration } from "$lib/types/portfolio-calibration";
 	import type {
 		AchievableReturnBand,
+		OperatorMessage,
 		OperatorSignal,
+		WinnerSignal,
 	} from "$lib/types/cascade-telemetry";
 	import { defaultCvarForProfile } from "$lib/util/profile-defaults";
 	import RiskBudgetSlider from "./RiskBudgetSlider.svelte";
@@ -46,6 +48,13 @@
 	);
 	const serverMinCvar = $derived(
 		workspace.constructionRun?.cascade_telemetry?.min_achievable_cvar ?? null,
+	);
+	// PR-A19.1 Section C — cascade-aware signal + backend-owned copy.
+	const winnerSignal = $derived<WinnerSignal | null>(
+		workspace.constructionRun?.cascade_telemetry?.winner_signal ?? null,
+	);
+	const operatorMessage = $derived<OperatorMessage | null>(
+		workspace.constructionRun?.cascade_telemetry?.operator_message ?? null,
 	);
 
 	// ── Preview-channel state (PR-A13.2 live drag) ─────────────────
@@ -198,6 +207,25 @@
 				</p>
 			</div>
 		{/if}
+		<!--
+		  PR-A19.1 Section C — cascade-aware operator message.
+
+		  Backend owns the displayable copy; frontend renders verbatim
+		  (smart backend / dumb frontend). Shown only when the cascade
+		  winner signal is non-optimal and the backend returned a
+		  formatted message.
+		-->
+		{#if winnerSignal && winnerSignal !== "optimal" && operatorMessage}
+			<div
+				class="rbp-banner rbp-banner--{operatorMessage.severity}"
+				role={operatorMessage.severity === "error" ? "alert" : "status"}
+				data-testid="rbp-operator-message"
+				data-winner-signal={winnerSignal}
+			>
+				<p class="rbp-banner__title">{operatorMessage.title}</p>
+				<p class="rbp-banner__msg">{operatorMessage.body}</p>
+			</div>
+		{/if}
 	{/if}
 </div>
 
@@ -249,6 +277,21 @@
 	}
 	.rbp-banner--preview-error {
 		border-left-color: var(--terminal-status-warning);
+	}
+	/* PR-A19.1 — operator_message severity variants */
+	.rbp-banner--info {
+		border-left-color: var(--terminal-status-info, var(--terminal-fg-muted));
+	}
+	.rbp-banner--error {
+		border-left-color: var(--terminal-status-error);
+	}
+	.rbp-banner__title {
+		margin: 0 0 4px 0;
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--terminal-fg-primary);
+		text-transform: uppercase;
+		letter-spacing: 0.4px;
 	}
 	.rbp-chart-frame {
 		position: relative;

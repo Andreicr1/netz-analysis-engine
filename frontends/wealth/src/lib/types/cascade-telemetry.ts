@@ -81,6 +81,29 @@ export interface PhaseAttempt {
 	cvar_at_solution?: number | null;
 }
 
+/**
+ * PR-A19.1 Section C — cascade-aware operator signal. Additive to the
+ * legacy ``operator_signal``; distinguishes Phase 1 optimal from
+ * Phase 3 min-CVaR fallback when the CVaR target is infeasible. The
+ * backend owns the displayable copy (``operator_message``) — smart
+ * backend / dumb frontend.
+ */
+export type WinnerSignal =
+	| "optimal"
+	| "cvar_infeasible_min_var"
+	| "robustness_fallback"
+	| "degraded_other"
+	| "pre_solve_failure";
+
+export type OperatorMessageSeverity = "info" | "warning" | "error";
+
+export interface OperatorMessage {
+	title: string;
+	body: string;
+	severity: OperatorMessageSeverity;
+	action_hint: string;
+}
+
 export interface CascadeTelemetry {
 	phase_attempts: PhaseAttempt[];
 	cascade_summary: CascadeSummary;
@@ -89,6 +112,9 @@ export interface CascadeTelemetry {
 	operator_signal: OperatorSignal | null;
 	// PR-A14 — universe coverage surface (nullable for legacy runs).
 	coverage?: CoverageTelemetry | null;
+	// PR-A19.1 — cascade-aware signal + backend-owned copy.
+	winner_signal?: WinnerSignal | null;
+	operator_message?: OperatorMessage | null;
 }
 
 /**

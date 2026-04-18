@@ -73,6 +73,8 @@ from app.domains.wealth.models.model_portfolio import (
     PortfolioStressResult,
 )
 from app.domains.wealth.schemas.sanitized import (
+    build_operator_message,
+    compute_winner_signal,
     humanize_event_type,
     sanitize_payload,
 )
@@ -533,6 +535,46 @@ def _build_cascade_telemetry(
         else:
             operator_signal = {**operator_signal, "secondary": secondary}
 
+    # ── PR-A19.1 Section C — cascade-aware operator signal ────────────
+    # Additive; legacy ``operator_signal`` and ``cascade_summary`` keep
+    # their existing contracts. ``winner_signal`` distinguishes "Phase 1
+    # optimal" from "Phase 3 min-CVaR fallback because CVaR target
+    # infeasible" so the frontend can render the right operator_message
+    # verbatim (smart-backend / dumb-frontend).
+    phase3_attempt = next(
+        (a for a in public_attempts if a["phase"] == "phase_3_min_cvar"),
+        None,
+    )
+    _cvar_within_limit = (
+        bool(phase3_attempt.get("cvar_within_limit"))
+        if phase3_attempt is not None else False
+    )
+    winner_signal_enum = compute_winner_signal(
+        winning_phase=winning_phase,
+        cvar_within_limit=_cvar_within_limit,
+        cvar_limit=cvar_limit,
+        min_achievable_cvar=min_achievable_cvar,
+    )
+    # Winner's delivered expected return — for phase_1/phase_2 it's the
+    # winning attempt's objective_value; for phase_3 it's the lower band
+    # edge (phase_3 objective is min-CVaR, not return).
+    _winner_expected_return: float | None = None
+    if winning_phase == "phase_3_min_cvar" and achievable_return_band is not None:
+        _winner_expected_return = achievable_return_band.get("lower")
+    else:
+        winner_attempt = next(
+            (a for a in public_attempts if a["phase"] == winning_phase),
+            None,
+        )
+        if winner_attempt is not None:
+            _winner_expected_return = winner_attempt.get("objective_value")
+    operator_message = build_operator_message(
+        signal=winner_signal_enum,
+        cvar_limit=cvar_limit,
+        min_achievable_cvar=min_achievable_cvar,
+        expected_return=_winner_expected_return,
+    )
+
     telemetry = {
         "phase_attempts": public_attempts,
         "cascade_summary": cascade_summary,
@@ -541,6 +583,9 @@ def _build_cascade_telemetry(
         "operator_signal": operator_signal,
         # PR-A14 — universe coverage JSONB (nullable for legacy runs).
         "coverage": coverage,
+        # PR-A19.1 Section C — cascade-aware operator signal (additive).
+        "winner_signal": winner_signal_enum.value,
+        "operator_message": operator_message,
     }
     return telemetry, run_status
 
@@ -1187,6 +1232,9 @@ async def _execute_inner(
                 # PR-A12 — Builder slider inputs. Sanitized numeric values only.
                 "min_achievable_cvar": cascade_telemetry.get("min_achievable_cvar"),
                 "achievable_return_band": cascade_telemetry.get("achievable_return_band"),
+                # PR-A19.1 Section C — cascade-aware operator signal.
+                "winner_signal": cascade_telemetry.get("winner_signal"),
+                "operator_message": cascade_telemetry.get("operator_message"),
             },
         )
 
