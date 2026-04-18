@@ -106,6 +106,25 @@ STRATEGY_LABEL_TO_BLOCKS: dict[str, list[str]] = {
     "Prime Money Market": ["cash"],
     "Tax-Exempt Money Market": ["cash"],
     "Single State Money Market": ["cash"],
+    # PR-A26.3.2 — canonical labels emitted by the authoritative refresh
+    # script (sec_etfs / sec_bdcs / esma_funds). Each entry is the dominant
+    # block; multi-asset/ESG/sector-aggregate labels collapse to their
+    # dominant economic exposure for v1 candidate discovery.
+    "Intermediate-Term Bond": ["fi_us_aggregate"],  # 61 ETF + 894 ESMA
+    "Investment Grade Bond": ["fi_us_aggregate"],  # 37 ETF + 209 ESMA
+    "Government Bond": ["fi_us_treasury"],  # 12 ETF + 144 ESMA
+    "Mortgage-Backed Securities": ["fi_us_aggregate"],  # 2 ETF + 1 ESMA
+    "Asset-Backed Securities": ["fi_us_aggregate"],  # 1 ETF + 8 ESMA
+    "Structured Credit": ["fi_us_high_yield"],  # 6 ETF + 10 ESMA
+    "Emerging Markets Debt": ["fi_em_debt"],  # 4 ETF + 233 ESMA
+    "ESG/Sustainable Bond": ["fi_us_aggregate"],  # 6 ETF + 239 ESMA
+    "International Equity": ["dm_europe_equity"],  # 56 ETF + 1430 ESMA
+    "European Equity": ["dm_europe_equity"],  # 1 ETF + 82 ESMA
+    "Emerging Markets Equity": ["em_equity"],  # 27 ETF + 178 ESMA
+    "Sector Equity": ["na_equity_large"],  # 58 ETF + 134 ESMA — dominant US large
+    "ESG/Sustainable Equity": ["na_equity_large"],  # 26 ETF + 770 ESMA — dominant
+    "Balanced": ["na_equity_large"],  # 12 ETF + 605 ESMA — multi-asset, dominant
+    "Mid Blend": ["na_equity_small"],  # 14 ETF + 31 ESMA — alias of Mid-Cap Blend
 }
 
 
