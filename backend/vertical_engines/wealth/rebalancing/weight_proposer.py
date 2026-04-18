@@ -191,8 +191,14 @@ def propose_weights(
         )
 
     # 4. Build bounds map and redistribute proportionally
+    # PR-A26.2 — ``min_weight/max_weight`` dropped; read the approved
+    # drift band. Unapproved blocks fall back to ``[0, 1]`` so the
+    # rebalance proposer can still produce a feasible redistribution.
     bounds: dict[str, tuple[float, float]] = {
-        a.block_id: (float(a.min_weight), float(a.max_weight))
+        a.block_id: (
+            float(a.drift_min) if a.drift_min is not None else 0.0,
+            float(a.drift_max) if a.drift_max is not None else 1.0,
+        )
         for a in allocations
     }
 

@@ -1498,8 +1498,12 @@ async def _compute_and_persist_taa_state(
             block_center = smoothed[ac] * block_ratio
             block_half = half_widths.get(ac, 0.05) * block_ratio
 
+            # PR-A26.2 — ``min_weight/max_weight`` columns dropped; read the
+            # approved drift band. NULL (pre-approval) falls back to [0, 1].
+            _min_w = float(a.drift_min) if a.drift_min is not None else 0.0
+            _max_w = float(a.drift_max) if a.drift_max is not None else 1.0
             eff_min, eff_max = compute_effective_band(
-                float(a.min_weight), float(a.max_weight),
+                _min_w, _max_w,
                 block_center, block_half,
             )
             effective_bands[a.block_id] = {

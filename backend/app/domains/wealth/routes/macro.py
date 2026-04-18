@@ -493,13 +493,17 @@ async def _generate_allocation_proposals(
         for bp in proposal.proposals:
             from decimal import Decimal as D
 
+            # PR-A26.2 — the legacy SA ``min_weight/max_weight`` columns
+            # were dropped in migration 0155; the macro proposal's bounds
+            # land on ``drift_min/drift_max`` (realize-mode BlockConstraint
+            # now reads those).
             row = StrategicAllocation(
                 organization_id=org_id,
                 profile=profile_name,
                 block_id=bp.block_id,
                 target_weight=D(str(bp.proposed_weight)),
-                min_weight=D(str(bp.min_weight)),
-                max_weight=D(str(bp.max_weight)),
+                drift_min=D(str(bp.min_weight)),
+                drift_max=D(str(bp.max_weight)),
                 rationale=proposal.rationale,
                 approved_by=actor_id,
                 effective_from=today,

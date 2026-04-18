@@ -2099,12 +2099,19 @@ async def _run_construction_async(
             if taa_cfg_result:
                 taa_config = taa_cfg_result.value
 
+        # PR-A26.2 — realize-mode BlockConstraint is driven by the approved
+        # drift band (``drift_min/drift_max``). Legacy ``min_weight/
+        # max_weight`` columns were dropped in migration 0155. Unapproved
+        # blocks (``drift_min IS NULL``) fall back to ``[0, 1]``; the
+        # realize-mode gate (Section E below) refuses to run when any
+        # canonical block lacks ``approved_at``, so the fallback only
+        # surfaces in transitional states / integration tests.
         alloc_dicts = [
             {
                 "block_id": a.block_id,
                 "target_weight": float(a.target_weight) if a.target_weight is not None else 0.0,
-                "min_weight": float(a.min_weight) if a.min_weight is not None else 0.0,
-                "max_weight": float(a.max_weight) if a.max_weight is not None else 1.0,
+                "min_weight": float(a.drift_min) if a.drift_min is not None else 0.0,
+                "max_weight": float(a.drift_max) if a.drift_max is not None else 1.0,
             }
             for a in allocations
         ]

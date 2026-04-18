@@ -10,20 +10,54 @@ from app.domains.wealth.schemas.sanitized import humanize_regime
 
 
 class StrategicAllocationRead(BaseModel):
+    # PR-A26.2 — ``min_weight/max_weight`` are serialized from the ORM's
+    # ``drift_min/drift_max`` columns via explicit validator (the legacy
+    # SA columns were dropped in migration 0155). Kept on the wire so
+    # existing frontend consumers don't need to follow the rename.
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     allocation_id: uuid.UUID
     profile: str
     block_id: str
-    target_weight: Decimal
-    min_weight: Decimal
-    max_weight: Decimal
+    target_weight: Decimal | None = None
+    min_weight: Decimal | None = None
+    max_weight: Decimal | None = None
     risk_budget: Decimal | None = None
     rationale: str | None = None
     approved_by: str | None = None
     effective_from: date
     effective_to: date | None = None
     created_at: datetime
+
+    @model_validator(mode="before")
+    @classmethod
+    def _map_drift_to_legacy(cls, data: object) -> object:
+        """Populate ``min_weight/max_weight`` from ``drift_min/drift_max``.
+
+        Runs only when the incoming data is an ORM instance (from_attributes
+        path) or a mapping that carries ``drift_min``/``drift_max``.
+        """
+        # Mapping path (e.g. manual dict construction).
+        if isinstance(data, dict):
+            if "min_weight" not in data and "drift_min" in data:
+                data["min_weight"] = data.get("drift_min")
+            if "max_weight" not in data and "drift_max" in data:
+                data["max_weight"] = data.get("drift_max")
+            return data
+        # ORM / arbitrary-object path — synthesize a mapping so downstream
+        # validation reads the alias even if the source object lacks
+        # ``min_weight`` entirely.
+        if not hasattr(data, "drift_min") and not hasattr(data, "drift_max"):
+            return data
+        mapping: dict[str, object] = {}
+        for field_name in cls.model_fields:
+            if hasattr(data, field_name):
+                mapping[field_name] = getattr(data, field_name)
+        if hasattr(data, "drift_min"):
+            mapping["min_weight"] = getattr(data, "drift_min")
+        if hasattr(data, "drift_max"):
+            mapping["max_weight"] = getattr(data, "drift_max")
+        return mapping
 
 
 class StrategicAllocationItem(BaseModel):
