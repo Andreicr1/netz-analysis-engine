@@ -65,16 +65,24 @@ def upgrade() -> None:
             """
         )
     ).fetchall()
-    if missing_rows:
-        missing = [r[0] for r in missing_rows]
-        raise RuntimeError(
-            f"PR-A19.1 0146: canonical tickers missing from instruments_universe: {missing}. "
-            "Run universe_sync worker before this migration."
+    missing: list[str] = [r[0] for r in missing_rows] if missing_rows else []
+    if missing:
+        # Warn-and-skip (spec revision 2026-04-17): upstream universe_sync
+        # gaps must not block backfilling the tickers that ARE present. SPY
+        # absence from instruments_org was the root A19.1 complaint — hard-
+        # failing on IVV/BND/TLT/SHY would block that fix indefinitely.
+        # Missing tickers are tracked separately (universe_sync backlog).
+        print(
+            f"WARNING canonical_ticker_missing tickers={missing} — "
+            "skipped from backfill; upstream universe_sync gap"
         )
 
     # Warn on missing blocks (non-blocking — NULL block_id is acceptable).
+    missing_set = set(missing)
     resolved_map: dict[str, str | None] = {}
     for ticker, block_id in CANONICAL_BLOCK_MAP.items():
+        if ticker in missing_set:
+            continue  # upstream catalog gap, skip
         if block_id is None:
             resolved_map[ticker] = None
             continue
@@ -109,7 +117,11 @@ def upgrade() -> None:
                 'approved',
                 'pr_a19_1_backfill',
                 FALSE
-            FROM organizations o
+            FROM (
+                SELECT DISTINCT organization_id AS id FROM instruments_org
+                UNION
+                SELECT DISTINCT organization_id AS id FROM model_portfolios
+            ) o
             CROSS JOIN instruments_universe iu
             WHERE iu.ticker = '{ticker}'
             ON CONFLICT DO NOTHING
