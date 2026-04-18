@@ -266,6 +266,64 @@ class TestAutoImportForOrg:
         ]
         assert len(flag_updates) == 1
 
+    async def test_pr_a24_excluded_asset_class_skips_upsert_and_flags_universe(
+        self,
+    ) -> None:
+        """PR-A24: muni instruments must (a) count under
+        ``skipped_by_reason["excluded_asset_class"]``, (b) never UPSERT
+        into ``instruments_org``, and (c) flag the universe row with
+        ``strategic_excluded_reason`` via JSONB merge. The
+        ``needs_human_review`` flag path must NOT fire — exclusion is a
+        distinct signal from triage.
+        """
+        qualified = [
+            _inst(
+                asset_class="fixed_income",
+                strategy_label="Muni National Interm",
+                name="Vanguard Tax-Exempt Bond",
+            ),
+            # Second muni row to prove the counter increments per row.
+            _inst(
+                asset_class="fixed_income",
+                strategy_label="High Yield Muni",
+                name="iShares HY Muni",
+            ),
+        ]
+        db, captured = _mock_db([])  # zero UPSERTs expected
+        org_id = uuid.uuid4()
+
+        with patch(
+            "app.domains.wealth.services.universe_auto_import_service.write_audit_event",
+            new=AsyncMock(),
+        ):
+            metrics = await auto_import_for_org(
+                db, org_id, reason="test", qualified=qualified,
+            )
+
+        assert metrics["added"] == 0
+        assert metrics["skipped"] == 2
+        assert metrics["skipped_by_reason"]["excluded_asset_class"] == 2
+        assert "needs_human_review" not in metrics["skipped_by_reason"]
+
+        # No instruments_org mutation.
+        upserts = [c for c in captured if "INSERT INTO instruments_org" in c[0]]
+        assert upserts == []
+
+        # Universe flagged with strategic_excluded_reason — one UPDATE per row.
+        exclusion_updates = [
+            c for c in captured
+            if "UPDATE instruments_universe" in c[0]
+            and "strategic_excluded_reason" in c[0]
+        ]
+        assert len(exclusion_updates) == 2
+        # Guard: the needs_human_review branch must NOT fire for excluded rows.
+        review_updates = [
+            c for c in captured
+            if "UPDATE instruments_universe" in c[0]
+            and "needs_human_review" in c[0]
+        ]
+        assert review_updates == []
+
     async def test_qualified_none_triggers_fetch(self) -> None:
         """When callers pass qualified=None, the service fetches the
         global rowset inline. Here we assert ``_fetch_qualified_instruments``
