@@ -34,6 +34,8 @@ from app.domains.wealth.models.model_portfolio import (
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.schemas.generated_report import ReportGenerateRequest
 from app.domains.wealth.schemas.model_portfolio import (
+    ApprovalResponse,
+    ApproveProposalRequest,
     ConstructionAdviceRead,
     ConstructionRunDiffOut,
     ConstructionRunMetricDelta,
@@ -55,6 +57,8 @@ from app.domains.wealth.schemas.model_portfolio import (
     RebalancePreviewResponse,
     RegimeCurrentRead,
     SectorExposureRead,
+    SetOverrideRequest,
+    StrategicAllocationRow,
     StressScenarioCatalog,
     StressScenarioCatalogEntry,
     StressTestRequest,
@@ -4865,4 +4869,379 @@ async def latest_proposal(
         winner_signal=winner_signal,
         proposed_bands=proposed_bands,
         proposal_metrics=proposal_metrics,
+    )
+
+
+# ── PR-A26.2 — Approval flow + override endpoints ────────────────────
+
+
+_APPROVE_VALID_WINNER_SIGNALS: frozenset[str] = frozenset(
+    {"proposal_ready", "proposal_cvar_infeasible"},
+)
+
+
+@portfolio_meta_router.post(
+    "/profiles/{profile}/approve-proposal/{run_id}",
+    response_model=ApprovalResponse,
+    status_code=status.HTTP_200_OK,
+    summary=(
+        "PR-A26.2 - Atomically snapshot a propose-mode run's bands onto "
+        "strategic_allocation; becomes the Strategic IPS anchor"
+    ),
+)
+async def approve_proposal(
+    profile: str,
+    run_id: uuid.UUID,
+    body: ApproveProposalRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+    org_id: str = Depends(get_org_id),
+) -> ApprovalResponse:
+    """Approve a propose run for the given profile.
+
+    Atomic transaction - the 18 strategic_allocation rows are updated,
+    the prior active allocation_approvals row (if any) is superseded,
+    and the new audit row is inserted, all in one commit.
+
+    Rejects proposal_cvar_infeasible runs unless the operator sets
+    ``confirm_cvar_infeasible=true`` on the body - avoids a silent
+    accept of an IPS that cannot meet the configured CVaR target.
+    """
+    from sqlalchemy import text as _sa_text
+
+    _require_ic_role(actor)
+
+    profile_lc = profile.strip().lower()
+    if profile_lc not in _PROPOSE_VALID_PROFILES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Unknown profile '{profile}'. Valid: "
+                f"{sorted(_PROPOSE_VALID_PROFILES)}"
+            ),
+        )
+
+    run_stmt = (
+        select(PortfolioConstructionRun)
+        .join(
+            ModelPortfolio,
+            ModelPortfolio.id == PortfolioConstructionRun.portfolio_id,
+        )
+        .where(
+            PortfolioConstructionRun.id == run_id,
+            ModelPortfolio.profile == profile_lc,
+        )
+        .limit(1)
+    )
+    run = (await db.execute(run_stmt)).scalar_one_or_none()
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No run {run_id} found for profile '{profile_lc}' in the "
+                "current organization."
+            ),
+        )
+    if run.run_mode != "propose":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Run {run_id} is not a propose-mode run "
+                f"(run_mode={run.run_mode!r})."
+            ),
+        )
+
+    telemetry = run.cascade_telemetry or {}
+    winner_signal_raw = telemetry.get("winner_signal")
+    if winner_signal_raw == "proposal_cvar_infeasible":
+        if not body.confirm_cvar_infeasible:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Proposal was infeasible against the configured CVaR "
+                    "target - set confirm_cvar_infeasible=true to approve "
+                    "anyway."
+                ),
+            )
+    elif winner_signal_raw not in _APPROVE_VALID_WINNER_SIGNALS:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Run {run_id} carries winner_signal={winner_signal_raw!r}; "
+                "only proposal_ready or proposal_cvar_infeasible runs can "
+                "be approved."
+            ),
+        )
+
+    raw_proposed_bands = telemetry.get("proposed_bands") or []
+    if len(raw_proposed_bands) != 18:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                f"Run {run_id} carries {len(raw_proposed_bands)} proposed "
+                "bands; expected 18 (canonical template). Propose run "
+                "invariant violated."
+            ),
+        )
+
+    proposal_metrics = telemetry.get("proposal_metrics") or {}
+    approver = actor.actor_id
+    org_uuid = uuid.UUID(str(org_id))
+    now_ts = await db.scalar(_sa_text("SELECT now()"))
+
+    updated_rows: list[dict[str, Any]] = []
+    for band in raw_proposed_bands:
+        bid = band["block_id"]
+        target = band.get("target_weight")
+        dmin = band.get("drift_min")
+        dmax = band.get("drift_max")
+        update_stmt = _sa_text(
+            """
+            UPDATE strategic_allocation
+               SET target_weight = :target,
+                   drift_min = :dmin,
+                   drift_max = :dmax,
+                   approved_from_run_id = :run_id,
+                   approved_at = :ts,
+                   approved_by = :approver
+             WHERE organization_id = :org
+               AND profile = :profile
+               AND block_id = :block_id
+            RETURNING block_id, target_weight, drift_min, drift_max,
+                      override_min, override_max, approved_at, approved_by,
+                      excluded_from_portfolio
+            """
+        )
+        result = await db.execute(
+            update_stmt,
+            {
+                "target": target,
+                "dmin": dmin,
+                "dmax": dmax,
+                "run_id": run_id,
+                "ts": now_ts,
+                "approver": approver[:100],
+                "org": org_uuid,
+                "profile": profile_lc,
+                "block_id": bid,
+            },
+        )
+        row = result.mappings().one_or_none()
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=(
+                    f"strategic_allocation row missing for block "
+                    f"{bid!r}; canonical template trigger is broken."
+                ),
+            )
+        updated_rows.append(dict(row))
+
+    await db.execute(
+        _sa_text(
+            """
+            UPDATE allocation_approvals
+               SET superseded_at = :ts
+             WHERE organization_id = :org
+               AND profile = :profile
+               AND superseded_at IS NULL
+            """
+        ),
+        {"ts": now_ts, "org": org_uuid, "profile": profile_lc},
+    )
+
+    approval_id = uuid.uuid4()
+    await db.execute(
+        _sa_text(
+            """
+            INSERT INTO allocation_approvals
+                (id, run_id, organization_id, profile, approved_by,
+                 approved_at, superseded_at, cvar_at_approval,
+                 expected_return_at_approval, cvar_feasible_at_approval,
+                 operator_message)
+            VALUES
+                (:id, :run_id, :org, :profile, :approver,
+                 :ts, NULL, :cvar, :er, :feasible, :msg)
+            """
+        ),
+        {
+            "id": approval_id,
+            "run_id": run_id,
+            "org": org_uuid,
+            "profile": profile_lc,
+            "approver": approver,
+            "ts": now_ts,
+            "cvar": proposal_metrics.get("target_cvar"),
+            "er": proposal_metrics.get("expected_return"),
+            "feasible": bool(proposal_metrics.get("cvar_feasible", True)),
+            "msg": body.operator_message,
+        },
+    )
+
+    await db.flush()
+
+    snapshot = [
+        StrategicAllocationRow(
+            block_id=str(r["block_id"]),
+            target_weight=(
+                float(r["target_weight"])
+                if r.get("target_weight") is not None
+                else None
+            ),
+            drift_min=(
+                float(r["drift_min"]) if r.get("drift_min") is not None else None
+            ),
+            drift_max=(
+                float(r["drift_max"]) if r.get("drift_max") is not None else None
+            ),
+            override_min=(
+                float(r["override_min"])
+                if r.get("override_min") is not None
+                else None
+            ),
+            override_max=(
+                float(r["override_max"])
+                if r.get("override_max") is not None
+                else None
+            ),
+            approved_at=r.get("approved_at"),
+            approved_by=r.get("approved_by"),
+            excluded_from_portfolio=bool(r.get("excluded_from_portfolio") or False),
+        )
+        for r in updated_rows
+    ]
+
+    return ApprovalResponse(
+        approval_id=approval_id,
+        run_id=run_id,
+        organization_id=org_uuid,
+        profile=profile_lc,
+        approved_at=now_ts,
+        approved_by=approver,
+        cvar_feasible_at_approval=bool(
+            proposal_metrics.get("cvar_feasible", True),
+        ),
+        strategic_snapshot=snapshot,
+    )
+
+
+@portfolio_meta_router.post(
+    "/profiles/{profile}/set-override",
+    response_model=StrategicAllocationRow,
+    status_code=status.HTTP_200_OK,
+    summary=(
+        "PR-A26.2 - Write override_min/override_max on a single "
+        "strategic_allocation row; affects next propose run only"
+    ),
+)
+async def set_override(
+    profile: str,
+    body: SetOverrideRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+    org_id: str = Depends(get_org_id),
+) -> StrategicAllocationRow:
+    """Set or clear override_min/override_max on one block.
+
+    The override applies to the next propose-mode run only; realize
+    mode reads the approved drift band instead. Either bound may be
+    ``None`` to clear just one side; pass both as ``None`` to reset
+    the override entirely.
+    """
+    from sqlalchemy import text as _sa_text
+
+    from app.domains.wealth.models.block import AllocationBlock as _AB
+
+    _require_ic_role(actor)
+
+    profile_lc = profile.strip().lower()
+    if profile_lc not in _PROPOSE_VALID_PROFILES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Unknown profile '{profile}'. Valid: "
+                f"{sorted(_PROPOSE_VALID_PROFILES)}"
+            ),
+        )
+
+    block_row = (
+        await db.execute(
+            select(_AB.is_canonical).where(_AB.block_id == body.block_id)
+        )
+    ).scalar_one_or_none()
+    if block_row is None or not bool(block_row):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"block_id {body.block_id!r} is not a canonical "
+                "allocation block."
+            ),
+        )
+
+    update_stmt = _sa_text(
+        """
+        UPDATE strategic_allocation
+           SET override_min = :omin,
+               override_max = :omax,
+               rationale = COALESCE(:rationale, rationale)
+         WHERE organization_id = :org
+           AND profile = :profile
+           AND block_id = :block_id
+        RETURNING block_id, target_weight, drift_min, drift_max,
+                  override_min, override_max, approved_at, approved_by,
+                  excluded_from_portfolio
+        """
+    )
+    result = await db.execute(
+        update_stmt,
+        {
+            "omin": body.override_min,
+            "omax": body.override_max,
+            "rationale": body.rationale,
+            "org": uuid.UUID(str(org_id)),
+            "profile": profile_lc,
+            "block_id": body.block_id,
+        },
+    )
+    row = result.mappings().one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No strategic_allocation row for (profile={profile_lc}, "
+                f"block_id={body.block_id}). Canonical template may not "
+                "have been seeded for this organization."
+            ),
+        )
+
+    await db.flush()
+
+    return StrategicAllocationRow(
+        block_id=str(row["block_id"]),
+        target_weight=(
+            float(row["target_weight"])
+            if row.get("target_weight") is not None
+            else None
+        ),
+        drift_min=(
+            float(row["drift_min"]) if row.get("drift_min") is not None else None
+        ),
+        drift_max=(
+            float(row["drift_max"]) if row.get("drift_max") is not None else None
+        ),
+        override_min=(
+            float(row["override_min"])
+            if row.get("override_min") is not None
+            else None
+        ),
+        override_max=(
+            float(row["override_max"])
+            if row.get("override_max") is not None
+            else None
+        ),
+        approved_at=row.get("approved_at"),
+        approved_by=row.get("approved_by"),
+        excluded_from_portfolio=bool(row.get("excluded_from_portfolio") or False),
     )
