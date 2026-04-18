@@ -57,10 +57,140 @@ Adding a new consumer
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+# ── PR-A19.1 Section C — cascade-aware operator signal ───────────────
+#
+# ``winner_status`` on the optimizer result only distinguishes
+# ``optimal`` from ``degraded``, which conflates two very different
+# operator actions: "Phase 3 min-CVaR won because target was infeasible"
+# (raise the CVaR target) vs "Phase 2 robust won under uncertainty"
+# (accept the robustness premium). ``WinnerSignal`` is an additive
+# enum — ``winner_status`` is kept for backwards compatibility and
+# frontend fallback.
+
+
+class WinnerSignal(str, Enum):
+    OPTIMAL = "optimal"
+    # phase_3_min_cvar winner — CVaR target is below what any portfolio
+    # in the universe can achieve. Operator remedy: raise the CVaR
+    # target OR expand the universe with lower-tail-risk instruments.
+    CVAR_INFEASIBLE_MIN_VAR = "cvar_infeasible_min_var"
+    # phase_2_ru_robust winner — Phase 1 infeasible / unavailable and
+    # the robust SOCP carries a μ-uncertainty premium. Healthy fallback.
+    ROBUSTNESS_FALLBACK = "robustness_fallback"
+    # Catch-all for degraded winners we haven't classified (e.g.
+    # phase_3 win where CVaR is within limit but operator still sees
+    # degraded — atypical).
+    DEGRADED_OTHER = "degraded_other"
+    # No winner at all: empty universe, PSD violation, polytope empty.
+    PRE_SOLVE_FAILURE = "pre_solve_failure"
+
+
+def compute_winner_signal(
+    *,
+    winning_phase: str | None,
+    cvar_within_limit: bool,
+    cvar_limit: float | None,
+    min_achievable_cvar: float | None,
+) -> WinnerSignal:
+    """Classify a cascade outcome into a ``WinnerSignal``.
+
+    Inputs are the same fields ``construction_run_executor`` already
+    has on hand. Pure function — safe to unit test without touching
+    the solver.
+    """
+    if winning_phase is None:
+        return WinnerSignal.PRE_SOLVE_FAILURE
+    if winning_phase == "phase_1_ru_max_return" and cvar_within_limit:
+        return WinnerSignal.OPTIMAL
+    if (
+        winning_phase == "phase_3_min_cvar"
+        and cvar_limit is not None
+        and min_achievable_cvar is not None
+        and min_achievable_cvar > cvar_limit
+    ):
+        return WinnerSignal.CVAR_INFEASIBLE_MIN_VAR
+    if winning_phase == "phase_2_ru_robust":
+        return WinnerSignal.ROBUSTNESS_FALLBACK
+    return WinnerSignal.DEGRADED_OTHER
+
+
+def build_operator_message(
+    *,
+    signal: WinnerSignal,
+    cvar_limit: float | None,
+    min_achievable_cvar: float | None,
+    expected_return: float | None,
+) -> dict[str, Any] | None:
+    """Backend-owned copy for non-``optimal`` signals.
+
+    Frontend renders the string verbatim — smart-backend/dumb-frontend
+    principle (``CLAUDE.md`` "Frontend formatter discipline"). Returns
+    None for ``OPTIMAL`` so consumers can guard on truthiness.
+    """
+    if signal is WinnerSignal.OPTIMAL:
+        return None
+    if signal is WinnerSignal.CVAR_INFEASIBLE_MIN_VAR:
+        cvar_pct = (cvar_limit or 0.0) * 100
+        min_pct = (min_achievable_cvar or 0.0) * 100
+        er_pct = (expected_return or 0.0) * 100
+        return {
+            "title": "CVaR target infeasible with current universe",
+            "body": (
+                f"Your CVaR target of {cvar_pct:.1f}% cannot be achieved "
+                f"by any portfolio in the current universe. The minimum "
+                f"achievable CVaR is {min_pct:.2f}%. The delivered "
+                f"allocation is the minimum-variance portfolio "
+                f"(expected return {er_pct:.2f}%). To improve expected "
+                f"return, either (a) raise the CVaR target to at least "
+                f"{min_pct:.2f}%, or (b) expand the universe with "
+                f"lower-tail-risk instruments (IG credit, Treasuries)."
+            ),
+            "severity": "warning",
+            "action_hint": "raise_cvar_or_expand_universe",
+        }
+    if signal is WinnerSignal.ROBUSTNESS_FALLBACK:
+        return {
+            "title": "Robust allocation selected",
+            "body": (
+                "Phase 1 was unavailable or infeasible; the delivered "
+                "allocation is from the robust SOCP (Phase 2), which "
+                "applies an uncertainty premium on expected returns. "
+                "Expected return may be below the unconstrained "
+                "optimum — this is the cost of the robustness margin."
+            ),
+            "severity": "info",
+            "action_hint": "review_robust_margin",
+        }
+    if signal is WinnerSignal.DEGRADED_OTHER:
+        return {
+            "title": "Construction degraded",
+            "body": (
+                "The cascade completed outside the optimal phase. "
+                "Review cascade telemetry for the winning phase and "
+                "infeasibility reasons."
+            ),
+            "severity": "warning",
+            "action_hint": "review_cascade_telemetry",
+        }
+    # PRE_SOLVE_FAILURE
+    return {
+        "title": "Construction failed before solve",
+        "body": (
+            "The optimizer could not run: either the universe was "
+            "empty, the covariance matrix failed PSD validation, or "
+            "the block constraints were unsatisfiable. Check data "
+            "quality and block bands."
+        ),
+        "severity": "error",
+        "action_hint": "inspect_universe_and_blocks",
+    }
 
 # ── Canonical mapping — Risk Methodology v3 ───────────────────────
 
