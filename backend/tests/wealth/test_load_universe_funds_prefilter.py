@@ -93,7 +93,7 @@ async def _seed_strategic_allocation(
             """
             INSERT INTO strategic_allocation (
                 allocation_id, organization_id, profile, block_id,
-                target_weight, min_weight, max_weight, effective_from
+                target_weight, drift_min, drift_max, effective_from
             )
             VALUES (
                 :allocation_id, :org_id, :profile, :block_id,

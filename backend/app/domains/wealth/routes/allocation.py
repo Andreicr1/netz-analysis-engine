@@ -97,12 +97,17 @@ async def update_strategic(
     # Create new allocations
     new_rows: list[StrategicAllocation] = []
     for item in body.allocations:
+        # PR-A26.2 — the legacy ``min_weight/max_weight`` columns were dropped
+        # in migration 0155. The ``PUT /allocation/{profile}`` endpoint is
+        # repurposed as a manual drift setter: the incoming ``min_weight`` /
+        # ``max_weight`` now land on ``drift_min`` / ``drift_max``. The full
+        # approval lifecycle lives behind the propose-approve flow.
         row = StrategicAllocation(
             profile=profile,
             block_id=item.block_id,
             target_weight=item.target_weight,
-            min_weight=item.min_weight,
-            max_weight=item.max_weight,
+            drift_min=item.min_weight,
+            drift_max=item.max_weight,
             risk_budget=item.risk_budget,
             rationale=item.rationale,
             approved_by=user.name,
@@ -254,8 +259,8 @@ async def get_effective(
                 strategic_weight=s.target_weight if s else None,
                 tactical_overweight=t.overweight if t else None,
                 effective_weight=s_weight + t_weight,
-                min_weight=s.min_weight if s else None,
-                max_weight=s.max_weight if s else None,
+                min_weight=s.drift_min if s else None,
+                max_weight=s.drift_max if s else None,
             ),
         )
     return effective
@@ -573,9 +578,13 @@ async def get_regime_bands(
         band = effective_bands_raw.get(sa.block_id)
         if band is None:
             continue
-        if band.get("min", 0) > float(sa.min_weight) + 1e-6:
+        # PR-A26.2 — ``min_weight/max_weight`` columns were dropped; the drift
+        # band is now the canonical source of truth for clamp detection.
+        sa_min = sa.drift_min
+        sa_max = sa.drift_max
+        if sa_min is not None and band.get("min", 0) > float(sa_min) + 1e-6:
             ips_clamps.append(f"{sa.block_id}_min_raised")
-        if band.get("max", 1) < float(sa.max_weight) - 1e-6:
+        if sa_max is not None and band.get("max", 1) < float(sa_max) - 1e-6:
             ips_clamps.append(f"{sa.block_id}_max_lowered")
 
     return RegimeBandsRead(
@@ -707,8 +716,8 @@ async def get_effective_with_regime(
                 strategic_weight=s.target_weight if s else None,
                 tactical_overweight=t.overweight if t else None,
                 effective_weight=s_weight + t_weight,
-                min_weight=s.min_weight if s else None,
-                max_weight=s.max_weight if s else None,
+                min_weight=s.drift_min if s else None,
+                max_weight=s.drift_max if s else None,
                 regime_min=band.get("min") if band else None,
                 regime_max=band.get("max") if band else None,
                 regime_center=band.get("center") if band else None,

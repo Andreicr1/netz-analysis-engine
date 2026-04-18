@@ -62,7 +62,7 @@ async def test_template_trigger_fans_out_canonical_rows() -> None:
             """
             INSERT INTO strategic_allocation (
                 allocation_id, organization_id, profile, block_id,
-                target_weight, min_weight, max_weight, risk_budget,
+                target_weight, drift_min, drift_max, risk_budget,
                 rationale, approved_by, effective_from, effective_to,
                 actor_source, excluded_from_portfolio
             )

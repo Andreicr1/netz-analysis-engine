@@ -63,7 +63,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
 # ── PR-A19.1 Section C — cascade-aware operator signal ───────────────
 #
 # ``winner_status`` on the optimizer result only distinguishes
@@ -112,6 +111,16 @@ class WinnerSignal(str, Enum):
     # the universe.
     PROPOSAL_READY = "proposal_ready"
     PROPOSAL_CVAR_INFEASIBLE = "proposal_cvar_infeasible"
+    # PR-A26.2 — realize-mode runs require an approved Strategic IPS
+    # (``strategic_allocation.approved_at`` populated for all 18 canonical
+    # blocks). Operator remedy: run the propose-then-approve cycle.
+    NO_APPROVED_ALLOCATION = "no_approved_allocation"
+    # PR-A26.2 — composition stage detected a block whose realize weight
+    # cannot be distributed under the hard 15% per-instrument cap given
+    # the approved instrument count in that block. Operator remedy:
+    # approve more instruments for the breaching block OR accept a
+    # lower realize weight for it.
+    INSTRUMENT_CONCENTRATION_BREACH = "instrument_concentration_breach"
 
 
 def compute_winner_signal(

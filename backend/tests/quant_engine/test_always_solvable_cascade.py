@@ -174,7 +174,7 @@ def test_achievable_band_monotonic() -> None:
 
     # Upper bound is non-increasing as we tighten the limit.
     uppers = [b[1] for b in bands]
-    for prev, cur in zip(uppers, uppers[1:]):
+    for prev, cur in zip(uppers, uppers[1:], strict=False):
         assert cur <= prev + 1e-6, f"band.upper not monotonic: {uppers}"
 
     # When the limit drops below the universe floor the band collapses.

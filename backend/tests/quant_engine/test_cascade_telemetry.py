@@ -18,7 +18,6 @@ from __future__ import annotations
 import asyncio
 
 import numpy as np
-import pytest
 
 from quant_engine.optimizer_service import (
     BlockConstraint,

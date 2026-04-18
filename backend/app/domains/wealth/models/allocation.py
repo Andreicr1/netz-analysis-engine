@@ -12,8 +12,10 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    false as sa_false,
     func,
+)
+from sqlalchemy import (
+    false as sa_false,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -31,12 +33,25 @@ class StrategicAllocation(OrganizationScopedMixin, Base):
     block_id: Mapped[str] = mapped_column(
         String(80), ForeignKey("allocation_blocks.block_id"), nullable=False,
     )
-    # PR-A25 (migration 0153): weights relaxed to nullable so the canonical
-    # 18-block template can be seeded before the operator or PR-A26's
-    # propose-then-approve flow fills the bands.
+    # PR-A26.2 (migration 0155): optimizer-bound ``min_weight`` /
+    # ``max_weight`` columns were dropped. ``target_weight`` persists as
+    # the "approved anchor" — NULL until the propose-then-approve flow
+    # snapshots a propose run into the row. Operator overrides and the
+    # drift band now own the optimizer-facing semantics.
     target_weight: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
-    min_weight: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
-    max_weight: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
+    # Drift band around the approved target. Populated atomically by the
+    # approve-proposal endpoint; NULL when the block has never been
+    # approved. Realize-mode BlockConstraint reads these two columns.
+    drift_min: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
+    drift_max: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
+    # Operator-set propose-mode overrides. Persist across approvals;
+    # cleared only via ``POST /set-override`` with explicit NULL. Have
+    # no effect on realize-mode runs.
+    override_min: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
+    override_max: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
+    # Provenance back to the propose run that seeded the approved snapshot.
+    approved_from_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     risk_budget: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
     rationale: Mapped[str | None] = mapped_column(Text)
     approved_by: Mapped[str | None] = mapped_column(String(100))
@@ -55,6 +70,46 @@ class StrategicAllocation(OrganizationScopedMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
     )
+
+
+class AllocationApproval(Base):
+    """PR-A26.2 — audit log of approved propose-mode allocations.
+
+    GLOBAL table (no RLS) — admin-visible audit history. Queries that
+    want org scope must still filter by ``organization_id`` explicitly.
+
+    At most one row per ``(organization_id, profile)`` carries
+    ``superseded_at IS NULL`` at any given time; the approve-proposal
+    endpoint supersedes the prior active row before inserting the new
+    one (single transaction).
+    """
+
+    __tablename__ = "allocation_approvals"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
+    )
+    # No FK — historical runs can be purged independently. Integrity
+    # comes from the (run_id, organization_id, profile) triple plus
+    # the superseded_at lifecycle.
+    run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False,
+    )
+    profile: Mapped[str] = mapped_column(String(20), nullable=False)
+    approved_by: Mapped[str] = mapped_column(Text, nullable=False)
+    approved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cvar_at_approval: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
+    expected_return_at_approval: Mapped[Decimal | None] = mapped_column(
+        Numeric(8, 6),
+    )
+    cvar_feasible_at_approval: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True,
+    )
+    operator_message: Mapped[str | None] = mapped_column(Text)
 
 
 class MacroRegimeSnapshot(Base):

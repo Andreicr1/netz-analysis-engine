@@ -312,6 +312,79 @@ class JobCreatedResponse(BaseModel):
     run_id: uuid.UUID
 
 
+# ── PR-A26.2 — Approval flow + overrides ────────────────────────────
+
+
+class ApproveProposalRequest(BaseModel):
+    """Body for ``POST /portfolio/profiles/{profile}/approve-proposal/{run_id}``.
+
+    ``confirm_cvar_infeasible=True`` is required when approving a run
+    that completed with ``winner_signal = 'proposal_cvar_infeasible'``
+    — the operator is explicitly accepting a Strategic IPS whose bands
+    cannot meet the configured CVaR target. ``operator_message`` lands
+    on ``allocation_approvals.operator_message`` for audit.
+    """
+
+    confirm_cvar_infeasible: bool = False
+    operator_message: str | None = Field(default=None, max_length=5000)
+
+
+class StrategicAllocationRow(BaseModel):
+    """Single strategic_allocation row after approval (Section C)."""
+
+    block_id: str
+    target_weight: float | None = None
+    drift_min: float | None = None
+    drift_max: float | None = None
+    override_min: float | None = None
+    override_max: float | None = None
+    approved_at: datetime | None = None
+    approved_by: str | None = None
+    excluded_from_portfolio: bool = False
+
+
+class ApprovalResponse(BaseModel):
+    """Response for ``POST /portfolio/profiles/{profile}/approve-proposal/{run_id}``.
+
+    ``strategic_snapshot`` carries one entry per canonical block — the
+    post-approval state of the 18 ``strategic_allocation`` rows that
+    make up the Strategic IPS anchor. The frontend renders this as
+    confirmation before wiring up the realize-mode CTA.
+    """
+
+    approval_id: uuid.UUID
+    run_id: uuid.UUID
+    organization_id: uuid.UUID
+    profile: str
+    approved_at: datetime
+    approved_by: str
+    cvar_feasible_at_approval: bool
+    strategic_snapshot: list[StrategicAllocationRow]
+
+
+class SetOverrideRequest(BaseModel):
+    """Body for ``POST /portfolio/profiles/{profile}/set-override``.
+
+    Either bound may be ``None`` — set just one side (e.g. only
+    ``override_max``) or both, or clear both by passing ``None``.
+    """
+
+    block_id: str
+    override_min: float | None = Field(default=None, ge=0.0, le=1.0)
+    override_max: float | None = Field(default=None, ge=0.0, le=1.0)
+    rationale: str | None = Field(default=None, max_length=5000)
+
+    @model_validator(mode="after")
+    def _validate_override_bounds(self) -> SetOverrideRequest:
+        if (
+            self.override_min is not None
+            and self.override_max is not None
+            and self.override_min > self.override_max
+        ):
+            raise ValueError("override_min must be <= override_max when both set")
+        return self
+
+
 class StressScenarioCatalogEntry(BaseModel):
     """One entry in the stress catalog returned by GET /portfolio/stress-test/scenarios."""
 
