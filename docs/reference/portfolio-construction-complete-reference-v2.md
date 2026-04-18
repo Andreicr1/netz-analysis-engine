@@ -270,6 +270,19 @@ Example: US score = 65, room = 0.08 → `+0.36%` additional tilt to US equity bl
 
 **Function:** `_load_universe_funds()` in `model_portfolios.py`
 
+### 5.0 Universe Curation Principle
+
+The engine does not prescribe a canonical universe. Each org curates
+`instruments_org` according to its mandate, regulatory domicile, and
+client constraints. The cascade validates block coverage against the
+`StrategicAllocation` before running; insufficient coverage returns a
+structured operator signal (`block_coverage_insufficient`), never a
+silent fallback. Prescriptive cross-org backfills (attempted and
+abandoned in the draft PR-A20) violate mandate autonomy — an
+institutional shop may deliberately exclude TLT/SHY, and a UCITS shop
+cannot use US-domiciled ETFs. The corrective sequence is PR-A21
+(sanitization), PR-A22 (coverage validator), PR-A23 (classifier fix).
+
 ### 5.1 Approved Universe Query
 
 The optimizer only considers funds that are:
