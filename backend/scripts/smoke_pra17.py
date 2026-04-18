@@ -69,7 +69,8 @@ with psycopg.connect(DB) as conn, conn.cursor() as cur:
     for r in cur.fetchall():
         name, profile, status, limit, er, cv, summary, floor, cov, sec = r
         flipped = summary == "phase_1_succeeded"
-        if flipped: any_phase1 = True
+        if flipped:
+            any_phase1 = True
         mark = "  ** FLIPPED TO PHASE 1 **" if flipped else ""
         print(f"\n--- {name} [{profile}] status={status}{mark}")
         print(f"    limit={float(limit)*100:.2f}%  delivered_CVaR={float(cv)*100:.2f}%  E[r]={float(er)*100:.2f}%" if cv and er else f"    limit={float(limit)*100:.2f}%")

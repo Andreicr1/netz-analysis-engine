@@ -126,6 +126,117 @@ def upgrade() -> None:
         """
     )
 
+    # ── A25 trigger refresh ───────────────────────────────────────
+    # Migration 0153 defined ``fn_enforce_allocation_template_sa`` and
+    # ``fn_enforce_allocation_template_blocks`` with INSERTs that
+    # reference the now-dropped ``min_weight`` / ``max_weight`` columns.
+    # Rebuild both functions without those columns so the canonical
+    # template trigger keeps firing post-A26.2.
+    op.execute(
+        r"""
+        CREATE OR REPLACE FUNCTION fn_enforce_allocation_template_sa()
+        RETURNS TRIGGER AS $$
+        DECLARE
+            missing_block RECORD;
+            existing_rows INT;
+        BEGIN
+            SELECT COUNT(*)
+              INTO existing_rows
+              FROM strategic_allocation
+             WHERE organization_id = NEW.organization_id
+               AND profile = NEW.profile;
+            IF existing_rows <> 1 THEN
+                RETURN NEW;
+            END IF;
+
+            FOR missing_block IN
+                SELECT block_id FROM allocation_blocks
+                 WHERE is_canonical = true
+                   AND block_id <> NEW.block_id
+            LOOP
+                INSERT INTO strategic_allocation (
+                    allocation_id, organization_id, profile, block_id,
+                    target_weight, risk_budget,
+                    rationale, approved_by, effective_from, effective_to,
+                    actor_source, excluded_from_portfolio
+                )
+                VALUES (
+                    gen_random_uuid(), NEW.organization_id, NEW.profile,
+                    missing_block.block_id,
+                    NULL, NULL,
+                    'Auto-inserted by enforce_allocation_template trigger',
+                    'system', CURRENT_DATE, NULL,
+                    'trigger_enforce', false
+                );
+
+                INSERT INTO allocation_template_audit (
+                    trigger_reason, organization_id, profile, block_id,
+                    action, details
+                )
+                VALUES (
+                    'new_profile_created', NEW.organization_id,
+                    NEW.profile, missing_block.block_id, 'inserted',
+                    jsonb_build_object('source_row_id', NEW.allocation_id)
+                );
+            END LOOP;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql SECURITY DEFINER
+        """
+    )
+    op.execute(
+        r"""
+        CREATE OR REPLACE FUNCTION fn_enforce_allocation_template_blocks()
+        RETURNS TRIGGER AS $$
+        DECLARE
+            combo RECORD;
+        BEGIN
+            IF NOT (NEW.is_canonical = true AND
+                    COALESCE(OLD.is_canonical, false) = false) THEN
+                RETURN NEW;
+            END IF;
+
+            FOR combo IN
+                SELECT DISTINCT organization_id, profile
+                  FROM strategic_allocation
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM strategic_allocation sa
+                      WHERE sa.organization_id = strategic_allocation.organization_id
+                        AND sa.profile = strategic_allocation.profile
+                        AND sa.block_id = NEW.block_id
+                 )
+            LOOP
+                INSERT INTO strategic_allocation (
+                    allocation_id, organization_id, profile, block_id,
+                    target_weight, risk_budget,
+                    rationale, approved_by, effective_from, effective_to,
+                    actor_source, excluded_from_portfolio
+                )
+                VALUES (
+                    gen_random_uuid(), combo.organization_id, combo.profile,
+                    NEW.block_id,
+                    NULL, NULL,
+                    'Auto-inserted by enforce_allocation_template_blocks trigger',
+                    'system', CURRENT_DATE, NULL,
+                    'trigger_enforce', false
+                );
+
+                INSERT INTO allocation_template_audit (
+                    trigger_reason, organization_id, profile, block_id,
+                    action, details
+                )
+                VALUES (
+                    'block_marked_canonical', combo.organization_id,
+                    combo.profile, NEW.block_id, 'inserted',
+                    jsonb_build_object('source_block_id', NEW.block_id)
+                );
+            END LOOP;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql SECURITY DEFINER
+        """
+    )
+
 
 def downgrade() -> None:
     """Reverse the migration.
@@ -170,5 +281,113 @@ def downgrade() -> None:
         ALTER TABLE strategic_allocation
           ADD COLUMN IF NOT EXISTS min_weight NUMERIC(6,4),
           ADD COLUMN IF NOT EXISTS max_weight NUMERIC(6,4)
+        """
+    )
+
+    # Restore A25 trigger function bodies that reference the re-created
+    # ``min_weight`` / ``max_weight`` columns so upstream rollback leaves
+    # the canonical template enforcement intact.
+    op.execute(
+        r"""
+        CREATE OR REPLACE FUNCTION fn_enforce_allocation_template_sa()
+        RETURNS TRIGGER AS $$
+        DECLARE
+            missing_block RECORD;
+            existing_rows INT;
+        BEGIN
+            SELECT COUNT(*)
+              INTO existing_rows
+              FROM strategic_allocation
+             WHERE organization_id = NEW.organization_id
+               AND profile = NEW.profile;
+            IF existing_rows <> 1 THEN
+                RETURN NEW;
+            END IF;
+
+            FOR missing_block IN
+                SELECT block_id FROM allocation_blocks
+                 WHERE is_canonical = true
+                   AND block_id <> NEW.block_id
+            LOOP
+                INSERT INTO strategic_allocation (
+                    allocation_id, organization_id, profile, block_id,
+                    target_weight, min_weight, max_weight, risk_budget,
+                    rationale, approved_by, effective_from, effective_to,
+                    actor_source, excluded_from_portfolio
+                )
+                VALUES (
+                    gen_random_uuid(), NEW.organization_id, NEW.profile,
+                    missing_block.block_id,
+                    NULL, NULL, NULL, NULL,
+                    'Auto-inserted by enforce_allocation_template trigger',
+                    'system', CURRENT_DATE, NULL,
+                    'trigger_enforce', false
+                );
+
+                INSERT INTO allocation_template_audit (
+                    trigger_reason, organization_id, profile, block_id,
+                    action, details
+                )
+                VALUES (
+                    'new_profile_created', NEW.organization_id,
+                    NEW.profile, missing_block.block_id, 'inserted',
+                    jsonb_build_object('source_row_id', NEW.allocation_id)
+                );
+            END LOOP;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql SECURITY DEFINER
+        """
+    )
+    op.execute(
+        r"""
+        CREATE OR REPLACE FUNCTION fn_enforce_allocation_template_blocks()
+        RETURNS TRIGGER AS $$
+        DECLARE
+            combo RECORD;
+        BEGIN
+            IF NOT (NEW.is_canonical = true AND
+                    COALESCE(OLD.is_canonical, false) = false) THEN
+                RETURN NEW;
+            END IF;
+
+            FOR combo IN
+                SELECT DISTINCT organization_id, profile
+                  FROM strategic_allocation
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM strategic_allocation sa
+                      WHERE sa.organization_id = strategic_allocation.organization_id
+                        AND sa.profile = strategic_allocation.profile
+                        AND sa.block_id = NEW.block_id
+                 )
+            LOOP
+                INSERT INTO strategic_allocation (
+                    allocation_id, organization_id, profile, block_id,
+                    target_weight, min_weight, max_weight, risk_budget,
+                    rationale, approved_by, effective_from, effective_to,
+                    actor_source, excluded_from_portfolio
+                )
+                VALUES (
+                    gen_random_uuid(), combo.organization_id, combo.profile,
+                    NEW.block_id,
+                    NULL, NULL, NULL, NULL,
+                    'Auto-inserted by enforce_allocation_template_blocks trigger',
+                    'system', CURRENT_DATE, NULL,
+                    'trigger_enforce', false
+                );
+
+                INSERT INTO allocation_template_audit (
+                    trigger_reason, organization_id, profile, block_id,
+                    action, details
+                )
+                VALUES (
+                    'block_marked_canonical', combo.organization_id,
+                    combo.profile, NEW.block_id, 'inserted',
+                    jsonb_build_object('source_block_id', NEW.block_id)
+                );
+            END LOOP;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql SECURITY DEFINER
         """
     )
