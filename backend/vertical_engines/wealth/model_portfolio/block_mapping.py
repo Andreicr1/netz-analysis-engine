@@ -96,10 +96,16 @@ STRATEGY_LABEL_TO_BLOCKS: dict[str, list[str]] = {
     "Infrastructure": ["alt_commodities"],
     # Alternatives — Gold
     "Precious Metals": ["alt_gold"],
-    # Cash
+    # Cash — only real MMF categories (SEC sec_money_market_funds strategy_label values).
+    # "Cash Equivalent" was removed 2026-04-18 — label was contaminated upstream with
+    # equity/bond/muni funds (e.g., SCHB, FEZ, FZIIX) and mapping it to cash caused the
+    # optimizer to treat them as zero-vol cash proxies.
     "Money Market": ["cash"],
     "Liquidity Fund": ["cash"],
-    "Cash Equivalent": ["cash"],
+    "Government Money Market": ["cash"],
+    "Prime Money Market": ["cash"],
+    "Tax-Exempt Money Market": ["cash"],
+    "Single State Money Market": ["cash"],
 }
 
 
