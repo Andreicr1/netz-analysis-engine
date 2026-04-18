@@ -161,6 +161,53 @@ class TemplateIncompleteError(Exception):
         self.report = report
 
 
+class NoApprovedAllocationError(Exception):
+    """PR-A26.2 Section E — realize-mode requires an approved Strategic IPS.
+
+    Raised pre-optimizer when any canonical ``strategic_allocation`` row
+    for the ``(organization_id, profile)`` pair has ``approved_at IS
+    NULL``. The operator remedy is to run the propose → approve cycle
+    before realizing any portfolio.
+    """
+
+    def __init__(
+        self, *, organization_id: uuid.UUID, profile: str,
+        approved_count: int, total_count: int,
+    ) -> None:
+        super().__init__(
+            f"no_approved_allocation profile={profile!r} "
+            f"approved={approved_count}/{total_count}"
+        )
+        self.organization_id = organization_id
+        self.profile = profile
+        self.approved_count = approved_count
+        self.total_count = total_count
+
+
+class InstrumentConcentrationBreachError(Exception):
+    """PR-A26.2 Section F — realize composition breached the 15% per-instrument cap.
+
+    The block's realized weight ``w_b`` would require at least
+    ``ceil(w_b / 0.15)`` approved instruments to distribute under the
+    hard 15% ceiling. Operator remedy: approve more instruments for
+    the breaching block or accept a lower block weight.
+    """
+
+    def __init__(
+        self, *, block_id: str, block_weight: float,
+        required: int, available: int,
+    ) -> None:
+        super().__init__(
+            f"instrument_concentration_breach block={block_id} "
+            f"block_weight={block_weight:.4f} required={required} "
+            f"available={available}"
+        )
+        self.block_id = block_id
+        self.block_weight = block_weight
+        self.required = required
+        self.available = available
+
+
 # ── Helpers ────────────────────────────────────────────────────
 
 
@@ -938,6 +985,112 @@ async def _persist_template_failure(
     )
 
 
+async def _count_approved_blocks(
+    db: AsyncSession, organization_id: uuid.UUID | str, profile: str,
+) -> tuple[int, int]:
+    """PR-A26.2 Section E — return ``(approved, total)`` canonical-block count.
+
+    ``approved`` counts rows with ``approved_at IS NOT NULL``; ``total``
+    is the number of rows present for the ``(org, profile)`` pair.
+    Realize mode requires ``approved == 18`` (== total once the A25
+    canonical trigger has run).
+    """
+    from sqlalchemy import text as _sa_text
+
+    row = await db.execute(
+        _sa_text(
+            """
+            SELECT COUNT(*) FILTER (WHERE approved_at IS NOT NULL) AS approved,
+                   COUNT(*) AS total
+              FROM strategic_allocation
+             WHERE organization_id = :org
+               AND profile = :profile
+            """
+        ),
+        {"org": str(organization_id), "profile": profile},
+    )
+    record = row.one_or_none()
+    if record is None:
+        return 0, 0
+    return int(record[0] or 0), int(record[1] or 0)
+
+
+async def _persist_no_approval_failure(
+    db: AsyncSession,
+    *,
+    run: PortfolioConstructionRun,
+    organization_id: uuid.UUID,
+    profile: str,
+    approved_count: int,
+    total_count: int,
+) -> None:
+    """PR-A26.2 Section E — persist the no-approved-allocation failure."""
+    existing = run.cascade_telemetry or {}
+    run.cascade_telemetry = {
+        **existing,
+        "winner_signal": WinnerSignal.NO_APPROVED_ALLOCATION.value,
+        "operator_signal": WinnerSignal.NO_APPROVED_ALLOCATION.value,
+        "operator_message": {
+            "title": "No approved Strategic IPS",
+            "body": (
+                f"Realize mode requires an approved Strategic allocation "
+                f"for the '{profile}' profile — currently "
+                f"{approved_count}/{total_count} canonical blocks are "
+                "approved. Run POST /portfolio/profiles/{profile}/"
+                "propose-allocation and then POST approve-proposal/{run_id} "
+                "to seed the Strategic IPS anchor before realizing."
+            ),
+            "severity": "warning",
+            "action_hint": "run_propose_then_approve",
+        },
+        "cascade_summary": "no_approved_allocation",
+        "approval_state": {
+            "approved_count": approved_count,
+            "total_count": total_count,
+        },
+    }
+    run.status = "failed"
+    run.failure_reason = (
+        f"no_approved_allocation: {approved_count}/{total_count} "
+        f"canonical blocks approved for profile '{profile}'"
+    )
+
+
+async def _persist_instrument_concentration_breach(
+    db: AsyncSession,
+    *,
+    run: PortfolioConstructionRun,
+    breaches: list[dict[str, Any]],
+) -> None:
+    """PR-A26.2 Section F — persist instrument concentration breach."""
+    existing = run.cascade_telemetry or {}
+    run.cascade_telemetry = {
+        **existing,
+        "winner_signal": WinnerSignal.INSTRUMENT_CONCENTRATION_BREACH.value,
+        "operator_signal": WinnerSignal.INSTRUMENT_CONCENTRATION_BREACH.value,
+        "operator_message": {
+            "title": "Per-instrument concentration cap breached",
+            "body": (
+                "One or more blocks would require a single instrument to "
+                "hold more than 15% of the total portfolio to distribute "
+                "the block's realize weight. Approve additional "
+                "instruments for the breaching block(s) or accept a "
+                "lower realize weight."
+            ),
+            "severity": "warning",
+            "action_hint": "approve_more_instruments_or_reduce_block_weight",
+        },
+        "cascade_summary": "instrument_concentration_breach",
+        "concentration_breaches": breaches,
+    }
+    run.status = "failed"
+    first = breaches[0] if breaches else {}
+    run.failure_reason = (
+        f"instrument_concentration_breach: block={first.get('block_id')!r} "
+        f"required={first.get('required')} available={first.get('available')}"
+    )
+
+
 async def _persist_coverage_failure(
     db: AsyncSession,
     *,
@@ -1255,6 +1408,87 @@ async def execute_construction_run(
             },
         )
         return run
+    except NoApprovedAllocationError as no_approval_exc:
+        # PR-A26.2 Section E — realize mode blocked; emit structured signal.
+        await _persist_no_approval_failure(
+            db,
+            run=run,
+            organization_id=no_approval_exc.organization_id,
+            profile=no_approval_exc.profile,
+            approved_count=no_approval_exc.approved_count,
+            total_count=no_approval_exc.total_count,
+        )
+        run.completed_at = datetime.now(tz=timezone.utc)
+        run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
+        await db.flush()
+        await _publish_terminal_event_sanitized(
+            db,
+            run_id=run_id,
+            job_id=job_id,
+            raw_type="run_failed",
+            raw_payload={
+                "run_id": str(run_id),
+                "reason": "no_approved_allocation",
+                "winner_signal": WinnerSignal.NO_APPROVED_ALLOCATION.value,
+                "approved_count": no_approval_exc.approved_count,
+                "total_count": no_approval_exc.total_count,
+            },
+        )
+        logger.info(
+            "construction_run_no_approved_allocation",
+            extra={
+                "run_id": str(run_id),
+                "portfolio_id": str(portfolio_id),
+                "profile": no_approval_exc.profile,
+                "approved": no_approval_exc.approved_count,
+                "total": no_approval_exc.total_count,
+            },
+        )
+        return run
+    except InstrumentConcentrationBreachError as conc_exc:
+        # PR-A26.2 Section F — realize composition refused; emit signal.
+        await _persist_instrument_concentration_breach(
+            db,
+            run=run,
+            breaches=[
+                {
+                    "block_id": conc_exc.block_id,
+                    "block_weight": conc_exc.block_weight,
+                    "required": conc_exc.required,
+                    "available": conc_exc.available,
+                },
+            ],
+        )
+        run.completed_at = datetime.now(tz=timezone.utc)
+        run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
+        await db.flush()
+        await _publish_terminal_event_sanitized(
+            db,
+            run_id=run_id,
+            job_id=job_id,
+            raw_type="run_failed",
+            raw_payload={
+                "run_id": str(run_id),
+                "reason": "instrument_concentration_breach",
+                "winner_signal": (
+                    WinnerSignal.INSTRUMENT_CONCENTRATION_BREACH.value
+                ),
+                "block_id": conc_exc.block_id,
+                "required": conc_exc.required,
+                "available": conc_exc.available,
+            },
+        )
+        logger.info(
+            "construction_run_instrument_concentration_breach",
+            extra={
+                "run_id": str(run_id),
+                "portfolio_id": str(portfolio_id),
+                "block_id": conc_exc.block_id,
+                "required": conc_exc.required,
+                "available": conc_exc.available,
+            },
+        )
+        return run
     except CoverageInsufficientError as coverage_exc:
         # PR-A22 — pre-solve failure with structured gap report.
         await _persist_coverage_failure(
@@ -1441,6 +1675,24 @@ async def _execute_inner(
     coverage = await validate_block_coverage(db, organization_id, profile)
     if not coverage.is_sufficient:
         raise CoverageInsufficientError(coverage)
+
+    # ── PR-A26.2 Section E. Realize-mode approval gate ──
+    # Refuse-to-run until an approved Strategic IPS exists for the
+    # (org, profile) pair. Propose mode skips this check — it generates
+    # the anchor bands the operator later approves.
+    if not propose_mode:
+        approved, total = await _count_approved_blocks(
+            db, organization_id, profile,
+        )
+        # ``total`` is 18 post-A25; allow for transitional fixtures by
+        # requiring ``approved == total`` AND ``approved > 0``.
+        if total == 0 or approved < total:
+            raise NoApprovedAllocationError(
+                organization_id=organization_id,
+                profile=profile,
+                approved_count=approved,
+                total_count=total,
+            )
 
     await _check_cancellation(job_id, "pre_optimizer")
     await _publish_event_sanitized(
