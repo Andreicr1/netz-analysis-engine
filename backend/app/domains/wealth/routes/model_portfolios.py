@@ -40,6 +40,8 @@ from app.domains.wealth.schemas.model_portfolio import (
     ConstructionRunWeightDelta,
     ConstructRunAccepted,
     CusipExposureRead,
+    JobCreatedResponse,
+    LatestProposalResponse,
     ModelPortfolioCreate,
     ModelPortfolioRead,
     ModelPortfolioUpdate,
@@ -47,6 +49,8 @@ from app.domains.wealth.schemas.model_portfolio import (
     PortfolioCalibrationRead,
     PortfolioCalibrationUpdate,
     PortfolioTransitionRequest,
+    ProposalMetrics,
+    ProposedBand,
     RebalancePreviewRequest,
     RebalancePreviewResponse,
     RegimeCurrentRead,
@@ -4653,3 +4657,205 @@ async def _set_cached_mc(cache_key: str, result: dict, ttl: int = 3600) -> None:
             await r.aclose()
     except Exception:
         logger.debug("mc_cache_set_failed", cache_key=cache_key)
+
+
+# ── PR-A26.1 — Propose-mode endpoints (profile-scoped) ────────────────
+
+
+_PROPOSE_VALID_PROFILES: frozenset[str] = frozenset(
+    {"conservative", "moderate", "growth", "aggressive"},
+)
+
+
+async def _resolve_propose_target_portfolio(
+    db: AsyncSession,
+    *,
+    organization_id: str,
+    profile: str,
+) -> ModelPortfolio:
+    """Resolve the model portfolio to host a propose-mode run for ``profile``.
+
+    Propose mode is profile-scoped from the operator's standpoint, but
+    the construction executor still needs a portfolio row to attach the
+    run to (for ``portfolio_id`` FK on ``portfolio_construction_runs``
+    and the calibration snapshot). We pick the most recently updated
+    model portfolio for the (org, profile) pair. If no portfolio exists
+    yet for the profile, we 404 — propose mode does not auto-create.
+    """
+    stmt = (
+        select(ModelPortfolio)
+        .where(ModelPortfolio.profile == profile)
+        .order_by(ModelPortfolio.state_changed_at.desc())
+        .limit(1)
+    )
+    portfolio = (await db.execute(stmt)).scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No model portfolio exists for profile '{profile}'. "
+                "Create a portfolio first, then propose an allocation."
+            ),
+        )
+    return portfolio
+
+
+@portfolio_meta_router.post(
+    "/profiles/{profile}/propose-allocation",
+    response_model=JobCreatedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary=(
+        "PR-A26.1 — Run the optimizer in propose mode (CVaR-only "
+        "constraints, IPS bands ignored)"
+    ),
+)
+async def propose_allocation(
+    profile: str,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+    org_id: str = Depends(get_org_id),
+) -> JobCreatedResponse:
+    """Kick off a propose-mode construction run.
+
+    The optimizer runs with maximum freedom subject only to the CVaR
+    target from ``portfolio_calibration`` and the
+    ``excluded_from_portfolio`` flag on ``strategic_allocation``. The
+    cascade still fires the template + coverage gates from PR-A25/A22
+    so structural failures surface before the solver ever runs.
+
+    Returns 202 + job_id. Progress events stream from
+    ``/api/v1/jobs/{job_id}/stream`` and include ``propose_started``,
+    ``optimizer_started``, ``optimizer_phase_complete`` (per phase),
+    and a terminal ``propose_ready`` or ``propose_cvar_infeasible``.
+    The completed proposal can be fetched via
+    ``GET /portfolio/profiles/{profile}/latest-proposal``.
+    """
+    from app.core.jobs.tracker import register_job_owner
+    from app.domains.wealth.workers.construction_run_executor import (
+        execute_construction_run,
+    )
+
+    _require_ic_role(actor)
+
+    profile_lc = profile.strip().lower()
+    if profile_lc not in _PROPOSE_VALID_PROFILES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Unknown profile '{profile}'. Valid: "
+                f"{sorted(_PROPOSE_VALID_PROFILES)}"
+            ),
+        )
+
+    portfolio = await _resolve_propose_target_portfolio(
+        db, organization_id=org_id, profile=profile_lc,
+    )
+
+    job_id = f"propose:{uuid.uuid4()}"
+    await register_job_owner(job_id, str(org_id))
+
+    # Same in-request dispatch shape as the realize-mode /construct
+    # route above — bounded at 120s by execute_construction_run.
+    run = await execute_construction_run(
+        db=db,
+        portfolio_id=portfolio.id,
+        organization_id=org_id,
+        requested_by=actor.actor_id,
+        job_id=job_id,
+        propose_mode=True,
+    )
+
+    return JobCreatedResponse(
+        job_id=job_id,
+        sse_url=f"/api/v1/jobs/{job_id}/stream",
+        run_id=run.id,
+    )
+
+
+@portfolio_meta_router.get(
+    "/profiles/{profile}/latest-proposal",
+    response_model=LatestProposalResponse,
+    summary=(
+        "PR-A26.1 — Fetch the most recent propose-mode allocation for the "
+        "(org, profile) pair"
+    ),
+)
+async def latest_proposal(
+    profile: str,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    org_id: str = Depends(get_org_id),
+) -> LatestProposalResponse:
+    """Return the latest ``run_mode='propose'`` run for the profile.
+
+    404s if no propose run has ever completed for the (org, profile)
+    pair. ``proposed_bands`` carries one entry per canonical block
+    (excluded blocks emit ``target_weight = 0`` with rationale).
+    """
+    profile_lc = profile.strip().lower()
+    if profile_lc not in _PROPOSE_VALID_PROFILES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Unknown profile '{profile}'. Valid: "
+                f"{sorted(_PROPOSE_VALID_PROFILES)}"
+            ),
+        )
+
+    stmt = (
+        select(PortfolioConstructionRun)
+        .join(
+            ModelPortfolio,
+            ModelPortfolio.id == PortfolioConstructionRun.portfolio_id,
+        )
+        .where(
+            PortfolioConstructionRun.run_mode == "propose",
+            ModelPortfolio.profile == profile_lc,
+        )
+        .order_by(PortfolioConstructionRun.requested_at.desc())
+        .limit(1)
+    )
+    run = (await db.execute(stmt)).scalar_one_or_none()
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No propose-mode run found for profile '{profile_lc}'. "
+                "Run POST /portfolio/profiles/{profile}/propose-allocation "
+                "first."
+            ),
+        )
+
+    telemetry = run.cascade_telemetry or {}
+    raw_bands = telemetry.get("proposed_bands") or []
+    raw_metrics = telemetry.get("proposal_metrics") or {}
+    winner_signal = (
+        telemetry.get("winner_signal") or run.status or "unknown"
+    )
+
+    proposed_bands = [
+        ProposedBand(
+            block_id=str(b["block_id"]),
+            target_weight=float(b.get("target_weight") or 0.0),
+            drift_min=float(b.get("drift_min") or 0.0),
+            drift_max=float(b.get("drift_max") or 0.0),
+            rationale=b.get("rationale"),
+        )
+        for b in raw_bands
+    ]
+    proposal_metrics = ProposalMetrics(
+        expected_return=raw_metrics.get("expected_return"),
+        expected_cvar=raw_metrics.get("expected_cvar"),
+        expected_sharpe=raw_metrics.get("expected_sharpe"),
+        target_cvar=raw_metrics.get("target_cvar"),
+        cvar_feasible=bool(raw_metrics.get("cvar_feasible", False)),
+    )
+
+    return LatestProposalResponse(
+        run_id=run.id,
+        requested_at=run.requested_at,
+        winner_signal=winner_signal,
+        proposed_bands=proposed_bands,
+        proposal_metrics=proposal_metrics,
+    )
