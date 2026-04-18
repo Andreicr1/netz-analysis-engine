@@ -125,6 +125,10 @@ def upgrade() -> None:
     )
 
     # ── Step 4 — D3 taxonomy retire ────────────────────────────────
+    # Dropping ``fi_govt`` from ``allocation_blocks`` requires every
+    # FK-referencing row to be dealt with first. Precedent for this
+    # pattern is migration 0144 (legacy fi_aggregate/fi_high_yield/
+    # fi_tips retirement).
     sa_fi_govt = conn.execute(
         sa.text(
             """
@@ -139,6 +143,54 @@ def upgrade() -> None:
             f"(n={sa_fi_govt}); refusing to delete block"
         )
 
+    # benchmark_nav for fi_govt tracks the GOVT ETF; fi_us_treasury
+    # tracks IEF. The two benchmarks are materially different — do
+    # NOT remap rows across them. Delete the fi_govt history; the
+    # canonical series is already being accumulated against
+    # fi_us_treasury by benchmark_ingest.
+    bench_result = conn.execute(
+        sa.text(
+            """
+            DELETE FROM benchmark_nav
+             WHERE block_id = 'fi_govt'
+            """
+        )
+    )
+
+    # funds_universe, tactical_positions: remap to fi_us_treasury —
+    # these are allocation assignments and the new canonical block
+    # carries equivalent semantics.
+    fu_result = conn.execute(
+        sa.text(
+            """
+            UPDATE funds_universe
+               SET block_id = 'fi_us_treasury'
+             WHERE block_id = 'fi_govt'
+            """
+        )
+    )
+    tp_result = conn.execute(
+        sa.text(
+            """
+            UPDATE tactical_positions
+               SET block_id = 'fi_us_treasury'
+             WHERE block_id = 'fi_govt'
+            """
+        )
+    )
+
+    # blended_benchmark_components row for fi_govt was a weight
+    # pointing at the retired benchmark — drop it rather than
+    # remapping (different underlying ticker).
+    bbc_result = conn.execute(
+        sa.text(
+            """
+            DELETE FROM blended_benchmark_components
+             WHERE block_id = 'fi_govt'
+            """
+        )
+    )
+
     drop_result = conn.execute(
         sa.text(
             """
@@ -149,7 +201,11 @@ def upgrade() -> None:
     )
     print(
         "pr_a21_step4_taxonomy_retire "
-        f"rows_deleted={drop_result.rowcount}"
+        f"benchmark_nav_deleted={bench_result.rowcount} "
+        f"funds_universe_remapped={fu_result.rowcount} "
+        f"tactical_positions_remapped={tp_result.rowcount} "
+        f"blended_benchmark_components_deleted={bbc_result.rowcount} "
+        f"allocation_blocks_deleted={drop_result.rowcount}"
     )
 
 

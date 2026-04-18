@@ -197,7 +197,7 @@ def _summarize(report: dict[str, Any]) -> str:
 
 
 async def main() -> None:
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    engine = create_async_engine(settings.database_url, echo=False)
     try:
         async with engine.connect() as conn:
             report = await _collect(conn)
