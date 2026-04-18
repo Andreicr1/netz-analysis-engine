@@ -311,7 +311,6 @@ async def auto_import_for_org(
                 )
                 logger.info(
                     "classifier_needs_review",
-                    event="classifier_needs_review",
                     instrument_id=str(inst["instrument_id"]),
                     ticker=inst.get("ticker") or inst.get("name"),
                     reason=decision_reason,
