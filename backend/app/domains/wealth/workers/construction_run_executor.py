@@ -985,6 +985,72 @@ async def _persist_template_failure(
     )
 
 
+_INSTRUMENT_CONCENTRATION_CAP = 0.15
+
+
+async def _check_instrument_concentration_feasibility(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID | str,
+    profile: str,
+) -> None:
+    """PR-A26.2 Section F — pre-optimizer per-instrument 15% cap check.
+
+    For every canonical block with ``target_weight > 0.15`` we require
+    at least ``ceil(target_weight / 0.15)`` approved instruments in
+    ``instruments_org``. Anything less guarantees the composition layer
+    would have to violate the 15% per-instrument cap to distribute the
+    block's realize weight. Raises :class:`InstrumentConcentrationBreachError`
+    on the first breach (operators get one gap at a time to avoid an
+    avalanche of error detail).
+    """
+    from math import ceil
+
+    from sqlalchemy import text as _sa_text
+
+    # Join SA (target_weight) with instruments_org (approved candidates)
+    # grouped by block_id. ``approval_status = 'approved'`` matches the
+    # live realize-mode universe loader.
+    rows = (
+        await db.execute(
+            _sa_text(
+                """
+                SELECT sa.block_id,
+                       COALESCE(sa.target_weight, 0.0) AS target_weight,
+                       COALESCE(counts.n_approved, 0)  AS n_approved
+                  FROM strategic_allocation sa
+                  LEFT JOIN (
+                       SELECT block_id, COUNT(*) AS n_approved
+                         FROM instruments_org
+                        WHERE organization_id = :org
+                          AND approval_status = 'approved'
+                          AND block_id IS NOT NULL
+                        GROUP BY block_id
+                  ) counts ON counts.block_id = sa.block_id
+                 WHERE sa.organization_id = :org
+                   AND sa.profile = :profile
+                   AND COALESCE(sa.excluded_from_portfolio, false) = false
+                """
+            ),
+            {"org": str(organization_id), "profile": profile},
+        )
+    ).all()
+
+    for block_id, target_weight, n_approved in rows:
+        target = float(target_weight or 0.0)
+        if target <= _INSTRUMENT_CONCENTRATION_CAP:
+            # A single instrument at 15% can fully fund the block.
+            continue
+        required = int(ceil(target / _INSTRUMENT_CONCENTRATION_CAP))
+        if int(n_approved or 0) < required:
+            raise InstrumentConcentrationBreachError(
+                block_id=str(block_id),
+                block_weight=target,
+                required=required,
+                available=int(n_approved or 0),
+            )
+
+
 async def _count_approved_blocks(
     db: AsyncSession, organization_id: uuid.UUID | str, profile: str,
 ) -> tuple[int, int]:
@@ -1693,6 +1759,16 @@ async def _execute_inner(
                 approved_count=approved,
                 total_count=total,
             )
+
+        # PR-A26.2 Section F. Per-instrument 15% cap feasibility.
+        # Refuse to invoke the optimizer when any block's approved
+        # target weight cannot be distributed without breaching the
+        # hard 15% per-instrument ceiling given the approved-universe
+        # count. Ensures the operator never sees a silent optimizer
+        # infeasibility that could be explained structurally.
+        await _check_instrument_concentration_feasibility(
+            db, organization_id=organization_id, profile=profile,
+        )
 
     await _check_cancellation(job_id, "pre_optimizer")
     await _publish_event_sanitized(
