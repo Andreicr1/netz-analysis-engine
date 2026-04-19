@@ -38,7 +38,7 @@ test.describe("PR-A26.3 allocation propose→approve flow", () => {
 		});
 
 		// Step 1 — Navigate to the allocation page.
-		await page.goto(`/portfolio/profiles/${PROFILE}/allocation`);
+		await page.goto(`/allocation/${PROFILE}`);
 		await expect(
 			page.getByRole("heading", { name: /Moderate Allocation/i }),
 		).toBeVisible();

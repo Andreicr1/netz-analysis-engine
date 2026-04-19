@@ -96,9 +96,7 @@
 		class="flex items-center gap-1 text-xs text-muted-foreground mb-3"
 		aria-label="Breadcrumb"
 	>
-		<a href={resolve("/portfolio")} class="hover:text-foreground">Portfolio</a>
-		<ChevronRight class="w-3 h-3" />
-		<a href={resolve("/portfolio/profiles")} class="hover:text-foreground">
+		<a href={resolve("/allocation")} class="hover:text-foreground">
 			Allocations
 		</a>
 		<ChevronRight class="w-3 h-3" />

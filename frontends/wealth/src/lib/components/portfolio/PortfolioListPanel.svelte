@@ -52,7 +52,7 @@
 
 	<!-- PR-A26.3 Section H — entry point to per-profile Strategic IPS. -->
 	<a
-		href={resolve("/portfolio/profiles")}
+		href={resolve("/allocation")}
 		class="plp-allocations-link"
 		title="Review and approve Strategic allocations by profile"
 	>
