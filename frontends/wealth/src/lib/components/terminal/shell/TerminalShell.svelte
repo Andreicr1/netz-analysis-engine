@@ -42,7 +42,13 @@
 	import { resolve } from "$app/paths";
 	import { createClientApiClient } from "$lib/api/client";
 	import TerminalTopNav from "./TerminalTopNav.svelte";
+	import TerminalBreadcrumb from "./TerminalBreadcrumb.svelte";
+	import TerminalTweaksPanel from "./TerminalTweaksPanel.svelte";
 	import TerminalStatusBar from "./TerminalStatusBar.svelte";
+	import {
+		TERMINAL_TWEAKS_KEY,
+		type TerminalTweaks,
+	} from "$lib/stores/terminal-tweaks.svelte";
 	import TerminalContextRail, {
 		type TerminalContextRailEntity,
 		type TerminalContextRailEntityKind,
@@ -79,6 +85,12 @@
 	// Part C hardcodes "connecting" since no streams are mounted.
 	// Phase 5+ will aggregate real TerminalStream subscriptions.
 	const connectionStatus = "connecting" as const;
+
+	// ─── Tweaks (density / accent / theme) ─────────────────────
+	// Bound as data-attributes on the shell root so tokens shipped
+	// in @investintell/ui/tokens/terminal.css activate via attribute
+	// selectors. Store is populated by (terminal)/+layout.svelte.
+	const tweaks = getContext<TerminalTweaks>(TERMINAL_TWEAKS_KEY);
 
 	// ─── DD queue badge count ───────────────────────────────────
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -277,7 +289,14 @@
 	<AlertTicker />
 {/snippet}
 
-<div class="ts-shell" class:ts-shell--has-rail={entity !== null}>
+<div
+	class="ts-shell"
+	class:ts-shell--has-rail={entity !== null}
+	data-surface="terminal"
+	data-density={tweaks?.density ?? "standard"}
+	data-accent={tweaks?.accent ?? "amber"}
+	data-theme={tweaks?.theme ?? "dark"}
+>
 	<div class="ts-nav-row">
 		<TerminalTopNav
 			activePath={page.url.pathname}
@@ -286,6 +305,10 @@
 			{userInitials}
 			{orgName}
 		/>
+	</div>
+
+	<div class="ts-crumb-row">
+		<TerminalBreadcrumb />
 	</div>
 
 	<main class="ts-content">
@@ -313,16 +336,18 @@
 </div>
 
 <CommandPalette bind:open={paletteOpen} />
+<TerminalTweaksPanel />
 
 <style>
 	.ts-shell {
 		position: fixed;
 		inset: 0;
 		display: grid;
-		grid-template-rows: 32px 1fr 28px;
+		grid-template-rows: 32px var(--terminal-shell-breadcrumb-height, 28px) 1fr 28px;
 		grid-template-columns: 1fr;
 		grid-template-areas:
 			"nav"
+			"crumb"
 			"content"
 			"status";
 		height: 100dvh;
@@ -338,12 +363,18 @@
 		grid-template-columns: 1fr 280px;
 		grid-template-areas:
 			"nav nav"
+			"crumb crumb"
 			"content rail"
 			"status status";
 	}
 
 	.ts-nav-row {
 		grid-area: nav;
+		min-width: 0;
+	}
+
+	.ts-crumb-row {
+		grid-area: crumb;
 		min-width: 0;
 	}
 

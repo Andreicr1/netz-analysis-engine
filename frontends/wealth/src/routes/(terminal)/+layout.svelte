@@ -28,6 +28,11 @@
 	} from "$lib/stores/market-data.svelte";
 	import { TERMINAL_MARKET_DATA_KEY } from "$lib/components/portfolio/live/workbench-state";
 	import TerminalShell from "$lib/components/terminal/shell/TerminalShell.svelte";
+	import {
+		createTerminalTweaks,
+		TERMINAL_TWEAKS_KEY,
+		type TerminalTweaks,
+	} from "$lib/stores/terminal-tweaks.svelte";
 
 	let { children }: { children: Snippet } = $props();
 
@@ -38,6 +43,12 @@
 	// the (app) dashboard's store.
 	const marketStore = createMarketDataStore({ getToken });
 	setContext<MarketDataStore>(TERMINAL_MARKET_DATA_KEY, marketStore);
+
+	// Terminal runtime tweaks (density / accent / theme). In-memory,
+	// session-scoped. Consumed by TerminalShell (data-attrs) and
+	// TerminalTweaksPanel (UI controls).
+	const tweaks = createTerminalTweaks();
+	setContext<TerminalTweaks>(TERMINAL_TWEAKS_KEY, tweaks);
 </script>
 
 <TerminalShell>
