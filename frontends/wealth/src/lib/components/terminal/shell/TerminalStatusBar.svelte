@@ -6,7 +6,7 @@
 		§1.4 TerminalShell + layer taxonomy, Appendix C tokens.
 
 	Fixed 28px bottom strip for the terminal shell. Three-zone grid:
-		• Left   — NETZ brand, build SHA, environment (dev/staging
+		• Left   — tenant brand (default II), build SHA, environment (dev/staging
 		           hidden on prod), org name, user initials.
 		• Center — optional `ticker` snippet slot (TerminalShell
 		           injects AlertTicker output here). STANDBY fallback
@@ -103,7 +103,7 @@
 	);
 
 	const displayBuildSha = $derived(buildSha.length > 0 ? buildSha : "local");
-	const displayOrgName = $derived(orgName.length > 0 ? orgName : "—");
+	const displayOrgName = $derived(orgName.length > 0 ? orgName : "II");
 	const displayUserInitials = $derived(
 		userInitials.length > 0 ? userInitials : "—",
 	);
@@ -130,7 +130,7 @@
 
 <footer class="sb-bar" aria-label="Terminal status bar">
 	<div class="sb-cluster sb-cluster--left">
-		<span class="sb-brand">[ NETZ ]</span>
+		<span class="sb-brand">[ {displayOrgName} ]</span>
 		<span class="sb-sep">//</span>
 		<span class="sb-meta">
 			<span class="sb-meta-label">BUILD</span>

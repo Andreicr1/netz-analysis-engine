@@ -206,7 +206,7 @@
 					aria-haspopup="dialog"
 					aria-expanded={showPopover}
 				>
-					<div class="rk-score-label">NETZ SCORE</div>
+					<div class="rk-score-label">SCORE</div>
 					<div class="rk-score-val">
 						{#if risk!.manager_score == null}
 							<span class="rk-na">--</span>
@@ -328,7 +328,7 @@
 					</span>
 				</div>
 				<div class="rk-kpi">
-					<span class="rk-label">Netz Score</span>
+					<span class="rk-label">Score</span>
 					<span class="rk-value">
 						{risk!.manager_score != null ? formatNumber(risk!.manager_score, 0) + "/100" : "--"}
 					</span>

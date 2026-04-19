@@ -5,7 +5,7 @@
 
   Shows the 8 KPI fields removed from the lean Universe table:
   AUM, 3Y Return, Risk-Adjusted Return, Max Drawdown, Correlation
-  to Portfolio, Momentum, Liquidity, and Netz Score — plus Ticker
+  to Portfolio, Momentum, Liquidity, and Score — plus Ticker
   and Asset Class for context.
 
   Phase 11 "Million Dollar" refactor — dedicated viewer pattern.
@@ -161,7 +161,7 @@
 				</div>
 
 				<div class="fdd-kpi fdd-kpi--accent">
-					<span class="fdd-kpi-label">Netz Score</span>
+					<span class="fdd-kpi-label">Score</span>
 					<span class="fdd-kpi-value fdd-kpi-value--score">{fmt(fund.manager_score ?? null, "score")}</span>
 				</div>
 			</div>

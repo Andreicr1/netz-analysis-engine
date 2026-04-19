@@ -94,7 +94,7 @@
 	// ─── Clerk context placeholders ─────────────────────────────
 	// Phase 2+ wires real Clerk user/org when the SvelteKit SDK
 	// stabilizes. Ship with placeholders per escape hatch #7.
-	const orgName = "NETZ";
+	const orgName = "II";
 	const userInitials = "AR";
 
 	// ─── Connection status ──────────────────────────────────────
