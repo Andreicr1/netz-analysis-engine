@@ -83,8 +83,10 @@ def _make_allocation(
     a.organization_id = org_id
     a.block_id = block_id
     a.target_weight = Decimal(str(target))
-    a.min_weight = Decimal(str(min_w))
-    a.max_weight = Decimal(str(max_w))
+    # PR-A26.2 — legacy ``min_weight/max_weight`` replaced by
+    # ``drift_min/drift_max`` on the ORM.
+    a.drift_min = Decimal(str(min_w))
+    a.drift_max = Decimal(str(max_w))
     a.effective_to = None
     return a
 

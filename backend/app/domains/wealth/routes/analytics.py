@@ -283,11 +283,13 @@ async def optimize(
         return OptimizeResult(**cached)
 
     # Build constraints from strategic allocation
+    # PR-A26.2 — the legacy ``min_weight/max_weight`` columns were dropped;
+    # realize-mode optimization now reads the approved drift band.
     block_constraints = [
         BlockConstraint(
             block_id=a.block_id,
-            min_weight=float(a.min_weight),
-            max_weight=float(a.max_weight),
+            min_weight=float(a.drift_min) if a.drift_min is not None else 0.0,
+            max_weight=float(a.drift_max) if a.drift_max is not None else 1.0,
         )
         for a in allocations
     ]
@@ -382,7 +384,11 @@ async def optimize_pareto(
     )
     frozen_cov = cov_matrix.tolist()
     frozen_constraints = [
-        {"block_id": a.block_id, "min_weight": float(a.min_weight), "max_weight": float(a.max_weight)}
+        {
+            "block_id": a.block_id,
+            "min_weight": float(a.drift_min) if a.drift_min is not None else 0.0,
+            "max_weight": float(a.drift_max) if a.drift_max is not None else 1.0,
+        }
         for a in allocations
     ]
     profile = body.profile

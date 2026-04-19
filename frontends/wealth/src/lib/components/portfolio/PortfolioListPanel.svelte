@@ -10,10 +10,12 @@
   "+ New Portfolio" is pinned at the top (never scrolls away).
 -->
 <script lang="ts">
+	import { resolve } from "$app/paths";
 	import { StatusBadge, formatDateTime } from "@investintell/ui";
 	import Plus from "lucide-svelte/icons/plus";
 	import ChevronDown from "lucide-svelte/icons/chevron-down";
 	import ChevronRight from "lucide-svelte/icons/chevron-right";
+	import SlidersHorizontal from "lucide-svelte/icons/sliders-horizontal";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 	import { profileColor } from "$lib/types/model-portfolio";
 	import { portfolioDisplayName } from "$lib/constants/blocks";
@@ -47,6 +49,16 @@
 			<span>New</span>
 		</button>
 	</div>
+
+	<!-- PR-A26.3 Section H — entry point to per-profile Strategic IPS. -->
+	<a
+		href={resolve("/allocation")}
+		class="plp-allocations-link"
+		title="Review and approve Strategic allocations by profile"
+	>
+		<SlidersHorizontal size={14} />
+		<span>Allocations</span>
+	</a>
 
 	<!-- Scrollable list -->
 	<div class="plp-list" role="listbox" aria-label="Model portfolios">
@@ -207,6 +219,28 @@
 	.plp-new-btn:focus-visible {
 		outline: 2px solid #2d7ef7;
 		outline-offset: 2px;
+	}
+
+	/* PR-A26.3 Section H — Allocations entry link. */
+	.plp-allocations-link {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 0 12px 4px 12px;
+		padding: 8px 10px;
+		border-radius: 6px;
+		font-size: 12px;
+		font-weight: 500;
+		color: rgba(255, 255, 255, 0.75);
+		background: rgba(255, 255, 255, 0.03);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		text-decoration: none;
+		transition: background-color 120ms ease, border-color 120ms ease;
+	}
+	.plp-allocations-link:hover {
+		background: rgba(255, 255, 255, 0.08);
+		border-color: rgba(255, 255, 255, 0.25);
+		color: rgba(255, 255, 255, 0.95);
 	}
 
 	/* ── Scrollable list ────────────────────────────────────── */

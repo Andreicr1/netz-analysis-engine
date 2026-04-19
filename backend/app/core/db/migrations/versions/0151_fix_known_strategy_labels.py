@@ -140,7 +140,7 @@ def upgrade() -> None:
                    SET attributes = jsonb_set(
                        COALESCE(attributes, '{}'::jsonb),
                        '{strategy_label}',
-                       to_jsonb(:label::text),
+                       to_jsonb(CAST(:label AS text)),
                        true
                    )
                  WHERE ticker = :ticker

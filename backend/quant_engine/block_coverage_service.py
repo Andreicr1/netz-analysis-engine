@@ -77,10 +77,13 @@ _STRATEGIC_ALLOCATION_SQL = text(
 _APPROVED_COUNT_SQL = text(
     """
     SELECT COUNT(*)
-      FROM instruments_org
-     WHERE organization_id = :organization_id
-       AND block_id = :block_id
-       AND approval_status = 'approved'
+      FROM instruments_org io
+      JOIN instruments_universe iu
+        ON iu.instrument_id = io.instrument_id
+     WHERE io.organization_id = :organization_id
+       AND io.approval_status = 'approved'
+       AND iu.is_active = TRUE
+       AND iu.attributes->>'strategy_label' = ANY(CAST(:labels AS text[]))
     """
 )
 
@@ -113,11 +116,13 @@ async def _count_approved(
     db: AsyncSession,
     *,
     organization_id: uuid.UUID,
-    block_id: str,
+    labels: list[str],
 ) -> int:
+    if not labels:
+        return 0
     row = await db.execute(
         _APPROVED_COUNT_SQL,
-        {"organization_id": organization_id, "block_id": block_id},
+        {"organization_id": organization_id, "labels": labels},
     )
     return int(row.scalar_one() or 0)
 
@@ -166,14 +171,14 @@ async def validate_block_coverage(
     gaps: list[BlockCoverageGap] = []
     weight_at_risk = 0.0
     for block_id, target_weight in rows:
+        labels = strategy_labels_for_block(block_id)
         n_candidates = await _count_approved(
             db,
             organization_id=organization_id,
-            block_id=block_id,
+            labels=labels,
         )
         if n_candidates > 0:
             continue
-        labels = strategy_labels_for_block(block_id)
         catalog_count, example_tickers = await _catalog_snapshot(
             db, labels=labels,
         )
