@@ -37,15 +37,25 @@
  *      Catches drift in the opposite direction: someone adds a
  *      new accent color in CSS but forgets the SSR fallback.
  *
+ *   D. No forbidden patterns inside the terminal route + component
+ *      surfaces. Complements the ESLint formatter rules (which
+ *      handle `.toFixed`, `Intl.*`) by catching patterns ESLint
+ *      cannot cheaply express: raw hex color literals in `.svelte`
+ *      files, client-side persistence (`localStorage` /
+ *      `sessionStorage`), native `new EventSource` (auth-header
+ *      unsafe — must use `fetch` + `ReadableStream`), and emoji
+ *      glyphs (see `feedback_no_emojis.md`). Scoped to the 4
+ *      terminal route dirs + shared component dir.
+ *
  * Failure exits with code 1 — wired into pnpm/turbo lint and
  * backend `make check` so PRs cannot land in a drifted state.
  *
  * Pure Node, no dependencies. Runs on the bare runtime.
  */
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, relative, join, extname } from "node:path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -229,18 +239,177 @@ function main() {
 		}
 	}
 
+	// ── Invariant D — no forbidden patterns in terminal surfaces ──
+	const routeScanErrors = scanRouteSurfaces();
+	errors.push(...routeScanErrors);
+
 	if (errors.length > 0) {
-		console.error("[token-sync] terminal token drift detected:\n");
+		console.error("[token-sync] terminal drift detected:\n");
 		for (const e of errors) console.error(`  - ${e}`);
 		console.error(
-			`\n[token-sync] FAIL — fix terminal.css or terminal-options.ts so the two surfaces match.`,
+			`\n[token-sync] FAIL — fix terminal.css, terminal-options.ts, or the offending terminal route/component files.`,
 		);
 		process.exit(1);
 	}
 
 	console.log(
-		`[token-sync] OK — ${cssTokens.size} CSS tokens, ${readVarRefs.size} readVar references, ${defaultKeys.size} DEFAULT_TOKENS keys are in sync.`,
+		`[token-sync] OK — ${cssTokens.size} CSS tokens, ${readVarRefs.size} readVar references, ${defaultKeys.size} DEFAULT_TOKENS keys are in sync; forbidden-pattern scan passed.`,
 	);
+}
+
+// ── Invariant D — route-dir forbidden-pattern scan ─────────
+
+/**
+ * Directories covered by the terminal forbidden-pattern sweep.
+ * Paths relative to REPO_ROOT. Must stay in sync with the route
+ * surface declared in each terminal parity plan (currently
+ * docs/plans/2026-04-19-netz-terminal-parity-builder-macro-screener.md §D).
+ */
+const ROUTE_SCAN_DIRS = [
+	"frontends/wealth/src/routes/(terminal)/portfolio/live",
+	"frontends/wealth/src/routes/(terminal)/portfolio/builder",
+	"frontends/wealth/src/routes/(terminal)/terminal-screener",
+	"frontends/wealth/src/routes/(terminal)/macro",
+	"frontends/wealth/src/lib/components/terminal",
+];
+
+const SCAN_EXTENSIONS = new Set([".svelte", ".ts"]);
+const SKIP_DIR_NAMES = new Set([
+	"node_modules",
+	".svelte-kit",
+	"build",
+	"dist",
+	".turbo",
+]);
+
+/**
+ * Each rule returns an array of `{ line, match }` hits against the
+ * file's text. `.svelte`-only rules are gated by `svelteOnly: true`.
+ * Patterns already enforced by ESLint (`.toFixed`, `.toLocaleString`,
+ * `new Intl.*`) are deliberately NOT duplicated here.
+ */
+const FORBIDDEN_PATTERNS = [
+	{
+		label: "hex color literal",
+		svelteOnly: true,
+		re: /#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b/g,
+		note: "use --terminal-* CSS custom property",
+	},
+	{
+		label: "localStorage",
+		// Match real access only (`.foo`, `[...]`, or `()`) to avoid
+		// flagging the word inside "Zero localStorage" comments.
+		re: /\blocalStorage\s*(?:\.|\[|\()/g,
+		note: "terminal surfaces are in-memory only (see feedback_echarts_no_localstorage.md)",
+	},
+	{
+		label: "sessionStorage",
+		re: /\bsessionStorage\s*(?:\.|\[|\()/g,
+		note: "terminal surfaces are in-memory only",
+	},
+	{
+		label: "new EventSource",
+		re: /new\s+EventSource\s*\(/g,
+		note: "use fetch() + ReadableStream (auth headers required)",
+	},
+	{
+		label: "emoji glyph",
+		// Actual pictograph planes only — Misc Symbols & Pictographs
+		// + Supplemental + Dingbats. Deliberately excludes Misc
+		// Technical (U+2300-23FF, e.g. ⌘ ⏎ ⌥) and Arrows, which are
+		// legitimate keyboard glyphs in Kbd components.
+		re: /[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1FAFF}\u{2700}-\u{27BF}]/gu,
+		note: "terminal is text-only (see feedback_no_emojis.md)",
+	},
+];
+
+function scanRouteSurfaces() {
+	const errors = [];
+	for (const relDir of ROUTE_SCAN_DIRS) {
+		const absDir = resolve(REPO_ROOT, relDir);
+		if (!existsSync(absDir)) continue; // dir may not exist yet — routes land per-PR
+		for (const absFile of walkFiles(absDir)) {
+			const ext = extname(absFile);
+			if (!SCAN_EXTENSIONS.has(ext)) continue;
+			const rel = relative(REPO_ROOT, absFile).replaceAll("\\", "/");
+			const text = readFileSync(absFile, "utf8");
+			for (const rule of FORBIDDEN_PATTERNS) {
+				if (rule.svelteOnly && ext !== ".svelte") continue;
+				const hits = findHits(text, rule.re, ext);
+				for (const hit of hits) {
+					errors.push(
+						`D. ${rel}:${hit.line} forbidden ${rule.label} "${hit.match}" — ${rule.note}`,
+					);
+				}
+			}
+		}
+	}
+	return errors;
+}
+
+function walkFiles(absDir) {
+	const out = [];
+	const stack = [absDir];
+	while (stack.length) {
+		const current = stack.pop();
+		let entries;
+		try {
+			entries = readdirSync(current);
+		} catch {
+			continue;
+		}
+		for (const name of entries) {
+			if (SKIP_DIR_NAMES.has(name)) continue;
+			const abs = join(current, name);
+			let st;
+			try {
+				st = statSync(abs);
+			} catch {
+				continue;
+			}
+			if (st.isDirectory()) stack.push(abs);
+			else if (st.isFile()) out.push(abs);
+		}
+	}
+	return out;
+}
+
+function findHits(text, re, ext) {
+	const hits = [];
+	// For .svelte files we must skip the <style> block: hex literals
+	// are legitimate inside scoped component styles since Svelte's
+	// scoped CSS output is not the token catalog. We only enforce the
+	// no-hex rule in script + template regions.
+	const scanText = ext === ".svelte" ? stripStyleBlocks(text) : text;
+	re.lastIndex = 0;
+	let m;
+	while ((m = re.exec(scanText)) !== null) {
+		if (m[0] === "") {
+			re.lastIndex++;
+			continue;
+		}
+		hits.push({
+			line: offsetToLine(scanText, m.index),
+			match: m[0],
+		});
+	}
+	return hits;
+}
+
+function stripStyleBlocks(text) {
+	// Replace <style ...>...</style> with equivalent-length blanks so
+	// line numbers stay accurate for reports.
+	return text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, (block) =>
+		block.replace(/[^\n]/g, " "),
+	);
+}
+
+function offsetToLine(text, offset) {
+	let line = 1;
+	for (let i = 0; i < offset && i < text.length; i++) {
+		if (text[i] === "\n") line++;
+	}
+	return line;
 }
 
 main();
