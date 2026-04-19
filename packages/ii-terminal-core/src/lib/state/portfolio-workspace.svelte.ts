@@ -5,10 +5,10 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
-import { createClientApiClient } from "$wealth/api/client";
-import { BLOCK_LABELS } from "$wealth/constants/blocks";
-import { parseSseStream } from "$wealth/util/sse-reader";
-import type { BuildAccepted, BuildEvent, BuildPhase } from "$wealth/types/portfolio-build";
+import { createClientApiClient } from "../api/client";
+import { BLOCK_LABELS } from "../constants/blocks";
+import { parseSseStream } from "../utils/sse-reader";
+import type { BuildAccepted, BuildEvent, BuildPhase } from "../types/portfolio-build";
 import type {
 	ModelPortfolio,
 	NAVPoint,
@@ -19,32 +19,32 @@ import type {
 	TrackRecord,
 	OverlapResult,
 	ConstructionAdvice,
-} from "$wealth/types/model-portfolio";
+} from "../types/model-portfolio";
 import type {
 	AttributionResult,
 	StrategyDriftAlert,
 	CorrelationRegimeResult,
 	RiskBudgetResult,
-} from "$wealth/types/analytics";
+} from "../types/analytics";
 import type {
 	PortfolioCalibration,
 	PortfolioCalibrationUpdate,
-} from "$wealth/types/portfolio-calibration";
+} from "../types/portfolio-calibration";
 import type {
 	PortfolioAlertCount,
 	UnifiedAlertInbox,
-} from "$wealth/types/alerts";
+} from "../types/alerts";
 import type {
 	CascadeTelemetry,
 	AchievableReturnBand,
 	OperatorSignal,
 	PreviewCvarResponse,
-} from "$wealth/types/cascade-telemetry";
+} from "../types/cascade-telemetry";
 import type {
 	RegimeBands,
 	TaaHistory,
 	EffectiveAllocationWithRegime,
-} from "$wealth/types/taa";
+} from "../types/taa";
 
 /**
  * Phase 3 Run Construct response payload — flat dict returned from

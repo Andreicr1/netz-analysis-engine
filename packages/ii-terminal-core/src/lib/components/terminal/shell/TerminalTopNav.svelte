@@ -36,7 +36,7 @@
 	import { resolve } from "$app/paths";
 	import { goto } from "$app/navigation";
 	import { getContext, onDestroy } from "svelte";
-	import { createClientApiClient } from "$wealth/api/client";
+	import { createClientApiClient } from "../../../api/client";
 
 	// Resolved hrefs for the 6 F-key tabs. The lint rule
 	// `svelte/no-navigation-without-resolve` rejects any href that is

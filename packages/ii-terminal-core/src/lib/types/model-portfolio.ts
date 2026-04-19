@@ -222,7 +222,7 @@ export interface ParametricStressResult {
 }
 
 /** Human-readable labels for allocation block IDs — re-exported from canonical source */
-export { blockLabel } from "$wealth/constants/blocks";
+export { blockLabel } from "../constants/blocks";
 
 /** Holdings overlap analysis result from GET /model-portfolios/{id}/overlap */
 export interface CusipExposure {

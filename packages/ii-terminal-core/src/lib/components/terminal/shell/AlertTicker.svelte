@@ -27,7 +27,7 @@
 	import {
 		createTerminalStream,
 		type TerminalStreamHandle,
-	} from "$wealth/components/terminal/runtime/stream";
+	} from "../../../components/terminal/runtime/stream";
 
 	type AlertSeverity = "info" | "warn" | "error" | "critical";
 

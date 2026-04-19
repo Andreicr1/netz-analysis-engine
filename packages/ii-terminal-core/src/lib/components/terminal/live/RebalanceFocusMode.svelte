@@ -8,8 +8,8 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { formatPercent, formatCurrency } from "@investintell/ui";
-	import { createClientApiClient } from "$wealth/api/client";
-	import FocusMode from "$wealth/components/terminal/focus-mode/FocusMode.svelte";
+	import { createClientApiClient } from "../../../api/client";
+	import FocusMode from "../../../components/terminal/focus-mode/FocusMode.svelte";
 	import TradeConfirmation from "./TradeConfirmation.svelte";
 
 	interface Props {

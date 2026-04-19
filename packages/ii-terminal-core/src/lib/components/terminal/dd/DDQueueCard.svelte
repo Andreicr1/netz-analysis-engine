@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
 	import { formatDateTime, formatPercent } from "@investintell/ui";
-	import LiveDot from "$wealth/components/terminal/data/LiveDot.svelte";
+	import LiveDot from "../../../components/terminal/data/LiveDot.svelte";
 
 	interface DDQueueCardProps {
 		id: string;

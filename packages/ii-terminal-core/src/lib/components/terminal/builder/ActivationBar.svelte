@@ -7,7 +7,7 @@
 <script lang="ts">
 	import { fly } from "svelte/transition";
 	import { svelteTransitionFor } from "@investintell/ui";
-	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
+	import { workspace } from "../../../state/portfolio-workspace.svelte";
 	import ConsequenceDialog from "./ConsequenceDialog.svelte";
 
 	interface Props {

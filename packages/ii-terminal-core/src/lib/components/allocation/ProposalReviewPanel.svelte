@@ -20,14 +20,14 @@
 		readTerminalTokens,
 	} from "@investintell/ui";
 	import { CheckCircle2, AlertTriangle } from "lucide-svelte";
-	import GenericEChart from "$wealth/components/charts/GenericEChart.svelte";
+	import GenericEChart from "../../components/charts/GenericEChart.svelte";
 	import CascadeTimeline from "./CascadeTimeline.svelte";
 	import type {
 		AllocationProfile,
 		ApproveProposalRequest,
 		LatestProposalResponse,
 		StrategicAllocationBlock,
-	} from "$wealth/types/allocation-page";
+	} from "../../types/allocation-page";
 
 	interface Props {
 		profile: AllocationProfile;

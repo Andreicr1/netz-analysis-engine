@@ -2,7 +2,7 @@
 	import { getContext, onMount } from "svelte";
 	import { formatNumber } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
-	import { createClientApiClient } from "$wealth/api/client";
+	import { createClientApiClient } from "../../../api/client";
 	import ScoreCompositionPanel from "./ScoreCompositionPanel.svelte";
 
 	interface Props {

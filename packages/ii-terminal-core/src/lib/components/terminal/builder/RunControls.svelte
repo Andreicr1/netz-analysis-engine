@@ -5,7 +5,7 @@
   workspace.runPhase. Compare dropdown stub for Session 3.
 -->
 <script lang="ts">
-	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
+	import { workspace } from "../../../state/portfolio-workspace.svelte";
 
 	interface Props {
 		onRunComplete?: () => void;

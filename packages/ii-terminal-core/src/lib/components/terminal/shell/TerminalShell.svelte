@@ -40,7 +40,7 @@
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
-	import { createClientApiClient } from "$wealth/api/client";
+	import { createClientApiClient } from "../../../api/client";
 	import TerminalTopNav from "./TerminalTopNav.svelte";
 	import TerminalBreadcrumb from "./TerminalBreadcrumb.svelte";
 	import TerminalTweaksPanel from "./TerminalTweaksPanel.svelte";
@@ -48,9 +48,9 @@
 	import {
 		TERMINAL_TWEAKS_KEY,
 		type TerminalTweaks,
-	} from "$wealth/stores/terminal-tweaks.svelte";
-	import { TERMINAL_MARKET_DATA_KEY } from "$wealth/components/portfolio/live/workbench-state";
-	import type { MarketDataStore, WsStatus } from "$wealth/stores/market-data.svelte";
+	} from "../../../stores/terminal-tweaks.svelte";
+	import { TERMINAL_MARKET_DATA_KEY } from "../../../components/portfolio/live/workbench-state";
+	import type { MarketDataStore, WsStatus } from "../../../stores/market-data.svelte";
 	import type { TerminalStatusBarConnectionStatus } from "./TerminalStatusBar.svelte";
 	import TerminalContextRail, {
 		type TerminalContextRailEntity,

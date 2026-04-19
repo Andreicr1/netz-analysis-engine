@@ -7,7 +7,7 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { formatPercent, formatTime } from "@investintell/ui";
-	import { createClientApiClient } from "$wealth/api/client";
+	import { createClientApiClient } from "../../../api/client";
 
 	interface Props {
 		portfolioId: string | null;

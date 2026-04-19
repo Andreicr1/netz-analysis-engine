@@ -42,8 +42,8 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { formatNumber, readTerminalTokens, TerminalMiniSparkline } from "@investintell/ui";
-	import { focusTrigger } from "$wealth/components/terminal/focus-mode/focus-trigger";
-	import { createClientApiClient } from "$wealth/api/client";
+	import { focusTrigger } from "../../components/terminal/focus-mode/focus-trigger";
+	import { createClientApiClient } from "../../api/client";
 
 	const ROW_HEIGHT = 32;
 	const OVERSCAN = 5;

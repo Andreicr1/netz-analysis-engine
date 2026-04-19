@@ -31,7 +31,7 @@
 	import type {
 		CascadePhaseAttempt,
 		CoverageSummary,
-	} from "$wealth/types/allocation-page";
+	} from "../../types/allocation-page";
 
 	export type CascadeTimelineMode = "live" | "settled";
 

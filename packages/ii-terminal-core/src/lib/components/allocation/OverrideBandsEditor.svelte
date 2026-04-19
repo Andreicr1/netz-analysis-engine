@@ -14,7 +14,7 @@
 		AllocationProfile,
 		SetOverrideRequest,
 		StrategicAllocationBlock,
-	} from "$wealth/types/allocation-page";
+	} from "../../types/allocation-page";
 
 	interface Props {
 		profile: AllocationProfile;

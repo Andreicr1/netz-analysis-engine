@@ -7,8 +7,8 @@
 -->
 <script lang="ts">
 	import { formatNumber, formatPercent, createTerminalChartOptions, readTerminalTokens } from "@investintell/ui";
-	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
-	import TerminalChart from "$wealth/components/terminal/charts/TerminalChart.svelte";
+	import { workspace } from "../../../state/portfolio-workspace.svelte";
+	import TerminalChart from "../../../components/terminal/charts/TerminalChart.svelte";
 	import type { EChartsOption } from "echarts";
 
 	// Fetch on mount

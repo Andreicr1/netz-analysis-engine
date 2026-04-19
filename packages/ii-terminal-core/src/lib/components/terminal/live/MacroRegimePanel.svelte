@@ -8,7 +8,7 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { formatPercent, formatNumber, formatBps } from "@investintell/ui";
-	import { createClientApiClient } from "$wealth/api/client";
+	import { createClientApiClient } from "../../../api/client";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);

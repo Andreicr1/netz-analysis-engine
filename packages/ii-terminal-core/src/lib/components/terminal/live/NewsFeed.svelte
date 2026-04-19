@@ -8,7 +8,7 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { formatTime } from "@investintell/ui";
-	import { createClientApiClient } from "$wealth/api/client";
+	import { createClientApiClient } from "../../../api/client";
 
 	interface Props {
 		tickers: string[];

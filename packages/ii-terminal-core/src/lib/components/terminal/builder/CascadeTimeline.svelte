@@ -8,8 +8,8 @@
   Connector rail fills left-to-right as phases complete.
 -->
 <script lang="ts">
-	import type { CascadePhase } from "$wealth/state/portfolio-workspace.svelte";
-	import type { BuildPhase } from "$wealth/types/portfolio-build";
+	import type { CascadePhase } from "../../../state/portfolio-workspace.svelte";
+	import type { BuildPhase } from "../../../types/portfolio-build";
 	import { formatNumber } from "@investintell/ui";
 
 	interface Props {

@@ -13,12 +13,12 @@
 		formatPercent,
 		readTerminalTokens,
 	} from "@investintell/ui";
-	import GenericEChart from "$wealth/components/charts/GenericEChart.svelte";
+	import GenericEChart from "../../components/charts/GenericEChart.svelte";
 	import {
 		blockFamily,
 		type BlockFamily,
 		type StrategicAllocationBlock,
-	} from "$wealth/types/allocation-page";
+	} from "../../types/allocation-page";
 
 	interface Props {
 		blocks: StrategicAllocationBlock[];

@@ -7,10 +7,10 @@
 -->
 <script lang="ts">
 	import { formatDateTime } from "@investintell/ui";
-	import LiveDot from "$wealth/components/terminal/data/LiveDot.svelte";
-	import KeyValueStrip from "$wealth/components/terminal/data/KeyValueStrip.svelte";
-	import { chapterTitle } from "$wealth/types/dd-report";
-	import { renderMarkdown, flattenObject } from "$wealth/utils/render-markdown";
+	import LiveDot from "../../../components/terminal/data/LiveDot.svelte";
+	import KeyValueStrip from "../../../components/terminal/data/KeyValueStrip.svelte";
+	import { chapterTitle } from "../../../types/dd-report";
+	import { renderMarkdown, flattenObject } from "../../../utils/render-markdown";
 
 	interface DDChapterSectionProps {
 		chapterTag: string;

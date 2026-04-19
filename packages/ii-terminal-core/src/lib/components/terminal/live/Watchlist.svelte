@@ -11,9 +11,9 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { formatPercent, formatCurrency } from "@investintell/ui";
-	import type { MarketDataStore, PriceTick } from "$wealth/stores/market-data.svelte";
-	import { TERMINAL_MARKET_DATA_KEY } from "$wealth/components/portfolio/live/workbench-state";
-	import { createClientApiClient } from "$wealth/api/client";
+	import type { MarketDataStore, PriceTick } from "../../../stores/market-data.svelte";
+	import { TERMINAL_MARKET_DATA_KEY } from "../../../components/portfolio/live/workbench-state";
+	import { createClientApiClient } from "../../../api/client";
 
 	export interface WatchlistItem {
 		ticker: string;
