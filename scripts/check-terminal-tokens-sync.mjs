@@ -47,6 +47,16 @@
  *      glyphs (see `feedback_no_emojis.md`). Scoped to the 4
  *      terminal route dirs + shared component dir.
  *
+ *   G. User-visible strings in terminal chrome (top nav brand,
+ *      status bar brand, aria-labels, alt, placeholder, title
+ *      attributes, and visible text nodes) MUST NOT contain the
+ *      hardcoded tenant name "Netz" / "NETZ". Product chrome
+ *      defaults to "II" (InvestIntell); tenant branding comes in
+ *      at runtime via the orgName prop from the Clerk actor.
+ *      Comments, context keys ("netz:getToken"), and path
+ *      references to docs/ux/Netz Terminal/ are explicitly
+ *      whitelisted — they are not user-visible strings.
+ *
  * Failure exits with code 1 — wired into pnpm/turbo lint and
  * backend `make check` so PRs cannot land in a drifted state.
  *
@@ -250,6 +260,10 @@ function main() {
 	// ── Invariant F — terminal routes must not use shadcn classes ─
 	const terminalShadcnErrors = scanTerminalRoutesForShadcn();
 	errors.push(...terminalShadcnErrors);
+
+	// ── Invariant G — no hardcoded Netz in user-visible chrome ──
+	const brandErrors = scanChromeBrandLeaks();
+	errors.push(...brandErrors);
 
 	if (errors.length > 0) {
 		console.error("[token-sync] terminal drift detected:\n");
@@ -609,6 +623,163 @@ function scanTerminalRoutesForShadcn() {
 				const line = offsetToLine(scanText, m.index);
 				errors.push(
 					`F. ${rel}:${line} forbidden shadcn class "${m[0]}" — use terminal-native CSS via surfaces/*.css or var(--terminal-*)`,
+				);
+			}
+		}
+	}
+	return errors;
+}
+
+// ── Invariant G — chrome brand-leak scan ──────────────────
+//
+// The terminal app + shared terminal component surface must not carry
+// hardcoded "Netz" / "NETZ" in any user-visible string. "Netz" is a
+// tenant (injected at runtime via the orgName prop from the Clerk
+// actor), not the product brand. Product chrome defaults to "II".
+//
+// Scan targets:
+//   1. frontends/terminal/src/**/*.{svelte,ts,html}
+//   2. frontends/wealth/src/lib/components/terminal/**/*.{svelte,ts}
+//        — these components are shared via $wealth/* into the II
+//          terminal app, so any hardcoded Netz bleeds into the
+//          product chrome.
+//   3. A small allowlist of additional wealth components that render
+//      Score/brand labels into the terminal surface.
+//
+// For each file we strip comments (//, /* */, <!-- -->) and <style>
+// blocks, then match:
+//   - `>…Netz…<` visible text nodes
+//   - `aria-label="…Netz…"`, `alt="…Netz…"`, `placeholder="…Netz…"`,
+//     `title="…Netz…"`
+//   - bare "Netz" / "NETZ" string literals in scripts (single or
+//     double-quoted; backtick templates included)
+// A narrow whitelist lets through `netz:getToken` (context key —
+// internal app IP, not user-visible) and literal path references to
+// `docs/ux/Netz Terminal/`.
+
+const CHROME_SCAN_ROOTS = [
+	"frontends/terminal/src",
+	"frontends/wealth/src/lib/components/terminal",
+	"frontends/wealth/src/lib/components/research/terminal",
+];
+
+const CHROME_SCAN_FILES = [
+	"frontends/wealth/src/lib/components/portfolio/FundDetailsDrawer.svelte",
+	"frontends/wealth/src/lib/components/screener/FundFactSheetContent.svelte",
+];
+
+const CHROME_SCAN_EXTENSIONS = new Set([".svelte", ".ts", ".html"]);
+
+/** Strip // line, /* block, and <!-- HTML --> comments so comment
+ *  prose that mentions "Netz" never trips Invariant G. Keeps line
+ *  counts stable by replacing non-newline chars inside matches with
+ *  spaces. */
+function stripCommentary(text, ext) {
+	let out = text;
+	// Block CSS/JS comments
+	out = out.replace(/\/\*[\s\S]*?\*\//g, (block) =>
+		block.replace(/[^\n]/g, " "),
+	);
+	// HTML comments (only meaningful inside .svelte/.html)
+	if (ext === ".svelte" || ext === ".html") {
+		out = out.replace(/<!--[\s\S]*?-->/g, (block) =>
+			block.replace(/[^\n]/g, " "),
+		);
+	}
+	// Line comments (JS/TS only — inside .svelte these only appear in
+	// <script> regions but the regex is safe: it won't match inside a
+	// CSS block comment because those were already blanked above).
+	out = out.replace(/(^|[^:])\/\/[^\n]*/g, (match, pfx) =>
+		pfx + " ".repeat(match.length - pfx.length),
+	);
+	return out;
+}
+
+const CHROME_WHITELIST_PATTERNS = [
+	/netz:getToken/,               // context key — internal app IP
+	/docs\/ux\/Netz Terminal/,     // reference path to the bundle source
+	/netz-analysis-engine/,        // repo name
+];
+
+function isChromeWhitelisted(lineText) {
+	return CHROME_WHITELIST_PATTERNS.some((re) => re.test(lineText));
+}
+
+const CHROME_BRAND_RULES = [
+	{
+		label: "aria-label",
+		re: /aria-label\s*=\s*(["'`])[^"'`]*\b[Nn][Ee][Tt][Zz]\b[^"'`]*\1/g,
+	},
+	{
+		label: "alt attribute",
+		re: /\balt\s*=\s*(["'`])[^"'`]*\b[Nn][Ee][Tt][Zz]\b[^"'`]*\1/g,
+	},
+	{
+		label: "placeholder attribute",
+		re: /\bplaceholder\s*=\s*(["'`])[^"'`]*\b[Nn][Ee][Tt][Zz]\b[^"'`]*\1/g,
+	},
+	{
+		label: "title attribute",
+		re: /\btitle\s*=\s*(["'`])[^"'`]*\b[Nn][Ee][Tt][Zz]\b[^"'`]*\1/g,
+	},
+	{
+		label: "visible text node",
+		// Matches a character between `>` and `<` that contains a
+		// word "Netz" / "NETZ". Skips tag-internal content.
+		re: />[^<]*\b(?:Netz|NETZ)\b[^<]*</g,
+	},
+	{
+		label: "string literal brand",
+		// "Netz" / "NETZ" / 'Netz' / 'NETZ' / `Netz` / `NETZ` as a
+		// whole-word token inside a quoted literal.
+		re: /(["'`])\b(?:Netz|NETZ)\b\1/g,
+	},
+];
+
+function scanChromeBrandLeaks() {
+	const errors = [];
+
+	const targets = [];
+	for (const rel of CHROME_SCAN_ROOTS) {
+		const abs = resolve(REPO_ROOT, rel);
+		if (!existsSync(abs)) continue;
+		for (const file of walkFiles(abs)) {
+			if (CHROME_SCAN_EXTENSIONS.has(extname(file))) targets.push(file);
+		}
+	}
+	for (const rel of CHROME_SCAN_FILES) {
+		const abs = resolve(REPO_ROOT, rel);
+		if (existsSync(abs)) targets.push(abs);
+	}
+
+	for (const absFile of targets) {
+		const ext = extname(absFile);
+		const rel = relative(REPO_ROOT, absFile).replaceAll("\\", "/");
+		let text;
+		try {
+			text = readFileSync(absFile, "utf8");
+		} catch {
+			continue;
+		}
+		// Strip comments + <style> blocks before scanning so prose and
+		// scoped CSS (which may legitimately reference legacy class
+		// names) never trip the brand check.
+		const decommented = stripCommentary(text, ext);
+		const scanText =
+			ext === ".svelte" ? stripStyleBlocks(decommented) : decommented;
+
+		for (const rule of CHROME_BRAND_RULES) {
+			rule.re.lastIndex = 0;
+			let m;
+			while ((m = rule.re.exec(scanText)) !== null) {
+				if (m[0] === "") {
+					rule.re.lastIndex++;
+					continue;
+				}
+				if (isChromeWhitelisted(m[0])) continue;
+				const line = offsetToLine(scanText, m.index);
+				errors.push(
+					`G. ${rel}:${line} hardcoded Netz brand in ${rule.label}: "${m[0].trim()}" — product chrome defaults to "II"; tenant name injected via orgName prop`,
 				);
 			}
 		}
