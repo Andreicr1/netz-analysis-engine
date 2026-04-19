@@ -27,7 +27,7 @@
 		formatShortDate,
 		SparklineSVG,
 	} from "@investintell/ui";
-	import type { ModelPortfolio } from "$lib/types/model-portfolio";
+	import type { ModelPortfolio } from "$wealth/types/model-portfolio";
 
 	interface Props {
 		portfolio: ModelPortfolio;

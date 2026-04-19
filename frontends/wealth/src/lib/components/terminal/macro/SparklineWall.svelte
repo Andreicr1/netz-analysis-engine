@@ -16,8 +16,8 @@
 		TerminalMiniSparkline,
 		formatNumber,
 	} from "@investintell/ui";
-	import type { MarketDataStore } from "$lib/stores/market-data.svelte";
-	import { TERMINAL_MARKET_DATA_KEY } from "$lib/components/portfolio/live/workbench-state";
+	import type { MarketDataStore } from "$wealth/stores/market-data.svelte";
+	import { TERMINAL_MARKET_DATA_KEY } from "$wealth/components/portfolio/live/workbench-state";
 	import {
 		proxyFor,
 		PROXY_SYMBOLS,

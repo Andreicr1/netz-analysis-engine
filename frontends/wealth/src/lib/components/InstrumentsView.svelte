@@ -9,9 +9,9 @@
 	import { Label } from "@investintell/ui/components/ui/label";
 	import { Skeleton } from "@investintell/ui/components/ui/skeleton";
 	import { Dialog, Input, Select, Textarea } from "@investintell/ui";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 	import { getContext } from "svelte";
-	import type { Instrument } from "$lib/types/api";
+	import type { Instrument } from "$wealth/types/api";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 

@@ -9,9 +9,9 @@
 	import { DataTable, formatAUM, formatPercent, formatCompact, formatDate } from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { ChevronLeft, Loader2, Download } from "lucide-svelte";
-	import { createClientApiClient } from "$lib/api/client";
-	import { runScreenerImport, ScreenerImportError, type ImportProgress } from "$lib/api/screener-import";
-	import type { ShareClassItem, FundClassesResponse } from "$lib/types/catalog";
+	import { createClientApiClient } from "$wealth/api/client";
+	import { runScreenerImport, ScreenerImportError, type ImportProgress } from "$wealth/api/screener-import";
+	import type { ShareClassItem, FundClassesResponse } from "$wealth/types/catalog";
 	import type { ColumnDef } from "@tanstack/svelte-table";
 
 	interface Props {

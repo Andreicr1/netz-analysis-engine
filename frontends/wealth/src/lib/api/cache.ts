@@ -3,7 +3,7 @@
  * No localStorage (per architectural rule). Cache lives only for the SPA session.
  *
  * Usage:
- *   import { cachedGet, invalidateCache } from "$lib/api/cache";
+ *   import { cachedGet, invalidateCache } from "$wealth/api/cache";
  *   const data = await cachedGet(api, "/universe", {}, 300_000); // 5 min TTL
  */
 

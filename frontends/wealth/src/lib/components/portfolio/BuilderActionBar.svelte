@@ -20,14 +20,14 @@
   ``workspace.applyTransition`` (Phase 5 backend dispatcher).
 -->
 <script lang="ts">
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 	import { Button } from "@investintell/ui";
 	import {
 		ACTION_MAP,
 		sortActions,
 		type ActionDescriptor,
-	} from "$lib/portfolio/action-map";
-	import type { PortfolioAction } from "$lib/types/model-portfolio";
+	} from "$wealth/portfolio/action-map";
+	import type { PortfolioAction } from "$wealth/types/model-portfolio";
 	import PortfolioStateChip from "./PortfolioStateChip.svelte";
 	import TransitionConfirmDialog from "./TransitionConfirmDialog.svelte";
 

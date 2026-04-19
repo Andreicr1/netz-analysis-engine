@@ -10,7 +10,7 @@
 <script lang="ts">
 	import Package from "lucide-svelte/icons/package";
 	import X from "lucide-svelte/icons/x";
-	import type { BundleBuilder } from "$lib/state/library/bundle-builder.svelte";
+	import type { BundleBuilder } from "$wealth/state/library/bundle-builder.svelte";
 
 	interface Props {
 		bundle: BundleBuilder;

@@ -7,9 +7,9 @@
 	import { formatPercent, formatDate, DatePicker } from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { Label } from "@investintell/ui/components/ui/label";
-	import { createClientApiClient } from "$lib/api/client";
-	import type { PortfolioView } from "$lib/types/model-portfolio";
-	import type { UniverseAsset } from "$lib/types/universe";
+	import { createClientApiClient } from "$wealth/api/client";
+	import type { PortfolioView } from "$wealth/types/model-portfolio";
+	import type { UniverseAsset } from "$wealth/types/universe";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 

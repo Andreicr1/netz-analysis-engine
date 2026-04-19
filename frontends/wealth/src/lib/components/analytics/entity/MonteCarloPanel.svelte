@@ -6,7 +6,7 @@
 	import { formatPercent, formatNumber } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
-	import type { MonteCarloResult } from "$lib/types/analytics";
+	import type { MonteCarloResult } from "$wealth/types/analytics";
 
 	interface Props {
 		mc: MonteCarloResult;

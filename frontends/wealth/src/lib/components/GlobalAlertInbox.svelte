@@ -30,11 +30,11 @@
 	import Check from "lucide-svelte/icons/check";
 	import Circle from "lucide-svelte/icons/circle";
 	import { EmptyState, formatDateTime } from "@investintell/ui";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 	import type {
 		UnifiedAlert,
 		UnifiedSeverity,
-	} from "$lib/types/alerts";
+	} from "$wealth/types/alerts";
 
 	// Inject the JWT getter on mount so the workspace polling works
 	// even if no other wealth component has hydrated yet.

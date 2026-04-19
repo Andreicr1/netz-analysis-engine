@@ -10,8 +10,8 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
 	import { EmptyState, formatPercent } from "@investintell/ui";
-	import { workspace, type UniverseFund } from "$lib/state/portfolio-workspace.svelte";
-	import { blockLabel, BLOCK_GROUPS, blockDisplay, groupDisplay } from "$lib/constants/blocks";
+	import { workspace, type UniverseFund } from "$wealth/state/portfolio-workspace.svelte";
+	import { blockLabel, BLOCK_GROUPS, blockDisplay, groupDisplay } from "$wealth/constants/blocks";
 	import ChevronRight from "lucide-svelte/icons/chevron-right";
 	import Plus from "lucide-svelte/icons/plus";
 	import ExternalLink from "lucide-svelte/icons/external-link";

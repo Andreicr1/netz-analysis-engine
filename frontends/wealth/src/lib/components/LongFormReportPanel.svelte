@@ -6,7 +6,7 @@
 	import { getContext } from "svelte";
 	import { StatusBadge, Button, formatPercent } from "@investintell/ui";
 	import { Spinner } from "@investintell/ui/components/ui/spinner";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 

@@ -8,8 +8,8 @@
 	import { getContext } from "svelte";
 	import { Search, FileText, Building2, Landmark } from "lucide-svelte";
 	import * as Command from "@investintell/ui/components/ui/command";
-	import { createClientApiClient } from "$lib/api/client";
-	import { createDebouncedState } from "$lib/utils/reactivity";
+	import { createClientApiClient } from "$wealth/api/client";
+	import { createDebouncedState } from "$wealth/utils/reactivity";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);

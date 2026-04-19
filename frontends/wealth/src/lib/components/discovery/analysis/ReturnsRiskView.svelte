@@ -12,14 +12,14 @@
 		fetchReturnsRisk,
 		type AnalysisWindow,
 		type RiskMetricsPayload,
-	} from "$lib/discovery/analysis-api";
+	} from "$wealth/discovery/analysis-api";
 	import { AnalysisGrid, ChartCard } from "@investintell/ui";
-	import NavHeroChart from "$lib/components/charts/discovery/NavHeroChart.svelte";
-	import RollingRiskChart from "$lib/components/charts/discovery/RollingRiskChart.svelte";
-	import MonthlyReturnsHeatmap from "$lib/components/charts/discovery/MonthlyReturnsHeatmap.svelte";
-	import ReturnDistributionChart from "$lib/components/charts/discovery/ReturnDistributionChart.svelte";
-	import DrawdownUnderwaterChart from "$lib/components/charts/discovery/DrawdownUnderwaterChart.svelte";
-	import RiskMetricsBulletChart from "$lib/components/charts/discovery/RiskMetricsBulletChart.svelte";
+	import NavHeroChart from "$wealth/components/charts/discovery/NavHeroChart.svelte";
+	import RollingRiskChart from "$wealth/components/charts/discovery/RollingRiskChart.svelte";
+	import MonthlyReturnsHeatmap from "$wealth/components/charts/discovery/MonthlyReturnsHeatmap.svelte";
+	import ReturnDistributionChart from "$wealth/components/charts/discovery/ReturnDistributionChart.svelte";
+	import DrawdownUnderwaterChart from "$wealth/components/charts/discovery/DrawdownUnderwaterChart.svelte";
+	import RiskMetricsBulletChart from "$wealth/components/charts/discovery/RiskMetricsBulletChart.svelte";
 
 	interface NavPoint {
 		nav_date: string;

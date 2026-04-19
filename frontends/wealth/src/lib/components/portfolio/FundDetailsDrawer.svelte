@@ -16,7 +16,7 @@
 	import TrendingDown from "lucide-svelte/icons/trending-down";
 	import Minus from "lucide-svelte/icons/minus";
 	import { formatPercent, formatAUM, formatNumber } from "@investintell/ui";
-	import type { UniverseFund } from "$lib/state/portfolio-workspace.svelte";
+	import type { UniverseFund } from "$wealth/state/portfolio-workspace.svelte";
 
 	interface Props {
 		fund: UniverseFund;

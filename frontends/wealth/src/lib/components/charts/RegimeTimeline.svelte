@@ -3,7 +3,7 @@
   Each segment is proportional to its duration. Hover expands from 8px to 24px.
 -->
 <script lang="ts">
-	import { regimeLabels, regimeColors } from "$lib/constants/regime";
+	import { regimeLabels, regimeColors } from "$wealth/constants/regime";
 	import { formatShortDate } from "@investintell/ui";
 
 	interface Props {

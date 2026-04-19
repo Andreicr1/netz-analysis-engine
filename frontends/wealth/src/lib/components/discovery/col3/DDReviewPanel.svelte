@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { openDDReportStream } from "$lib/discovery/api";
+	import { openDDReportStream } from "$wealth/discovery/api";
 
 	interface Props {
 		fundId: string;

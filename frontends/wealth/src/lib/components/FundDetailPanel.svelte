@@ -6,7 +6,7 @@
 <script lang="ts">
 	import { ContextPanel, EmptyState, SectionCard, MetricCard, formatAUM, formatNumber, formatPercent, formatDate } from "@investintell/ui";
 	import { createMountedGuard } from "@investintell/ui/runtime";
-	import { humanizeMetric } from "$lib/i18n/quant-labels";
+	import { humanizeMetric } from "$wealth/i18n/quant-labels";
 	import { Progress } from "@investintell/ui/components/ui/progress";
 	import * as Tabs from "@investintell/ui/components/ui/tabs";
 	import { getContext, onDestroy, onMount } from "svelte";

@@ -10,7 +10,7 @@
 <script lang="ts">
 	import { formatNumber } from "@investintell/ui";
 	import PortfolioDropdown from "./PortfolioDropdown.svelte";
-	import type { ModelPortfolio } from "$lib/types/model-portfolio";
+	import type { ModelPortfolio } from "$wealth/types/model-portfolio";
 	import type { DraftHolding, OverlapResultRead } from "./LiveWorkbenchShell.svelte";
 
 	interface PriceData {

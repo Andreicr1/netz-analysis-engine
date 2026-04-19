@@ -9,9 +9,9 @@
 	import { Button } from "@investintell/ui/components/ui/button";
 	import * as Select from "@investintell/ui/components/ui/select";
 	import { StatusBadge, formatNumber, formatDateTime } from "@investintell/ui";
-	import type { ScreeningResult, ScreeningRun, ScreenerFilterConfig, OverallStatus } from "$lib/types/screening";
-	import { EMPTY_FILTERS } from "$lib/types/screening";
-	import { createDebouncedState } from "$lib/utils/reactivity";
+	import type { ScreeningResult, ScreeningRun, ScreenerFilterConfig, OverallStatus } from "$wealth/types/screening";
+	import { EMPTY_FILTERS } from "$wealth/types/screening";
+	import { createDebouncedState } from "$wealth/utils/reactivity";
 
 	interface Props {
 		results: ScreeningResult[];

@@ -20,7 +20,7 @@
  * snapshot.
  */
 
-import { createClientApiClient } from "$lib/api/client";
+import { createClientApiClient } from "$wealth/api/client";
 
 export type ImportPhase =
 	| "queued"

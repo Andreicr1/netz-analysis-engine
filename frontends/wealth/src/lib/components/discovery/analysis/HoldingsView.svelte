@@ -21,15 +21,15 @@
 	import { getContext } from "svelte";
 	import { EnterpriseTable, formatPercent, ChartCard, AnalysisGrid } from "@investintell/ui";
 	import type { ColumnDef } from "@investintell/ui";
-	import HoldingsNetworkChart from "$lib/components/charts/discovery/HoldingsNetworkChart.svelte";
-	import TopHoldingsSunburst from "$lib/components/charts/discovery/TopHoldingsSunburst.svelte";
-	import SectorTreemap from "$lib/components/charts/discovery/SectorTreemap.svelte";
-	import StyleDriftFlow from "$lib/components/charts/discovery/StyleDriftFlow.svelte";
+	import HoldingsNetworkChart from "$wealth/components/charts/discovery/HoldingsNetworkChart.svelte";
+	import TopHoldingsSunburst from "$wealth/components/charts/discovery/TopHoldingsSunburst.svelte";
+	import SectorTreemap from "$wealth/components/charts/discovery/SectorTreemap.svelte";
+	import StyleDriftFlow from "$wealth/components/charts/discovery/StyleDriftFlow.svelte";
 	import {
 		fetchHoldingsTop,
 		fetchStyleDrift,
 		fetchReverseLookup,
-	} from "$lib/discovery/analysis-api";
+	} from "$wealth/discovery/analysis-api";
 
 	interface Holding {
 		issuer_name: string;

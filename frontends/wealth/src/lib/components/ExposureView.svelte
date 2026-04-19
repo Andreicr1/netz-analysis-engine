@@ -5,7 +5,7 @@
 <script lang="ts">
 	import { SectionCard, HeatmapTable, EmptyState, formatPercent, formatShortDate } from "@investintell/ui";
 	import { Skeleton } from "@investintell/ui/components/ui/skeleton";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 	import { getContext } from "svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");

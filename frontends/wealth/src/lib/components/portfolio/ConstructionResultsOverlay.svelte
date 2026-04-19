@@ -16,11 +16,11 @@
 	import CheckCircle from "lucide-svelte/icons/check-circle";
 	import { formatPercent, formatNumber } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
-	import type { ConstructionStressResult } from "$lib/state/portfolio-workspace.svelte";
-	import { portfolioDisplayName } from "$lib/constants/blocks";
-	import { blockLabel } from "$lib/constants/blocks";
-	import { chartTokens } from "$lib/components/charts/chart-tokens";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
+	import type { ConstructionStressResult } from "$wealth/state/portfolio-workspace.svelte";
+	import { portfolioDisplayName } from "$wealth/constants/blocks";
+	import { blockLabel } from "$wealth/constants/blocks";
+	import { chartTokens } from "$wealth/components/charts/chart-tokens";
 	import CoverageGapPanel from "./CoverageGapPanel.svelte";
 
 	interface Props {

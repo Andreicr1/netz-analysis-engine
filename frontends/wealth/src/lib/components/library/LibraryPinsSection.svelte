@@ -14,9 +14,9 @@
 	import Clock from "lucide-svelte/icons/clock";
 	import Star from "lucide-svelte/icons/star";
 	import { formatDateTime } from "@investintell/ui";
-	import type { PinsClient } from "$lib/state/library/pins-client.svelte";
-	import type { UrlAdapter } from "$lib/state/library/url-adapter.svelte";
-	import type { LibraryPin } from "$lib/types/library";
+	import type { PinsClient } from "$wealth/state/library/pins-client.svelte";
+	import type { UrlAdapter } from "$wealth/state/library/url-adapter.svelte";
+	import type { LibraryPin } from "$wealth/types/library";
 
 	interface Props {
 		pins: PinsClient;

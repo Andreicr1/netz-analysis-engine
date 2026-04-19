@@ -7,7 +7,14 @@ const config = {
 	kit: {
 		adapter: adapter(),
 		alias: {
-			$lib: "src/lib",
+			// X2 transitional: terminal has no src/lib of its own yet — all
+			// components live under wealth/src/lib and are imported via
+			// $wealth/* from copied routes. Pointing $lib at wealth's
+			// src/lib lets those wealth files resolve their own $lib/*
+			// internal imports unchanged. X5 promotes the components to
+			// @investintell/ii-terminal-core and drops this redirection.
+			$lib: "../wealth/src/lib",
+			$wealth: "../wealth/src/lib",
 		},
 	},
 };

@@ -6,7 +6,7 @@
 <script lang="ts">
 	import { formatNumber } from "@investintell/ui";
 	import { AlertTriangle, ShieldAlert, ShieldCheck, RefreshCw } from "lucide-svelte";
-	import type { StrategyDriftAlert } from "$lib/stores/portfolio-workspace.svelte";
+	import type { StrategyDriftAlert } from "$wealth/stores/portfolio-workspace.svelte";
 
 	interface Props {
 		alerts: StrategyDriftAlert[];

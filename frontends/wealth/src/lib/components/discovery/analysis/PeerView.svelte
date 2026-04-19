@@ -15,13 +15,13 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { ChartCard, AnalysisGrid } from "@investintell/ui";
-	import PeerScatterChart from "$lib/components/charts/discovery/PeerScatterChart.svelte";
-	import PeerRankingLadder from "$lib/components/charts/discovery/PeerRankingLadder.svelte";
-	import InstitutionalRevealMatrix from "$lib/components/charts/discovery/InstitutionalRevealMatrix.svelte";
+	import PeerScatterChart from "$wealth/components/charts/discovery/PeerScatterChart.svelte";
+	import PeerRankingLadder from "$wealth/components/charts/discovery/PeerRankingLadder.svelte";
+	import InstitutionalRevealMatrix from "$wealth/components/charts/discovery/InstitutionalRevealMatrix.svelte";
 	import {
 		fetchPeerComparison,
 		fetchInstitutionalReveal,
-	} from "$lib/discovery/analysis-api";
+	} from "$wealth/discovery/analysis-api";
 
 	interface Peer {
 		external_id: string;

@@ -6,7 +6,7 @@
 <script lang="ts">
 	import { formatNumber, formatCurrency, formatPercent } from "@investintell/ui";
 	import { X, ArrowUpRight, ArrowDownRight, Minus, Loader2 } from "lucide-svelte";
-	import type { RebalancePreviewResult, SuggestedTrade } from "$lib/stores/portfolio-workspace.svelte";
+	import type { RebalancePreviewResult, SuggestedTrade } from "$wealth/stores/portfolio-workspace.svelte";
 
 	interface Props {
 		preview: RebalancePreviewResult | null;

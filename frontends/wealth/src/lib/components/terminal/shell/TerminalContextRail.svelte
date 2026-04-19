@@ -27,7 +27,7 @@
 	import type { Snippet } from "svelte";
 	import { fly } from "svelte/transition";
 	import { svelteTransitionFor } from "@investintell/ui";
-	import { pinnedRegime, type PinnedRegime } from "$lib/state/pinned-regime.svelte";
+	import { pinnedRegime, type PinnedRegime } from "$wealth/state/pinned-regime.svelte";
 
 	export type TerminalContextRailEntityKind =
 		| "fund"

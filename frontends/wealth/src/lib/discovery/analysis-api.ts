@@ -1,7 +1,7 @@
 /**
  * Analysis API client.
  *
- * Mirrors the auth pattern of `$lib/discovery/api.ts` — callers pass a
+ * Mirrors the auth pattern of `$wealth/discovery/api.ts` — callers pass a
  * `getToken` callback obtained via
  * `getContext<() => Promise<string>>("netz:getToken")`. Each function builds
  * its own `Authorization: Bearer ...` header so components stay decoupled

@@ -4,8 +4,8 @@
 -->
 <script lang="ts">
 	import { Button } from "@investintell/ui/components/ui/button";
-	import type { ReportType, ReportGenerateRequest } from "$lib/types/model-portfolio";
-	import { REPORT_TYPE_LABELS } from "$lib/types/model-portfolio";
+	import type { ReportType, ReportGenerateRequest } from "$wealth/types/model-portfolio";
+	import { REPORT_TYPE_LABELS } from "$wealth/types/model-portfolio";
 
 	interface Props {
 		canGenerate: boolean;

@@ -15,7 +15,7 @@
 	import type {
 		LibraryViewMode,
 		UrlAdapter,
-	} from "$lib/state/library/url-adapter.svelte";
+	} from "$wealth/state/library/url-adapter.svelte";
 
 	interface Props {
 		adapter: UrlAdapter;

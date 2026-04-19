@@ -17,7 +17,7 @@
 		formatPercent,
 		formatRelativeDate,
 	} from "@investintell/ui";
-	import type { AllocationProfile } from "$lib/types/allocation-page";
+	import type { AllocationProfile } from "$wealth/types/allocation-page";
 
 	interface Props {
 		cvarLimit: number | null;

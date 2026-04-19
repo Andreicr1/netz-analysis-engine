@@ -5,7 +5,7 @@
 <script lang="ts">
 	import { StatusBadge, formatCurrency, formatPercent, formatNumber, plColor } from "@investintell/ui";
 	import { Badge } from "@investintell/ui/components/ui/badge";
-	import { resolveWealthStatus } from "$lib/utils/status-maps";
+	import { resolveWealthStatus } from "$wealth/utils/status-maps";
 
 	interface Props {
 		name: string;

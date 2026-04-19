@@ -9,7 +9,7 @@
   from ``workspace.localStress``.
 -->
 <script lang="ts">
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 	import { Button, formatPercent } from "@investintell/ui";
 
 	let equityShock = $state(-20);

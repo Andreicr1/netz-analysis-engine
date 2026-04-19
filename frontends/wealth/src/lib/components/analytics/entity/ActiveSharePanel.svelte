@@ -10,8 +10,8 @@
 	import { goto } from "$app/navigation";
 	import { page } from "$app/stores";
 	import { formatNumber, formatPercent } from "@investintell/ui";
-	import type { ActiveShareResult } from "$lib/types/analytics";
-	import { createClientApiClient } from "$lib/api/client";
+	import type { ActiveShareResult } from "$wealth/types/analytics";
+	import { createClientApiClient } from "$wealth/api/client";
 
 	interface Props {
 		data: ActiveShareResult | null;

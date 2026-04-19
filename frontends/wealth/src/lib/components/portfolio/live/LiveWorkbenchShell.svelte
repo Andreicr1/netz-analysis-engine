@@ -38,8 +38,8 @@
 		BarData,
 		LiveTick,
 	} from "./charts/TerminalPriceChart.svelte";
-	import type { ModelPortfolio, InstrumentWeight } from "$lib/types/model-portfolio";
-	import { createClientApiClient } from "$lib/api/client";
+	import type { ModelPortfolio, InstrumentWeight } from "$wealth/types/model-portfolio";
+	import { createClientApiClient } from "$wealth/api/client";
 
 	export interface CusipExposure {
 		cusip: string;

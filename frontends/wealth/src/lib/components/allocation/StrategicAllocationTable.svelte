@@ -13,7 +13,7 @@
 <script lang="ts">
 	import { formatPercent } from "@investintell/ui";
 	import { Pencil } from "lucide-svelte";
-	import type { StrategicAllocationBlock } from "$lib/types/allocation-page";
+	import type { StrategicAllocationBlock } from "$wealth/types/allocation-page";
 
 	interface Props {
 		blocks: StrategicAllocationBlock[];

@@ -27,7 +27,7 @@
  *
  * Consumers
  * ---------
- *   import { humanizeMetric, regimeLabel } from "$lib/i18n/quant-labels";
+ *   import { humanizeMetric, regimeLabel } from "$wealth/i18n/quant-labels";
  *   <MetricCard label={humanizeMetric("cvar_95")} value={formatPercent(x)} />
  *   <span>{regimeLabel(store.regime.label)}</span>
  *

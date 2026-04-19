@@ -11,7 +11,7 @@
  * No localStorage. All state is in-memory. Svelte 5 runes.
  */
 
-import { createClientApiClient } from "$lib/api/client";
+import { createClientApiClient } from "$wealth/api/client";
 import type {
 	ReportGenerateRequest,
 	ReportGenerateResponse,
@@ -20,7 +20,7 @@ import type {
 	ReportProgressEvent,
 	ReportStage,
 	ReportType,
-} from "$lib/types/model-portfolio";
+} from "$wealth/types/model-portfolio";
 
 // ── Types ───────────────────────────────────────────────────
 

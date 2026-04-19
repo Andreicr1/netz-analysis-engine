@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 	import { formatTime } from "@investintell/ui";
 
 	type Severity = "info" | "warning" | "critical";

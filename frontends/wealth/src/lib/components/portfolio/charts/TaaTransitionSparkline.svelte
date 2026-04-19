@@ -11,10 +11,10 @@
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { formatPercent, formatShortDate } from "@investintell/ui";
-	import type { TaaHistory } from "$lib/types/taa";
-	import { taaRegimeLabel } from "$lib/types/taa";
-	import { BLOCK_GROUPS, groupDisplay } from "$lib/constants/blocks";
-	import { chartTokens } from "$lib/components/charts/chart-tokens";
+	import type { TaaHistory } from "$wealth/types/taa";
+	import { taaRegimeLabel } from "$wealth/types/taa";
+	import { BLOCK_GROUPS, groupDisplay } from "$wealth/constants/blocks";
+	import { chartTokens } from "$wealth/components/charts/chart-tokens";
 
 	interface Props {
 		history: TaaHistory | null;

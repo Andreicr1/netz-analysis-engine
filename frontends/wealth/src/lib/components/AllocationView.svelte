@@ -15,8 +15,8 @@
 	} from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { goto } from "$app/navigation";
-	import { createClientApiClient } from "$lib/api/client";
-	import { invalidateCache } from "$lib/api/cache";
+	import { createClientApiClient } from "$wealth/api/client";
+	import { invalidateCache } from "$wealth/api/cache";
 	import { getContext } from "svelte";
 	import { BLOCK_INSTRUMENTS } from "./allocation/BLOCK_INSTRUMENTS";
 	import type { BlockMeta } from "./allocation/types";

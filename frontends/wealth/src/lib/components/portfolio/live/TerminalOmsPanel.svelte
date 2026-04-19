@@ -8,7 +8,7 @@
 <script lang="ts">
 	import { formatNumber } from "@investintell/ui";
 	import TradeConfirmationDialog from "./TradeConfirmationDialog.svelte";
-	import type { InstrumentWeight } from "$lib/types/model-portfolio";
+	import type { InstrumentWeight } from "$wealth/types/model-portfolio";
 
 	/** Actual holding from the OMS endpoint. */
 	export interface ActualHolding {

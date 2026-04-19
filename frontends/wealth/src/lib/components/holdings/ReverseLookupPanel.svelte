@@ -4,7 +4,7 @@
 <script lang="ts">
     import { onMount, getContext } from 'svelte';
     import { formatCompact, formatPercent, formatDate, StatusBadge } from "@investintell/ui";
-    import { createClientApiClient } from "$lib/api/client";
+    import { createClientApiClient } from "$wealth/api/client";
 
     let { cusip = null, isin = null, assetName = "Asset" } = $props();
     

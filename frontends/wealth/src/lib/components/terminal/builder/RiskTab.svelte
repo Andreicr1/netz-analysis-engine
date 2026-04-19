@@ -10,9 +10,9 @@
   createTerminalChartOptions).
 -->
 <script lang="ts">
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 	import { formatNumber, readTerminalTokens, createTerminalChartOptions } from "@investintell/ui";
-	import TerminalChart from "$lib/components/terminal/charts/TerminalChart.svelte";
+	import TerminalChart from "$wealth/components/terminal/charts/TerminalChart.svelte";
 	import type { EChartsOption } from "echarts";
 	import {
 		translateKappa,
@@ -21,7 +21,7 @@
 		translateFactorCoverage,
 		translateRSquaredMedian,
 		type TranslatedMetric,
-	} from "$lib/util/metric-translators";
+	} from "$wealth/util/metric-translators";
 
 	const run = $derived(workspace.constructionRun);
 	const funds = $derived(workspace.funds);

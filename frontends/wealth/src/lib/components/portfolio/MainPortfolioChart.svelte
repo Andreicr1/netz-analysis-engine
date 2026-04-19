@@ -7,7 +7,7 @@
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
 	import { formatNumber, formatPercent } from "@investintell/ui";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 
 	let wrapEl: HTMLDivElement | undefined = $state();
 	let chartHeight = $state(0);

@@ -5,7 +5,7 @@
 	import { formatPercent, formatNumber } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions, statusColors } from "@investintell/ui/charts/echarts-setup";
-	import type { DrawdownAnalysis } from "$lib/types/entity-analytics";
+	import type { DrawdownAnalysis } from "$wealth/types/entity-analytics";
 
 	interface Props {
 		drawdown: DrawdownAnalysis;
