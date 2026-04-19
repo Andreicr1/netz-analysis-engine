@@ -157,7 +157,7 @@
 	});
 
 	// ── Chart state ───────────────────────────────────────────
-	type Timeframe = "1D" | "1W" | "1M" | "3M";
+	type Timeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y";
 	let chartTimeframe = $state<Timeframe>("1M");
 	let mockLastTick = $state<LiveTick | null>(null);
 

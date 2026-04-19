@@ -49,6 +49,9 @@
 		TERMINAL_TWEAKS_KEY,
 		type TerminalTweaks,
 	} from "$lib/stores/terminal-tweaks.svelte";
+	import { TERMINAL_MARKET_DATA_KEY } from "$lib/components/portfolio/live/workbench-state";
+	import type { MarketDataStore, WsStatus } from "$lib/stores/market-data.svelte";
+	import type { TerminalStatusBarConnectionStatus } from "./TerminalStatusBar.svelte";
 	import TerminalContextRail, {
 		type TerminalContextRailEntity,
 		type TerminalContextRailEntityKind,
@@ -82,9 +85,24 @@
 	const userInitials = "AR";
 
 	// ─── Connection status ──────────────────────────────────────
-	// Part C hardcodes "connecting" since no streams are mounted.
-	// Phase 5+ will aggregate real TerminalStream subscriptions.
-	const connectionStatus = "connecting" as const;
+	// Aggregated from the terminal-scoped MarketDataStore WS state
+	// (context set by (terminal)/+layout.svelte). Routes without a
+	// market stream still see "connecting" as the bootstrap default.
+	const marketStore = getContext<MarketDataStore | undefined>(
+		TERMINAL_MARKET_DATA_KEY,
+	);
+
+	const WS_STATUS_MAP: Record<WsStatus, TerminalStatusBarConnectionStatus> = {
+		connecting: "connecting",
+		connected: "open",
+		reconnecting: "degraded",
+		disconnected: "closed",
+		error: "error",
+	};
+
+	const connectionStatus = $derived<TerminalStatusBarConnectionStatus>(
+		marketStore ? WS_STATUS_MAP[marketStore.status] : "connecting",
+	);
 
 	// ─── Tweaks (density / accent / theme) ─────────────────────
 	// Bound as data-attributes on the shell root so tokens shipped
