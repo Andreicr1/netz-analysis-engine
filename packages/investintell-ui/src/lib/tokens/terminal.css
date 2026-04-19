@@ -19,55 +19,53 @@
 
 :root {
 	/* ── Backgrounds ───────────────────────────────────────── */
-	/* void: terminal canvas behind every panel.                */
-	/* panel: default surface of every TerminalPanel.           */
-	/* panel-raised: elevated (drawer, focus mode content).     */
-	/* panel-sunken: inset (input, readout).                    */
-	/* overlay: for floating command palette / dropdown.        */
-	/* scrim: FocusMode background dimmer.                      */
-	--terminal-bg-void: #000000;
-	--terminal-bg-panel: #050505;
-	--terminal-bg-panel-raised: #0a0a0a;
-	--terminal-bg-panel-sunken: #020202;
-	--terminal-bg-overlay: #0c0c0c;
-	--terminal-bg-scrim: rgba(0, 0, 0, 0.72);
+	/* Façade rewired to --ii-* (X3). Values resolve to the     */
+	/* base InvestIntell palette by default (wealth = blue      */
+	/* petroleum); in terminal app, surfaces/terminal.css       */
+	/* overrides --ii-bg / --ii-surface to navy-deep + orange.  */
+	--terminal-bg-void: var(--ii-bg);
+	--terminal-bg-panel: var(--ii-surface);
+	--terminal-bg-panel-raised: var(--ii-surface-alt);
+	--terminal-bg-panel-sunken: var(--ii-surface-inset);
+	--terminal-bg-overlay: var(--ii-surface-raised);
+	--terminal-bg-scrim: var(--ii-surface-overlay);
 
 	/* ── Foregrounds (tiers) ───────────────────────────────── */
-	--terminal-fg-primary: #f5f5f0;
-	--terminal-fg-secondary: #b8b8b0;
-	--terminal-fg-tertiary: #6b6b63;
-	--terminal-fg-muted: #3d3d38;
-	--terminal-fg-disabled: #2a2a27;
-	--terminal-fg-inverted: #000000;
+	--terminal-fg-primary: var(--ii-text-primary);
+	--terminal-fg-secondary: var(--ii-text-secondary);
+	--terminal-fg-tertiary: var(--ii-text-muted);
+	--terminal-fg-muted: var(--ii-border-strong);
+	--terminal-fg-disabled: var(--ii-border-subtle);
+	--terminal-fg-inverted: var(--ii-text-inverse);
 
 	/* ── Accents ───────────────────────────────────────────── */
-	/* amber: primary attention — ELITE, focus, hero metric.   */
-	/* cyan: live/streaming data.                               */
-	/* violet: AI-touched surfaces (DD critic, Copilot).       */
-	--terminal-accent-amber: #ffb020;
-	--terminal-accent-amber-dim: #8a5f12;
-	--terminal-accent-cyan: #00e5ff;
-	--terminal-accent-cyan-dim: #0a7a8a;
+	/* amber: primary brand (orange in terminal, blue in wealth) */
+	/* cyan: live/streaming (steel blue in terminal)             */
+	/* violet: AI-touched surfaces — no wealth token equivalent  */
+	--terminal-accent-amber: var(--ii-brand-primary);
+	--terminal-accent-amber-dim: color-mix(in srgb, var(--ii-brand-primary) 45%, transparent);
+	--terminal-accent-cyan: var(--ii-info);
+	--terminal-accent-cyan-dim: color-mix(in srgb, var(--ii-info) 45%, transparent);
 	--terminal-accent-violet: #a080ff;
 	--terminal-accent-violet-dim: #4a3a80;
 
 	/* ── Status ────────────────────────────────────────────── */
-	--terminal-status-success: #3ed67b;
-	--terminal-status-warn: #ffb020;
-	--terminal-status-error: #ff3b4b;
-	--terminal-status-neutral: #6b6b63;
+	--terminal-status-success: var(--ii-success);
+	--terminal-status-warn: var(--ii-warning);
+	--terminal-status-error: var(--ii-danger);
+	--terminal-status-neutral: var(--ii-text-muted);
 
 	/* ── Dataviz ordinal palette (1..8) ───────────────────── */
 	/* Colorblind-safe, derived from accents and status. Used  */
 	/* in order for series colors, heatmaps, scatter plots.    */
-	--terminal-dataviz-1: #ffb020; /* amber */
-	--terminal-dataviz-2: #00e5ff; /* cyan */
-	--terminal-dataviz-3: #a080ff; /* violet */
-	--terminal-dataviz-4: #3ed67b; /* success green */
-	--terminal-dataviz-5: #ff7a4a; /* terracotta */
+	--terminal-dataviz-1: var(--ii-brand-primary); /* brand accent */
+	--terminal-dataviz-2: var(--ii-info); /* info blue */
+	--terminal-dataviz-3: #a080ff; /* violet — no --ii-* map */
+	--terminal-dataviz-4: var(--ii-success); /* green */
+	--terminal-dataviz-5: #ff7a4a; /* terracotta — complement */
 	--terminal-dataviz-6: #f0f0e6; /* bone white */
-	--terminal-dataviz-7: #6b8cff; /* cobalt */
-	--terminal-dataviz-8: #b8b8b0; /* ash grey */
+	--terminal-dataviz-7: #6b8cff; /* cobalt — complement */
+	--terminal-dataviz-8: var(--ii-text-secondary); /* ash */
 
 	/* ── Spacing (4px grid) ────────────────────────────────── */
 	--terminal-space-1: 4px;
@@ -91,8 +89,10 @@
 	/* ── Typography ───────────────────────────────────────── */
 	/* Mono: primary register for every numeric, header, label */
 	/* Sans: narrative long-form copy only (DD chapter body).  */
-	--terminal-font-mono: "JetBrains Mono", "IBM Plex Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-	--terminal-font-sans: "Inter", "Urbanist", system-ui, -apple-system, sans-serif;
+	/* X3: rebind to --ii-font-terminal-* which the surface     */
+	/* override rewires --ii-font-{sans,mono} through.          */
+	--terminal-font-mono: var(--ii-font-terminal-mono, "JetBrains Mono", "IBM Plex Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+	--terminal-font-sans: var(--ii-font-terminal-sans, "Inter", "Urbanist", system-ui, -apple-system, sans-serif);
 
 	--terminal-text-10: 10px;
 	--terminal-text-11: 11px;

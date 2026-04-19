@@ -4,6 +4,7 @@
   per-profile Strategic Allocation surface.
 -->
 <script lang="ts">
+	import "@investintell/ui/styles/surfaces/builder";
 	import { resolve } from "$app/paths";
 	import { formatDateTime, formatPercent } from "@investintell/ui";
 	import { PROFILE_LABELS } from "$wealth/types/allocation-page";
@@ -12,7 +13,7 @@
 	let { data }: { data: PageData } = $props();
 </script>
 
-<div class="h-[calc(100vh-88px)] overflow-y-auto p-6">
+<div class="h-[calc(100vh-88px)] overflow-y-auto p-6" data-surface="builder">
 	<header class="mb-6">
 		<h1 class="text-2xl font-semibold text-foreground">Allocation Profiles</h1>
 		<p class="text-sm text-muted-foreground mt-1">

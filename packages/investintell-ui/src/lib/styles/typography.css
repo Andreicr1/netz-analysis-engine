@@ -6,17 +6,34 @@
 
 @import "@fontsource-variable/urbanist";
 @import "@fontsource-variable/geist-mono";
+@import "@fontsource/ibm-plex-mono/300.css";
 @import "@fontsource/ibm-plex-mono/400.css";
 @import "@fontsource/ibm-plex-mono/500.css";
 @import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/ibm-plex-mono/700.css";
+@import "@fontsource/ibm-plex-sans/300.css";
 @import "@fontsource/ibm-plex-sans/400.css";
 @import "@fontsource/ibm-plex-sans/500.css";
 @import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/montserrat/400.css";
+@import "@fontsource/montserrat/600.css";
+@import "@fontsource/montserrat/700.css";
 
 :root {
 	/* Font families */
 	--ii-font-sans: "Urbanist Variable", "Urbanist", ui-sans-serif, system-ui, sans-serif;
 	--ii-font-mono: "Geist Mono Variable", "Geist Mono", "Menlo", ui-monospace, monospace;
+
+	/* Terminal font stack — activated by the surfaces/terminal overlay,
+	 * which rebinds --ii-font-sans / --ii-font-mono to these slots.
+	 * Static weights (300/400/500/600/700) imported above; IBM Plex has
+	 * no variable-font package on fontsource. Montserrat reserved for
+	 * rare display slots (brand mark only).
+	 */
+	--ii-font-terminal-sans: "IBM Plex Sans", Inter, Urbanist, system-ui, -apple-system, sans-serif;
+	--ii-font-terminal-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--ii-font-terminal-display: "Montserrat", "IBM Plex Sans", Inter, system-ui, sans-serif;
 
 	/* Font feature settings — Urbanist supports contextual alternates + tabular nums */
 	--ii-font-features: "calt" 1, "tnum" 1;   /* tnum: tabular nums for financial data */

@@ -16,9 +16,11 @@
 	import ReturnDistributionChart from "$wealth/components/charts/ReturnDistributionChart.svelte";
 	import RollingReturnsChart from "$wealth/components/charts/RollingReturnsChart.svelte";
 	import { getContext, onMount } from "svelte";
+	import { createClientApiClient } from "$wealth/api/client";
 	import "./factsheet.css";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const api = createClientApiClient(getToken);
 
 	interface RouteDataShape {
 		data: Record<string, unknown> | null;
@@ -74,14 +76,7 @@
 	async function fetchAnalytics(id: string) {
 		analyticsLoading = true;
 		try {
-			const token = getToken ? await getToken() : "";
-			const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
-			const res = await fetch(`${apiBase}/wealth/entity-analytics/${id}?window=1y`, {
-				headers: { Authorization: `Bearer ${token}` }
-			});
-			if (res.ok) {
-				analytics = await res.json();
-			}
+			analytics = await api.get<any>(`/wealth/entity-analytics/${id}?window=1y`);
 		} catch (e) {
 			console.error("Failed to fetch analytics", e);
 		} finally {

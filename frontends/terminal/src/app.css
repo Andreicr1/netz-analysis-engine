@@ -1,7 +1,20 @@
-/* Import @investintell/ui design tokens + base reset (--ii-* tokens).
- * X3 (visual sprint) will extend with bundle-specific surfaces.
+/* Terminal app bootstrap CSS.
+ *
+ * Load order:
+ *   1. @investintell/ui/styles — base --ii-* tokens + typography.
+ *   2. surfaces/terminal — bundle palette (navy + orange) overrides
+ *      :root with terminal canvas tokens. Route-specific surfaces
+ *      (builder/screener/macro) are imported per-route and scope
+ *      themselves under [data-surface="..."] attributes.
+ *   3. tailwindcss — utility classes, resolved against the tokens
+ *      above via @theme custom-properties.
+ *
+ * Wealth deliberately does NOT import the terminal surface — it keeps
+ * the blue InvestIntell palette. Surface isolation is enforced by the
+ * token scanner (scripts/check-terminal-tokens-sync.mjs, Invariant E).
  */
 @import "@investintell/ui/styles";
+@import "@investintell/ui/styles/surfaces/terminal";
 @import "tailwindcss";
 
 /* ── Content sources (replaces tailwind.config content[]) ── */
