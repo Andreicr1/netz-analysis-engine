@@ -35,6 +35,7 @@
 	import { getContext } from "svelte";
 	import { goto, invalidateAll } from "$app/navigation";
 	import { page } from "$app/state";
+	import { resolve } from "$app/paths";
 	import { createClientApiClient } from "$wealth/api/client";
 	import type { AllocationProfile } from "$wealth/types/allocation-page";
 
@@ -68,10 +69,12 @@
 	}
 
 	function setTab(tab: BuilderTab) {
-		const url = new URL(page.url);
-		if (tab === "strategic") url.searchParams.delete("tab");
-		else url.searchParams.set("tab", tab);
-		goto(url.pathname + url.search, {
+		if (!profile) return;
+		const search = new URLSearchParams(page.url.searchParams);
+		if (tab === "strategic") search.delete("tab");
+		else search.set("tab", tab);
+		const qs = search.toString();
+		goto(resolve(`/allocation/${profile}${qs ? `?${qs}` : ""}`), {
 			replaceState: true,
 			noScroll: true,
 			keepFocus: true,
@@ -79,9 +82,8 @@
 	}
 
 	function setProfile(p: AllocationProfile) {
-		const url = new URL(page.url);
-		url.pathname = `/allocation/${p}`;
-		goto(url.pathname + url.search, { keepFocus: true });
+		const qs = page.url.searchParams.toString();
+		goto(resolve(`/allocation/${p}${qs ? `?${qs}` : ""}`), { keepFocus: true });
 	}
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
