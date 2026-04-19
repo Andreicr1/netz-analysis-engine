@@ -7,9 +7,18 @@
 
   Dismiss is cosmetic in v1 — the panel hides locally, the DB run
   persists. Running a new propose supersedes it.
+
+  PR-4b — terminal re-skin. ECharts bar colors now resolved via
+  ``readTerminalTokens()`` (no hex in script). All surfaces use
+  ``--terminal-*`` custom properties; no Tailwind semantic colors.
 -->
 <script lang="ts">
-	import { formatDateTime, formatNumber, formatPercent } from "@investintell/ui";
+	import {
+		formatDateTime,
+		formatNumber,
+		formatPercent,
+		readTerminalTokens,
+	} from "@investintell/ui";
 	import { CheckCircle2, AlertTriangle } from "lucide-svelte";
 	import GenericEChart from "$lib/components/charts/GenericEChart.svelte";
 	import CascadeTimeline from "./CascadeTimeline.svelte";
@@ -28,7 +37,8 @@
 		apiPost: <T>(path: string, body: unknown) => Promise<T>;
 	}
 
-	let { profile, proposal, strategicBlocks, onApproved, apiPost }: Props = $props();
+	let { profile, proposal, strategicBlocks, onApproved, apiPost }: Props =
+		$props();
 
 	let expanded = $state(false);
 	let approving = $state(false);
@@ -40,9 +50,7 @@
 		new Map(strategicBlocks.map((b) => [b.block_id, b.block_name])),
 	);
 	const currentByBlock = $derived(
-		new Map(
-			strategicBlocks.map((b) => [b.block_id, b.target_weight ?? 0]),
-		),
+		new Map(strategicBlocks.map((b) => [b.block_id, b.target_weight ?? 0])),
 	);
 
 	const diffs = $derived(
@@ -59,6 +67,7 @@
 	);
 
 	const diffChartOptions = $derived.by(() => {
+		const tokens = readTerminalTokens();
 		const sorted = [...diffs].sort((a, b) => a.delta - b.delta);
 		return {
 			tooltip: {
@@ -86,7 +95,7 @@
 					data: sorted.map((d) => ({
 						value: d.delta,
 						itemStyle: {
-							color: d.delta >= 0 ? "#10b981" : "#ef4444",
+							color: d.delta >= 0 ? tokens.statusSuccess : tokens.statusError,
 						},
 					})),
 				},
@@ -127,57 +136,53 @@
 </script>
 
 {#if !dismissed}
-	<section class="rounded-lg border border-border bg-card p-4">
-		<header class="flex items-start justify-between mb-3">
-			<div>
-				<h2 class="text-base font-medium text-foreground">Pending Proposal</h2>
-				<p class="text-xs text-muted-foreground mt-0.5">
+	<section class="proposal-panel">
+		<header class="proposal-panel__header">
+			<div class="proposal-panel__title-block">
+				<h2 class="proposal-panel__title">Pending Proposal</h2>
+				<p class="proposal-panel__subtitle">
 					Generated {formatDateTime(proposal.requested_at)}
 				</p>
 			</div>
 			{#if isInfeasible}
-				<span
-					class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning"
-				>
+				<span class="status-pill status-pill--warn">
 					<AlertTriangle class="w-3 h-3" /> CVaR infeasible
 				</span>
 			{:else}
-				<span
-					class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-success/10 text-success"
-				>
+				<span class="status-pill status-pill--ok">
 					<CheckCircle2 class="w-3 h-3" /> Feasible
 				</span>
 			{/if}
 		</header>
 
-		<dl class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 text-sm">
-			<div>
-				<dt class="text-xs uppercase tracking-wide text-muted-foreground">Proposed E[r]</dt>
-				<dd class="tabular-nums text-foreground">
+		<dl class="metrics-grid">
+			<div class="metric">
+				<dt class="metric__label">Proposed E[r]</dt>
+				<dd class="metric__value">
 					{proposal.proposal_metrics.expected_return !== null
 						? formatPercent(proposal.proposal_metrics.expected_return)
 						: "—"}
 				</dd>
 			</div>
-			<div>
-				<dt class="text-xs uppercase tracking-wide text-muted-foreground">Proposed CVaR</dt>
-				<dd class="tabular-nums text-foreground">
+			<div class="metric">
+				<dt class="metric__label">Proposed CVaR</dt>
+				<dd class="metric__value">
 					{proposal.proposal_metrics.expected_cvar !== null
 						? formatPercent(proposal.proposal_metrics.expected_cvar)
 						: "—"}
 				</dd>
 			</div>
-			<div>
-				<dt class="text-xs uppercase tracking-wide text-muted-foreground">Target CVaR</dt>
-				<dd class="tabular-nums text-foreground">
+			<div class="metric">
+				<dt class="metric__label">Target CVaR</dt>
+				<dd class="metric__value">
 					{proposal.proposal_metrics.target_cvar !== null
 						? formatPercent(proposal.proposal_metrics.target_cvar)
 						: "—"}
 				</dd>
 			</div>
-			<div>
-				<dt class="text-xs uppercase tracking-wide text-muted-foreground">Sharpe</dt>
-				<dd class="tabular-nums text-foreground">
+			<div class="metric">
+				<dt class="metric__label">Sharpe</dt>
+				<dd class="metric__value">
 					{proposal.proposal_metrics.expected_sharpe !== null
 						? formatNumber(proposal.proposal_metrics.expected_sharpe, 2)
 						: "—"}
@@ -186,7 +191,7 @@
 		</dl>
 
 		{#if proposal.phase_attempts.length > 0}
-			<div class="mb-4">
+			<div class="proposal-panel__cascade">
 				<CascadeTimeline
 					phases={proposal.phase_attempts}
 					winnerSignal={proposal.winner_signal}
@@ -196,43 +201,43 @@
 			</div>
 		{/if}
 
-		<div class="mb-4">
+		<div class="proposal-panel__chart">
 			<GenericEChart options={diffChartOptions} height={420} />
 		</div>
 
-		<div class="mb-4">
+		<div class="proposal-panel__diff">
 			<button
 				type="button"
-				class="text-xs text-primary hover:underline"
+				class="proposal-panel__diff-toggle"
 				onclick={() => (expanded = !expanded)}
 			>
 				{expanded ? "Hide" : "Show"} block-by-block diff
 			</button>
 			{#if expanded}
-				<div class="mt-2 overflow-x-auto rounded-md border border-border">
-					<table class="w-full text-xs">
-						<thead class="bg-muted/40 text-muted-foreground uppercase">
+				<div class="diff-table-wrap">
+					<table class="diff-table">
+						<thead>
 							<tr>
-								<th class="text-left px-3 py-1.5">Asset Class</th>
-								<th class="text-right px-3 py-1.5">Current</th>
-								<th class="text-right px-3 py-1.5">Proposed</th>
-								<th class="text-right px-3 py-1.5">Delta</th>
+								<th class="align-left">Asset Class</th>
+								<th class="align-right">Current</th>
+								<th class="align-right">Proposed</th>
+								<th class="align-right">Delta</th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each diffs as row (row.block_id)}
-								<tr class="border-t border-border">
-									<td class="px-3 py-1.5">{row.block_name}</td>
-									<td class="px-3 py-1.5 text-right tabular-nums">
+								<tr>
+									<td class="align-left">{row.block_name}</td>
+									<td class="align-right numeric">
 										{formatPercent(row.current)}
 									</td>
-									<td class="px-3 py-1.5 text-right tabular-nums">
+									<td class="align-right numeric">
 										{formatPercent(row.proposed)}
 									</td>
 									<td
-										class="px-3 py-1.5 text-right tabular-nums"
-										class:text-success={row.delta > 0}
-										class:text-destructive={row.delta < 0}
+										class="align-right numeric"
+										class:delta-up={row.delta > 0}
+										class:delta-down={row.delta < 0}
 									>
 										{row.delta >= 0 ? "+" : ""}{formatPercent(row.delta)}
 									</td>
@@ -245,20 +250,20 @@
 		</div>
 
 		{#if errorMsg}
-			<p class="text-xs text-destructive mb-2">{errorMsg}</p>
+			<p class="proposal-panel__error">{errorMsg}</p>
 		{/if}
 
-		<footer class="flex items-center justify-between">
+		<footer class="proposal-panel__footer">
 			<button
 				type="button"
-				class="text-xs text-muted-foreground hover:text-foreground"
+				class="action action--ghost"
 				onclick={() => (dismissed = true)}
 			>
 				Dismiss proposal
 			</button>
 			<button
 				type="button"
-				class="px-4 py-1.5 rounded-md bg-primary text-primary-foreground text-sm hover:bg-primary/90 disabled:opacity-50"
+				class="action action--primary"
 				onclick={onApproveClick}
 				disabled={approving}
 			>
@@ -269,19 +274,16 @@
 
 	{#if showConfirmInfeasible}
 		<div
-			class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+			class="modal-backdrop"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="confirm-infeasible-title"
 		>
-			<div class="w-full max-w-md rounded-lg bg-card border border-border p-5">
-				<h3
-					id="confirm-infeasible-title"
-					class="text-base font-medium text-foreground mb-2"
-				>
+			<div class="modal">
+				<h3 id="confirm-infeasible-title" class="modal__title">
 					Proposal did not reach CVaR target
 				</h3>
-				<p class="text-sm text-muted-foreground mb-4">
+				<p class="modal__body">
 					The optimizer could not meet the configured CVaR limit of
 					<strong>
 						{proposal.proposal_metrics.target_cvar !== null
@@ -292,13 +294,13 @@
 						{proposal.proposal_metrics.expected_cvar !== null
 							? formatPercent(proposal.proposal_metrics.expected_cvar)
 							: "—"}
-					</strong>. Approving accepts a Strategic IPS that cannot meet
-					the target. Continue anyway?
+					</strong>. Approving accepts a Strategic IPS that cannot meet the
+					target. Continue anyway?
 				</p>
-				<div class="flex items-center justify-end gap-2">
+				<div class="modal__footer">
 					<button
 						type="button"
-						class="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground"
+						class="action action--ghost"
 						onclick={() => (showConfirmInfeasible = false)}
 						disabled={approving}
 					>
@@ -306,7 +308,7 @@
 					</button>
 					<button
 						type="button"
-						class="px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground text-sm hover:bg-destructive/90 disabled:opacity-50"
+						class="action action--destructive"
 						onclick={() => void doApprove(true)}
 						disabled={approving}
 					>
@@ -317,3 +319,256 @@
 		</div>
 	{/if}
 {/if}
+
+<style>
+	.proposal-panel {
+		border: var(--terminal-border-hairline);
+		background: var(--terminal-bg-panel);
+		padding: var(--terminal-space-4);
+		font-family: var(--terminal-font-mono);
+		color: var(--terminal-fg-primary);
+	}
+	.proposal-panel__header {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: var(--terminal-space-3);
+		margin-bottom: var(--terminal-space-3);
+	}
+	.proposal-panel__title {
+		font-size: var(--terminal-text-14);
+		font-weight: 500;
+		color: var(--terminal-fg-primary);
+		margin: 0;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+	}
+	.proposal-panel__subtitle {
+		font-size: var(--terminal-text-10);
+		color: var(--terminal-fg-tertiary);
+		margin: var(--terminal-space-1) 0 0;
+	}
+	.status-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--terminal-space-1);
+		padding: var(--terminal-space-1) var(--terminal-space-2);
+		border: var(--terminal-border-hairline);
+		font-size: var(--terminal-text-10);
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+	}
+	.status-pill--ok {
+		color: var(--terminal-status-success);
+		border-color: var(--terminal-status-success);
+	}
+	.status-pill--warn {
+		color: var(--terminal-status-warn);
+		border-color: var(--terminal-status-warn);
+	}
+
+	.metrics-grid {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: var(--terminal-space-3);
+		margin: 0 0 var(--terminal-space-3);
+	}
+	@media (min-width: 640px) {
+		.metrics-grid {
+			grid-template-columns: repeat(4, 1fr);
+		}
+	}
+	.metric {
+		display: flex;
+		flex-direction: column;
+		gap: var(--terminal-space-1);
+	}
+	.metric__label {
+		font-size: var(--terminal-text-10);
+		color: var(--terminal-fg-tertiary);
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		margin: 0;
+	}
+	.metric__value {
+		font-size: var(--terminal-text-14);
+		color: var(--terminal-fg-primary);
+		font-variant-numeric: tabular-nums;
+		margin: 0;
+	}
+
+	.proposal-panel__cascade,
+	.proposal-panel__chart {
+		margin-bottom: var(--terminal-space-4);
+	}
+
+	.proposal-panel__diff {
+		margin-bottom: var(--terminal-space-4);
+	}
+	.proposal-panel__diff-toggle {
+		background: transparent;
+		border: none;
+		color: var(--terminal-accent-amber);
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-10);
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		cursor: pointer;
+		padding: 0;
+	}
+	.proposal-panel__diff-toggle:hover,
+	.proposal-panel__diff-toggle:focus-visible {
+		text-decoration: underline;
+		outline: none;
+	}
+
+	.diff-table-wrap {
+		margin-top: var(--terminal-space-2);
+		overflow-x: auto;
+		border: var(--terminal-border-hairline);
+		background: var(--terminal-bg-panel-raised);
+	}
+	.diff-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: var(--terminal-text-11);
+		font-family: var(--terminal-font-mono);
+	}
+	.diff-table thead tr {
+		background: var(--terminal-bg-panel-sunken);
+	}
+	.diff-table th {
+		padding: var(--terminal-space-1) var(--terminal-space-3);
+		font-weight: 500;
+		font-size: var(--terminal-text-10);
+		color: var(--terminal-fg-tertiary);
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+	}
+	.diff-table td {
+		padding: var(--terminal-space-1) var(--terminal-space-3);
+		border-top: var(--terminal-border-hairline);
+		height: var(--t-row-height);
+		color: var(--terminal-fg-primary);
+	}
+	.align-left {
+		text-align: left;
+	}
+	.align-right {
+		text-align: right;
+	}
+	.numeric {
+		font-variant-numeric: tabular-nums;
+	}
+	.delta-up {
+		color: var(--terminal-status-success);
+	}
+	.delta-down {
+		color: var(--terminal-status-error);
+	}
+
+	.proposal-panel__error {
+		font-size: var(--terminal-text-10);
+		color: var(--terminal-status-error);
+		margin: 0 0 var(--terminal-space-2);
+	}
+
+	.proposal-panel__footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--terminal-space-3);
+	}
+
+	.action {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--terminal-space-1);
+		padding: var(--terminal-space-2) var(--terminal-space-3);
+		border: var(--terminal-border-hairline);
+		background: transparent;
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-11);
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		cursor: pointer;
+		transition: border-color var(--terminal-motion-tick)
+				var(--terminal-motion-easing-out),
+			color var(--terminal-motion-tick) var(--terminal-motion-easing-out);
+	}
+	.action:disabled {
+		color: var(--terminal-fg-disabled);
+		border-color: var(--terminal-fg-disabled);
+		cursor: not-allowed;
+	}
+	.action--ghost {
+		color: var(--terminal-fg-tertiary);
+	}
+	.action--ghost:hover:not(:disabled),
+	.action--ghost:focus-visible:not(:disabled) {
+		color: var(--terminal-fg-primary);
+		border-color: var(--terminal-fg-secondary);
+		outline: none;
+	}
+	.action--primary {
+		color: var(--terminal-accent-amber);
+		border-color: var(--terminal-accent-amber);
+	}
+	.action--primary:hover:not(:disabled),
+	.action--primary:focus-visible:not(:disabled) {
+		background: var(--terminal-bg-panel-sunken);
+		outline: none;
+	}
+	.action--destructive {
+		color: var(--terminal-status-error);
+		border-color: var(--terminal-status-error);
+	}
+	.action--destructive:hover:not(:disabled),
+	.action--destructive:focus-visible:not(:disabled) {
+		background: var(--terminal-bg-panel-sunken);
+		outline: none;
+	}
+
+	.modal-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: var(--terminal-z-modal);
+		background: var(--terminal-bg-scrim);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: var(--terminal-space-4);
+	}
+	.modal {
+		width: 100%;
+		max-width: 480px;
+		background: var(--terminal-bg-panel);
+		border: var(--terminal-border-hairline);
+		padding: var(--terminal-space-4);
+		font-family: var(--terminal-font-mono);
+		color: var(--terminal-fg-primary);
+	}
+	.modal__title {
+		font-size: var(--terminal-text-14);
+		font-weight: 500;
+		margin: 0 0 var(--terminal-space-2);
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+	}
+	.modal__body {
+		font-size: var(--terminal-text-12);
+		color: var(--terminal-fg-secondary);
+		margin: 0 0 var(--terminal-space-4);
+		line-height: var(--terminal-leading-normal);
+	}
+	.modal__body strong {
+		color: var(--terminal-fg-primary);
+		font-weight: inherit;
+	}
+	.modal__footer {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: var(--terminal-space-2);
+	}
+</style>
