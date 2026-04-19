@@ -86,7 +86,7 @@
         <button type="button" class="sh-btn" onclick={onPin}>PIN REGIME</button>
       {/if}
       <button type="button" class="sh-btn sh-btn--proceed" onclick={onProceedToAlloc}>
-        PROCEED TO ALLOC &rarr;
+        PROCEED TO BUILDER &rarr;
       </button>
     </div>
   </div>
