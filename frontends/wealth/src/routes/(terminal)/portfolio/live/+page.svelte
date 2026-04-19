@@ -226,8 +226,10 @@
 	// ---- Chart state ----
 
 	type Timeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y";
+	type ChartMode = "candle" | "line";
 	let selectedTicker = $state<string | null>(null);
 	let chartTimeframe = $state<Timeframe>("1M");
+	let chartMode = $state<ChartMode>("line");
 	let compareTicker = $state<string | null>(null);
 
 	// Reset selection when portfolio changes
@@ -252,7 +254,15 @@
 	});
 
 	// Historical bars from REST quote endpoint
+	interface CandleBar {
+		time: number;
+		open: number;
+		high: number;
+		low: number;
+		close: number;
+	}
 	let historicalBars = $state<BarData[]>([]);
+	let candleBars = $state<CandleBar[]>([]);
 	let portfolioNavBars = $state<BarData[]>([]);
 
 	$effect(() => {
@@ -271,15 +281,30 @@
 		}>(`/market-data/historical/${encodeURIComponent(t)}`)
 			.then((res) => {
 				if (cancelled) return;
-				historicalBars = (res.bars ?? [])
-					.filter((b) => b.close != null)
-					.map((b) => ({
+				const raw = (res.bars ?? []).filter((b) => b.close != null);
+				historicalBars = raw.map((b) => ({
+					time: Math.floor(new Date(b.timestamp).getTime() / 1000),
+					value: Number(b.close),
+				}));
+				// Candle bars require full OHLC. Fall back to the close
+				// price when open/high/low are missing so candle mode
+				// still renders (degenerate doji rather than a gap).
+				candleBars = raw.map((b) => {
+					const close = Number(b.close);
+					return {
 						time: Math.floor(new Date(b.timestamp).getTime() / 1000),
-						value: Number(b.close),
-					}));
+						open: b.open != null ? Number(b.open) : close,
+						high: b.high != null ? Number(b.high) : close,
+						low: b.low != null ? Number(b.low) : close,
+						close,
+					};
+				});
 			})
 			.catch(() => {
-				if (!cancelled) historicalBars = [];
+				if (!cancelled) {
+					historicalBars = [];
+					candleBars = [];
+				}
 			});
 		return () => {
 			cancelled = true;
@@ -612,6 +637,8 @@
 						onCompare={handleCompare}
 						{compareTicker}
 						onClearCompare={handleClearCompare}
+						mode={chartMode}
+						onModeChange={(m) => (chartMode = m)}
 					/>
 				</div>
 
@@ -619,11 +646,13 @@
 					<TerminalPriceChart
 						ticker={effectiveTicker}
 						{historicalBars}
+						{candleBars}
 						portfolioNavBars={effectiveNavBars}
 						{lastTick}
 						timeframe={chartTimeframe}
 						onTimeframeChange={handleTimeframeChange}
 						{dataStatus}
+						mode={chartMode}
 					/>
 				</section>
 

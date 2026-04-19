@@ -6,12 +6,13 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { formatCurrency, formatPercent } from "@investintell/ui";
+	import { formatCurrency, formatPercent, TerminalPill } from "@investintell/ui";
 	import type { MarketDataStore, PriceTick } from "$lib/stores/market-data.svelte";
 	import { TERMINAL_MARKET_DATA_KEY } from "$lib/components/portfolio/live/workbench-state";
 	import { createClientApiClient } from "$lib/api/client";
 
 	type Timeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y";
+	export type ChartMode = "candle" | "line";
 
 	interface Props {
 		ticker: string;
@@ -21,6 +22,8 @@
 		onCompare: (ticker: string) => void;
 		compareTicker: string | null;
 		onClearCompare: () => void;
+		mode?: ChartMode;
+		onModeChange?: (m: ChartMode) => void;
 	}
 
 	let {
@@ -31,6 +34,8 @@
 		onCompare,
 		compareTicker,
 		onClearCompare,
+		mode = "line",
+		onModeChange,
 	}: Props = $props();
 
 	const marketStore = getContext<MarketDataStore>(TERMINAL_MARKET_DATA_KEY);
@@ -38,6 +43,44 @@
 	const api = createClientApiClient(getToken);
 
 	const TIMEFRAMES: Timeframe[] = ["1D", "1W", "1M", "3M", "6M", "1Y"];
+
+	const CHART_MODES: { id: ChartMode; label: string }[] = [
+		{ id: "candle", label: "CANDLE" },
+		{ id: "line", label: "LINE" },
+	];
+
+	function setMode(m: ChartMode) {
+		if (onModeChange) onModeChange(m);
+	}
+
+	function isEditableTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) return false;
+		const tag = target.tagName;
+		if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+		if (target.isContentEditable) return true;
+		const role = target.getAttribute("role");
+		if (role === "textbox" || role === "searchbox" || role === "combobox") {
+			return true;
+		}
+		return false;
+	}
+
+	$effect(() => {
+		if (typeof window === "undefined") return;
+		const handler = (event: KeyboardEvent) => {
+			if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+			if (isEditableTarget(event.target)) return;
+			if (event.key === "c" || event.key === "C") {
+				event.preventDefault();
+				setMode("candle");
+			} else if (event.key === "l" || event.key === "L") {
+				event.preventDefault();
+				setMode("line");
+			}
+		};
+		window.addEventListener("keydown", handler);
+		return () => window.removeEventListener("keydown", handler);
+	});
 
 	// Live price from MarketDataStore
 	const tickData = $derived<PriceTick | undefined>(
@@ -107,6 +150,23 @@
 
 	<!-- Right: controls -->
 	<div class="ct-controls">
+		<!-- Chart type toggle (Candle | Line) -->
+		<div class="ct-mode" role="radiogroup" aria-label="Chart type">
+			{#each CHART_MODES as cm (cm.id)}
+				<TerminalPill
+					as="button"
+					label={cm.label}
+					tone={mode === cm.id ? "accent" : "neutral"}
+					pressed={mode === cm.id}
+					size="sm"
+					ariaLabel={`Chart type ${cm.label}`}
+					onclick={() => setMode(cm.id)}
+				/>
+			{/each}
+		</div>
+
+		<span class="ct-divider"></span>
+
 		<!-- Timeframe pills -->
 		<div class="ct-timeframes" role="group" aria-label="Timeframe">
 			{#each TIMEFRAMES as tf}
@@ -237,6 +297,12 @@
 		width: 1px;
 		height: 16px;
 		background: var(--terminal-fg-muted);
+	}
+
+	/* -- Chart mode toggle -- */
+	.ct-mode {
+		display: inline-flex;
+		gap: var(--terminal-space-1);
 	}
 
 	/* -- Timeframes -- */
