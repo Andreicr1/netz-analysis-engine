@@ -6,6 +6,12 @@
 
 @import "@fontsource-variable/urbanist";
 @import "@fontsource-variable/geist-mono";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
 
 :root {
 	/* Font families */
@@ -118,4 +124,17 @@
 	--ii-code-border: rgba(0, 0, 0, 0.06);
 	--ii-kbd-bg:      #f1f5f9;   /* slate-100 */
 	--ii-kbd-border:  #cbd5e1;   /* slate-300 */
+}
+
+/* ── Terminal-scoped fonts ──────────────────────────────────
+ * Source: docs/plans/2026-04-18-netz-terminal-parity.md §B.4.
+ * Urbanist remains default OUTSIDE [data-surface="terminal"].
+ * font-display: optional avoids FOUT on first cold load — the
+ * system mono renders instantly, IBM Plex swaps on next reload.
+ * ============================================================ */
+[data-surface="terminal"] {
+	font-family: var(--terminal-font-mono);
+}
+[data-surface="terminal"] [data-font="sans"] {
+	font-family: "IBM Plex Sans", Inter, Urbanist, system-ui, sans-serif;
 }

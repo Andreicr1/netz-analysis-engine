@@ -153,6 +153,13 @@ export { createOptimisticMutation } from "./utils/optimistic.svelte.js";
 export type { OptimisticMutation, OptimisticMutationConfig } from "./utils/optimistic.svelte.js";
 export { canOpenSSE, registerSSE, unregisterSSE, getActiveSSECount } from "./utils/sse-registry.svelte.js";
 export {
+	formatMonoTime,
+	formatCompactCurrency,
+	formatPpDrift,
+	formatMonoPercent,
+} from "./formatters/mono.js";
+export type { CompactCurrencyOptions } from "./formatters/mono.js";
+export {
 	formatAUM,
 	formatBps,
 	formatNAV,
