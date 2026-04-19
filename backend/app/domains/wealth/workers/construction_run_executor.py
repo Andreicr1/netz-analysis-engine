@@ -79,6 +79,11 @@ from app.domains.wealth.schemas.sanitized import (
     humanize_event_type,
     sanitize_payload,
 )
+from quant_engine.allocation_template_service import (
+    TemplateReport,
+    build_template_operator_message,
+    validate_template_completeness,
+)
 from quant_engine.block_coverage_service import (
     CoverageReport,
     build_coverage_operator_message,
@@ -138,6 +143,69 @@ class CoverageInsufficientError(Exception):
             f"weight_at_risk={report.total_target_weight_at_risk:.4f}"
         )
         self.report = report
+
+
+class TemplateIncompleteError(Exception):
+    """PR-A25 — raised when the canonical template is incomplete.
+
+    Fires strictly before ``CoverageInsufficientError`` so operators
+    see the structural defect (missing canonical block rows) rather
+    than the downstream coverage gap it would otherwise manifest as.
+    """
+
+    def __init__(self, report: TemplateReport) -> None:
+        super().__init__(
+            "template_incomplete missing="
+            f"{len(report.missing_canonical_blocks)}"
+        )
+        self.report = report
+
+
+class NoApprovedAllocationError(Exception):
+    """PR-A26.2 Section E — realize-mode requires an approved Strategic IPS.
+
+    Raised pre-optimizer when any canonical ``strategic_allocation`` row
+    for the ``(organization_id, profile)`` pair has ``approved_at IS
+    NULL``. The operator remedy is to run the propose → approve cycle
+    before realizing any portfolio.
+    """
+
+    def __init__(
+        self, *, organization_id: uuid.UUID, profile: str,
+        approved_count: int, total_count: int,
+    ) -> None:
+        super().__init__(
+            f"no_approved_allocation profile={profile!r} "
+            f"approved={approved_count}/{total_count}"
+        )
+        self.organization_id = organization_id
+        self.profile = profile
+        self.approved_count = approved_count
+        self.total_count = total_count
+
+
+class InstrumentConcentrationBreachError(Exception):
+    """PR-A26.2 Section F — realize composition breached the 15% per-instrument cap.
+
+    The block's realized weight ``w_b`` would require at least
+    ``ceil(w_b / 0.15)`` approved instruments to distribute under the
+    hard 15% ceiling. Operator remedy: approve more instruments for
+    the breaching block or accept a lower block weight.
+    """
+
+    def __init__(
+        self, *, block_id: str, block_weight: float,
+        required: int, available: int,
+    ) -> None:
+        super().__init__(
+            f"instrument_concentration_breach block={block_id} "
+            f"block_weight={block_weight:.4f} required={required} "
+            f"available={available}"
+        )
+        self.block_id = block_id
+        self.block_weight = block_weight
+        self.required = required
+        self.available = available
 
 
 # ── Helpers ────────────────────────────────────────────────────
@@ -885,6 +953,210 @@ async def _build_advisor_result(
     }
 
 
+async def _persist_template_failure(
+    db: AsyncSession,
+    *,
+    run: PortfolioConstructionRun,
+    report: TemplateReport,
+) -> None:
+    """PR-A25 — persist a template-incomplete failure to the run row.
+
+    Mirrors :func:`_persist_coverage_failure`: writes a structured
+    ``cascade_telemetry`` payload with ``winner_signal`` +
+    ``operator_message`` plus a ``template_report`` envelope, and
+    flips ``status = 'failed'`` with a compact ``failure_reason``.
+    """
+    operator_message = build_template_operator_message(report)
+    existing_telemetry = run.cascade_telemetry or {}
+    run.cascade_telemetry = {
+        **existing_telemetry,
+        "winner_signal": WinnerSignal.TEMPLATE_INCOMPLETE.value,
+        "operator_signal": WinnerSignal.TEMPLATE_INCOMPLETE.value,
+        "operator_message": operator_message,
+        "template_report": report.model_dump(mode="json"),
+        # Cascade never ran — signal to downstream consumers that
+        # stress / advisor / validation output should not be rendered.
+        "cascade_summary": "template_incomplete",
+    }
+    run.status = "failed"
+    run.failure_reason = (
+        f"template_incomplete: profile '{report.profile}' missing "
+        f"{len(report.missing_canonical_blocks)} canonical block(s)"
+    )
+
+
+_INSTRUMENT_CONCENTRATION_CAP = 0.15
+
+
+async def _check_instrument_concentration_feasibility(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID | str,
+    profile: str,
+) -> None:
+    """PR-A26.2 Section F — pre-optimizer per-instrument 15% cap check.
+
+    For every canonical block with ``target_weight > 0.15`` we require
+    at least ``ceil(target_weight / 0.15)`` approved instruments in
+    ``instruments_org``. Anything less guarantees the composition layer
+    would have to violate the 15% per-instrument cap to distribute the
+    block's realize weight. Raises :class:`InstrumentConcentrationBreachError`
+    on the first breach (operators get one gap at a time to avoid an
+    avalanche of error detail).
+    """
+    from math import ceil
+
+    from sqlalchemy import text as _sa_text
+
+    # Join SA (target_weight) with instruments_org (approved candidates)
+    # grouped by block_id. ``approval_status = 'approved'`` matches the
+    # live realize-mode universe loader.
+    rows = (
+        await db.execute(
+            _sa_text(
+                """
+                SELECT sa.block_id,
+                       COALESCE(sa.target_weight, 0.0) AS target_weight,
+                       COALESCE(counts.n_approved, 0)  AS n_approved
+                  FROM strategic_allocation sa
+                  LEFT JOIN (
+                       SELECT block_id, COUNT(*) AS n_approved
+                         FROM instruments_org
+                        WHERE organization_id = :org
+                          AND approval_status = 'approved'
+                          AND block_id IS NOT NULL
+                        GROUP BY block_id
+                  ) counts ON counts.block_id = sa.block_id
+                 WHERE sa.organization_id = :org
+                   AND sa.profile = :profile
+                   AND COALESCE(sa.excluded_from_portfolio, false) = false
+                """
+            ),
+            {"org": str(organization_id), "profile": profile},
+        )
+    ).all()
+
+    for block_id, target_weight, n_approved in rows:
+        target = float(target_weight or 0.0)
+        if target <= _INSTRUMENT_CONCENTRATION_CAP:
+            # A single instrument at 15% can fully fund the block.
+            continue
+        required = int(ceil(target / _INSTRUMENT_CONCENTRATION_CAP))
+        if int(n_approved or 0) < required:
+            raise InstrumentConcentrationBreachError(
+                block_id=str(block_id),
+                block_weight=target,
+                required=required,
+                available=int(n_approved or 0),
+            )
+
+
+async def _count_approved_blocks(
+    db: AsyncSession, organization_id: uuid.UUID | str, profile: str,
+) -> tuple[int, int]:
+    """PR-A26.2 Section E — return ``(approved, total)`` canonical-block count.
+
+    ``approved`` counts rows with ``approved_at IS NOT NULL``; ``total``
+    is the number of rows present for the ``(org, profile)`` pair.
+    Realize mode requires ``approved == 18`` (== total once the A25
+    canonical trigger has run).
+    """
+    from sqlalchemy import text as _sa_text
+
+    row = await db.execute(
+        _sa_text(
+            """
+            SELECT COUNT(*) FILTER (WHERE approved_at IS NOT NULL) AS approved,
+                   COUNT(*) AS total
+              FROM strategic_allocation
+             WHERE organization_id = :org
+               AND profile = :profile
+            """
+        ),
+        {"org": str(organization_id), "profile": profile},
+    )
+    record = row.one_or_none()
+    if record is None:
+        return 0, 0
+    return int(record[0] or 0), int(record[1] or 0)
+
+
+async def _persist_no_approval_failure(
+    db: AsyncSession,
+    *,
+    run: PortfolioConstructionRun,
+    organization_id: uuid.UUID,
+    profile: str,
+    approved_count: int,
+    total_count: int,
+) -> None:
+    """PR-A26.2 Section E — persist the no-approved-allocation failure."""
+    existing = run.cascade_telemetry or {}
+    run.cascade_telemetry = {
+        **existing,
+        "winner_signal": WinnerSignal.NO_APPROVED_ALLOCATION.value,
+        "operator_signal": WinnerSignal.NO_APPROVED_ALLOCATION.value,
+        "operator_message": {
+            "title": "No approved Strategic IPS",
+            "body": (
+                f"Realize mode requires an approved Strategic allocation "
+                f"for the '{profile}' profile — currently "
+                f"{approved_count}/{total_count} canonical blocks are "
+                "approved. Run POST /portfolio/profiles/{profile}/"
+                "propose-allocation and then POST approve-proposal/{run_id} "
+                "to seed the Strategic IPS anchor before realizing."
+            ),
+            "severity": "warning",
+            "action_hint": "run_propose_then_approve",
+        },
+        "cascade_summary": "no_approved_allocation",
+        "approval_state": {
+            "approved_count": approved_count,
+            "total_count": total_count,
+        },
+    }
+    run.status = "failed"
+    run.failure_reason = (
+        f"no_approved_allocation: {approved_count}/{total_count} "
+        f"canonical blocks approved for profile '{profile}'"
+    )
+
+
+async def _persist_instrument_concentration_breach(
+    db: AsyncSession,
+    *,
+    run: PortfolioConstructionRun,
+    breaches: list[dict[str, Any]],
+) -> None:
+    """PR-A26.2 Section F — persist instrument concentration breach."""
+    existing = run.cascade_telemetry or {}
+    run.cascade_telemetry = {
+        **existing,
+        "winner_signal": WinnerSignal.INSTRUMENT_CONCENTRATION_BREACH.value,
+        "operator_signal": WinnerSignal.INSTRUMENT_CONCENTRATION_BREACH.value,
+        "operator_message": {
+            "title": "Per-instrument concentration cap breached",
+            "body": (
+                "One or more blocks would require a single instrument to "
+                "hold more than 15% of the total portfolio to distribute "
+                "the block's realize weight. Approve additional "
+                "instruments for the breaching block(s) or accept a "
+                "lower realize weight."
+            ),
+            "severity": "warning",
+            "action_hint": "approve_more_instruments_or_reduce_block_weight",
+        },
+        "cascade_summary": "instrument_concentration_breach",
+        "concentration_breaches": breaches,
+    }
+    run.status = "failed"
+    first = breaches[0] if breaches else {}
+    run.failure_reason = (
+        f"instrument_concentration_breach: block={first.get('block_id')!r} "
+        f"required={first.get('required')} available={first.get('available')}"
+    )
+
+
 async def _persist_coverage_failure(
     db: AsyncSession,
     *,
@@ -918,6 +1190,141 @@ async def _persist_coverage_failure(
     )
 
 
+# ── PR-A26.1 — propose-mode band derivation ─────────────────────
+
+
+def _derive_drift_band(target: float) -> tuple[float, float]:
+    """Hybrid drift band per A26.1 spec: ``max(0.02, 0.15 * target)``.
+
+    Returned band is symmetric and clamped to ``[0, 1]``. A target of
+    zero collapses both edges to zero — used for excluded blocks and
+    blocks the optimizer chose not to fund.
+    """
+    if target <= 0.0:
+        return 0.0, 0.0
+    drift = max(0.02, 0.15 * target)
+    return max(0.0, target - drift), min(1.0, target + drift)
+
+
+_PROPOSAL_DEFAULT_RATIONALE = (
+    "Optimizer-proposed weight at this allocation under "
+    "the configured CVaR target."
+)
+_PROPOSAL_EXCLUDED_RATIONALE = (
+    "Block excluded by IPS — forced to zero exposure."
+)
+
+
+async def _build_propose_payload(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID | str,
+    profile: str,
+    base_result: dict[str, Any],
+    cascade_telemetry: dict[str, Any],
+    ex_ante_metrics: dict[str, Any],
+    calibration_snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the propose-mode payload merged into ``cascade_telemetry``.
+
+    Inputs come straight from the post-cascade state inside
+    ``_execute_inner``: the funds list (for block aggregation), the
+    canonical template + excluded-block set (re-queried RLS-aware), the
+    cascade winner (for ``cvar_feasible``), and the ex-ante metrics.
+
+    Returns a dict with three keys merged into cascade_telemetry:
+    ``proposed_bands``, ``proposal_metrics``, and ``winner_signal``.
+    The latter overrides the cascade-derived signal so propose runs
+    surface ``proposal_ready`` / ``proposal_cvar_infeasible`` instead
+    of the realize-mode operator signals.
+    """
+    from app.domains.wealth.models.allocation import StrategicAllocation
+    from app.domains.wealth.models.block import AllocationBlock
+
+    # 1. Aggregate optimizer weights to block level.
+    weights_by_block: dict[str, float] = {}
+    for fund in base_result.get("funds") or []:
+        bid = fund.get("block_id")
+        if not bid:
+            continue
+        w = float(fund.get("weight") or 0.0)
+        weights_by_block[bid] = weights_by_block.get(bid, 0.0) + w
+
+    # 2. Canonical block list + excluded set (RLS-aware via passed db).
+    canonical_rows = (
+        await db.execute(
+            select(AllocationBlock.block_id)
+            .where(AllocationBlock.is_canonical.is_(True))
+        )
+    ).all()
+    canonical_block_ids = sorted({r[0] for r in canonical_rows})
+
+    excluded_rows = (
+        await db.execute(
+            select(StrategicAllocation.block_id)
+            .where(
+                StrategicAllocation.profile == profile,
+                StrategicAllocation.excluded_from_portfolio.is_(True),
+            )
+        )
+    ).all()
+    excluded_block_ids = {r[0] for r in excluded_rows}
+
+    # 3. Build proposed bands per canonical block.
+    proposed_bands: list[dict[str, Any]] = []
+    for bid in canonical_block_ids:
+        if bid in excluded_block_ids:
+            proposed_bands.append({
+                "block_id": bid,
+                "target_weight": 0.0,
+                "drift_min": 0.0,
+                "drift_max": 0.0,
+                "rationale": _PROPOSAL_EXCLUDED_RATIONALE,
+            })
+            continue
+        target = float(weights_by_block.get(bid, 0.0))
+        drift_min, drift_max = _derive_drift_band(target)
+        proposed_bands.append({
+            "block_id": bid,
+            "target_weight": round(target, 6),
+            "drift_min": round(drift_min, 6),
+            "drift_max": round(drift_max, 6),
+            "rationale": _PROPOSAL_DEFAULT_RATIONALE,
+        })
+
+    # 4. cvar_feasible: True iff the cascade landed on Phase 1 or Phase 2.
+    # Phase 3 (min-CVaR fallback) means the universe floor exceeds the
+    # operator's CVaR target — return the bands but flag infeasibility.
+    winning_phase = (base_result.get("cascade") or {}).get("winning_phase")
+    cvar_feasible = winning_phase in {
+        "phase_1_ru_max_return",
+        "phase_2_ru_robust",
+    }
+
+    target_cvar = calibration_snapshot.get("cvar_limit")
+    expected_cvar = ex_ante_metrics.get("cvar_95")
+    proposal_metrics = {
+        "expected_return": ex_ante_metrics.get("expected_return"),
+        "expected_cvar": expected_cvar,
+        "expected_sharpe": ex_ante_metrics.get("sharpe_ratio"),
+        "target_cvar": float(target_cvar) if target_cvar is not None else None,
+        "cvar_feasible": bool(cvar_feasible),
+    }
+
+    winner_signal = (
+        WinnerSignal.PROPOSAL_READY.value
+        if cvar_feasible
+        else WinnerSignal.PROPOSAL_CVAR_INFEASIBLE.value
+    )
+
+    return {
+        "proposed_bands": proposed_bands,
+        "proposal_metrics": proposal_metrics,
+        "winner_signal": winner_signal,
+        "run_mode": "propose",
+    }
+
+
 # ── Main entry point ──────────────────────────────────────────
 
 
@@ -929,6 +1336,7 @@ async def execute_construction_run(
     requested_by: str,
     job_id: str | None = None,
     as_of_date: date | None = None,
+    propose_mode: bool = False,
 ) -> PortfolioConstructionRun:
     """Execute a full enriched construction run.
 
@@ -984,6 +1392,7 @@ async def execute_construction_run(
         universe_fingerprint="pending",  # filled post-construction
         as_of_date=as_of_date,
         status="running",
+        run_mode="propose" if propose_mode else "realize",
         requested_by=requested_by,
         started_at=datetime.now(tz=timezone.utc),
     )
@@ -1010,6 +1419,7 @@ async def execute_construction_run(
                 portfolio_id=portfolio_id,
                 calibration_snapshot=calibration_snapshot,
                 job_id=job_id,
+                propose_mode=propose_mode,
             ),
             timeout=CONSTRUCTION_TIMEOUT_SECONDS,
         )
@@ -1031,6 +1441,118 @@ async def execute_construction_run(
         logger.warning(
             "construction_run_timeout",
             extra={"run_id": str(run_id), "portfolio_id": str(portfolio_id)},
+        )
+        return run
+    except TemplateIncompleteError as template_exc:
+        # PR-A25 — structural failure ahead of the coverage gate.
+        await _persist_template_failure(
+            db, run=run, report=template_exc.report,
+        )
+        run.completed_at = datetime.now(tz=timezone.utc)
+        run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
+        await db.flush()
+        await _publish_terminal_event_sanitized(
+            db,
+            run_id=run_id,
+            job_id=job_id,
+            raw_type="run_failed",
+            raw_payload={
+                "run_id": str(run_id),
+                "reason": "template_incomplete",
+                "winner_signal": WinnerSignal.TEMPLATE_INCOMPLETE.value,
+                "template_report": template_exc.report.model_dump(mode="json"),
+            },
+        )
+        logger.warning(
+            "construction_run_template_incomplete",
+            extra={
+                "run_id": str(run_id),
+                "portfolio_id": str(portfolio_id),
+                "missing_canonical_blocks": (
+                    template_exc.report.missing_canonical_blocks
+                ),
+            },
+        )
+        return run
+    except NoApprovedAllocationError as no_approval_exc:
+        # PR-A26.2 Section E — realize mode blocked; emit structured signal.
+        await _persist_no_approval_failure(
+            db,
+            run=run,
+            organization_id=no_approval_exc.organization_id,
+            profile=no_approval_exc.profile,
+            approved_count=no_approval_exc.approved_count,
+            total_count=no_approval_exc.total_count,
+        )
+        run.completed_at = datetime.now(tz=timezone.utc)
+        run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
+        await db.flush()
+        await _publish_terminal_event_sanitized(
+            db,
+            run_id=run_id,
+            job_id=job_id,
+            raw_type="run_failed",
+            raw_payload={
+                "run_id": str(run_id),
+                "reason": "no_approved_allocation",
+                "winner_signal": WinnerSignal.NO_APPROVED_ALLOCATION.value,
+                "approved_count": no_approval_exc.approved_count,
+                "total_count": no_approval_exc.total_count,
+            },
+        )
+        logger.info(
+            "construction_run_no_approved_allocation",
+            extra={
+                "run_id": str(run_id),
+                "portfolio_id": str(portfolio_id),
+                "profile": no_approval_exc.profile,
+                "approved": no_approval_exc.approved_count,
+                "total": no_approval_exc.total_count,
+            },
+        )
+        return run
+    except InstrumentConcentrationBreachError as conc_exc:
+        # PR-A26.2 Section F — realize composition refused; emit signal.
+        await _persist_instrument_concentration_breach(
+            db,
+            run=run,
+            breaches=[
+                {
+                    "block_id": conc_exc.block_id,
+                    "block_weight": conc_exc.block_weight,
+                    "required": conc_exc.required,
+                    "available": conc_exc.available,
+                },
+            ],
+        )
+        run.completed_at = datetime.now(tz=timezone.utc)
+        run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
+        await db.flush()
+        await _publish_terminal_event_sanitized(
+            db,
+            run_id=run_id,
+            job_id=job_id,
+            raw_type="run_failed",
+            raw_payload={
+                "run_id": str(run_id),
+                "reason": "instrument_concentration_breach",
+                "winner_signal": (
+                    WinnerSignal.INSTRUMENT_CONCENTRATION_BREACH.value
+                ),
+                "block_id": conc_exc.block_id,
+                "required": conc_exc.required,
+                "available": conc_exc.available,
+            },
+        )
+        logger.info(
+            "construction_run_instrument_concentration_breach",
+            extra={
+                "run_id": str(run_id),
+                "portfolio_id": str(portfolio_id),
+                "block_id": conc_exc.block_id,
+                "required": conc_exc.required,
+                "available": conc_exc.available,
+            },
         )
         return run
     except CoverageInsufficientError as coverage_exc:
@@ -1176,6 +1698,7 @@ async def _execute_inner(
     portfolio_id: uuid.UUID,
     calibration_snapshot: dict[str, Any],
     job_id: str | None,
+    propose_mode: bool = False,
 ) -> None:
     """The inner pipeline — everything that runs inside the 120s bound.
 
@@ -1197,6 +1720,18 @@ async def _execute_inner(
     profile = portfolio.profile
     organization_id = portfolio.organization_id
 
+    # ── PR-A25. Template completeness gate — runs BEFORE the coverage
+    # gate so structural defects (missing canonical blocks) surface as
+    # the dedicated ``template_incomplete`` signal. Post-migration 0153
+    # this should never fail; if it does the trigger is broken and the
+    # operator message directs them to engineering rather than to the
+    # universe editor.
+    template = await validate_template_completeness(
+        db, organization_id, profile,
+    )
+    if not template.is_complete:
+        raise TemplateIncompleteError(template)
+
     # ── PR-A22. Block coverage gate — fail fast if any block in the
     # profile's StrategicAllocation has zero approved candidates in
     # the org's universe. Runs BEFORE the optimizer so the cascade is
@@ -1206,6 +1741,34 @@ async def _execute_inner(
     coverage = await validate_block_coverage(db, organization_id, profile)
     if not coverage.is_sufficient:
         raise CoverageInsufficientError(coverage)
+
+    # ── PR-A26.2 Section E. Realize-mode approval gate ──
+    # Refuse-to-run until an approved Strategic IPS exists for the
+    # (org, profile) pair. Propose mode skips this check — it generates
+    # the anchor bands the operator later approves.
+    if not propose_mode:
+        approved, total = await _count_approved_blocks(
+            db, organization_id, profile,
+        )
+        # ``total`` is 18 post-A25; allow for transitional fixtures by
+        # requiring ``approved == total`` AND ``approved > 0``.
+        if total == 0 or approved < total:
+            raise NoApprovedAllocationError(
+                organization_id=organization_id,
+                profile=profile,
+                approved_count=approved,
+                total_count=total,
+            )
+
+        # PR-A26.2 Section F. Per-instrument 15% cap feasibility.
+        # Refuse to invoke the optimizer when any block's approved
+        # target weight cannot be distributed without breaching the
+        # hard 15% per-instrument ceiling given the approved-universe
+        # count. Ensures the operator never sees a silent optimizer
+        # infeasibility that could be explained structurally.
+        await _check_instrument_concentration_feasibility(
+            db, organization_id=organization_id, profile=profile,
+        )
 
     await _check_cancellation(job_id, "pre_optimizer")
     await _publish_event_sanitized(
@@ -1219,6 +1782,7 @@ async def _execute_inner(
     # ── 4. Optimizer cascade ──
     base_result = await _run_construction_async(
         db, profile, str(organization_id), portfolio_id=portfolio_id,
+        propose_mode=propose_mode,
     )
 
     # PR-A8 — Layer 3 dedup telemetry. Surfaced as a sanitized SSE event
@@ -1330,6 +1894,34 @@ async def _execute_inner(
                 # PR-A19.1 Section C — cascade-aware operator signal.
                 "winner_signal": cascade_telemetry.get("winner_signal"),
                 "operator_message": cascade_telemetry.get("operator_message"),
+            },
+        )
+
+    # ── PR-A26.1 — propose-mode payload (bands + metrics) ──
+    if propose_mode:
+        proposal_payload = await _build_propose_payload(
+            db,
+            organization_id=organization_id,
+            profile=profile,
+            base_result=base_result,
+            cascade_telemetry=cascade_telemetry,
+            ex_ante_metrics=ex_ante_metrics,
+            calibration_snapshot=calibration_snapshot,
+        )
+        cascade_telemetry = {**cascade_telemetry, **proposal_payload}
+        await _publish_event_sanitized(
+            db,
+            run_id=run.id,
+            job_id=job_id,
+            raw_type=(
+                "propose_ready"
+                if proposal_payload["proposal_metrics"]["cvar_feasible"]
+                else "propose_cvar_infeasible"
+            ),
+            raw_payload={
+                "winner_signal": proposal_payload["winner_signal"],
+                "proposal_metrics": proposal_payload["proposal_metrics"],
+                "n_bands": len(proposal_payload["proposed_bands"]),
             },
         )
 

@@ -147,6 +147,27 @@ _FLAG_NEEDS_REVIEW_QUERY = text(
 )
 
 
+# PR-A24 — flag the universe row with the excluded strategy_label so
+# audits can report which mandate-level rule caught the instrument. JSONB
+# merge preserves every other attribute. Guard ensures idempotency: the
+# update is a no-op once the breadcrumb is already set.
+_FLAG_STRATEGIC_EXCLUDED_QUERY = text(
+    """
+    UPDATE instruments_universe
+       SET attributes = jsonb_set(
+           COALESCE(attributes, '{}'::jsonb),
+           '{strategic_excluded_reason}',
+           to_jsonb(:strategy_label::text),
+           true
+       )
+     WHERE instrument_id = :instrument_id
+       AND COALESCE(
+               attributes->>'strategic_excluded_reason', ''
+           ) IS DISTINCT FROM :strategy_label
+    """,
+)
+
+
 async def _flag_universe_needs_review(
     db: AsyncSession, *, instrument_id: Any,
 ) -> None:
@@ -313,6 +334,31 @@ async def auto_import_for_org(
                     "classifier_needs_review",
                     instrument_id=str(inst["instrument_id"]),
                     ticker=inst.get("ticker") or inst.get("name"),
+                    reason=decision_reason,
+                    organization_id=str(org_id),
+                )
+            elif decision_reason == "excluded_asset_class":
+                # PR-A24 — mandate-level exclusion (e.g. US muni).
+                # Universe row gets a strategic_excluded_reason audit
+                # breadcrumb with the triggering strategy_label; NO
+                # instruments_org insert; NO needs_human_review flag
+                # (that signal is reserved for rows the operator should
+                # triage). Log for observability.
+                strategy_label = (inst.get("attributes") or {}).get(
+                    "strategy_label",
+                )
+                await db.execute(
+                    _FLAG_STRATEGIC_EXCLUDED_QUERY,
+                    {
+                        "instrument_id": inst["instrument_id"],
+                        "strategy_label": strategy_label,
+                    },
+                )
+                logger.info(
+                    "auto_import_excluded",
+                    instrument_id=str(inst["instrument_id"]),
+                    ticker=inst.get("ticker") or inst.get("name"),
+                    strategy_label=strategy_label,
                     reason=decision_reason,
                     organization_id=str(org_id),
                 )

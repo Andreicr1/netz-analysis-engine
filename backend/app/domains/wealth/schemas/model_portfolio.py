@@ -259,6 +259,210 @@ class ConstructRunAccepted(BaseModel):
     run_url: str
 
 
+# ── PR-A26.1 — Propose Mode ──────────────────────────────────────────
+
+
+class ProposedBand(BaseModel):
+    """One block's proposed strategic anchor + drift band.
+
+    Emitted by the propose-mode optimizer for every block in the
+    canonical template (excluded blocks have ``target_weight = 0`` and
+    ``drift_min = drift_max = 0``). Drift band is the hybrid
+    ``max(0.02, 0.15 * target)`` derivation per A26.1 spec.
+    """
+
+    block_id: str
+    target_weight: float
+    drift_min: float
+    drift_max: float
+    rationale: str | None = None
+
+
+class ProposalMetrics(BaseModel):
+    """Headline ex-ante metrics for the propose-mode allocation.
+
+    ``cvar_feasible`` is False when the cascade fell through to the
+    Phase 3 min-CVaR fallback (universe floor exceeds the operator's
+    target); the bands are still returned so the operator can decide
+    whether to raise the limit or expand the universe.
+    """
+
+    expected_return: float | None = None
+    expected_cvar: float | None = None
+    expected_sharpe: float | None = None
+    target_cvar: float | None = None
+    cvar_feasible: bool
+
+
+class LatestProposalResponse(BaseModel):
+    """Response for ``GET /portfolio/profiles/{profile}/latest-proposal``."""
+
+    run_id: uuid.UUID
+    requested_at: datetime
+    winner_signal: str
+    proposed_bands: list[ProposedBand]
+    proposal_metrics: ProposalMetrics
+
+
+class JobCreatedResponse(BaseModel):
+    """Generic 202 response for async propose-mode dispatch."""
+
+    job_id: str
+    sse_url: str
+    run_id: uuid.UUID
+
+
+# ── PR-A26.2 — Approval flow + overrides ────────────────────────────
+
+
+class ApproveProposalRequest(BaseModel):
+    """Body for ``POST /portfolio/profiles/{profile}/approve-proposal/{run_id}``.
+
+    ``confirm_cvar_infeasible=True`` is required when approving a run
+    that completed with ``winner_signal = 'proposal_cvar_infeasible'``
+    — the operator is explicitly accepting a Strategic IPS whose bands
+    cannot meet the configured CVaR target. ``operator_message`` lands
+    on ``allocation_approvals.operator_message`` for audit.
+    """
+
+    confirm_cvar_infeasible: bool = False
+    operator_message: str | None = Field(default=None, max_length=5000)
+
+
+class StrategicAllocationRow(BaseModel):
+    """Single strategic_allocation row after approval (Section C)."""
+
+    block_id: str
+    target_weight: float | None = None
+    drift_min: float | None = None
+    drift_max: float | None = None
+    override_min: float | None = None
+    override_max: float | None = None
+    approved_at: datetime | None = None
+    approved_by: str | None = None
+    excluded_from_portfolio: bool = False
+
+
+class ApprovalResponse(BaseModel):
+    """Response for ``POST /portfolio/profiles/{profile}/approve-proposal/{run_id}``.
+
+    ``strategic_snapshot`` carries one entry per canonical block — the
+    post-approval state of the 18 ``strategic_allocation`` rows that
+    make up the Strategic IPS anchor. The frontend renders this as
+    confirmation before wiring up the realize-mode CTA.
+    """
+
+    approval_id: uuid.UUID
+    run_id: uuid.UUID
+    organization_id: uuid.UUID
+    profile: str
+    approved_at: datetime
+    approved_by: str
+    cvar_feasible_at_approval: bool
+    strategic_snapshot: list[StrategicAllocationRow]
+
+
+class SetOverrideRequest(BaseModel):
+    """Body for ``POST /portfolio/profiles/{profile}/set-override``.
+
+    Either bound may be ``None`` — set just one side (e.g. only
+    ``override_max``) or both, or clear both by passing ``None``.
+    """
+
+    block_id: str
+    override_min: float | None = Field(default=None, ge=0.0, le=1.0)
+    override_max: float | None = Field(default=None, ge=0.0, le=1.0)
+    rationale: str | None = Field(default=None, max_length=5000)
+
+    @model_validator(mode="after")
+    def _validate_override_bounds(self) -> SetOverrideRequest:
+        if (
+            self.override_min is not None
+            and self.override_max is not None
+            and self.override_min > self.override_max
+        ):
+            raise ValueError("override_min must be <= override_max when both set")
+        return self
+
+
+# ── PR-A26.3 — Allocation page read endpoints ──────────────────────
+
+
+class StrategicAllocationBlock(BaseModel):
+    """One canonical block row on the allocation page (Section A / C).
+
+    Extends :class:`StrategicAllocationRow` with ``block_name`` for the
+    frontend (humanized label) plus ``approved_from_run_id`` for
+    provenance tracing. ``target_weight`` / ``drift_*`` / ``approved_*``
+    are ``None`` when the block has never been approved.
+    """
+
+    block_id: str
+    block_name: str
+    target_weight: float | None = None
+    drift_min: float | None = None
+    drift_max: float | None = None
+    override_min: float | None = None
+    override_max: float | None = None
+    excluded_from_portfolio: bool = False
+    approved_from_run_id: uuid.UUID | None = None
+    approved_at: datetime | None = None
+    approved_by: str | None = None
+
+
+class StrategicAllocationResponse(BaseModel):
+    """Response for ``GET /portfolio/profiles/{profile}/strategic-allocation``.
+
+    ``cvar_limit`` is resolved from the active ``portfolio_calibration``
+    row for the profile's live/paused model portfolio; it falls back to
+    the institutional default (per-profile) when no portfolio exists
+    yet. ``has_active_approval`` is True iff at least one block row
+    carries a non-NULL ``approved_at`` — i.e. the Strategic IPS has
+    been snapshotted at least once for this (org, profile) pair.
+    """
+
+    organization_id: uuid.UUID
+    profile: str
+    cvar_limit: float
+    has_active_approval: bool
+    last_approved_at: datetime | None = None
+    last_approved_by: str | None = None
+    blocks: list[StrategicAllocationBlock]
+
+
+class ApprovalHistoryEntry(BaseModel):
+    """One row of the approval history table (Section G).
+
+    ``is_active`` mirrors ``superseded_at IS NULL`` — useful on the
+    frontend so the Active badge can be computed without re-checking
+    the superseded timestamp.
+    """
+
+    approval_id: uuid.UUID
+    run_id: uuid.UUID
+    approved_by: str
+    approved_at: datetime
+    superseded_at: datetime | None = None
+    cvar_at_approval: float | None = None
+    expected_return_at_approval: float | None = None
+    cvar_feasible_at_approval: bool
+    operator_message: str | None = None
+    is_active: bool
+
+
+class ApprovalHistoryResponse(BaseModel):
+    """Response for ``GET /portfolio/profiles/{profile}/approval-history``.
+
+    Pagination is offset-based; ``total`` reflects the full count for
+    the (org, profile) pair regardless of limit/offset.
+    """
+
+    organization_id: uuid.UUID
+    profile: str
+    total: int
+    entries: list[ApprovalHistoryEntry]
+
+
 class StressScenarioCatalogEntry(BaseModel):
     """One entry in the stress catalog returned by GET /portfolio/stress-test/scenarios."""
 

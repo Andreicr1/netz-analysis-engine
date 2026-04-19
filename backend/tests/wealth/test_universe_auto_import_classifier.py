@@ -400,6 +400,66 @@ def test_pr_a23_happy_path_spy_unchanged() -> None:
     assert reason == "strategy_label"
 
 
+# ── PR-A24 regression tests — muni asset-class exclusion ─────────
+
+
+@pytest.mark.parametrize(
+    "muni_label",
+    [
+        "Muni National Interm",
+        "Muni National Short",
+        "Muni National Long",
+        "Muni Single State Interm",
+        "High Yield Muni",
+        "Muni California Long",
+        "Muni Target Maturity",
+    ],
+)
+def test_pr_a24_muni_strategy_label_returns_excluded_asset_class(
+    muni_label: str,
+) -> None:
+    """Every muni strategy label in EXCLUDED_STRATEGY_LABELS must
+    short-circuit the cascade with ``(None, "excluded_asset_class")`` —
+    distinct from ``needs_human_review`` so the service layer can skip
+    row insertion entirely rather than flag for triage.
+    """
+    inst = _inst(
+        asset_class="fixed_income", investment_geography="US",
+        name="Some Muni Fund", strategy_label=muni_label,
+    )
+    valid = {"fi_us_aggregate", "fi_us_treasury"}
+    block_id, reason = classify_block(inst, valid_blocks=valid)
+    assert block_id is None
+    assert reason == "excluded_asset_class"
+
+
+def test_pr_a24_muni_exclusion_runs_before_hybrid_check() -> None:
+    """Defensive: exclusion must run before every other branch so no
+    classifier path can ever return ``needs_human_review`` for a muni
+    instrument."""
+    inst = _inst(
+        asset_class="fixed_income",
+        name="Vanguard Tax-Exempt Bond Index",
+        strategy_label="Muni National Interm",
+    )
+    block_id, reason = classify_block(inst)
+    assert block_id is None
+    assert reason == "excluded_asset_class"
+
+
+def test_pr_a24_non_muni_unchanged() -> None:
+    """Non-muni FI funds continue through the normal cascade — no
+    regression from the early exclusion check."""
+    inst = _inst(
+        asset_class="fixed_income",
+        strategy_label="Intermediate Core Bond",
+        name="Vanguard Total Bond",
+    )
+    block_id, reason = classify_block(inst)
+    assert block_id == "fi_us_aggregate"
+    assert reason == "strategy_label"
+
+
 def test_valid_blocks_no_valid_candidate_surfaces_block_not_registered() -> None:
     """Multi-Strategy only maps to [alt_hedge_fund]; when none of the
     candidate blocks are seeded the classifier must skip the row with a

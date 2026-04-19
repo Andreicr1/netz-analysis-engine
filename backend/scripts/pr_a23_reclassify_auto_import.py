@@ -90,6 +90,35 @@ _FLAG_UNIVERSE_SQL = text(
     """
 )
 
+
+# PR-A24 — mandate-level exclusion reclassification: when the updated
+# classifier surfaces a muni (or other excluded-class) instrument, we
+# DELETE the org row rather than nulling block_id. Honours block_overridden
+# so hand-curated selections are never touched.
+_DELETE_EXCLUDED_SQL = text(
+    """
+    DELETE FROM instruments_org
+     WHERE id = :row_id
+       AND block_overridden = FALSE
+    """
+)
+
+_FLAG_UNIVERSE_EXCLUDED_SQL = text(
+    """
+    UPDATE instruments_universe
+       SET attributes = jsonb_set(
+           COALESCE(attributes, '{}'::jsonb),
+           '{strategic_excluded_reason}',
+           to_jsonb(CAST(:strategy_label AS text)),
+           true
+       )
+     WHERE instrument_id = :instrument_id
+       AND COALESCE(
+               attributes->>'strategic_excluded_reason', ''
+           ) IS DISTINCT FROM :strategy_label
+    """
+)
+
 _VALID_BLOCKS_SQL = text("SELECT block_id FROM allocation_blocks")
 
 _LIST_ORGS_SQL = text(
@@ -134,6 +163,7 @@ async def _process_org(
     rows_flagged = 0
     rows_override_skipped = 0
     rows_unchanged = 0
+    rows_deleted_as_excluded = 0
     changes: list[dict[str, Any]] = []
 
     for row in rows:
@@ -148,6 +178,47 @@ async def _process_org(
         }
         new_block, new_reason = classify_block(payload, valid_blocks=valid_blocks)
         current_block = row["current_block_id"]
+
+        # PR-A24 — mandate-level exclusion: delete the org row entirely
+        # rather than flag or null. Honours block_overridden (operator
+        # curated) — those rows are left intact and recorded as drift.
+        if new_reason == "excluded_asset_class":
+            if row["block_overridden"]:
+                rows_override_skipped += 1
+                changes.append({
+                    "row_id": str(row["id"]),
+                    "ticker": row["ticker"],
+                    "current_block_id": current_block,
+                    "new_block_id": None,
+                    "new_reason": new_reason,
+                    "applied": False,
+                    "skip_reason": "block_overridden",
+                })
+                continue
+            if not dry_run:
+                strategy_label = (row["attributes"] or {}).get("strategy_label")
+                await db.execute(
+                    _DELETE_EXCLUDED_SQL,
+                    {"row_id": row["id"]},
+                )
+                await db.execute(
+                    _FLAG_UNIVERSE_EXCLUDED_SQL,
+                    {
+                        "instrument_id": row["instrument_id"],
+                        "strategy_label": strategy_label,
+                    },
+                )
+            rows_deleted_as_excluded += 1
+            changes.append({
+                "row_id": str(row["id"]),
+                "ticker": row["ticker"],
+                "current_block_id": current_block,
+                "new_block_id": None,
+                "new_reason": new_reason,
+                "applied": not dry_run,
+                "skip_reason": None,
+            })
+            continue
 
         if new_block == current_block:
             rows_unchanged += 1
@@ -199,6 +270,7 @@ async def _process_org(
         rows_flagged_for_review=rows_flagged,
         rows_override_skipped=rows_override_skipped,
         rows_unchanged=rows_unchanged,
+        rows_deleted_as_excluded=rows_deleted_as_excluded,
         changes=changes,
     )
 
@@ -219,14 +291,19 @@ async def _run(dry_run: bool) -> dict[str, Any]:
     total_flagged = 0
     total_override_skipped = 0
     total_unchanged = 0
+    total_deleted_as_excluded = 0
 
     for org_id in org_ids:
         async with session_factory() as db:
             # Scope RLS context per org so UPDATEs on instruments_org
             # respect tenancy. instruments_universe is global (no RLS).
+            # PostgreSQL's SET LOCAL cannot use bind params — interpolate
+            # the UUID directly. Safe because org_id is already a UUID
+            # instance from the DB, not user input.
             await db.execute(
-                text("SET LOCAL app.current_organization_id = :oid"),
-                {"oid": str(org_id)},
+                text(
+                    f"SET LOCAL app.current_organization_id = '{org_id}'",
+                ),
             )
             summary = await _process_org(
                 db,
@@ -244,6 +321,7 @@ async def _run(dry_run: bool) -> dict[str, Any]:
         total_flagged += summary["rows_flagged_for_review"]
         total_override_skipped += summary["rows_override_skipped"]
         total_unchanged += summary["rows_unchanged"]
+        total_deleted_as_excluded += summary["rows_deleted_as_excluded"]
 
     await engine.dispose()
 
@@ -254,6 +332,7 @@ async def _run(dry_run: bool) -> dict[str, Any]:
         "rows_flagged_for_review": total_flagged,
         "rows_override_skipped": total_override_skipped,
         "rows_unchanged": total_unchanged,
+        "rows_deleted_as_excluded": total_deleted_as_excluded,
         "per_org": per_org_summaries,
     }
 
@@ -280,7 +359,8 @@ def main() -> int:
         f"updated={report['rows_updated']} "
         f"flagged_for_review={report['rows_flagged_for_review']} "
         f"override_skipped={report['rows_override_skipped']} "
-        f"unchanged={report['rows_unchanged']}",
+        f"unchanged={report['rows_unchanged']} "
+        f"deleted_as_excluded={report['rows_deleted_as_excluded']}",
         file=sys.stderr,
     )
     return 0
