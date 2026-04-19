@@ -2,18 +2,18 @@
 
 **Date:** 2026-04-19
 **Owner:** Andrei
-**Scope decision locked:** Visual + interaction parity for the 3 remaining Figma pages (`Netz Terminal - Builder.html`, `Netz Terminal - Macro.html`, `Netz Terminal - Screener.html`). Terminal.html parity already landed via PRs #230–#234.
+**Scope decision locked:** Visual + interaction parity for the 3 remaining UX bundle pages (`Netz Terminal - Builder.html`, `Netz Terminal - Macro.html`, `Netz Terminal - Screener.html`). Terminal.html parity already landed via PRs #230–#234.
 **Execution model:** 4–5 independently-mergeable sub-PRs sized for a single Opus session each. Sessions run in parallel with Gemini; do not cross-touch files outside the PR’s scope.
 
 ---
 
 ## 0. Ground truth & assumptions
 
-- Figma bundle IS checked into repo at `docs/ux/Netz Terminal/`:
+- UX bundle IS checked into repo at `docs/ux/Netz Terminal/`:
   - `Netz Terminal - Builder.html` + `builder.css` (726 lines) + `builder-app.jsx` (381) + `builder-data.jsx` + `builder-preview.jsx`.
   - `Netz Terminal - Macro.html` + `macro.css` (629) + `macro-app.jsx` (695) + `macro-data.jsx`.
   - `Netz Terminal - Screener.html` + `screener.css` (398) + `screener-app.jsx` (602) + `screener-data.jsx`.
-  - Shared `assets/` + `_check/` (Figma QA snapshots).
+  - Shared `assets/` + `_check/` (bundle QA snapshots).
   - Opus diffs against these at visual-QA time; the `.jsx` files are reference-only (React) — never imported.
 - Infra to REUSE (do NOT rewrite):
   - `@netz/ui/terminal` primitives: `Pill`, `Kbd`, `KpiCard`, `DensityToggle`, `AccentPicker`, `ThemeToggle` (PR #231).
@@ -21,8 +21,8 @@
   - `terminal-tweaks.svelte.ts` (density/accent/theme — in-memory only).
   - `MarketDataStore` (Tiingo WS + REST fallback) already wired to `(terminal)/+layout.svelte`.
   - Formatters `formatMonoTime` / `formatCompactCurrency` / `formatPpDrift` / `formatMonoPercent` from `@netz/ui/formatters/mono`.
-  - Tokens `--terminal-*` namespace canonical; `--term-*` in Figma CSS are naming differences only — remap at port time, no aliases in `@netz/ui`.
-- Figma JSX uses React `useState`/`setInterval` sims + `Math.random` ticks — **ignore all JS**, port visuals only.
+  - Tokens `--terminal-*` namespace canonical; `--term-*` in bundle CSS are naming differences only — remap at port time, no aliases in `@netz/ui`.
+- Bundle JSX uses React `useState`/`setInterval` sims + `Math.random` ticks — **ignore all JS**, port visuals only.
 - `(terminal)/+layout.svelte` already mounts breadcrumb, tweaks context, and LayoutCage. No layout-shell changes allowed in this sprint.
 - Scope decisions confirmed by Andrei 2026-04-19:
   - **Macro RegimeMatrix pin** = client-only `$state`, no backend write. UI banner “SIMULATION”.
@@ -38,96 +38,96 @@
 
 ## A. Diff-style audit per page
 
-Each row: **Current** → **Gap vs Figma** → **Patch**.
+Each row: **Current** → **Gap vs bundle** → **Patch**.
 
 ### A.SCREENER — `/terminal-screener`
 
 Route: `frontends/wealth/src/routes/(terminal)/terminal-screener/+page.svelte`
 Supporting: `frontends/wealth/src/lib/components/screener/terminal/{TerminalScreenerShell,TerminalScreenerFilters,TerminalDataGrid}.svelte`
-Figma: `Netz Terminal - Screener.html` + `screener.css` + `screener-app.jsx`
+Bundle: `Netz Terminal - Screener.html` + `screener.css` + `screener-app.jsx`
 
-| # | Current | Gap vs Figma | Patch |
+| # | Current | Gap vs bundle | Patch |
 |---|---|---|---|
-| S1 | `TerminalScreenerShell` renders filters + datagrid. URL-owned filter state via `parseFiltersFromURL`. `FundFocusMode` overlay on row click. | OK — architecture matches Figma’s two-column (filter rail + grid). No structural change. | No-op. |
-| S2 | `TerminalScreenerFilters.svelte` — raw filter inputs (checkboxes + numeric sliders inline). | Figma uses a **FilterChipGroup** model: each applied filter renders as a dismissible pill with operator + value. Unapplied filters hide in a collapsible drawer at left. | Introduce `<FilterChipRow>` at the top of the grid (shows applied filters as `Pill as="button" tone="accent"` with X). Filter inputs remain in the rail but are collapsed by default; chip row is the primary driver. See §B.1. |
-| S3 | Datagrid uses `TerminalDataGrid` (custom `<table>`). | Figma shows tabular row with **mini sparkline column** (inline 60×18 sparkline per row — last 12mo NAV trend), plus star-elite badge, pill for strategy. | Add `<MiniSparkline />` primitive (§B.2) to `TerminalDataGrid` row renderer. Sparkline data comes from `fund_risk_metrics.nav_trend_sparkline` if present; otherwise omit column (flag backend gap §D). |
-| S4 | Column set: name, strategy, aum, return_1y, sharpe, expense, dd. | Figma adds **BLENDED MOMENTUM** column (pre-computed `blended_momentum_score` from `fund_risk_metrics`) and **10Y RETURN** column. | Add columns to `TerminalDataGrid` config. Data already exists in `fund_risk_metrics`. |
-| S5 | Row click → `FundFocusMode` overlay. | OK. Figma `screener-app.jsx` shows same overlay structure. | No-op. |
+| S1 | `TerminalScreenerShell` renders filters + datagrid. URL-owned filter state via `parseFiltersFromURL`. `FundFocusMode` overlay on row click. | OK — architecture matches the bundle’s two-column (filter rail + grid). No structural change. | No-op. |
+| S2 | `TerminalScreenerFilters.svelte` — raw filter inputs (checkboxes + numeric sliders inline). | Bundle uses a **FilterChipGroup** model: each applied filter renders as a dismissible pill with operator + value. Unapplied filters hide in a collapsible drawer at left. | Introduce `<FilterChipRow>` at the top of the grid (shows applied filters as `Pill as="button" tone="accent"` with X). Filter inputs remain in the rail but are collapsed by default; chip row is the primary driver. See §B.1. |
+| S3 | Datagrid uses `TerminalDataGrid` (custom `<table>`). | Bundle shows tabular row with **mini sparkline column** (inline 60×18 sparkline per row — last 12mo NAV trend), plus star-elite badge, pill for strategy. | Add `<MiniSparkline />` primitive (§B.2) to `TerminalDataGrid` row renderer. Sparkline data comes from `fund_risk_metrics.nav_trend_sparkline` if present; otherwise omit column (flag backend gap §D). |
+| S4 | Column set: name, strategy, aum, return_1y, sharpe, expense, dd. | Bundle adds **BLENDED MOMENTUM** column (pre-computed `blended_momentum_score` from `fund_risk_metrics`) and **10Y RETURN** column. | Add columns to `TerminalDataGrid` config. Data already exists in `fund_risk_metrics`. |
+| S5 | Row click → `FundFocusMode` overlay. | OK. bundle `screener-app.jsx` shows same overlay structure. | No-op. |
 | S6 | `screener.css` uses `--term-*` tokens (e.g. `--term-void`, `--term-fg-primary`). | Must remap to `--terminal-*`. | Port only the layout rules (grid template, row heights, column widths). All color refs → `--terminal-*`. |
-| S7 | No DensityToggle integration in screener surface. | Figma rows compress with `[data-density="compact"]`. | `<TerminalDataGrid>` must consume `--t-row-height` (already defined). Verify row height does NOT use hardcoded px. |
-| S8 | `screener-page-root` overrides `.lc-cage--standard` padding to `--terminal-space-2`. | OK — matches Figma edge-to-edge density. | No-op. |
-| S9 | No keyboard nav in grid. | Figma: `↑/↓` moves row focus; `Enter` opens FundFocusMode; `/` focuses filter search. | Add keyboard handler on `containerEl` in `+page.svelte`. Guard: skip when input focused (reuse util from `TerminalShell`). |
+| S7 | No DensityToggle integration in screener surface. | Bundle rows compress with `[data-density="compact"]`. | `<TerminalDataGrid>` must consume `--t-row-height` (already defined). Verify row height does NOT use hardcoded px. |
+| S8 | `screener-page-root` overrides `.lc-cage--standard` padding to `--terminal-space-2`. | OK — matches the bundle's edge-to-edge density. | No-op. |
+| S9 | No keyboard nav in grid. | Bundle: `↑/↓` moves row focus; `Enter` opens FundFocusMode; `/` focuses filter search. | Add keyboard handler on `containerEl` in `+page.svelte`. Guard: skip when input focused (reuse util from `TerminalShell`). |
 
 ### A.MACRO — `/macro`
 
 Route: `frontends/wealth/src/routes/(terminal)/macro/+page.svelte`
 Supporting: `frontends/wealth/src/lib/components/terminal/macro/{StressHero,SignalBreakdown,RegionalHealthTile,SparklineWall,CommitteeReviewFeed}.svelte`
-Figma: `Netz Terminal - Macro.html` + `macro.css` + `macro-app.jsx`
+Bundle: `Netz Terminal - Macro.html` + `macro.css` + `macro-app.jsx`
 
-| # | Current | Gap vs Figma | Patch |
+| # | Current | Gap vs bundle | Patch |
 |---|---|---|---|
-| M1 | Layout = Hero (full) → SignalBreakdown (2-col) → bottom grid 5fr/4fr/3fr. | Figma layout = **4 zones**: (1) StressHero + RegimeMatrix side-by-side (7fr/5fr), (2) SignalBreakdown full-width, (3) bottom = RegionalHealth (6fr) + SparklineWall (6fr), (4) CommitteeReviewFeed = right sidebar in Zone 1 OR collapsible drawer. | Restructure `macro-desk` grid. Pull CommitteeReviewFeed out of bottom row; place as a drawer toggled by `Shift+R` (committee review key). Add RegimeMatrix next to Hero. |
+| M1 | Layout = Hero (full) → SignalBreakdown (2-col) → bottom grid 5fr/4fr/3fr. | Bundle layout = **4 zones**: (1) StressHero + RegimeMatrix side-by-side (7fr/5fr), (2) SignalBreakdown full-width, (3) bottom = RegionalHealth (6fr) + SparklineWall (6fr), (4) CommitteeReviewFeed = right sidebar in Zone 1 OR collapsible drawer. | Restructure `macro-desk` grid. Pull CommitteeReviewFeed out of bottom row; place as a drawer toggled by `Shift+R` (committee review key). Add RegimeMatrix next to Hero. |
 | M2 | `.macro-desk { height: calc(100vh - 88px); padding: 24px; }` hardcoded. | Use layout cage tokens. | `height: var(--terminal-shell-cage-height, calc(100vh - 116px))`; keep `padding: 24px` per `feedback_layout_cage_pattern.md` (flex/grid min-h-0 fails). |
-| M3 | `setInterval(..., 5*60*1000)` polls macro scores + FRED sparklines. | Figma sparklines are WS-ticked (Tiingo quote for index-tracking ETFs). Backend FRED series are daily — WS not applicable. | Keep 5min REST poll for FRED. **NEW:** for VIX/USD/10Y sparklines that have Tiingo proxies (VXX, UUP, IEF), swap source to `MarketDataStore` subscription. Adapter `macro-sparkline-adapter.ts` (§B.3) resolves series → symbol → live tick. Sparklines without live proxy stay REST-only. |
-| M4 | No RegimeMatrix (drag-drop pin simulation). | Figma: 4×4 grid of regime cells (rows = stress level, cols = growth quadrant). User drags the active pin to a cell → `simulatedRegime` propagates to Hero + SignalBreakdown shading. | New component `RegimeMatrix.svelte` (§B.4). Local `$state` only, banner “SIMULATION”, `Reset` button. No backend write. |
-| M5 | `pinnedRegime` currently persists across pages (global state). | Figma pin state is page-local (matrix = simulation, not a global lock). | Keep `pinnedRegime` global store as-is for TopNav regime indicator, but matrix simulation writes to a SEPARATE `macroSimulationStore` (page-scoped) that does NOT touch `pinnedRegime`. |
-| M6 | `SparklineWall` uses its own sparkline renderer. | Figma sparklines are identical to screener mini-sparklines (same 60×18 footprint with last/delta label). | Refactor `SparklineWall` to use the new `<MiniSparkline>` primitive from §B.2. Deduplicates. |
-| M7 | No chart-type toggle. Sparklines only. | Figma has **tab group** on SparklineWall: `SPARK / AREA / BARS`. | Add `<Pill as="button">` trio driving `SparklineWall.mode`. Area/bars render via same `lightweight-charts` instance (single-container swap, same pattern as PR #233 Candle/Line toggle). **Out of scope if new lightweight-charts series types required** — ship SPARK-only and flag. |
+| M3 | `setInterval(..., 5*60*1000)` polls macro scores + FRED sparklines. | Bundle sparklines are WS-ticked (Tiingo quote for index-tracking ETFs). Backend FRED series are daily — WS not applicable. | Keep 5min REST poll for FRED. **NEW:** for VIX/USD/10Y sparklines that have Tiingo proxies (VXX, UUP, IEF), swap source to `MarketDataStore` subscription. Adapter `macro-sparkline-adapter.ts` (§B.3) resolves series → symbol → live tick. Sparklines without live proxy stay REST-only. |
+| M4 | No RegimeMatrix (drag-drop pin simulation). | Bundle: 4×4 grid of regime cells (rows = stress level, cols = growth quadrant). User drags the active pin to a cell → `simulatedRegime` propagates to Hero + SignalBreakdown shading. | New component `RegimeMatrix.svelte` (§B.4). Local `$state` only, banner “SIMULATION”, `Reset` button. No backend write. |
+| M5 | `pinnedRegime` currently persists across pages (global state). | Bundle pin state is page-local (matrix = simulation, not a global lock). | Keep `pinnedRegime` global store as-is for TopNav regime indicator, but matrix simulation writes to a SEPARATE `macroSimulationStore` (page-scoped) that does NOT touch `pinnedRegime`. |
+| M6 | `SparklineWall` uses its own sparkline renderer. | Bundle sparklines are identical to screener mini-sparklines (same 60×18 footprint with last/delta label). | Refactor `SparklineWall` to use the new `<MiniSparkline>` primitive from §B.2. Deduplicates. |
+| M7 | No chart-type toggle. Sparklines only. | Bundle has **tab group** on SparklineWall: `SPARK / AREA / BARS`. | Add `<Pill as="button">` trio driving `SparklineWall.mode`. Area/bars render via same `lightweight-charts` instance (single-container swap, same pattern as PR #233 Candle/Line toggle). **Out of scope if new lightweight-charts series types required** — ship SPARK-only and flag. |
 | M8 | No `.toFixed` / `toLocaleString` in macro components (grep clean). | — | No cleanup needed. |
-| M9 | `StressHero` emits `onProceedToAlloc` → `/terminal/allocation`. | Figma button reads `PROCEED TO BUILDER`. | Rename label; route already correct (`(terminal)/allocation`). Copy change only. |
-| M10 | `CommitteeReviewFeed` shows last N reviews inline. | Figma = drawer, closed by default, opens via `Shift+R` OR badge click in TopNav. | Wrap in `<Drawer side="right" width="380">` (new primitive §B.5 OR reuse `TerminalTweaksPanel` drawer pattern). |
+| M9 | `StressHero` emits `onProceedToAlloc` → `/terminal/allocation`. | Bundle button reads `PROCEED TO BUILDER`. | Rename label; route already correct (`(terminal)/allocation`). Copy change only. |
+| M10 | `CommitteeReviewFeed` shows last N reviews inline. | Bundle = drawer, closed by default, opens via `Shift+R` OR badge click in TopNav. | Wrap in `<Drawer side="right" width="380">` (new primitive §B.5 OR reuse `TerminalTweaksPanel` drawer pattern). |
 
 ### A.BUILDER — `/allocation/[profile]` (propose→approve surface)
 
 > **§ BUILDER SCOPE PIVOT (2026-04-19)**
 >
-> The Figma `Netz Terminal - Builder.html` file represents the **legacy pre-A26 architecture** where the operator supplied CVaR + turnover + min-weight + max-single-position sliders, IC views, factor tilts, and region caps to the optimizer as inputs. That input surface has been **deleted from the product model** by the A26 sprint (PRs #214, #217, #219, #220, #221, #222 merged 2026-04-18).
+> The bundle's `Netz Terminal - Builder.html` file represents the **legacy pre-A26 architecture** where the operator supplied CVaR + turnover + min-weight + max-single-position sliders, IC views, factor tilts, and region caps to the optimizer as inputs. That input surface has been **deleted from the product model** by the A26 sprint (PRs #214, #217, #219, #220, #221, #222 merged 2026-04-18).
 >
 > **New model (A26.1 + A26.2 + A26.3):** CVaR limit on the IPS is the only mandatory human input. The optimizer runs unconstrained by strategic bands in `propose` mode; the operator reviews the proposal (cascade telemetry + diff bars + 18-block targets) and either **approves atomically** (snapshot → `strategic_allocation` + `allocation_approvals`) or sets **ad-hoc per-block overrides** and re-proposes. Realize mode refuses to run until a Strategic is approved.
 >
-> **Treat the Figma as reference for the _output_ surfaces** (regime header, cascade phase timeline, weights table, risk metrics, stress scenarios, backtest charts — all read-only visualizations of an executed propose run). **Ignore the Figma's input surfaces** — zone B calibration sliders (CVaR/turnover/min-weight), IC views list, factor tilts, region caps, RunControls profile+RUN button. Those are replaced by the ProposeButton / ProposalReviewPanel / OverrideBandsEditor trio already shipped in PR #219.
+> **Treat the bundle as reference for the _output_ surfaces** (regime header, cascade phase timeline, weights table, risk metrics, stress scenarios, backtest charts — all read-only visualizations of an executed propose run). **Ignore the bundle's input surfaces** — zone B calibration sliders (CVaR/turnover/min-weight), IC views list, factor tilts, region caps, RunControls profile+RUN button. Those are replaced by the ProposeButton / ProposalReviewPanel / OverrideBandsEditor trio already shipped in PR #219.
 >
 > **Canonical Builder route for Terminal parity = `/(terminal)/allocation/[profile]/` (PR #219).**
 > The route `/(terminal)/portfolio/builder/` is **legacy Phase 4+5 Builder** with calibration sliders / tabs / ActivationBar. It is NOT the parity target of PR-4. It may be retired in a follow-up sprint; out of scope for this plan. Opus executor: do not edit `/(terminal)/portfolio/builder/**` in PR-4.
 
 **Route (canonical):** `frontends/wealth/src/routes/(terminal)/allocation/+page.svelte` (3-profile cards) + `frontends/wealth/src/routes/(terminal)/allocation/[profile]/+page.svelte` (per-profile governance surface).
 **Supporting components (PR #219 delivered):** `frontends/wealth/src/lib/components/allocation/{StrategicAllocationTable,AllocationDonut,AllocationTable,ProposalReviewPanel,ProposeButton,OverrideBandsEditor,ApprovalHistoryTable}.svelte` + `BLOCK_INSTRUMENTS.ts` + `types.ts`.
-**Figma:** `Netz Terminal - Builder.html` + `builder.css` + `builder-app.jsx` + `builder-preview.jsx` — reference visually for **output tabs only** (Regime / Weights / Risk / Stress / Backtest / Cascade). Discard all input-surface elements.
+**Bundle:** `Netz Terminal - Builder.html` + `builder.css` + `builder-app.jsx` + `builder-preview.jsx` — reference visually for **output tabs only** (Regime / Weights / Risk / Stress / Backtest / Cascade). Discard all input-surface elements.
 
-**What stays from Figma (visual re-skin targets, mapped to existing PR #219 components):**
+**What stays from the bundle (visual re-skin targets, mapped to existing PR #219 components):**
 
-| Figma element | Existing component | Parity action |
+| Bundle element | Existing component | Parity action |
 |---|---|---|
 | Cascade phase timeline (P1 → P1.5 → P2 → P3 → fallback) | `ProposalReviewPanel` metrics row (currently shows E[r] / CVaR / Target / Feasible badge — does NOT render phase timeline yet) | **NEW primitive** `CascadeTimeline.svelte` (wealth-local to `components/allocation/`) — reads `cascade_telemetry.phases[]` from the propose run. Mount in `ProposalReviewPanel` header above the diff bars. |
-| Regime context strip (top of Figma) | Not rendered on allocation page | **NEW** `RegimeContextStrip.svelte` read-only (current regime + stress + window from `GET /macro/regime`). Mount above the KPI row. |
+| Regime context strip (top of bundle) | Not rendered on allocation page | **NEW** `RegimeContextStrip.svelte` read-only (current regime + stress + window from `GET /macro/regime`). Mount above the KPI row. |
 | Weights diff bars | `ProposalReviewPanel` diff bar chart (svelte-echarts) | OK — already shipped; re-skin colors to `--terminal-*` tokens. |
 | 18-row allocation table | `StrategicAllocationTable` + `AllocationDonut` | OK — re-skin to Netz Terminal density + tokens. |
 | IPS summary strip (target return / max CVaR / rebalance freq) | None | **NEW** `IpsSummaryStrip.svelte` (wealth-local, §B.7) — reads CVaR limit from `StrategicAllocationResponse.cvar_limit`. Rendered in the KPI row OR as a footer strip. |
 | Breadcrumb + LayoutCage | `(terminal)/+layout.svelte` | OK — already wired. |
 
-**What is REMOVED from Figma (never implement):**
+**What is REMOVED from the bundle (never implement):**
 
-| Figma input element | Why removed | Replacement |
+| Bundle input element | Why removed | Replacement |
 |---|---|---|
 | Zone B CalibrationPanel (CVaR / turnover / min-weight / max-single-position sliders) | A26 eliminated pre-run IC parameters except CVaR limit. | CVaR limit is set on `portfolio_calibration` via admin API (not in allocation UI per A26.3 Section scope). `OverrideBandsEditor` modal replaces all other block-level constraints. |
 | IC views list (left rail) | A26.1 bypasses BL posterior + `_load_ic_views` in propose mode. | Deleted. |
-| Factor tilts | Never implemented in backend; legacy Figma artifact. | Deleted. |
+| Factor tilts | Never implemented in backend; legacy bundle artifact. | Deleted. |
 | Region caps / sector caps | Replaced by per-block `override_min/override_max` on any of the 18 canonical blocks. | `OverrideBandsEditor` per-block modal. |
 | `RunControls` RUN + profile dropdown | Profile is URL param `[profile]`; "run" is now `ProposeButton`. | `ProposeButton` (SSE-wired, `fetch + ReadableStream`). |
 | `ActivationBar` "all tabs visited" gate | No tabs exist in propose→approve flow. | Deleted. Approval gate is enforced server-side by the approve-proposal endpoint. |
 | MONTE CARLO / ADVISOR tabs | Tab navigation dropped. Advisor output surfaces inline in `ProposalReviewPanel`. | Deleted. (Monte Carlo visualization may return as a post-approval analytics backlog item — out of scope.) |
 
-**Diff rows (current `(terminal)/allocation/**` vs Figma sanitized reference):**
+**Diff rows (current `(terminal)/allocation/**` vs bundle sanitized reference):**
 
-| # | Current | Gap vs Figma (sanitized) | Patch |
+| # | Current | Gap vs bundle (sanitized) | Patch |
 |---|---|---|---|
-| B1 | `/allocation/[profile]/+page.svelte` renders: breadcrumb + KPI row (CVaR / Expected Return / Last Approved / Status badge) + 2-column main grid (Strategic table + donut \| ProposalReviewPanel OR ProposeButton) + ApprovalHistoryTable collapsible. | Figma adds a **RegimeContextStrip** above KPI row (current regime + stress + window). Not yet rendered. | Add `<RegimeContextStrip>` (§B.8) at top of page. Reads `GET /macro/regime` (same endpoint as Macro StressHero) via loader. |
-| B2 | `ProposalReviewPanel` shows metrics row + diff bars + expandable 18-block table + `Approve Allocation` / `Dismiss Proposal` actions. | Figma shows cascade phase timeline (P1 / P1.5 / P2 / P3 winner) between metrics row and diff bars. | Insert `<CascadeTimeline>` (§B.6) between metrics row and diff bars. Reads `cascade_telemetry.phases[]` + `winner_signal` + `coverage` from the propose run payload. |
-| B3 | `ProposalReviewPanel` metrics row: E[r] / CVaR / Target CVaR / Feasible badge. | Figma adds **coverage bar** underneath cascade timeline (PR-A14 coverage signal already in data). | `CascadeTimeline` renders coverage as a thin progress bar under the phase row. Color via `--sev-warn` if <50%, `--sev-critical` if <20%, `--terminal-status-success` otherwise. |
-| B4 | No IPS summary strip — only the inline KPI row. | Figma has dedicated `IPS SUMMARY` strip with pills (CVaR limit, last-approved profile, rebalance cadence). | Add `<IpsSummaryStrip>` (§B.7) beneath the breadcrumb OR as a footer. Reads `StrategicAllocationResponse.cvar_limit` + `last_approved_at` + static cadence label. |
-| B5 | `ApproveRejectBar` / standalone approve+reject bar not present — approve button lives inside `ProposalReviewPanel`. | Figma shows a dedicated footer `ApproveRejectBar` beneath the results zone. | Acceptable as-is — do not duplicate. Keep approve button inside `ProposalReviewPanel`. Cosmetic: align the panel's action footer to Figma's ApproveRejectBar visual (same density, `Pill` accent primary for Approve + `Pill` ghost for Dismiss). |
+| B1 | `/allocation/[profile]/+page.svelte` renders: breadcrumb + KPI row (CVaR / Expected Return / Last Approved / Status badge) + 2-column main grid (Strategic table + donut \| ProposalReviewPanel OR ProposeButton) + ApprovalHistoryTable collapsible. | Bundle adds a **RegimeContextStrip** above KPI row (current regime + stress + window). Not yet rendered. | Add `<RegimeContextStrip>` (§B.8) at top of page. Reads `GET /macro/regime` (same endpoint as Macro StressHero) via loader. |
+| B2 | `ProposalReviewPanel` shows metrics row + diff bars + expandable 18-block table + `Approve Allocation` / `Dismiss Proposal` actions. | Bundle shows cascade phase timeline (P1 / P1.5 / P2 / P3 winner) between metrics row and diff bars. | Insert `<CascadeTimeline>` (§B.6) between metrics row and diff bars. Reads `cascade_telemetry.phases[]` + `winner_signal` + `coverage` from the propose run payload. |
+| B3 | `ProposalReviewPanel` metrics row: E[r] / CVaR / Target CVaR / Feasible badge. | Bundle adds **coverage bar** underneath cascade timeline (PR-A14 coverage signal already in data). | `CascadeTimeline` renders coverage as a thin progress bar under the phase row. Color via `--sev-warn` if <50%, `--sev-critical` if <20%, `--terminal-status-success` otherwise. |
+| B4 | No IPS summary strip — only the inline KPI row. | Bundle has dedicated `IPS SUMMARY` strip with pills (CVaR limit, last-approved profile, rebalance cadence). | Add `<IpsSummaryStrip>` (§B.7) beneath the breadcrumb OR as a footer. Reads `StrategicAllocationResponse.cvar_limit` + `last_approved_at` + static cadence label. |
+| B5 | `ApproveRejectBar` / standalone approve+reject bar not present — approve button lives inside `ProposalReviewPanel`. | Bundle shows a dedicated footer `ApproveRejectBar` beneath the results zone. | Acceptable as-is — do not duplicate. Keep approve button inside `ProposalReviewPanel`. Cosmetic: align the panel's action footer to bundle's ApproveRejectBar visual (same density, `Pill` accent primary for Approve + `Pill` ghost for Dismiss). |
 | B6 | `.toFixed`/`Intl` audit in allocation components. | — | Grep sweep on PR open; PR #219 shipped clean but verify. Formatters must come from `@netz/ui`. |
-| B7 | `data-allocation-root` attribute for LayoutCage padding override. | Currently uses the `h-[calc(100vh-88px)] p-6 overflow-y-auto` pattern directly. Figma shows edge-to-edge density similar to screener. | Add `data-allocation-root` + match the screener override so cage padding collapses to `--terminal-space-2`. Preserve the `calc(100vh-88px)` height per `feedback_layout_cage_pattern.md`. |
+| B7 | `data-allocation-root` attribute for LayoutCage padding override. | Currently uses the `h-[calc(100vh-88px)] p-6 overflow-y-auto` pattern directly. Bundle shows edge-to-edge density similar to screener. | Add `data-allocation-root` + match the screener override so cage padding collapses to `--terminal-space-2`. Preserve the `calc(100vh-88px)` height per `feedback_layout_cage_pattern.md`. |
 | B8 | `StrategicAllocationTable` row click: no action. | OK — per PR-A26.3 Section C spec ("no drill-down in v1"). | No-op. Override edit still lives on the row-action icon. |
 | B9 | Approve with `cvar_feasible=false` → confirm modal in `ProposalReviewPanel`. | OK — matches A26.2 Section C spec (`confirm_cvar_infeasible=true` body flag). | No-op. Verify visual parity: destructive tone on `Confirm Approval` button. |
 | B10 | SSE propose flow: `fetch` + `ReadableStream` per `CLAUDE.md` + `ProposeButton`. | OK. | No-op. Verify events `propose_started / optimizer_started / optimizer_phase_complete / propose_ready / propose_cvar_infeasible / completed` render as a progress indicator with cascade-phase awareness (drives §CascadeTimeline update during the stream for pre-settlement visual). |
@@ -479,15 +479,15 @@ Splits the token/density re-skin + `.toFixed` sweep out of PR-4 if the 3 new pri
 3. **FilterChipRow vs TerminalScreenerFilters duplication.** Chip row is derived from URL state; filter rail writes to URL. Source-of-truth clash if chip X-removal and rail checkbox get out of sync. Mitigate: chip `onRemove` calls the same `handleFiltersChange` as rail; never writes to a separate store.
 
 ### G.MACRO
-1. **RegimeMatrix drag-drop on touch devices.** Pointer events cover touch, but verify on tablet Figma preview. Scope: desktop-first (Andrei runs terminal on 32″ monitor per memory); touch = nice-to-have.
+1. **RegimeMatrix drag-drop on touch devices.** Pointer events cover touch, but verify on tablet bundle preview. Scope: desktop-first (Andrei runs terminal on 32″ monitor per memory); touch = nice-to-have.
 2. **Simulated regime leak into global `pinnedRegime`.** Must not propagate. Enforce by putting `macroSimulationStore` in page-local scope — do NOT import from `$lib/state/*` (which is app-global).
 3. **SparklineWall live-tick subscription churn.** MarketDataStore subscribe/unsubscribe on mount/unmount. Verify `$effect` cleanup unsubscribes all 3 proxies. WS reconnect during page switch shouldn’t leak listeners.
 4. **Tiingo quote for UUP/IEF may not be in default tenant subscription basket.** Backend `MarketDataStore` ticker whitelist — if UUP isn’t subscribed, sparkline stays REST. Flag and defer; not a blocker.
 
 ### G.BUILDER (`/allocation/[profile]`)
-1. **Figma confusion — legacy Builder surfaces tempt re-implementation.** Opus executor reading the Figma may try to port calibration sliders / IC views / factor tilts / `RunControls` RUN button / ActivationBar tab gates because the HTML+JSX still contain them. **Mitigation:** the §BUILDER SCOPE PIVOT block at the top of §A.BUILDER is the anchor; re-read before any edit. Any PR-4 commit touching `/(terminal)/portfolio/builder/**` or introducing a CVaR slider / turnover slider / factor-tilts / IC-views UI is out of scope — reject in review.
+1. **Bundle confusion — legacy Builder surfaces tempt re-implementation.** Opus executor reading the bundle may try to port calibration sliders / IC views / factor tilts / `RunControls` RUN button / ActivationBar tab gates because the HTML+JSX still contain them. **Mitigation:** the §BUILDER SCOPE PIVOT block at the top of §A.BUILDER is the anchor; re-read before any edit. Any PR-4 commit touching `/(terminal)/portfolio/builder/**` or introducing a CVaR slider / turnover slider / factor-tilts / IC-views UI is out of scope — reject in review.
 2. **Cascade telemetry shape drift.** `cascade_telemetry.phases[]` schema shipped by A26.1 Section B may differ slightly from what `CascadeTimeline` expects. Verify at PR-4 open by fetching `latest-proposal` from dev DB canonical org and pasting the JSONB sample into the PR body. If shape differs (e.g., flat dict keyed by phase name vs. list), adapt `CascadeTimeline` props — do NOT change backend telemetry shape in PR-4.
-3. **Read-only vs. editable affordance ambiguity.** Figma's Weights / Risk / Stress / Backtest tabs historically felt "tweakable" because they sat next to input sliders. In the propose→approve model, those outputs are read-only. **Mitigation:** no hover-cursor=pointer on result cells; no inline editing controls; overrides are explicitly gated behind the `OverrideBandsEditor` modal (per-block), never as a cell edit. Acceptance criteria §E.BUILDER enforces this.
+3. **Read-only vs. editable affordance ambiguity.** bundle's Weights / Risk / Stress / Backtest tabs historically felt "tweakable" because they sat next to input sliders. In the propose→approve model, those outputs are read-only. **Mitigation:** no hover-cursor=pointer on result cells; no inline editing controls; overrides are explicitly gated behind the `OverrideBandsEditor` modal (per-block), never as a cell edit. Acceptance criteria §E.BUILDER enforces this.
 4. **Live-mode vs. settled-mode cascade timeline.** During SSE propose stream, phases arrive sequentially (`optimizer_phase_complete`). `CascadeTimeline` must degrade gracefully: show pending / in-progress / complete states per phase without flicker. Avoid replacing the component on every event — mutate `phases[]` in place via `$state`.
 5. **`RegimeContextStrip` depends on `/macro/regime`.** That endpoint may not be mounted on the wealth frontend's standard loader context (Macro page fetches it directly). Confirm at PR-4 open that the server loader can call `/macro/regime` without additional auth scope. If not, strip this element and flag as a backlog item (fallback: render without regime strip; don't block PR).
 6. **PR-A13 achievable-return band UX is a future sprint.** Memory flags PR-A13 UX brief exists (2026-04-17). PR-4 visually ships the propose→approve surface; the feasibility-frontier / achievable-return band panel is out of scope. If Opus attempts to bundle, split into a separate PR.
@@ -504,7 +504,7 @@ Splits the token/density re-skin + `.toFixed` sweep out of PR-4 if the 3 new pri
 3. **PR-3 (Macro)** — introduces RegimeMatrix + Drawer. Depends on PR-1 drawer. Visual complexity mid-tier.
 4. **PR-4 (Builder = `/allocation/[profile]` propose→approve re-skin)** — 3 new read-only primitives (`CascadeTimeline`, `IpsSummaryStrip`, `RegimeContextStrip`) on top of PR #219 surface. No dependency on PR-2/PR-3; could run in parallel after PR-1 but sequenced last to surface any breakage from Screener/Macro primitive changes before touching the governance-critical allocation page.
 
-Rationale: primitives before consumers; Screener validates shared primitives in simplest context; Macro stress-tests Drawer + live-tick wiring; Builder (`/allocation/[profile]`) consumes stable primitives + ships the scope-pivot read-only primitives last. Split into PR-4a (components + integration) and PR-4b (re-skin + lint sweep) if PR-4 exceeds one Opus session — splitting is recommended given the scope-pivot risk (see §G.BUILDER.1): PR-4a can focus all attention on "do not implement legacy Figma inputs" while PR-4b is purely mechanical token/density work.
+Rationale: primitives before consumers; Screener validates shared primitives in simplest context; Macro stress-tests Drawer + live-tick wiring; Builder (`/allocation/[profile]`) consumes stable primitives + ships the scope-pivot read-only primitives last. Split into PR-4a (components + integration) and PR-4b (re-skin + lint sweep) if PR-4 exceeds one Opus session — splitting is recommended given the scope-pivot risk (see §G.BUILDER.1): PR-4a can focus all attention on "do not implement legacy bundle inputs" while PR-4b is purely mechanical token/density work.
 
 ---
 
