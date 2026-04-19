@@ -1,21 +1,36 @@
 <!--
-  /portfolio/builder — Phase 4 Terminal Builder.
+  X3.1 — PORTFOLIO tab content.
 
-  2-column command center (40% command / 60% results).
-  Left: Zone A (regime), Zone B (calibration), Zone C (run controls).
-  Right: Zone D (cascade timeline), Zone E (6-tab results panel).
+  Absorbs /portfolio/builder's 40/60 command-center:
+    LEFT (40%)  — portfolio selector + CalibrationPanel + RunControls
+    RIGHT (60%) — 7 sub-tabs (REGIME / WEIGHTS / RISK / STRESS /
+                  BACKTEST / MONTE CARLO / ADVISOR),
+                  CascadeTimeline overlay while a build runs,
+                  ActivationBar that unlocks once every sub-tab
+                  has been visited.
 
-  Session 2: CascadeTimeline, SSE wiring, STRESS/RISK/ADVISOR tabs,
-  tab-visit tracking gate for Session 3 activation unlock.
+  Two adjustments vs the original page:
+    1. Height is 100% (parent workspace owns the shell cage). The
+       original `calc(100vh - 88px)` was page-level and would leak
+       past the profile + regime + tab strips now sitting above it.
+    2. Optional `?portfolio_id=<uuid>` URL param wins over the
+       auto-select of portfolios[0] so the redirect from
+       /portfolio/builder?id=<id> lands the user on the right
+       portfolio. Falls back to portfolios[0] when the query id
+       doesn't match anything.
+
+  Zone A (regime strip) from the original is dropped — the workspace
+  header already renders RegimeContextStrip above the tab strip, so
+  Zone A would duplicate context.
 -->
 <script lang="ts">
-	import "@investintell/ui/styles/surfaces/builder";
 	import { getContext } from "svelte";
 	import { SvelteSet } from "svelte/reactivity";
 	import { page } from "$app/state";
+	import { fly, fade } from "svelte/transition";
+	import { svelteTransitionFor } from "@investintell/ui";
 	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 	import type { ModelPortfolio } from "$wealth/types/model-portfolio";
-	import type { PageData } from "./$types";
 
 	import RunControls from "$wealth/components/terminal/builder/RunControls.svelte";
 	import WeightsTab from "$wealth/components/terminal/builder/WeightsTab.svelte";
@@ -28,28 +43,34 @@
 	import RegimeTab from "$wealth/components/terminal/builder/RegimeTab.svelte";
 	import ActivationBar from "$wealth/components/terminal/builder/ActivationBar.svelte";
 	import CalibrationPanel from "$wealth/components/portfolio/CalibrationPanel.svelte";
-	import { fly, fade } from "svelte/transition";
-	import { svelteTransitionFor } from "@investintell/ui";
-	import { resolve } from "$app/paths";
 
-	const HREF_SCREENER = resolve("/screener");
+	interface Props {
+		portfolios: ModelPortfolio[];
+	}
 
-	let { data }: { data: PageData } = $props();
+	let { portfolios }: Props = $props();
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
-	// Portfolio selection state
+	// ── Portfolio selection ──────────────────────────────────────
 	let selectedPortfolio = $state<ModelPortfolio | null>(null);
-	const portfolios = $derived((data.portfolios ?? []) as ModelPortfolio[]);
 
-	// Initialize workspace on mount
+	/** URL wins over auto-select so /portfolio/builder?id=X redirect preserves intent. */
+	const urlPortfolioId = $derived(
+		page.url.searchParams.get("portfolio_id"),
+	);
+
 	$effect(() => {
 		workspace.setGetToken(getToken);
 
-		// Auto-select first portfolio if available
-		const first = portfolios[0];
-		if (first && !selectedPortfolio) {
-			selectPortfolio(first);
+		// Prefer the portfolio the URL named — otherwise take the first.
+		const targetId = urlPortfolioId;
+		const target = targetId
+			? (portfolios.find((p) => p.id === targetId) ?? portfolios[0] ?? null)
+			: (portfolios[0] ?? null);
+
+		if (target && target.id !== selectedPortfolio?.id) {
+			selectPortfolio(target);
 		}
 	});
 
@@ -60,34 +81,41 @@
 
 	function handlePortfolioChange(e: Event) {
 		const select = e.currentTarget as HTMLSelectElement;
-		const p = portfolios.find((p) => p.id === select.value);
+		const p = portfolios.find((x) => x.id === select.value);
 		if (p) selectPortfolio(p);
 	}
 
-	// Regime bands: prefer workspace (live-updated) over server-loaded initial
-
-	// Tab state for right column
-	const TABS = ["REGIME", "WEIGHTS", "RISK", "STRESS", "BACKTEST", "MONTE CARLO", "ADVISOR"] as const;
+	// ── Right-column 7-tab state ─────────────────────────────────
+	const TABS = [
+		"REGIME",
+		"WEIGHTS",
+		"RISK",
+		"STRESS",
+		"BACKTEST",
+		"MONTE CARLO",
+		"ADVISOR",
+	] as const;
 	type TabId = (typeof TABS)[number];
-	let activeTab = $state<TabId>("REGIME");
 
-	// ── Tab-visit tracking gate (Session 3 activation unlock) ────
+	let activeTab = $state<TabId>("REGIME");
+	let userSwitchedTab = $state(false);
 	let visitedTabs = $state<Set<TabId>>(new Set());
 
 	$effect(() => {
 		visitedTabs.add(activeTab);
 	});
 
-	/** All tabs must be visited before activation unlocks (Session 3). */
+	/** ActivationBar unlocks only once every sub-tab has been visited. */
 	const allTabsVisited = $derived(visitedTabs.size === TABS.length);
 
-	// Allocation profile from URL (linked from Allocation Editor)
-	const allocProfile = $derived(page.url.searchParams.get("alloc"));
+	function setActiveTab(t: TabId) {
+		activeTab = t;
+		userSwitchedTab = true;
+	}
 
-	// Cascade timeline phases from workspace
+	// Cascade / pipeline phase mirroring the workspace run state.
 	const cascadePhases = $derived(workspace.optimizerPhases);
 	const showCascade = $derived(workspace.runPhase !== "idle");
-	// PR-A5 A.8 — thin progress bar visible only while a build is in-flight.
 	const showProgress = $derived(
 		workspace.runPhase !== "idle" &&
 			workspace.runPhase !== "done" &&
@@ -95,8 +123,6 @@
 	);
 	const runProgress = $derived(workspace.runProgress);
 
-	// ── PR-A5 B.1/B.2 — pipeline phase tracking ───────────────────
-	/** Map the workspace runPhase to the backend BuildPhase used by the strip. */
 	const pipelinePhase = $derived.by<
 		| "IDLE"
 		| "FACTOR_MODELING"
@@ -122,7 +148,7 @@
 	});
 	const pipelineErrored = $derived(workspace.runPhase === "error");
 
-	/** PR-A5 B.1 — tabs that should pulse while their upstream phase runs. */
+	/** Tabs that should pulse while their upstream phase is in flight. */
 	const pulsingTabs = $derived.by<SvelteSet<TabId>>(() => {
 		const set = new SvelteSet<TabId>();
 		switch (workspace.runPhase) {
@@ -143,20 +169,15 @@
 		return set;
 	});
 
-	// PR-A5 B.1 — auto-switch to WEIGHTS on COMPLETED unless user already moved.
-	let userSwitchedTab = $state(false);
-	function setActiveTab(t: TabId) {
-		activeTab = t;
-		userSwitchedTab = true;
-	}
-
 	$effect(() => {
-		if (workspace.runPhase === "done" && !userSwitchedTab && activeTab === "REGIME") {
+		if (
+			workspace.runPhase === "done" &&
+			!userSwitchedTab &&
+			activeTab === "REGIME"
+		) {
 			activeTab = "WEIGHTS";
 		}
 	});
-
-	// Reset the user-switch guard whenever a fresh build begins.
 	$effect(() => {
 		if (workspace.runPhase === "running") {
 			userSwitchedTab = false;
@@ -164,24 +185,9 @@
 	});
 </script>
 
-<svelte:head>
-	<title>Builder — InvestIntell</title>
-</svelte:head>
-
-<div class="builder-shell" data-surface="builder">
+<div class="builder-shell">
 	<!-- LEFT COLUMN (40%) — Command Panel -->
 	<div class="builder-left">
-		<!-- Breadcrumb back to screener -->
-		<div class="builder-header-row">
-			<a href={HREF_SCREENER} class="builder-backlink" data-sveltekit-preload-data="hover">
-				&larr; SCREENER
-			</a>
-			{#if allocProfile}
-				<span class="builder-alloc-badge">ALLOC: {allocProfile.toUpperCase()}</span>
-			{/if}
-		</div>
-
-		<!-- Portfolio selector -->
 		<div class="builder-portfolio-select">
 			<select
 				class="builder-select"
@@ -199,7 +205,6 @@
 			</select>
 		</div>
 
-		<!-- Zone B: Calibration Controls (scrollable) -->
 		<div class="builder-calibration">
 			{#if selectedPortfolio}
 				<CalibrationPanel />
@@ -208,7 +213,6 @@
 			{/if}
 		</div>
 
-		<!-- Zone C: Run Controls (pinned to bottom) -->
 		{#if selectedPortfolio}
 			<RunControls />
 		{/if}
@@ -216,7 +220,6 @@
 
 	<!-- RIGHT COLUMN (60%) — Results Panel -->
 	<div class="builder-right">
-		<!-- Tab bar -->
 		<div class="builder-tabs" role="tablist">
 			{#each TABS as tab (tab)}
 				<button
@@ -229,15 +232,19 @@
 				>
 					{tab}
 					{#if pulsingTabs.has(tab)}
-						<span class="builder-tab-pulse" aria-label="Dados deste tab estão sendo preparados"></span>
+						<span
+							class="builder-tab-pulse"
+							aria-label="Pipeline phase in flight"
+						></span>
 					{/if}
 				</button>
 			{/each}
 		</div>
 
-		<!-- Zone D: Cascade Timeline (visible during/after run) -->
 		{#if showCascade}
-			<div in:fly={{ y: -8, ...svelteTransitionFor("primary", { duration: "update" }) }}>
+			<div
+				in:fly={{ y: -8, ...svelteTransitionFor("primary", { duration: "update" }) }}
+			>
 				<CascadeTimeline
 					phases={cascadePhases}
 					{runProgress}
@@ -248,7 +255,6 @@
 			</div>
 		{/if}
 
-		<!-- Zone E: Tab content -->
 		<div class="builder-tab-content" role="tabpanel">
 			{#key activeTab}
 				<div in:fade={svelteTransitionFor("chrome", { duration: "tick" })}>
@@ -271,68 +277,32 @@
 			{/key}
 		</div>
 
-		<!-- Zone F: Activation Bar (Session 3) -->
 		<ActivationBar {allTabsVisited} />
 	</div>
 </div>
 
 <style>
+	/*
+	 * Height is 100% — the workspace shell already cages the page to
+	 * calc(100vh - 88px) and leaves us the remaining space after the
+	 * breadcrumb / profile strip / regime strip / tab strip.
+	 */
 	.builder-shell {
 		display: grid;
 		grid-template-columns: 40% 60%;
-		height: calc(100vh - 88px);
+		height: 100%;
+		min-height: 0;
 		background: var(--terminal-bg-void);
 		font-family: var(--terminal-font-mono);
 		color: var(--terminal-fg-secondary);
 	}
-
-	/* ── Left Column ──────────────────────────────────── */
 
 	.builder-left {
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
 		border-right: var(--terminal-border-hairline);
-	}
-
-	.builder-header-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		border-bottom: var(--terminal-border-hairline);
-	}
-
-	.builder-alloc-badge {
-		display: inline-flex;
-		align-items: center;
-		padding: 2px var(--terminal-space-2);
-		font-family: var(--terminal-font-mono);
-		font-size: var(--terminal-text-10);
-		font-weight: 600;
-		letter-spacing: var(--terminal-tracking-caps);
-		text-transform: uppercase;
-		color: var(--terminal-accent-cyan);
-		border: 1px solid var(--terminal-accent-cyan);
-		margin-right: var(--terminal-space-2);
-	}
-
-	.builder-backlink {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--terminal-space-1);
-		padding: var(--terminal-space-1) var(--terminal-space-2);
-		font-family: var(--terminal-font-mono);
-		font-size: var(--terminal-text-10);
-		font-weight: 600;
-		letter-spacing: var(--terminal-tracking-caps);
-		text-transform: uppercase;
-		text-decoration: none;
-		color: var(--terminal-fg-tertiary);
-		transition: color var(--terminal-motion-tick) var(--terminal-motion-easing-out);
-	}
-
-	.builder-backlink:hover {
-		color: var(--terminal-accent-amber);
+		min-height: 0;
 	}
 
 	.builder-portfolio-select {
@@ -352,7 +322,6 @@
 		padding: 0 var(--terminal-space-2);
 		cursor: pointer;
 	}
-
 	.builder-select:focus-visible {
 		outline: var(--terminal-border-focus);
 		outline-offset: 2px;
@@ -361,6 +330,7 @@
 	.builder-calibration {
 		flex: 1;
 		overflow-y: auto;
+		min-height: 0;
 	}
 
 	.builder-empty-zone {
@@ -374,12 +344,11 @@
 		letter-spacing: var(--terminal-tracking-caps);
 	}
 
-	/* ── Right Column ─────────────────────────────────── */
-
 	.builder-right {
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
+		min-height: 0;
 	}
 
 	.builder-tabs {
@@ -410,16 +379,13 @@
 			color var(--terminal-motion-tick) var(--terminal-motion-easing-out),
 			border-color var(--terminal-motion-tick) var(--terminal-motion-easing-out);
 	}
-
 	.builder-tab:hover {
 		color: var(--terminal-accent-amber);
 	}
-
 	.builder-tab--active {
 		color: var(--terminal-accent-amber);
 		border-bottom-color: var(--terminal-accent-amber);
 	}
-
 	.builder-tab:focus-visible {
 		outline: var(--terminal-border-focus);
 		outline-offset: -2px;
@@ -429,9 +395,9 @@
 		flex: 1;
 		overflow-y: auto;
 		padding: var(--terminal-space-2);
+		min-height: 0;
 	}
 
-	/* PR-A5 B.1 — pulsing dot on tab headers whose upstream phase is in-flight. */
 	.builder-tab-pulse {
 		display: inline-block;
 		width: 4px;
@@ -440,9 +406,13 @@
 		background: var(--terminal-status-warn, var(--terminal-accent-amber));
 		animation: builder-tab-pulse 1s ease-in-out infinite;
 	}
-
 	@keyframes builder-tab-pulse {
-		0%, 100% { opacity: 1; }
-		50% { opacity: 0.4; }
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.4;
+		}
 	}
 </style>
