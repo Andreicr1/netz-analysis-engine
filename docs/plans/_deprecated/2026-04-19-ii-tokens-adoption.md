@@ -1,4 +1,12 @@
-# ii-tokens — Substituição da Camada de Tokens + Superfícies de Página
+# [DEPRECATED 2026-04-19] ii-tokens — Substituição da Camada de Tokens + Superfícies de Página
+
+> **Status**: deprecated. Não executar. Plano abandonado no mesmo dia por pivot estratégico: em vez de migrar tokens dentro de `frontends/wealth/src/routes/(terminal)/`, o Terminal vai ser extraído para um frontend próprio (`frontends/terminal/`) com URL isolada (`terminal.investintell.com`). Ver plano de extração em `docs/plans/` quando escrito.
+>
+> **Branches relacionadas deletadas**: `feat/ii-tokens-adoption` (remote + local), `feat/ii-tokens-t1-base` (local). WIP do Opus preservado em `git stash` local sob mensagem "ii-tokens-t1-base WIP".
+>
+> **Arquivo mantido** como registro histórico da arquitetura considerada (façade `--terminal-*` → `--ii-*`, fonts via @fontsource, 4 sub-PRs T1-T4). Se a extração do terminal adotar a mesma estratégia de tokens, este plano pode ser re-promovido para `docs/plans/` e re-escopado ao novo frontend.
+
+---
 
 **Branch**: `feat/ii-tokens-adoption` (long-lived, não merge em main até visual pass)
 **Plano**: apenas este arquivo é editável em plan mode; o artefato versionado final do plano vai para `docs/plans/2026-04-19-ii-tokens-adoption.md` durante execução.
