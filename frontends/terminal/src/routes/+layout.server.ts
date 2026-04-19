@@ -2,8 +2,9 @@
  * Root layout server loader — loads Actor + token for all terminal pages.
  *
  * X1 scaffold scope: just surface the verified actor/token from hooks.
- * X3 swaps `defaultDarkBranding` for ii-bundle branding; X4 removes
- * any residual Netz strings from chrome.
+ * X3 swaps `defaultDarkBranding` for ii-bundle branding; X4 defaults
+ * product chrome (topnav brand, status bar brand) to "II" while
+ * preserving tenant-scoped overrides via the orgName prop.
  */
 import type { LayoutServerLoad } from "./$types";
 import { defaultDarkBranding } from "@investintell/ui/utils";
