@@ -15,7 +15,6 @@
 		"../../docs",
 		"../../profiles",
 		"../../calibration",
-		"../../frontends/credit",
-		"../../frontends/wealth"
+		"../../frontends/credit"
 	]
 }
