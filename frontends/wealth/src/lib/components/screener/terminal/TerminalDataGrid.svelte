@@ -28,6 +28,7 @@
 		ret1y: number | null;            // Already in human % (5.0 = 5%)
 		ret10y: number | null;           // Already in human % (8.0 = 8%)
 		managerScore: number | null;     // Composite score 0-100
+		blendedMomentumScore: number | null; // Pre-computed 0-100 (RSI + Bollinger + NAV + flow)
 		inceptionDate: string | null;
 		isin: string | null;
 		navStatus: string | null;   // available | pending_import | unavailable | null
@@ -40,7 +41,7 @@
 
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { formatNumber, readTerminalTokens } from "@investintell/ui";
+	import { formatNumber, readTerminalTokens, TerminalMiniSparkline } from "@investintell/ui";
 	import { focusTrigger } from "$lib/components/terminal/focus-mode/focus-trigger";
 	import { createClientApiClient } from "$lib/api/client";
 
@@ -62,6 +63,8 @@
 		isLoadingMore: boolean;
 		hasMore: boolean;
 		fetchGeneration: number;
+		/** Map of instrument_id → monthly NAV series for the MiniSparkline column. Shell owns the fetch. */
+		sparklineMap?: Map<string, number[]>;
 		onSelect: (asset: ScreenerAsset) => void;
 		onHighlight: (index: number) => void;
 		onApprove: (asset: ScreenerAsset) => Promise<void>;
@@ -79,12 +82,27 @@
 		isLoadingMore,
 		hasMore,
 		fetchGeneration,
+		sparklineMap,
 		onSelect,
 		onHighlight,
 		onApprove,
 		onQueueDD,
 		onLoadMore,
 	}: Props = $props();
+
+	const EMPTY_SPARKLINE: readonly number[] = [];
+
+	function sparklineFor(asset: ScreenerAsset): readonly number[] {
+		if (!sparklineMap || !asset.instrumentId) return EMPTY_SPARKLINE;
+		return sparklineMap.get(asset.instrumentId) ?? EMPTY_SPARKLINE;
+	}
+
+	function momentumTone(score: number | null): "high" | "mid" | "low" | "none" {
+		if (score == null) return "none";
+		if (score >= 70) return "high";
+		if (score >= 40) return "mid";
+		return "low";
+	}
 
 	// ── Type badge map ────────────────────────────────
 	const TYPE_BADGES: Record<string, { label: string; title: string }> = {
@@ -127,7 +145,8 @@
 		| "ret1y"
 		| "ret10y"
 		| "expenseRatioPct"
-		| "managerScore";
+		| "managerScore"
+		| "blendedMomentumScore";
 
 	let sortColumn = $state<SortableColumn | null>(null);
 	let sortDirection = $state<SortDirection>(null);
@@ -159,6 +178,7 @@
 		ret10y: "numeric",
 		expenseRatioPct: "numeric",
 		managerScore: "numeric",
+		blendedMomentumScore: "numeric",
 	};
 
 	function sortCaret(col: SortableColumn): string {
@@ -361,6 +381,8 @@
 		<button class="dg-th dg-th-sort dg-col-ret dg-right" class:dg-th-active={sortColumn === "ret10y"} onclick={() => toggleSort("ret10y")}>10Y Ret{sortCaret("ret10y")}</button>
 		<button class="dg-th dg-th-sort dg-col-er dg-right" class:dg-th-active={sortColumn === "expenseRatioPct"} onclick={() => toggleSort("expenseRatioPct")}>ER%{sortCaret("expenseRatioPct")}</button>
 		<button class="dg-th dg-th-sort dg-col-score dg-right" class:dg-th-active={sortColumn === "managerScore"} onclick={() => toggleSort("managerScore")}>Score{sortCaret("managerScore")}</button>
+		<button class="dg-th dg-th-sort dg-col-mom dg-right" class:dg-th-active={sortColumn === "blendedMomentumScore"} onclick={() => toggleSort("blendedMomentumScore")}>Mom{sortCaret("blendedMomentumScore")}</button>
+		<span class="dg-th dg-col-spark dg-center">Trend</span>
 		<span class="dg-th dg-col-action dg-center">Action</span>
 	</div>
 
@@ -416,6 +438,20 @@
 							class:score-low={asset.managerScore != null && asset.managerScore < 40}
 						>
 							{asset.managerScore != null ? fmtNum(asset.managerScore, 1) : "\u2014"}
+						</span>
+						<span
+							class="dg-td dg-col-mom dg-right dg-num dg-mom-{momentumTone(asset.blendedMomentumScore)}"
+							title="Blended momentum (RSI + Bollinger + NAV + flow)"
+						>
+							{asset.blendedMomentumScore != null ? fmtNum(asset.blendedMomentumScore, 0) : "\u2014"}
+						</span>
+						<span class="dg-td dg-col-spark dg-center">
+							<TerminalMiniSparkline
+								data={[...sparklineFor(asset)]}
+								width={60}
+								height={18}
+								ariaLabel="12mo NAV trend"
+							/>
 						</span>
 						<span class="dg-td dg-col-action dg-center">
 							{#if asset.inUniverse}
@@ -514,6 +550,8 @@
 			60px                  /* 10y ret — right-aligned */
 			48px                  /* er% — right-aligned */
 			56px                  /* score — right-aligned numeral */
+			48px                  /* blended momentum — right-aligned */
+			64px                  /* trend sparkline — center, 60x18 */
 			72px;                 /* action — APPROVE/+DD button */
 		column-gap: 2px;
 		align-items: center;
@@ -678,6 +716,20 @@
 	.score-high { color: var(--terminal-status-success); }
 	.score-mid { color: var(--terminal-accent-amber); }
 	.score-low { color: var(--terminal-status-error); }
+
+	/* Blended momentum tone — same palette as score, distinct class
+	   namespace so the two tiers can diverge without a cascade clash. */
+	.dg-mom-high { color: var(--terminal-status-success); }
+	.dg-mom-mid { color: var(--terminal-accent-amber); }
+	.dg-mom-low { color: var(--terminal-status-error); }
+	.dg-mom-none { color: var(--terminal-fg-tertiary); }
+
+	/* Spark column — cell centers the SVG inside the 64px column. */
+	.dg-col-spark {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
 
 	.dg-empty {
 		padding: 32px;

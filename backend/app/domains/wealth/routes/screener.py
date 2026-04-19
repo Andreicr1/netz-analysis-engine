@@ -1726,6 +1726,11 @@ async def get_catalog(
                 elite_flag=bool(r.elite_flag) if getattr(r, "elite_flag", None) is not None else None,
                 elite_rank_within_strategy=getattr(r, "elite_rank_within_strategy", None),
                 manager_score=float(r.manager_score) if getattr(r, "manager_score", None) is not None else None,
+                blended_momentum_score=(
+                    float(r.blended_momentum_score)
+                    if getattr(r, "blended_momentum_score", None) is not None
+                    else None
+                ),
                 # Phase 3: org membership from v_screener_org_membership
                 in_universe=(org_approval == "approved"),
                 approval_status=org_approval,
