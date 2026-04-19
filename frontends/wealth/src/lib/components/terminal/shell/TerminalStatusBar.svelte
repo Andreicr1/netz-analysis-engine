@@ -25,6 +25,7 @@
 -->
 <script lang="ts">
 	import type { Snippet } from "svelte";
+	import { formatMonoTime } from "@investintell/ui";
 
 	export type TerminalStatusBarConnectionStatus =
 		| "connecting"
@@ -81,14 +82,14 @@
 
 	let utcClock = $state("--:--:-- UTC");
 
-	// 1Hz UTC clock. ISO extraction is locale-independent, so it does
-	// not route through @investintell/ui formatters (those handle
-	// currency / percent / date, not raw ISO time). `$effect` cleanup
-	// guarantees the interval stops when the shell unmounts.
+	// 1Hz UTC clock via the mono formatter from @investintell/ui. The
+	// formatter is tabular-safe (zero-padded HH:MM:SS) and locale-
+	// independent. `$effect` cleanup guarantees the interval stops
+	// when the shell unmounts.
 	$effect(() => {
 		if (typeof window === "undefined") return;
 		const tick = () => {
-			utcClock = new Date().toISOString().substring(11, 19) + " UTC";
+			utcClock = formatMonoTime(new Date(), "utc");
 		};
 		tick();
 		const interval = window.setInterval(tick, 1000);

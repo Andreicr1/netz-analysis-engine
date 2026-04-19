@@ -136,6 +136,7 @@
 	/* Sacred calc() from feedback_layout_cage_pattern.md.     */
 	/* DO NOT migrate to flex/grid min-h-0 — proven broken.    */
 	--terminal-shell-topbar-height: 64px;
+	--terminal-shell-breadcrumb-height: 28px;
 	--terminal-shell-statusbar-height: 24px;
 	--terminal-shell-cage-height: calc(100vh - 88px);
 	--terminal-shell-cage-padding: 24px;
