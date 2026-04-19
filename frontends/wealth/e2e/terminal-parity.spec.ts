@@ -311,3 +311,71 @@ test.describe("Terminal parity — /macro smoke", () => {
 		await expect(page).toHaveURL(/\/allocation(\/|$)/);
 	});
 });
+
+test.describe("Terminal parity — /allocation/[profile] smoke", () => {
+	test.beforeEach(async ({ page }) => {
+		await page.route("**/api/v1/**", async (route) => {
+			const headers = {
+				...route.request().headers(),
+				"x-dev-actor": `super_admin:${TEST_ORG_ID}`,
+			};
+			await route.continue({ headers });
+		});
+	});
+
+	test("IpsSummaryStrip + RegimeContextStrip mount above the main grid", async ({
+		page,
+	}) => {
+		await page.goto("/allocation/moderate");
+		const ipsStrip = page.getByRole("group", { name: /IPS summary/i });
+		await expect(ipsStrip).toBeVisible();
+		await expect(ipsStrip.getByText(/Profile: Moderate/i)).toBeVisible();
+		await expect(ipsStrip.getByText(/CVaR/i).first()).toBeVisible();
+
+		// RegimeContextStrip only renders when /macro/regime resolves;
+		// treat it as best-effort (worker may not have run on a fresh DB).
+		const regimeStrip = page.getByRole("group", { name: /Macro regime context/i });
+		if ((await regimeStrip.count()) > 0) {
+			await expect(regimeStrip.getByText(/Regime:/i)).toBeVisible();
+		}
+	});
+
+	test("CascadeTimeline renders 3 phases in ProposalReviewPanel", async ({
+		page,
+	}) => {
+		await page.goto("/allocation/moderate");
+		// Only present when a proposal exists. If ProposeButton is mounted
+		// instead, the timeline is empty until a stream runs — skip assertion.
+		const timeline = page.getByRole("list", { name: /Cascade phase timeline/i });
+		if ((await timeline.count()) === 0) {
+			test.skip(true, "no pending proposal on this profile — run propose first");
+		}
+		await expect(timeline).toBeVisible();
+		const phases = timeline.locator("li");
+		await expect(phases).toHaveCount(3);
+		await expect(phases.nth(0)).toContainText(/Phase 1/i);
+		await expect(phases.nth(1)).toContainText(/Phase 2/i);
+		await expect(phases.nth(2)).toContainText(/Phase 3/i);
+	});
+
+	test("Propose SSE advances live CascadeTimeline phase by phase", async ({
+		page,
+	}) => {
+		await page.goto("/allocation/moderate");
+		const proposeButton = page.getByRole("button", { name: /Propose Allocation/i });
+		if ((await proposeButton.count()) === 0) {
+			test.skip(true, "proposal already pending — dismiss first to re-test propose flow");
+		}
+		await proposeButton.click();
+
+		const timeline = page.getByRole("list", { name: /Cascade phase timeline/i });
+		await expect(timeline).toBeVisible({ timeout: 5_000 });
+
+		const phase1 = timeline.locator("li").nth(0);
+		// Status progresses from "pending" (dashed) to "succeeded" / "skipped"
+		// by the time the stream emits optimizer_phase_complete for phase 1.
+		await expect(phase1).toHaveAttribute("data-status", /succeeded|skipped|failed/i, {
+			timeout: 30_000,
+		});
+	});
+});

@@ -38,11 +38,13 @@ from app.domains.wealth.schemas.model_portfolio import (
     ApprovalHistoryResponse,
     ApprovalResponse,
     ApproveProposalRequest,
+    CascadePhaseAttempt,
     ConstructionAdviceRead,
     ConstructionRunDiffOut,
     ConstructionRunMetricDelta,
     ConstructionRunWeightDelta,
     ConstructRunAccepted,
+    CoverageSummary,
     CusipExposureRead,
     JobCreatedResponse,
     LatestProposalResponse,
@@ -4895,6 +4897,8 @@ async def latest_proposal(
     telemetry = run.cascade_telemetry or {}
     raw_bands = telemetry.get("proposed_bands") or []
     raw_metrics = telemetry.get("proposal_metrics") or {}
+    raw_phases = telemetry.get("phase_attempts") or []
+    raw_coverage = telemetry.get("coverage")
     winner_signal = (
         telemetry.get("winner_signal") or run.status or "unknown"
     )
@@ -4916,6 +4920,27 @@ async def latest_proposal(
         target_cvar=raw_metrics.get("target_cvar"),
         cvar_feasible=bool(raw_metrics.get("cvar_feasible", False)),
     )
+    phase_attempts = [
+        CascadePhaseAttempt(
+            phase=str(p.get("phase") or ""),
+            status=str(p.get("status") or "unknown"),
+            solver=p.get("solver"),
+            wall_ms=int(p.get("wall_ms") or 0),
+            objective_value=p.get("objective_value"),
+            cvar_within_limit=p.get("cvar_within_limit"),
+        )
+        for p in raw_phases
+        if p.get("phase")
+    ]
+    coverage: CoverageSummary | None = None
+    if isinstance(raw_coverage, dict):
+        coverage = CoverageSummary(
+            pct_covered=raw_coverage.get("pct_covered"),
+            hard_fail=bool(raw_coverage.get("hard_fail", False)),
+            n_total_blocks=raw_coverage.get("n_total_blocks"),
+            n_covered_blocks=raw_coverage.get("n_covered_blocks"),
+            missing_blocks=list(raw_coverage.get("missing_blocks") or []),
+        )
 
     return LatestProposalResponse(
         run_id=run.id,
@@ -4923,6 +4948,8 @@ async def latest_proposal(
         winner_signal=winner_signal,
         proposed_bands=proposed_bands,
         proposal_metrics=proposal_metrics,
+        phase_attempts=phase_attempts,
+        coverage=coverage,
     )
 
 

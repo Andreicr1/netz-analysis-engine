@@ -2,8 +2,13 @@
  * PR-A26.3 Section B — Allocation page server loader.
  *
  * Uses the RouteData<T> contract (§3.2 Stability Guardrails). Strategic
- * is the only hard dependency; history + proposal degrade gracefully
- * to empty / null when the backend returns 404 or times out.
+ * is the only hard dependency; history + proposal + regime degrade
+ * gracefully to empty / null when the backend returns 404 or times out.
+ *
+ * PR-4a — adds an optional ``regime`` fetch (``GET /macro/regime``)
+ * used by ``RegimeContextStrip``. Null when the regime_detection
+ * worker has never run or the endpoint is unavailable; never blocks
+ * page load.
  */
 import type { PageServerLoad } from "./$types";
 import { okData, errData, type RouteData } from "@investintell/ui/runtime";
@@ -18,6 +23,17 @@ import {
 
 const FETCH_TIMEOUT_MS = 8000;
 
+interface RegimeSnapshot {
+	regime: string | null;
+	stressScore: number | null;
+}
+
+interface GlobalRegimeRead {
+	as_of_date: string;
+	raw_regime: string | null;
+	stress_score: number | null;
+}
+
 function isAllocationProfile(raw: string): raw is AllocationProfile {
 	return (ALLOCATION_PROFILES as readonly string[]).includes(raw);
 }
@@ -27,6 +43,7 @@ interface LoadResult {
 	strategic: RouteData<StrategicAllocationResponse>;
 	history: ApprovalHistoryResponse;
 	proposal: LatestProposalResponse | null;
+	regime: RegimeSnapshot | null;
 	actorRole: string | null;
 }
 
@@ -41,6 +58,7 @@ export const load: PageServerLoad = async ({ params, parent }): Promise<LoadResu
 			strategic: errData("HTTP_401", "Not authenticated", true),
 			history: emptyHistory(profileRaw),
 			proposal: null,
+			regime: null,
 			actorRole,
 		};
 	}
@@ -54,6 +72,7 @@ export const load: PageServerLoad = async ({ params, parent }): Promise<LoadResu
 			),
 			history: emptyHistory(profileRaw),
 			proposal: null,
+			regime: null,
 			actorRole,
 		};
 	}
@@ -109,13 +128,25 @@ export const load: PageServerLoad = async ({ params, parent }): Promise<LoadResu
 		)
 		.catch(() => null);
 
-	const [strategic, history, proposal] = await Promise.all([
+	const regimePromise = api
+		.get<GlobalRegimeRead>("/macro/regime", undefined, {
+			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+		})
+		.then((r): RegimeSnapshot | null => ({
+			regime: r.raw_regime ?? null,
+			stressScore:
+				typeof r.stress_score === "number" ? r.stress_score : null,
+		}))
+		.catch(() => null);
+
+	const [strategic, history, proposal, regime] = await Promise.all([
 		strategicPromise,
 		historyPromise,
 		proposalPromise,
+		regimePromise,
 	]);
 
-	return { profile, strategic, history, proposal, actorRole };
+	return { profile, strategic, history, proposal, regime, actorRole };
 };
 
 function emptyHistory(profile: string): ApprovalHistoryResponse {

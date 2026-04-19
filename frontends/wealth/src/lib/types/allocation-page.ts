@@ -69,12 +69,39 @@ export interface ProposalMetrics {
 	cvar_feasible: boolean;
 }
 
+/**
+ * PR-4a — surfaced from ``cascade_telemetry.phase_attempts``.
+ * Matches ``backend.app.domains.wealth.schemas.model_portfolio.CascadePhaseAttempt``.
+ */
+export interface CascadePhaseAttempt {
+	phase: string;
+	status: string;
+	solver: string | null;
+	wall_ms: number;
+	objective_value: number | null;
+	cvar_within_limit: boolean | null;
+}
+
+/**
+ * PR-4a — PR-A14 universe coverage summary.
+ * Matches ``backend.app.domains.wealth.schemas.model_portfolio.CoverageSummary``.
+ */
+export interface CoverageSummary {
+	pct_covered: number | null;
+	hard_fail: boolean;
+	n_total_blocks: number | null;
+	n_covered_blocks: number | null;
+	missing_blocks: string[];
+}
+
 export interface LatestProposalResponse {
 	run_id: string;
 	requested_at: string;
 	winner_signal: string;
 	proposed_bands: ProposedBand[];
 	proposal_metrics: ProposalMetrics;
+	phase_attempts: CascadePhaseAttempt[];
+	coverage: CoverageSummary | null;
 }
 
 export interface JobCreatedResponse {

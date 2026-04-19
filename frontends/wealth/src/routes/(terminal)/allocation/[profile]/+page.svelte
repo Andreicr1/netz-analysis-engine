@@ -32,6 +32,8 @@
 	import ProposeButton from "$lib/components/allocation/ProposeButton.svelte";
 	import OverrideBandsEditor from "$lib/components/allocation/OverrideBandsEditor.svelte";
 	import ApprovalHistoryTable from "$lib/components/allocation/ApprovalHistoryTable.svelte";
+	import IpsSummaryStrip from "$lib/components/allocation/IpsSummaryStrip.svelte";
+	import RegimeContextStrip from "$lib/components/allocation/RegimeContextStrip.svelte";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -102,6 +104,16 @@
 		<ChevronRight class="w-3 h-3" />
 		<span class="text-foreground">{PROFILE_LABELS[profile]}</span>
 	</nav>
+
+	<IpsSummaryStrip
+		class="mb-3"
+		{profile}
+		cvarLimit={strategic.cvar_limit}
+		lastApprovedAt={strategic.last_approved_at}
+		lastApprovedBy={strategic.last_approved_by}
+	/>
+
+	<RegimeContextStrip class="mb-3" data={data.regime} />
 
 	<header class="mb-5">
 		<h1 class="text-2xl font-semibold text-foreground">
