@@ -211,3 +211,58 @@ WHERE strategy_label_source = 'tiingo_cascade';
 * BDC and ESMA bridges still rely on direct identifier matching — no fuzzy extension in v1.
 * Funds where Tiingo has no description and the fund name is a short opaque mark (e.g. `"AAA"`, `"XYZ"`) stay `unclassified`. Manual brochure classification is the follow-on path.
 * `sec_mmf_bridge_candidates` rows with `match_tier = 'needs_review'` accumulate until an operator resolves them via SQL update — no UI in v1.
+
+---
+
+## PR-A26.3.5 Session 1 — Curator Overrides (priority 0)
+
+Migration `0158_instrument_strategy_overrides` adds a curator-managed
+override table that takes precedence over every authoritative source in
+`refresh_authoritative_labels.py`. Seeded with 48 canonical institutional
+tickers (SPY/IVV/VOO/VTI, QQQ family, SCHD/SCHB/VMIAX regression fixes,
+core bond/treasury ETFs, commodities, sector SPDRs).
+
+### Adding a new override
+
+**Preferred path (durable):** add an entry to `SEED_OVERRIDES` in the
+next migration. The seed list is code-reviewed and versioned.
+
+**Hot-patch path (SQL):**
+
+```sql
+INSERT INTO instrument_strategy_overrides (ticker, strategy_label, rationale, curated_by)
+VALUES ('TICKER', 'Canonical Label', 'why this override exists', 'operator:name')
+ON CONFLICT (ticker) DO UPDATE
+SET strategy_label = EXCLUDED.strategy_label,
+    rationale = EXCLUDED.rationale,
+    curated_by = EXCLUDED.curated_by,
+    curated_at = now();
+```
+
+Then re-run `python backend/scripts/refresh_authoritative_labels.py --apply`
+to propagate into `instruments_universe.attributes`.
+
+The `strategy_label` MUST be a key in
+`vertical_engines.wealth.model_portfolio.block_mapping.STRATEGY_LABEL_TO_BLOCKS`
+— otherwise candidate discovery returns zero funds silently.
+
+### When to use an override vs fix the classifier
+
+- **Override:** single-ticker outliers, SEC-registered regression fixes
+  where the authoritative bulk data is wrong or missing, fund families
+  with bespoke structures (FT Vest Buffer ETFs — handled via class-level
+  regex, not per-ticker).
+- **Classifier fix:** categorical issues (every Financial-sector fund
+  mislabeling as Real Estate). Prefer Session 2/3 patches.
+
+### FT Vest Buffer ETF family
+
+Tickers `FJAN..FDEC` are resolved to `Balanced` via a class-level regex
+inside `_resolve_override` — no per-ticker seed needed. An exact table
+entry for any buffer ticker still wins over the regex.
+
+### Review cadence
+
+Quarterly: audit `instrument_strategy_overrides` and remove entries that
+Session 3 (context-gated patterns) now handles correctly. Entries stay
+in the backup chain, so removal is safe.

@@ -112,6 +112,9 @@ STRATEGY_LABEL_TO_BLOCKS: dict[str, list[str]] = {
     # dominant economic exposure for v1 candidate discovery.
     "Intermediate-Term Bond": ["fi_us_aggregate"],  # 61 ETF + 894 ESMA
     "Investment Grade Bond": ["fi_us_aggregate"],  # 37 ETF + 209 ESMA
+    # PR-A26.3.5 — LQD (iShares iBoxx IG Corp) and peers use canonical
+    # "Corporate Bond" label emitted by the authoritative overrides table.
+    "Corporate Bond": ["fi_us_aggregate"],
     "Government Bond": ["fi_us_treasury"],  # 12 ETF + 144 ESMA
     "Mortgage-Backed Securities": ["fi_us_aggregate"],  # 2 ETF + 1 ESMA
     "Asset-Backed Securities": ["fi_us_aggregate"],  # 1 ETF + 8 ESMA

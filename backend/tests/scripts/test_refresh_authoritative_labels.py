@@ -16,6 +16,7 @@ from scripts.refresh_authoritative_labels import (
     SOURCE_ETF,
     SOURCE_MMF,
     SOURCE_NEEDS_REVIEW,
+    SOURCE_OVERRIDE,
     SOURCE_TIINGO,
     InstrumentRow,
     _resolve,
@@ -46,6 +47,7 @@ def _row(
 def _resolve_with(inst: InstrumentRow, **indexes):
     return _resolve(
         inst,
+        overrides=indexes.get("overrides", {}),
         mmf=indexes.get("mmf", {}),
         etf_by_series=indexes.get("etf_by_series", {}),
         etf_by_ticker=indexes.get("etf_by_ticker", {}),
@@ -53,6 +55,68 @@ def _resolve_with(inst: InstrumentRow, **indexes):
         esma=indexes.get("esma", {}),
         tiingo=indexes.get("tiingo", {}),
     )
+
+
+class TestOverridePriority:
+    """PR-A26.3.5 Session 1 — priority-0 curator overrides bypass every
+    downstream authoritative source.
+    """
+
+    def test_override_wins_over_etf_series(self) -> None:
+        inst = _row(ticker="SCHD", series_id="S00099")
+        result = _resolve_with(
+            inst,
+            overrides={"SCHD": ("Large Value", "Schwab Dividend — regression fix")},
+            etf_by_series={"S00099": ("Real Estate", "Schwab Dividend ETF")},
+            etf_by_ticker={"SCHD": ("Real Estate", "Schwab Dividend ETF")},
+        )
+        assert result.label == "Large Value"
+        assert result.source == SOURCE_OVERRIDE
+        assert result.source_table == "instrument_strategy_overrides"
+        assert result.source_value == "SCHD"
+
+    def test_override_wins_over_mmf(self) -> None:
+        inst = _row(ticker="SCHB", series_id="S00100")
+        result = _resolve_with(
+            inst,
+            overrides={"SCHB": ("Large Blend", "Schwab Broad Market — regression fix")},
+            mmf={"S00100": ("Government", "spurious MMF match")},
+        )
+        assert result.label == "Large Blend"
+        assert result.source == SOURCE_OVERRIDE
+
+    def test_ft_vest_buffer_family_regex_fallback(self) -> None:
+        for ticker in ("FJUL", "FAUG", "FJAN", "FDEC"):
+            inst = _row(ticker=ticker)
+            result = _resolve_with(inst)
+            assert result.label == "Balanced", f"{ticker} should resolve to Balanced"
+            assert result.source == SOURCE_OVERRIDE
+            assert result.source_value == ticker
+
+    def test_ft_vest_regex_does_not_match_unrelated_tickers(self) -> None:
+        # "FOO" starts with F but isn't a 3-letter month code.
+        inst = _row(ticker="FOO")
+        result = _resolve_with(inst)
+        assert result.source == SOURCE_NEEDS_REVIEW
+
+    def test_override_skipped_when_ticker_missing(self) -> None:
+        inst = _row(ticker=None, series_id="S00001")
+        result = _resolve_with(
+            inst,
+            overrides={"ANYTHING": ("Large Blend", "n/a")},
+            mmf={"S00001": ("Government", "mmf")},
+        )
+        assert result.source == SOURCE_MMF
+
+    def test_exact_ticker_override_preferred_over_ft_vest_regex(self) -> None:
+        # Sanity: exact table entry is checked before the FT Vest regex.
+        inst = _row(ticker="FJUL")
+        result = _resolve_with(
+            inst,
+            overrides={"FJUL": ("Large Blend", "explicit override trumps family regex")},
+        )
+        assert result.label == "Large Blend"
+        assert result.reason == "explicit override trumps family regex"
 
 
 class TestPriorityLadder:
