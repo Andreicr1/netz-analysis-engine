@@ -10,7 +10,7 @@
   vertical breathing room in the header strip.
 -->
 <script lang="ts">
-	import type { ModelPortfolio } from "$lib/types/model-portfolio";
+	import type { ModelPortfolio } from "$wealth/types/model-portfolio";
 
 	interface Props {
 		portfolios: readonly ModelPortfolio[];

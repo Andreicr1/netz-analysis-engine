@@ -20,7 +20,7 @@
 		AllocationProfile,
 		CascadePhaseAttempt,
 		JobCreatedResponse,
-	} from "$lib/types/allocation-page";
+	} from "$wealth/types/allocation-page";
 
 	interface Props {
 		profile: AllocationProfile;

@@ -13,7 +13,7 @@
  * No localStorage. All state is in-memory. Svelte 5 runes.
  */
 
-import { createClientApiClient } from "$lib/api/client";
+import { createClientApiClient } from "$wealth/api/client";
 
 // ── Types ───────────────────────────────────────────────────
 

@@ -15,15 +15,15 @@
 		formatNumber,
 		formatDate,
 	} from "@investintell/ui";
-	import TerminalChart from "$lib/components/terminal/charts/TerminalChart.svelte";
-	import { createClientApiClient } from "$lib/api/client";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import TerminalChart from "$wealth/components/terminal/charts/TerminalChart.svelte";
+	import { createClientApiClient } from "$wealth/api/client";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 	import {
 		taaRegimeLabel,
 		taaRegimeColor,
 		taaRegimePosture,
-	} from "$lib/types/taa";
-	import type { RegimeBands } from "$lib/types/taa";
+	} from "$wealth/types/taa";
+	import type { RegimeBands } from "$wealth/types/taa";
 	import type { EChartsOption } from "echarts";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");

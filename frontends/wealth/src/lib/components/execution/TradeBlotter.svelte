@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { formatNumber } from "@investintell/ui";
-	import type { InstrumentWeight } from "$lib/types/model-portfolio";
+	import type { InstrumentWeight } from "$wealth/types/model-portfolio";
 
 	export interface HoldingWeight {
 		instrument_id: string;

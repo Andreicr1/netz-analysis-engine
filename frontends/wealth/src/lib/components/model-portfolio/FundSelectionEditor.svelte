@@ -5,9 +5,9 @@
 -->
 <script lang="ts">
 	import { ConsequenceDialog, Button, formatPercent } from "@investintell/ui";
-	import type { InstrumentWeight } from "$lib/types/model-portfolio";
-	import type { UniverseAsset } from "$lib/types/universe";
-	import { blockLabel } from "$lib/constants/blocks";
+	import type { InstrumentWeight } from "$wealth/types/model-portfolio";
+	import type { UniverseAsset } from "$wealth/types/universe";
+	import { blockLabel } from "$wealth/constants/blocks";
 
 	interface Props {
 		portfolioId: string;

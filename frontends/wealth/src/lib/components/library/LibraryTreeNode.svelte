@@ -17,7 +17,7 @@
 	import Folder from "lucide-svelte/icons/folder";
 	import FolderOpen from "lucide-svelte/icons/folder-open";
 	import Loader2 from "lucide-svelte/icons/loader-2";
-	import type { LibraryNode } from "$lib/types/library";
+	import type { LibraryNode } from "$wealth/types/library";
 
 	interface Props {
 		node: LibraryNode;

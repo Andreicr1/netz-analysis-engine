@@ -6,14 +6,14 @@
 -->
 <script lang="ts">
 	import { goto } from "$app/navigation";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
-	import { blockDisplay, BLOCK_GROUPS, groupDisplay } from "$lib/constants/blocks";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
+	import { blockDisplay, BLOCK_GROUPS, groupDisplay } from "$wealth/constants/blocks";
 	import GripVertical from "lucide-svelte/icons/grip-vertical";
 	import Search from "lucide-svelte/icons/search";
 	import Loader2 from "lucide-svelte/icons/loader-2";
 	import ExternalLink from "lucide-svelte/icons/external-link";
 	import ChevronRight from "lucide-svelte/icons/chevron-right";
-	import { createDebouncedState } from "$lib/utils/reactivity";
+	import { createDebouncedState } from "$wealth/utils/reactivity";
 
 	const search = createDebouncedState("", 300);
 

@@ -19,7 +19,7 @@
  *     (the ``PortfolioAction`` union)
  */
 
-import type { PortfolioAction } from "$lib/types/model-portfolio";
+import type { PortfolioAction } from "$wealth/types/model-portfolio";
 
 /**
  * Visual variant for the action button — maps to the @investintell/ui

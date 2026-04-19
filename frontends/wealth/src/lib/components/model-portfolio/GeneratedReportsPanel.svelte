@@ -9,8 +9,8 @@
 	import { invalidateAll } from "$app/navigation";
 	import { formatDateTime, formatNumber } from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
-	import { createClientApiClient } from "$lib/api/client";
-	import type { GeneratedReport } from "$lib/types/model-portfolio";
+	import { createClientApiClient } from "$wealth/api/client";
+	import type { GeneratedReport } from "$wealth/types/model-portfolio";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 

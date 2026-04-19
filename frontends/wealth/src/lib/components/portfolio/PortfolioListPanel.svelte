@@ -16,10 +16,10 @@
 	import ChevronDown from "lucide-svelte/icons/chevron-down";
 	import ChevronRight from "lucide-svelte/icons/chevron-right";
 	import SlidersHorizontal from "lucide-svelte/icons/sliders-horizontal";
-	import type { ModelPortfolio } from "$lib/types/model-portfolio";
-	import { profileColor } from "$lib/types/model-portfolio";
-	import { portfolioDisplayName } from "$lib/constants/blocks";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import type { ModelPortfolio } from "$wealth/types/model-portfolio";
+	import { profileColor } from "$wealth/types/model-portfolio";
+	import { portfolioDisplayName } from "$wealth/constants/blocks";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 
 	interface Props {
 		portfolios: ModelPortfolio[];

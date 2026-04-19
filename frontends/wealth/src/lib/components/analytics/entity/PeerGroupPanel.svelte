@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
 	import { formatNumber, formatPercent } from "@investintell/ui";
-	import type { PeerGroupResult } from "$lib/types/analytics";
+	import type { PeerGroupResult } from "$wealth/types/analytics";
 
 	interface Props {
 		peerGroup: PeerGroupResult;

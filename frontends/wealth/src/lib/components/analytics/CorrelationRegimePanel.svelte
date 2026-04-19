@@ -6,15 +6,15 @@
 	import { getContext } from "svelte";
 	import { MetricCard, StatusBadge, formatPercent, formatNumber } from "@investintell/ui";
 	import { RegimeChart } from "@investintell/ui/charts";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 	import type {
 		CorrelationRegimeResult,
 		PairCorrelationResult,
 		InstrumentCorrelation,
-	} from "$lib/types/analytics";
-	import type { UniverseAsset } from "$lib/types/universe";
-	import CorrelationHeatmap from "$lib/components/charts/CorrelationHeatmap.svelte";
-	import EigenvalueChart from "$lib/components/charts/EigenvalueChart.svelte";
+	} from "$wealth/types/analytics";
+	import type { UniverseAsset } from "$wealth/types/universe";
+	import CorrelationHeatmap from "$wealth/components/charts/CorrelationHeatmap.svelte";
+	import EigenvalueChart from "$wealth/components/charts/EigenvalueChart.svelte";
 
 	interface Props {
 		data: CorrelationRegimeResult;

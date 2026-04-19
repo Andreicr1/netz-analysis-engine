@@ -9,8 +9,8 @@
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { Skeleton } from "@investintell/ui/components/ui/skeleton";
 	import { Spinner } from "@investintell/ui/components/ui/spinner";
-	import FundDetailPanel from "$lib/components/FundDetailPanel.svelte";
-	import { createClientApiClient } from "$lib/api/client";
+	import FundDetailPanel from "$wealth/components/FundDetailPanel.svelte";
+	import { createClientApiClient } from "$wealth/api/client";
 	import { getContext } from "svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");

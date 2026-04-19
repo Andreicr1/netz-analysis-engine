@@ -6,13 +6,13 @@
 	import { getContext } from "svelte";
 	import { goto } from "$app/navigation";
 	import { formatDateTime, formatNumber, formatAUM } from "@investintell/ui";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 	import type {
 		ScreeningRun,
 		ScreeningResult,
 		ScreeningRunRequest,
 		ScreeningRunResponse,
-	} from "$lib/types/screening";
+	} from "$wealth/types/screening";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);

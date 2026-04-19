@@ -9,11 +9,11 @@
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { Input } from "@investintell/ui/components/ui/input";
 	import { EmptyState, formatCurrency, formatPercent, formatNumber } from "@investintell/ui";
-	import { blockLabel } from "$lib/constants/blocks";
+	import { blockLabel } from "$wealth/constants/blocks";
 	import Loader2 from "lucide-svelte/icons/loader-2";
 	import Trash2 from "lucide-svelte/icons/trash-2";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
-	import { CASH_INSTRUMENT_ID, type HoldingInput } from "$lib/types/model-portfolio";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
+	import { CASH_INSTRUMENT_ID, type HoldingInput } from "$wealth/types/model-portfolio";
 
 	// ── Editable holdings state ───────────────────────────────────────
 	let holdings = $state<HoldingInput[]>([]);

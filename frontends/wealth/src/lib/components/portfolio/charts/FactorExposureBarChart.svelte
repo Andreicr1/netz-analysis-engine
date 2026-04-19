@@ -14,9 +14,9 @@
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { EmptyState, formatNumber } from "@investintell/ui";
-	import type { FactorAnalysisResponse } from "$lib/state/portfolio-workspace.svelte";
-	import type { ConstructionRunPayload } from "$lib/state/portfolio-workspace.svelte";
-	import { chartTokens } from "$lib/components/charts/chart-tokens";
+	import type { FactorAnalysisResponse } from "$wealth/state/portfolio-workspace.svelte";
+	import type { ConstructionRunPayload } from "$wealth/state/portfolio-workspace.svelte";
+	import { chartTokens } from "$wealth/components/charts/chart-tokens";
 
 	interface Props {
 		factorAnalysis: FactorAnalysisResponse | null;

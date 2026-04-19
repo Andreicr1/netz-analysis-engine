@@ -12,7 +12,7 @@
   visible label.
 -->
 <script lang="ts">
-	import type { PortfolioState } from "$lib/types/model-portfolio";
+	import type { PortfolioState } from "$wealth/types/model-portfolio";
 
 	interface Props {
 		state: PortfolioState;

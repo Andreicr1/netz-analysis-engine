@@ -2,19 +2,31 @@
 	TerminalTopNav.svelte — global navigation chrome.
 	=================================================
 
-	Source of truth: docs/plans/2026-04-11-terminal-unification-master-plan.md
-		§1.4 TerminalShell, Appendix B navigation flow, Appendix C tokens.
+	Source of truth: docs/plans/2026-04-19-ii-terminal-extraction.md
+		§X2 route move — institutional flow rewire.
 
-	Fixed 32px top chrome strip. Renders the full master plan navigation
-	vision — 8 tabs, 3 active routes and 5 pending (Phase 4–7). Pending
-	tabs are visibly rendered (greyed, PENDING badge, title attribute
-	with phase attribution) so the institutional surface shows the
-	complete product scope from day one. No "coming soon" hidden tabs.
+	F-key ordering (X2): six canonical tabs in institutional-lifecycle
+	order, Macro context flowing into Builder allocation flowing into
+	DD validation. No RESEARCH tab at top-level — research is scoped
+	under SCREENER (/screener/research).
 
-	Right cluster: Cmd/Ctrl+K palette trigger (platform-detected, SSR-
-	safe), REGIME placeholder for Phase 7 regime stream, tenant switcher
-	button (stubbed pending Clerk SDK resolution), alert pill with
-	count badge, session chip with user initials.
+		F1  LIVE      /live
+		F2  SCREENER  /screener
+		F3  MACRO     /macro
+		F4  BUILDER   /allocation  (builder surface = allocation review)
+		F5  DD        /dd
+		F6  ALERTS    /alerts
+
+	Fixed 32px top chrome strip.
+
+	Shared across wealth and terminal during X2–X6. Wealth adds minimal
+	redirect shims for /live and /screener/research so the resolve()
+	typecheck passes in both apps: see
+	frontends/wealth/src/routes/(terminal)/live (redirects to
+	/portfolio/live) and frontends/wealth/src/routes/(app)/screener/
+	research (redirects to /research). The /screener F-key resolves to
+	wealth's existing (app)/screener page — legacy wealth-app screener —
+	during transition; canonical /screener lives on the terminal app.
 
 	This component has no keyboard handling of its own. Global shortcuts
 	(Cmd+K, rail [ / ], g-prefix go-to) live inside TerminalShell's
@@ -24,30 +36,25 @@
 	import { resolve } from "$app/paths";
 	import { goto } from "$app/navigation";
 	import { getContext, onDestroy } from "svelte";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 
-	// Resolved hrefs for active routes. The lint rule
+	// Resolved hrefs for the 6 F-key tabs. The lint rule
 	// `svelte/no-navigation-without-resolve` rejects any href that is
 	// not the direct return value of a plain Identifier argument to
-	// `resolve(...)`; hardcoding the three active route literals is
-	// the only pattern its AST matcher accepts.
+	// `resolve(...)`; hardcoding one identifier per route is the only
+	// pattern its AST matcher accepts.
+	const HREF_LIVE = resolve("/live");
+	const HREF_SCREENER = resolve("/screener");
 	const HREF_MACRO = resolve("/macro");
-	const HREF_ALLOC = resolve("/allocation");
-	const HREF_SCREENER = resolve("/terminal-screener");
+	const HREF_BUILDER = resolve("/allocation");
 	const HREF_DD = resolve("/dd");
-	const HREF_BUILDER = resolve("/portfolio/builder");
-	const HREF_LIVE = resolve("/portfolio/live");
-	const HREF_RESEARCH = resolve("/research");
 	const HREF_ALERTS = resolve("/alerts");
-
-	type TabStatus = "active" | "pending";
 
 	interface PrimaryTab {
 		id: string;
 		label: string;
 		href: string;
-		status: TabStatus;
-		pendingReason?: string;
+		fKey: number;
 	}
 
 	interface TerminalTopNavProps {
@@ -147,43 +154,36 @@
 	});
 
 	const PRIMARY_TABS: ReadonlyArray<PrimaryTab> = [
-		{ id: "macro",    label: "MACRO",    href: HREF_MACRO,           status: "active" },
-		{ id: "alloc",    label: "ALLOC",    href: HREF_ALLOC,           status: "active" },
-		{ id: "screener", label: "SCREENER", href: HREF_SCREENER,        status: "active" },
-		{ id: "dd",       label: "DD",       href: HREF_DD,              status: "active" },
-		{ id: "builder",  label: "BUILDER",  href: HREF_BUILDER,         status: "active" },
-		{ id: "live",     label: "LIVE",     href: HREF_LIVE,            status: "active" },
-		{ id: "research", label: "RESEARCH", href: HREF_RESEARCH,        status: "active" },
-		{ id: "alerts",   label: "ALERTS",   href: HREF_ALERTS,          status: "active" },
+		{ id: "live",     label: "LIVE",     href: HREF_LIVE,     fKey: 1 },
+		{ id: "screener", label: "SCREENER", href: HREF_SCREENER, fKey: 2 },
+		{ id: "macro",    label: "MACRO",    href: HREF_MACRO,    fKey: 3 },
+		{ id: "builder",  label: "BUILDER",  href: HREF_BUILDER,  fKey: 4 },
+		{ id: "dd",       label: "DD",       href: HREF_DD,       fKey: 5 },
+		{ id: "alerts",   label: "ALERTS",   href: HREF_ALERTS,   fKey: 6 },
 	];
 
 	function isHrefActive(href: string): boolean {
 		return (
-			href === HREF_MACRO ||
-			href === HREF_ALLOC ||
-			href === HREF_SCREENER ||
-			href === HREF_DD ||
-			href === HREF_BUILDER ||
 			href === HREF_LIVE ||
-			href === HREF_RESEARCH ||
+			href === HREF_SCREENER ||
+			href === HREF_MACRO ||
+			href === HREF_BUILDER ||
+			href === HREF_DD ||
 			href === HREF_ALERTS
 		);
 	}
 
 	function activePathSegment(href: string): string {
+		if (href === HREF_LIVE) return "/live";
+		if (href === HREF_SCREENER) return "/screener";
 		if (href === HREF_MACRO) return "/macro";
-		if (href === HREF_ALLOC) return "/allocation";
-		if (href === HREF_SCREENER) return "/terminal-screener";
+		if (href === HREF_BUILDER) return "/allocation";
 		if (href === HREF_DD) return "/dd";
-		if (href === HREF_BUILDER) return "/portfolio/builder";
-		if (href === HREF_LIVE) return "/portfolio/live";
-		if (href === HREF_RESEARCH) return "/research";
 		if (href === HREF_ALERTS) return "/alerts";
 		return href;
 	}
 
 	function isActiveTab(tab: PrimaryTab): boolean {
-		if (tab.status !== "active") return false;
 		if (!isHrefActive(tab.href)) return false;
 		return activePath.startsWith(activePathSegment(tab.href));
 	}
@@ -209,9 +209,9 @@
 	);
 
 	function handleTenantClick() {
-		// Pending Clerk SDK resolution — no-op for Part C. Phase 2+
-		// wires the real org switcher when the SvelteKit SDK
-		// stabilizes (see CLAUDE.md §Clerk SvelteKit SDK Note).
+		// Pending Clerk SDK resolution — no-op for X2. A later sprint
+		// wires the real org switcher when the SvelteKit SDK stabilizes
+		// (see CLAUDE.md §Clerk SvelteKit SDK Note).
 	}
 
 	function handleAlertClick() {
@@ -221,7 +221,7 @@
 
 	function handleSessionClick() {
 		// Clerk user menu — pending SDK. Same rationale as tenant
-		// switcher. No-op for Part C.
+		// switcher. No-op for X2.
 	}
 </script>
 
@@ -234,22 +234,14 @@
 	<ul class="tn-tabs" role="list">
 		{#each PRIMARY_TABS as tab (tab.id)}
 			<li class="tn-tab-item">
-				{#if tab.id === "macro"}
+				{#if tab.id === "live"}
 					<a
 						class="tn-tab tn-tab--active"
 						class:tn-tab--current={isActiveTab(tab)}
-						href={HREF_MACRO}
+						href={HREF_LIVE}
 						data-sveltekit-preload-data="hover"
 					>
-						<span class="tn-tab-label">{tab.label}</span>
-					</a>
-				{:else if tab.id === "alloc"}
-					<a
-						class="tn-tab tn-tab--active"
-						class:tn-tab--current={isActiveTab(tab)}
-						href={HREF_ALLOC}
-						data-sveltekit-preload-data="hover"
-					>
+						<span class="tn-tab-fkey">F{tab.fKey}</span>
 						<span class="tn-tab-label">{tab.label}</span>
 					</a>
 				{:else if tab.id === "screener"}
@@ -259,6 +251,27 @@
 						href={HREF_SCREENER}
 						data-sveltekit-preload-data="hover"
 					>
+						<span class="tn-tab-fkey">F{tab.fKey}</span>
+						<span class="tn-tab-label">{tab.label}</span>
+					</a>
+				{:else if tab.id === "macro"}
+					<a
+						class="tn-tab tn-tab--active"
+						class:tn-tab--current={isActiveTab(tab)}
+						href={HREF_MACRO}
+						data-sveltekit-preload-data="hover"
+					>
+						<span class="tn-tab-fkey">F{tab.fKey}</span>
+						<span class="tn-tab-label">{tab.label}</span>
+					</a>
+				{:else if tab.id === "builder"}
+					<a
+						class="tn-tab tn-tab--active"
+						class:tn-tab--current={isActiveTab(tab)}
+						href={HREF_BUILDER}
+						data-sveltekit-preload-data="hover"
+					>
+						<span class="tn-tab-fkey">F{tab.fKey}</span>
 						<span class="tn-tab-label">{tab.label}</span>
 					</a>
 				{:else if tab.id === "dd"}
@@ -268,37 +281,11 @@
 						href={HREF_DD}
 						data-sveltekit-preload-data="hover"
 					>
+						<span class="tn-tab-fkey">F{tab.fKey}</span>
 						<span class="tn-tab-label">{tab.label}</span>
 						{#if ddQueueCount > 0}
 							<span class="tn-dd-badge">{ddQueueCount > 99 ? "99+" : ddQueueCount}</span>
 						{/if}
-					</a>
-				{:else if tab.id === "builder"}
-					<a
-						class="tn-tab tn-tab--active"
-						class:tn-tab--current={isActiveTab(tab)}
-						href={HREF_BUILDER}
-						data-sveltekit-preload-data="hover"
-					>
-						<span class="tn-tab-label">{tab.label}</span>
-					</a>
-				{:else if tab.id === "live"}
-					<a
-						class="tn-tab tn-tab--active"
-						class:tn-tab--current={isActiveTab(tab)}
-						href={HREF_LIVE}
-						data-sveltekit-preload-data="hover"
-					>
-						<span class="tn-tab-label">{tab.label}</span>
-					</a>
-				{:else if tab.id === "research"}
-					<a
-						class="tn-tab tn-tab--active"
-						class:tn-tab--current={isActiveTab(tab)}
-						href={HREF_RESEARCH}
-						data-sveltekit-preload-data="hover"
-					>
-						<span class="tn-tab-label">{tab.label}</span>
 					</a>
 				{:else if tab.id === "alerts"}
 					<a
@@ -307,18 +294,9 @@
 						href={HREF_ALERTS}
 						data-sveltekit-preload-data="hover"
 					>
+						<span class="tn-tab-fkey">F{tab.fKey}</span>
 						<span class="tn-tab-label">{tab.label}</span>
 					</a>
-				{:else}
-					<span
-						class="tn-tab tn-tab--pending"
-						role="link"
-						aria-disabled="true"
-						title={tab.pendingReason ?? "Pending"}
-					>
-						<span class="tn-tab-label">{tab.label}</span>
-						<span class="tn-tab-pending-badge">PENDING</span>
-					</span>
 				{/if}
 			</li>
 		{/each}
@@ -357,7 +335,7 @@
 			class="tn-alerts"
 			onclick={handleAlertClick}
 			aria-label={alertCount > 0 ? `${alertCount} unread alerts` : "Alerts inbox"}
-			title={alertCount > 0 ? `${alertCount} unread` : "Alerts inbox — Phase 5 pending"}
+			title={alertCount > 0 ? `${alertCount} unread` : "Alerts inbox"}
 		>
 			<span class="tn-alerts-icon">△</span>
 			{#if alertCount > 0}
@@ -467,22 +445,14 @@
 		outline-offset: -2px;
 	}
 
-	.tn-tab--pending {
+	.tn-tab-fkey {
+		font-weight: 500;
 		color: var(--terminal-fg-muted);
-		cursor: not-allowed;
+		letter-spacing: 0;
 	}
 
 	.tn-tab-label {
 		font-weight: 600;
-	}
-
-	.tn-tab-pending-badge {
-		display: inline-block;
-		padding: 1px 4px;
-		font-size: var(--terminal-text-10);
-		letter-spacing: 0.08em;
-		color: var(--terminal-fg-tertiary);
-		border: 1px solid var(--terminal-fg-muted);
 	}
 
 	.tn-right {

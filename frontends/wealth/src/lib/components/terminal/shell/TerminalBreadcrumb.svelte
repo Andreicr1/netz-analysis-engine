@@ -25,8 +25,8 @@
 	}
 
 	const segments: Segment[] = [
-		{ key: "screener", label: "SCREENER", href: "/terminal-screener", match: "/terminal-screener" },
-		{ key: "terminal", label: "TERMINAL", href: "/portfolio/live", match: "/portfolio/live" },
+		{ key: "screener", label: "SCREENER", href: "/screener", match: "/screener" },
+		{ key: "terminal", label: "TERMINAL", href: "/live", match: "/live" },
 		{ key: "macro", label: "MACRO", href: "/macro", match: "/macro" },
 		{ key: "builder", label: "BUILDER", href: "/portfolio/builder", match: "/portfolio/builder" },
 	];

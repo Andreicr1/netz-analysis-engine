@@ -5,10 +5,10 @@
 -->
 <script lang="ts">
 	import { StatusBadge, formatDateTime, EmptyState } from "@investintell/ui";
-	import type { ModelPortfolio } from "$lib/types/model-portfolio";
-	import { profileColor } from "$lib/types/model-portfolio";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
-	import { portfolioDisplayName } from "$lib/constants/blocks";
+	import type { ModelPortfolio } from "$wealth/types/model-portfolio";
+	import { profileColor } from "$wealth/types/model-portfolio";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
+	import { portfolioDisplayName } from "$wealth/constants/blocks";
 
 	let { portfolios }: { portfolios: ModelPortfolio[] } = $props();
 </script>

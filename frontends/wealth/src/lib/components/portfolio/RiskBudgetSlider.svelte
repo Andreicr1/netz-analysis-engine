@@ -14,7 +14,7 @@
 <script lang="ts">
 	import { formatPercent } from "@investintell/ui";
 	import CalibrationSliderField from "./CalibrationSliderField.svelte";
-	import { profileLabel } from "$lib/util/profile-defaults";
+	import { profileLabel } from "$wealth/util/profile-defaults";
 
 	interface Props {
 		value: number;

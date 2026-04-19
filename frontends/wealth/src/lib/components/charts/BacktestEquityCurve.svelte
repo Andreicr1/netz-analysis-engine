@@ -6,7 +6,7 @@
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
 	import { formatNumber, formatPercent, formatDate } from "@investintell/ui";
-	import type { BacktestFold } from "$lib/types/model-portfolio";
+	import type { BacktestFold } from "$wealth/types/model-portfolio";
 
 	interface Props {
 		folds: BacktestFold[];

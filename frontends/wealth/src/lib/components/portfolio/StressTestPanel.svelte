@@ -10,9 +10,9 @@
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
 	import { EmptyState, formatPercent } from "@investintell/ui";
-	import { blockLabel } from "$lib/constants/blocks";
+	import { blockLabel } from "$wealth/constants/blocks";
 	import Loader2 from "lucide-svelte/icons/loader-2";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 
 	// ── Shock inputs ──────────────────────────────────────────────────────
 	let equityShock = $state(-20);

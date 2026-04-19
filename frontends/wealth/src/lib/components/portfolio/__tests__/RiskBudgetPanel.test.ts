@@ -22,7 +22,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { PreviewCvarResponse } from "$lib/types/cascade-telemetry";
+import type { PreviewCvarResponse } from "$wealth/types/cascade-telemetry";
 
 const MOCK_BAND: PreviewCvarResponse = {
 	achievable_return_band: {

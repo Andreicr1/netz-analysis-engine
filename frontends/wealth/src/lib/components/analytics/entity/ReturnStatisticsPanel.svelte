@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
 	import { formatPercent, formatNumber, plColor } from "@investintell/ui";
-	import type { ReturnStatistics } from "$lib/types/entity-analytics";
+	import type { ReturnStatistics } from "$wealth/types/entity-analytics";
 
 	interface Props {
 		stats: ReturnStatistics;

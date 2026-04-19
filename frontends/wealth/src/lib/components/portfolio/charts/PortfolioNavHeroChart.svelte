@@ -12,8 +12,8 @@
 -->
 <script lang="ts">
 	import { EmptyState } from "@investintell/ui";
-	import NavHeroChart from "$lib/components/charts/discovery/NavHeroChart.svelte";
-	import type { NAVPoint } from "$lib/types/model-portfolio";
+	import NavHeroChart from "$wealth/components/charts/discovery/NavHeroChart.svelte";
+	import type { NAVPoint } from "$wealth/types/model-portfolio";
 
 	interface Props {
 		navSeries: NAVPoint[];

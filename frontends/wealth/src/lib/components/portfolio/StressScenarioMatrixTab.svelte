@@ -10,10 +10,10 @@
   (OD-26) — the panel never fabricates values.
 -->
 <script lang="ts">
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 	import { EmptyState, formatPercent } from "@investintell/ui";
-	import type { ConstructionStressResult } from "$lib/state/portfolio-workspace.svelte";
-	import type { StressScenarioId } from "$lib/types/portfolio-calibration";
+	import type { ConstructionStressResult } from "$wealth/state/portfolio-workspace.svelte";
+	import type { StressScenarioId } from "$wealth/types/portfolio-calibration";
 
 	interface Meta {
 		id: StressScenarioId;

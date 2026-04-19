@@ -5,9 +5,9 @@
 <script lang="ts">
 
   import { goto } from "$app/navigation";
-  import type { ScreenerTab, ScreenerFacets } from "$lib/types/screening";
-  import { EMPTY_FACETS } from "$lib/types/screening";
-  import { createDebouncedState } from "$lib/utils/reactivity";
+  import type { ScreenerTab, ScreenerFacets } from "$wealth/types/screening";
+  import { EMPTY_FACETS } from "$wealth/types/screening";
+  import { createDebouncedState } from "$wealth/utils/reactivity";
 
   interface Props {
     activeTab: ScreenerTab;

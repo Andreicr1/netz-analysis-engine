@@ -7,7 +7,7 @@
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { echarts } from "@investintell/ui/charts/echarts-setup";
 	import { formatNumber } from "@investintell/ui";
-	import type { InstrumentCorrelation } from "$lib/types/analytics";
+	import type { InstrumentCorrelation } from "$wealth/types/analytics";
 
 	interface Props {
 		matrix: number[][];

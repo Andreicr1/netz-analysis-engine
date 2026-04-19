@@ -3,7 +3,7 @@
   Bloomberg-style: pulse only when live, static for degraded/offline.
 -->
 <script lang="ts">
-	import type { ConnectionQuality } from "$lib/stores/risk-store.svelte";
+	import type { ConnectionQuality } from "$wealth/stores/risk-store.svelte";
 
 	interface Props {
 		quality: ConnectionQuality;

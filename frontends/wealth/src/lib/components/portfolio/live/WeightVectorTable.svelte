@@ -16,8 +16,8 @@
 -->
 <script lang="ts">
 	import { formatPercent } from "@investintell/ui";
-	import { blockLabel } from "$lib/constants/blocks";
-	import type { InstrumentWeight } from "$lib/types/model-portfolio";
+	import { blockLabel } from "$wealth/constants/blocks";
+	import type { InstrumentWeight } from "$wealth/types/model-portfolio";
 
 	interface ActualHolding {
 		instrument_id: string;

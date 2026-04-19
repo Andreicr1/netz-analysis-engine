@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
 	import { formatPercent, formatNumber } from "@investintell/ui";
-	import type { RiskBudgetResult } from "$lib/types/analytics";
+	import type { RiskBudgetResult } from "$wealth/types/analytics";
 
 	interface Props {
 		data: RiskBudgetResult;

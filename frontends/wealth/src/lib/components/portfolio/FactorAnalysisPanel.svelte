@@ -7,7 +7,7 @@
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
 	import { EmptyState, formatNumber } from "@investintell/ui";
-	import { workspace, type FactorContribution } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace, type FactorContribution } from "$wealth/state/portfolio-workspace.svelte";
 
 	// ── Real API Data Integration ───────────────────────────────────────
 	let data = $derived(workspace.localFactorAnalysis);

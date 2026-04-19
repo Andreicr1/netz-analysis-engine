@@ -5,7 +5,7 @@
 	import { formatNumber } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
-	import type { RollingReturns } from "$lib/types/entity-analytics";
+	import type { RollingReturns } from "$wealth/types/entity-analytics";
 
 	interface Props {
 		rollingReturns: RollingReturns;

@@ -6,8 +6,8 @@
   No custom shock form (deferred to Session 3+).
 -->
 <script lang="ts">
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
-	import type { ConstructionStressResult } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
+	import type { ConstructionStressResult } from "$wealth/state/portfolio-workspace.svelte";
 	import { formatPercent } from "@investintell/ui";
 
 	/** Sanitized scenario names per Appendix D. */

@@ -7,8 +7,8 @@
 -->
 <script lang="ts">
 	import { formatNumber, formatPercent, createTerminalChartOptions, readTerminalTokens } from "@investintell/ui";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
-	import TerminalChart from "$lib/components/terminal/charts/TerminalChart.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
+	import TerminalChart from "$wealth/components/terminal/charts/TerminalChart.svelte";
 	import type { EChartsOption } from "echarts";
 
 	const PERIODS = ["1Y", "3Y", "5Y", "10Y"] as const;

@@ -12,8 +12,8 @@
 -->
 <script lang="ts">
   import { formatAUM, formatNumber } from "@investintell/ui";
-  import type { ManagerCatalogItem } from "$lib/types/catalog";
-  import { FUND_TYPE_BADGE_MAP } from "$lib/types/catalog";
+  import type { ManagerCatalogItem } from "$wealth/types/catalog";
+  import { FUND_TYPE_BADGE_MAP } from "$wealth/types/catalog";
   import {
     createSvelteTable,
     getCoreRowModel,
@@ -28,7 +28,7 @@
     makeTextFilterFn,
     type ColumnFilterMeta,
     type ColumnFilterValue,
-  } from "$lib/components/screener/filters";
+  } from "$wealth/components/screener/filters";
 
   interface Props {
     items: ManagerCatalogItem[];

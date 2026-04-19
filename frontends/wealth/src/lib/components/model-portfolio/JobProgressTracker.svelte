@@ -3,9 +3,9 @@
   Reacts to the SSE stream via ActiveJob state from the PortfolioReportsStore.
 -->
 <script lang="ts">
-	import type { ActiveJob } from "$lib/stores/portfolio-reports.svelte";
-	import type { ReportStage, ReportType } from "$lib/types/model-portfolio";
-	import { REPORT_TYPE_LABELS, REPORT_STAGE_LABELS } from "$lib/types/model-portfolio";
+	import type { ActiveJob } from "$wealth/stores/portfolio-reports.svelte";
+	import type { ReportStage, ReportType } from "$wealth/types/model-portfolio";
+	import { REPORT_TYPE_LABELS, REPORT_STAGE_LABELS } from "$wealth/types/model-portfolio";
 
 	interface Props {
 		jobs: ActiveJob[];

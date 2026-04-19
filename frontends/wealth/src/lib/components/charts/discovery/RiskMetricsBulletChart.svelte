@@ -12,7 +12,7 @@
 -->
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
-	import type { RiskMetricsPayload } from "$lib/discovery/analysis-api";
+	import type { RiskMetricsPayload } from "$wealth/discovery/analysis-api";
 	import { chartTokens } from "../chart-tokens";
 
 	interface Props {

@@ -10,7 +10,7 @@
 <script lang="ts">
 	import Star from "lucide-svelte/icons/star";
 	import X from "lucide-svelte/icons/x";
-	import type { UrlAdapter } from "$lib/state/library/url-adapter.svelte";
+	import type { UrlAdapter } from "$wealth/state/library/url-adapter.svelte";
 
 	interface Props {
 		adapter: UrlAdapter;

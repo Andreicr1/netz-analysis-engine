@@ -8,9 +8,9 @@
 	import * as Sheet from "@investintell/ui/components/ui/sheet";
 	import { DataTable, formatAUM, formatPercent, formatCompact } from "@investintell/ui";
 	import { ChevronLeft, Building2, Loader2 } from "lucide-svelte";
-	import { createClientApiClient } from "$lib/api/client";
-	import type { UnifiedFundItem, UnifiedCatalogPage } from "$lib/types/catalog";
-	import { FUND_TYPE_LABELS } from "$lib/types/catalog";
+	import { createClientApiClient } from "$wealth/api/client";
+	import type { UnifiedFundItem, UnifiedCatalogPage } from "$wealth/types/catalog";
+	import { FUND_TYPE_LABELS } from "$wealth/types/catalog";
 	import type { ColumnDef } from "@tanstack/svelte-table";
 
 	interface Props {

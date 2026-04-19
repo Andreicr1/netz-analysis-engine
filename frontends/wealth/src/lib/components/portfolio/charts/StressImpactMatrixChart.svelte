@@ -20,8 +20,8 @@
 	import type {
 		ConstructionRunPayload,
 		ConstructionStressResult,
-	} from "$lib/state/portfolio-workspace.svelte";
-	import { chartTokens } from "$lib/components/charts/chart-tokens";
+	} from "$wealth/state/portfolio-workspace.svelte";
+	import { chartTokens } from "$wealth/components/charts/chart-tokens";
 
 	interface Props {
 		latestRun: ConstructionRunPayload | null;

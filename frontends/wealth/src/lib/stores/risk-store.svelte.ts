@@ -6,7 +6,7 @@
  * Freshness derived exclusively from server computed_at — Date.now() is forbidden.
  */
 
-import { createClientApiClient } from "$lib/api/client";
+import { createClientApiClient } from "$wealth/api/client";
 import { createSSEStream, type SSEStatus } from "@investintell/ui";
 import { isStale } from "./stale.js";
 

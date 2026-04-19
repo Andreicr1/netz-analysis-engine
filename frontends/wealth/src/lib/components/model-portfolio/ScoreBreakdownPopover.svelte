@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
 	import { formatNumber, formatPercent } from "@investintell/ui";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 	import { getContext } from "svelte";
 
 	interface Props {

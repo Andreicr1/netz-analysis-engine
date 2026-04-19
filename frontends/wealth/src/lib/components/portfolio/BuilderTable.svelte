@@ -42,8 +42,8 @@
 	import X from "lucide-svelte/icons/x";
 	import Plus from "lucide-svelte/icons/plus";
 	import { formatPercent, formatNumber } from "@investintell/ui";
-	import { BLOCK_GROUPS, blockDisplay, groupDisplay } from "$lib/constants/blocks";
-	import { workspace, type UniverseFund } from "$lib/state/portfolio-workspace.svelte";
+	import { BLOCK_GROUPS, blockDisplay, groupDisplay } from "$wealth/constants/blocks";
+	import { workspace, type UniverseFund } from "$wealth/state/portfolio-workspace.svelte";
 
 	// ── Build 3-level tree (ported from PortfolioOverview) ────────
 

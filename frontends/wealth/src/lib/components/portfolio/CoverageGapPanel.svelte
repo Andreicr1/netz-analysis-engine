@@ -11,11 +11,11 @@
 -->
 <script lang="ts">
 	import { formatPercent, formatNumber } from "@investintell/ui";
-	import { blockLabel } from "$lib/constants/blocks";
+	import { blockLabel } from "$wealth/constants/blocks";
 	import type {
 		CoverageReport,
 		OperatorMessage,
-	} from "$lib/types/cascade-telemetry";
+	} from "$wealth/types/cascade-telemetry";
 
 	interface Props {
 		report: CoverageReport;

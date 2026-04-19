@@ -23,15 +23,15 @@
   every number renders via @investintell/ui formatters.
 -->
 <script lang="ts">
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 	import { formatNumber, formatShortDate } from "@investintell/ui";
 	import type {
 		PortfolioCalibration,
 		PortfolioCalibrationUpdate,
 		CalibrationMandate,
 		StressScenarioId,
-	} from "$lib/types/portfolio-calibration";
-	import { calibrationsEqual } from "$lib/types/portfolio-calibration";
+	} from "$wealth/types/portfolio-calibration";
+	import { calibrationsEqual } from "$wealth/types/portfolio-calibration";
 	import CalibrationSliderField from "./CalibrationSliderField.svelte";
 	import CalibrationSelectField from "./CalibrationSelectField.svelte";
 	import CalibrationToggleField from "./CalibrationToggleField.svelte";

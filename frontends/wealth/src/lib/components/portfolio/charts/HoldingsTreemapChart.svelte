@@ -13,9 +13,9 @@
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { EmptyState, formatPercent, formatNumber } from "@investintell/ui";
-	import type { ModelPortfolio } from "$lib/types/model-portfolio";
-	import { blockLabel } from "$lib/constants/blocks";
-	import { chartTokens } from "$lib/components/charts/chart-tokens";
+	import type { ModelPortfolio } from "$wealth/types/model-portfolio";
+	import { blockLabel } from "$wealth/constants/blocks";
+	import { chartTokens } from "$wealth/components/charts/chart-tokens";
 
 	interface Props {
 		portfolio: ModelPortfolio | null;

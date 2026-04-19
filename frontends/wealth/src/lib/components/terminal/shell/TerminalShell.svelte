@@ -40,7 +40,7 @@
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 	import TerminalTopNav from "./TerminalTopNav.svelte";
 	import TerminalBreadcrumb from "./TerminalBreadcrumb.svelte";
 	import TerminalTweaksPanel from "./TerminalTweaksPanel.svelte";
@@ -48,9 +48,9 @@
 	import {
 		TERMINAL_TWEAKS_KEY,
 		type TerminalTweaks,
-	} from "$lib/stores/terminal-tweaks.svelte";
-	import { TERMINAL_MARKET_DATA_KEY } from "$lib/components/portfolio/live/workbench-state";
-	import type { MarketDataStore, WsStatus } from "$lib/stores/market-data.svelte";
+	} from "$wealth/stores/terminal-tweaks.svelte";
+	import { TERMINAL_MARKET_DATA_KEY } from "$wealth/components/portfolio/live/workbench-state";
+	import type { MarketDataStore, WsStatus } from "$wealth/stores/market-data.svelte";
 	import type { TerminalStatusBarConnectionStatus } from "./TerminalStatusBar.svelte";
 	import TerminalContextRail, {
 		type TerminalContextRailEntity,
@@ -167,7 +167,7 @@
 	}
 
 	async function navScreener() {
-		await goto(resolve("/terminal-screener"));
+		await goto(resolve("/screener"));
 	}
 
 	async function navDD() {
@@ -179,11 +179,11 @@
 	}
 
 	async function navLive() {
-		await goto(resolve("/portfolio/live"));
+		await goto(resolve("/live"));
 	}
 
 	async function navResearch() {
-		await goto(resolve("/research"));
+		await goto(resolve("/screener/research"));
 	}
 
 	async function navAlerts() {

@@ -7,7 +7,7 @@
 <script lang="ts">
 	import { fly } from "svelte/transition";
 	import { svelteTransitionFor } from "@investintell/ui";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 	import ConsequenceDialog from "./ConsequenceDialog.svelte";
 
 	interface Props {
@@ -55,7 +55,7 @@
 {#if successBanner}
 	<div class="ab-success">
 		Portfolio activated &mdash;
-		<a href="/portfolio/live" class="ab-success-link">view in Live Workbench</a>
+		<a href="/live" class="ab-success-link">view in Live Workbench</a>
 	</div>
 {/if}
 

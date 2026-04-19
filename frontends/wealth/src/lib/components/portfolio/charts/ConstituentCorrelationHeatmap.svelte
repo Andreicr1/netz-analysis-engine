@@ -19,8 +19,8 @@
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { EmptyState, formatNumber } from "@investintell/ui";
-	import type { CorrelationRegimeResult } from "$lib/types/analytics";
-	import { chartTokens } from "$lib/components/charts/chart-tokens";
+	import type { CorrelationRegimeResult } from "$wealth/types/analytics";
+	import { chartTokens } from "$wealth/components/charts/chart-tokens";
 
 	interface Props {
 		correlation: CorrelationRegimeResult | null;

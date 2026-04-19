@@ -13,7 +13,7 @@
 -->
 <script lang="ts">
 	import FocusMode from "../FocusMode.svelte";
-	import EntityAnalyticsVitrine from "$lib/components/analytics/entity/EntityAnalyticsVitrine.svelte";
+	import EntityAnalyticsVitrine from "$wealth/components/analytics/entity/EntityAnalyticsVitrine.svelte";
 
 	interface FundFocusModeProps {
 		fundId: string;

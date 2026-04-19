@@ -6,9 +6,9 @@
 	import { getContext } from "svelte";
 	import { formatDateTime, formatNumber } from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
-	import { createClientApiClient } from "$lib/api/client";
-	import type { ReportHistoryItem, ReportType } from "$lib/types/model-portfolio";
-	import { REPORT_TYPE_LABELS } from "$lib/types/model-portfolio";
+	import { createClientApiClient } from "$wealth/api/client";
+	import type { ReportHistoryItem, ReportType } from "$wealth/types/model-portfolio";
+	import { REPORT_TYPE_LABELS } from "$wealth/types/model-portfolio";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 

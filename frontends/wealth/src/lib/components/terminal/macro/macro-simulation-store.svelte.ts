@@ -2,7 +2,7 @@
  * Page-scoped macro regime simulation store.
  *
  * Deliberately isolated under `lib/components/terminal/macro/` (NOT
- * `$lib/state/*`) per plan §M5 so that importing it from anywhere
+ * `$wealth/state/*`) per plan §M5 so that importing it from anywhere
  * else in the app is visibly wrong in code review — the simulation
  * must never leak into `pinnedRegime` (which is the global TopNav
  * indicator) or into any backend call.

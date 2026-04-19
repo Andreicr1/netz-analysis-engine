@@ -34,19 +34,19 @@
 	import type { ConsequenceDialogPayload } from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { PanelEmptyState, PanelErrorState } from "@investintell/ui/runtime";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 	import type {
 		AuditEvent,
 		DDChapter,
 		DDReportFull,
-	} from "$lib/types/dd-report";
+	} from "$wealth/types/dd-report";
 	import {
 		anchorColor,
 		anchorLabel,
 		chapterTitle,
 		confidenceColor,
-	} from "$lib/types/dd-report";
-	import { flattenObject, renderMarkdown } from "$lib/utils/render-markdown";
+	} from "$wealth/types/dd-report";
+	import { flattenObject, renderMarkdown } from "$wealth/utils/render-markdown";
 
 	let { reportId }: { reportId: string } = $props();
 
