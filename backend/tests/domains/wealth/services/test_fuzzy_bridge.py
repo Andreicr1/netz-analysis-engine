@@ -4,9 +4,9 @@ from __future__ import annotations
 import pytest
 
 from app.domains.wealth.services.fuzzy_bridge import (
+    _token_set,
     score,
     verify_auto_match,
-    _token_set,
 )
 
 

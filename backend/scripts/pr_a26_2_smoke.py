@@ -65,8 +65,10 @@ async def main() -> None:
                     propose_runs[profile] = run.id
                 await db.commit()
             except Exception as e:
+                import traceback
+
                 print(f"  EXCEPTION: {type(e).__name__}: {e}")
-                import traceback; traceback.print_exc()
+                traceback.print_exc()
 
     # ── Phase 2: approve ──
     print("\n=== APPROVE ===")

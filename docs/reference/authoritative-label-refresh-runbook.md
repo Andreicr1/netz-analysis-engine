@@ -131,3 +131,83 @@ WHERE b.run_id = '<run_id>'
 | `strategy_label_source_table` | text | every apply (NULL for needs_review) |
 | `strategy_label_refreshed_at` | text (ISO-8601) | every apply |
 | `needs_human_review` | boolean | only when source = `needs_review` |
+
+---
+
+## A26.3.3 extension — fuzzy bridge + sec_etfs backfill
+
+**Migration:** `0157_fuzzy_bridge_audit`
+**Scripts:** `backend/scripts/bridge_mmf_catalog.py`, `backend/scripts/backfill_sec_etfs_strategy_label.py`
+
+Two new closures for the gaps documented above:
+
+1. **MMF fuzzy bridge** — `bridge_mmf_catalog.py` uses deterministic token-set Jaccard + `difflib.SequenceMatcher` (pure stdlib) to match `instruments_universe.name` against `sec_money_market_funds.fund_name`. Auto-apply threshold 0.85 with a second-pass verifier (Jaccard ≥ 0.70 AND SeqMatch ≥ 0.80 AND same category family). 0.70–0.85 matches land in `sec_mmf_bridge_candidates` tier `needs_review` for manual resolution. Writes `sec_cik` + `sec_series_id` into `instruments_universe.attributes`.
+2. **sec_etfs label backfill** — `backfill_sec_etfs_strategy_label.py` runs the Tiingo cascade classifier (`classify_fund`) against the 439 `sec_etfs` rows with `strategy_label IS NULL`, writes result plus `strategy_label_source = 'tiingo_cascade'` (or `'unclassified'` when cascade falls back).
+
+### Full execution sequence (A26.3.2 already applied, running the A26.3.3 extension)
+
+```bash
+# 1. Apply 0157
+make migrate                                              # head becomes 0157_fuzzy_bridge_audit
+
+# 2. Fuzzy bridge MMFs — dry-run, inspect top auto / needs_review, then apply
+python backend/scripts/bridge_mmf_catalog.py --json | tee /tmp/mmf_bridge_dryrun.json
+python backend/scripts/bridge_mmf_catalog.py --apply --json | tee /tmp/mmf_bridge_apply.json
+
+# 3. Backfill sec_etfs.strategy_label — dry-run, then apply
+python backend/scripts/backfill_sec_etfs_strategy_label.py --json | tee /tmp/etf_backfill_dryrun.json
+python backend/scripts/backfill_sec_etfs_strategy_label.py --apply --json | tee /tmp/etf_backfill_apply.json
+
+# 4. Re-run authoritative labels to propagate new bridges + new sec_etfs labels
+python backend/scripts/refresh_authoritative_labels.py --apply --json | tee /tmp/authoritative_second_pass.json
+
+# 5. Smoke test
+python backend/scripts/pr_a26_2_smoke.py
+```
+
+### Expected outcomes
+
+| Step | Before | After (target) |
+|---|---|---|
+| `sec_etfs.strategy_label NOT NULL` | 546 (of 985) | ≥ 900 |
+| `sec_mmf` bridges in IU | 44 | 300+ |
+| `applied_by_source.sec_mmf` (second pass) | 1 | 50+ |
+| `applied_by_source.sec_etf` (second pass) | 507 | 950+ |
+| Cash block share in propose output | 51–61 % | 5–15 % |
+| Portfolio Sharpe (Balanced) | 3.1–3.6 (inflated) | 1.5–2.5 |
+
+### Rollback
+
+```sql
+-- 1. Undo the second-pass authoritative refresh
+UPDATE instruments_universe iu
+SET attributes = COALESCE(attributes, '{}'::jsonb) ||
+                 jsonb_build_object('strategy_label', b.previous_strategy_label)
+FROM strategy_label_authoritative_backup b
+WHERE b.run_id = '<second_pass_run_id>'
+  AND b.instrument_id = iu.instrument_id;
+
+-- 2. Undo the fuzzy MMF bridge (only auto_applied rows wrote into attributes)
+UPDATE instruments_universe iu
+SET attributes = iu.attributes - 'sec_cik' - 'sec_series_id'
+                                - 'mmf_bridge_source' - 'mmf_bridge_score'
+                                - 'mmf_bridge_at'
+FROM sec_mmf_bridge_candidates c
+WHERE c.match_tier = 'auto_applied'
+  AND c.applied_at IS NOT NULL
+  AND c.instrument_id = iu.instrument_id;
+
+-- 3. Undo the sec_etfs backfill
+UPDATE sec_etfs
+SET strategy_label = NULL, strategy_label_source = NULL
+WHERE strategy_label_source = 'tiingo_cascade';
+
+-- 4. Drop migration if needed
+-- alembic downgrade 0156_authoritative_label_refresh
+```
+
+### Known limitations remaining after A26.3.3
+
+* BDC and ESMA bridges still rely on direct identifier matching — no fuzzy extension in v1.
+* Funds where Tiingo has no description and the fund name is a short opaque mark (e.g. `"AAA"`, `"XYZ"`) stay `unclassified`. Manual brochure classification is the follow-on path.
+* `sec_mmf_bridge_candidates` rows with `match_tier = 'needs_review'` accumulate until an operator resolves them via SQL update — no UI in v1.
