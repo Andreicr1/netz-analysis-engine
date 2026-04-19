@@ -8,11 +8,11 @@
 <script lang="ts">
 	import { getContext, onDestroy, onMount } from "svelte";
 	import { formatDateTime } from "@investintell/ui";
-	import { createClientApiClient } from "$wealth/api/client";
-	import { createTerminalStream, type TerminalStreamHandle } from "$wealth/components/terminal/runtime/stream";
-	import LiveDot from "$wealth/components/terminal/data/LiveDot.svelte";
-	import type { ContentSummary } from "$wealth/types/content";
-	import { contentTypeLabel } from "$wealth/types/content";
+	import { createClientApiClient } from "../../../api/client";
+	import { createTerminalStream, type TerminalStreamHandle } from "../../../components/terminal/runtime/stream";
+	import LiveDot from "../../../components/terminal/data/LiveDot.svelte";
+	import type { ContentSummary } from "../../../types/content";
+	import { contentTypeLabel } from "../../../types/content";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);

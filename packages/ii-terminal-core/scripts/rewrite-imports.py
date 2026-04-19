@@ -31,6 +31,9 @@ PREFIX_MAP: list[tuple[str, str]] = [
     ("$wealth/util/", "utils/"),
     ("$wealth/api/", "api/"),
     ("$wealth/constants/", "constants/"),
+    ("$wealth/i18n/", "i18n/"),
+    ("$wealth/services/", "services/"),
+    ("$wealth/workers/", "workers/"),
 ]
 
 IMPORT_RE = re.compile(r"""((?:from|import)\s*\(?\s*['"])(\$wealth/[^'"]+)(['"]\)?)""")

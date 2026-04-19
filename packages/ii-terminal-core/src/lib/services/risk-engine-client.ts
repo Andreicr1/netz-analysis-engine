@@ -12,7 +12,7 @@
  * routing or lookups.
  */
 
-import { createClientApiClient } from "$wealth/api/client";
+import { createClientApiClient } from "../api/client";
 
 export interface TVPoint {
 	time: number; // UNIX seconds

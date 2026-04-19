@@ -31,8 +31,8 @@ import {
 	createMountedGuard,
 	type MountedGuard,
 } from "@investintell/ui/runtime";
-import { createClientApiClient } from "$wealth/api/client";
-import type { LibraryDocumentDetail } from "$wealth/types/library";
+import { createClientApiClient } from "../../api/client";
+import type { LibraryDocumentDetail } from "../../types/library";
 
 export interface PreviewState {
 	loading: boolean;

@@ -7,7 +7,7 @@
 	import { formatNumber, formatPercent } from "@investintell/ui";
 	import type { TreeNode } from "./TerminalAssetTree.svelte";
 	import ScoreBreakdownPopover from "./ScoreBreakdownPopover.svelte";
-	import { createClientApiClient } from "$wealth/api/client";
+	import { createClientApiClient } from "../../../api/client";
 
 	interface RiskMetrics {
 		instrument_id: string;

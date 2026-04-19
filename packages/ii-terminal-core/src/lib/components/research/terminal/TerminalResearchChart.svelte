@@ -24,7 +24,7 @@
 	import {
 		fetchRiskTimeseries,
 		type RiskTimeseries,
-	} from "$wealth/services/risk-engine-client";
+	} from "../../../services/risk-engine-client";
 
 	interface Props {
 		ticker: string;

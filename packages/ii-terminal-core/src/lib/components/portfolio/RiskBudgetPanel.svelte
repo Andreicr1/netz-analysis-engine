@@ -14,16 +14,16 @@
 -->
 <script lang="ts">
 	import { formatPercent } from "@investintell/ui";
-	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
-	import type { ModelPortfolio } from "$wealth/types/model-portfolio";
-	import type { PortfolioCalibration } from "$wealth/types/portfolio-calibration";
+	import { workspace } from "../../state/portfolio-workspace.svelte";
+	import type { ModelPortfolio } from "../../types/model-portfolio";
+	import type { PortfolioCalibration } from "../../types/portfolio-calibration";
 	import type {
 		AchievableReturnBand,
 		OperatorMessage,
 		OperatorSignal,
 		WinnerSignal,
-	} from "$wealth/types/cascade-telemetry";
-	import { defaultCvarForProfile } from "$wealth/util/profile-defaults";
+	} from "../../types/cascade-telemetry";
+	import { defaultCvarForProfile } from "../../utils/profile-defaults";
 	import RiskBudgetSlider from "./RiskBudgetSlider.svelte";
 	import AchievableReturnBandChart from "./AchievableReturnBandChart.svelte";
 

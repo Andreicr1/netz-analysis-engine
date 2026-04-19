@@ -26,10 +26,10 @@
 	import type { ConsequenceDialogPayload } from "@investintell/ui";
 	import { PanelEmptyState, PanelErrorState } from "@investintell/ui/runtime";
 	import { ForbiddenError } from "@investintell/ui/utils";
-	import { createClientApiClient } from "$wealth/api/client";
-	import type { ContentFull } from "$wealth/types/content";
-	import { contentTypeColor, contentTypeLabel } from "$wealth/types/content";
-	import { flattenObject, renderMarkdown } from "$wealth/utils/render-markdown";
+	import { createClientApiClient } from "../../../api/client";
+	import type { ContentFull } from "../../../types/content";
+	import { contentTypeColor, contentTypeLabel } from "../../../types/content";
+	import { flattenObject, renderMarkdown } from "../../../utils/render-markdown";
 
 	let { id }: { id: string } = $props();
 

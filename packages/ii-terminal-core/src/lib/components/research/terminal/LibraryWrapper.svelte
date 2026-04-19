@@ -8,9 +8,9 @@
 -->
 <script lang="ts">
 	import { getContext, onMount } from "svelte";
-	import LibraryShell from "$wealth/components/library/LibraryShell.svelte";
-	import { createClientApiClient } from "$wealth/api/client";
-	import type { LibraryTree } from "$wealth/types/library";
+	import LibraryShell from "../../../components/library/LibraryShell.svelte";
+	import { createClientApiClient } from "../../../api/client";
+	import type { LibraryTree } from "../../../types/library";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);

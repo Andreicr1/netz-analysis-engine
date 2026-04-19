@@ -30,9 +30,9 @@
 	import Maximize2 from "lucide-svelte/icons/maximize-2";
 	import Minimize2 from "lucide-svelte/icons/minimize-2";
 	import { PanelEmptyState, PanelErrorState } from "@investintell/ui/runtime";
-	import type { PreviewLoader } from "$wealth/state/library/preview-loader.svelte";
-	import type { UrlAdapter } from "$wealth/state/library/url-adapter.svelte";
-	import type { LibraryDocumentDetail } from "$wealth/types/library";
+	import type { PreviewLoader } from "../../state/library/preview-loader.svelte";
+	import type { UrlAdapter } from "../../state/library/url-adapter.svelte";
+	import type { LibraryDocumentDetail } from "../../types/library";
 
 	interface Props {
 		loader: PreviewLoader;

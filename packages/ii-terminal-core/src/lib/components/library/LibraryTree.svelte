@@ -15,8 +15,8 @@
 -->
 <script lang="ts">
 	import { createVirtualizer } from "@tanstack/svelte-virtual";
-	import type { LibraryNode, LibraryTree } from "$wealth/types/library";
-	import type { TreeLoader } from "$wealth/state/library/tree-loader.svelte";
+	import type { LibraryNode, LibraryTree } from "../../types/library";
+	import type { TreeLoader } from "../../state/library/tree-loader.svelte";
 	import LibraryTreeNode from "./LibraryTreeNode.svelte";
 
 	interface Props {

@@ -43,6 +43,19 @@
     "./constants/*": {
       "types": "./dist/constants/*.d.ts",
       "default": "./dist/constants/*.js"
+    },
+    "./i18n/*": {
+      "types": "./dist/i18n/*.d.ts",
+      "default": "./dist/i18n/*.js"
+    },
+    "./services/*": {
+      "types": "./dist/services/*.d.ts",
+      "default": "./dist/services/*.js"
+    },
+    "./workers/*": {
+      "types": "./dist/workers/*.d.ts",
+      "svelte": "./dist/workers/*.js",
+      "default": "./dist/workers/*.js"
     }
   },
   "scripts": {

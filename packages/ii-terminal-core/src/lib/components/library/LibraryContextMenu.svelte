@@ -15,7 +15,7 @@
 	import PinOff from "lucide-svelte/icons/pin-off";
 	import Star from "lucide-svelte/icons/star";
 	import StarOff from "lucide-svelte/icons/star-off";
-	import type { LibraryNode } from "$wealth/types/library";
+	import type { LibraryNode } from "../../types/library";
 
 	interface Props {
 		node: LibraryNode | null;

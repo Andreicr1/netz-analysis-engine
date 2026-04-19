@@ -27,24 +27,24 @@
 	import {
 		createBundleBuilder,
 		type BundleBuilder,
-	} from "$wealth/state/library/bundle-builder.svelte";
+	} from "../../state/library/bundle-builder.svelte";
 	import {
 		createPinsClient,
 		type PinsClient,
-	} from "$wealth/state/library/pins-client.svelte";
+	} from "../../state/library/pins-client.svelte";
 	import {
 		createPreviewLoader,
 		type PreviewLoader,
-	} from "$wealth/state/library/preview-loader.svelte";
+	} from "../../state/library/preview-loader.svelte";
 	import {
 		createTreeLoader,
 		type TreeLoader,
-	} from "$wealth/state/library/tree-loader.svelte";
+	} from "../../state/library/tree-loader.svelte";
 	import {
 		createUrlAdapter,
 		type UrlAdapter,
-	} from "$wealth/state/library/url-adapter.svelte";
-	import type { LibraryNode, LibraryTree } from "$wealth/types/library";
+	} from "../../state/library/url-adapter.svelte";
+	import type { LibraryNode, LibraryTree } from "../../types/library";
 	import LibraryActionBar from "./LibraryActionBar.svelte";
 	import LibraryBreadcrumbs from "./LibraryBreadcrumbs.svelte";
 	import LibraryBundleWizard from "./LibraryBundleWizard.svelte";

@@ -6,7 +6,7 @@
   draft as the single source of truth.
 -->
 <script lang="ts">
-	import type { StressScenarioId } from "$wealth/types/portfolio-calibration";
+	import type { StressScenarioId } from "../../types/portfolio-calibration";
 
 	interface Option {
 		value: StressScenarioId;

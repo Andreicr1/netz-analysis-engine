@@ -21,9 +21,9 @@
 	import { getContext } from "svelte";
 	import { formatDate, formatNumber } from "@investintell/ui";
 	import { PanelEmptyState, PanelErrorState } from "@investintell/ui/runtime";
-	import { createClientApiClient } from "$wealth/api/client";
-	import { regimeLabel } from "$wealth/i18n/quant-labels";
-	import type { MacroReview } from "$wealth/types/macro";
+	import { createClientApiClient } from "../../../api/client";
+	import { regimeLabel } from "../../../i18n/quant-labels";
+	import type { MacroReview } from "../../../types/macro";
 
 	let { reviewId }: { reviewId: string } = $props();
 
