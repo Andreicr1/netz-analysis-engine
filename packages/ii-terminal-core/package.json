@@ -1,0 +1,68 @@
+{
+  "name": "@investintell/ii-terminal-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "InvestIntell Terminal — shared components, stores, state, types, and utilities promoted from wealth for reuse by frontends/terminal.",
+  "svelte": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "src"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "svelte": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./components/*": {
+      "types": "./dist/components/*",
+      "svelte": "./dist/components/*",
+      "default": "./dist/components/*"
+    },
+    "./stores/*": {
+      "types": "./dist/stores/*.d.ts",
+      "svelte": "./dist/stores/*.js",
+      "default": "./dist/stores/*.js"
+    },
+    "./state/*": {
+      "types": "./dist/state/*.d.ts",
+      "svelte": "./dist/state/*.js",
+      "default": "./dist/state/*.js"
+    },
+    "./types/*": {
+      "types": "./dist/types/*.d.ts",
+      "default": "./dist/types/*.js"
+    },
+    "./utils/*": {
+      "types": "./dist/utils/*.d.ts",
+      "default": "./dist/utils/*.js"
+    },
+    "./api/*": {
+      "types": "./dist/api/*.d.ts",
+      "default": "./dist/api/*.js"
+    },
+    "./constants/*": {
+      "types": "./dist/constants/*.d.ts",
+      "default": "./dist/constants/*.js"
+    }
+  },
+  "scripts": {
+    "build": "svelte-package -i ./src/lib -o ./dist",
+    "prepublishOnly": "pnpm build",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "peerDependencies": {
+    "@sveltejs/kit": "^2.0.0",
+    "svelte": "^5.0.0",
+    "@investintell/ui": "workspace:*"
+  },
+  "dependencies": {
+    "@investintell/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@sveltejs/package": "^2.0.0",
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "svelte": "^5.0.0",
+    "svelte-check": "^4.0.0",
+    "typescript": "^5.5.0"
+  }
+}
