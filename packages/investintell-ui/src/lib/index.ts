@@ -113,6 +113,10 @@ export { default as TerminalAccentPicker } from "./components/terminal/AccentPic
 export type { Accent } from "./components/terminal/AccentPicker.svelte";
 export { default as TerminalThemeToggle } from "./components/terminal/ThemeToggle.svelte";
 export type { TerminalTheme } from "./components/terminal/ThemeToggle.svelte";
+export { default as TerminalMiniSparkline } from "./components/terminal/MiniSparkline.svelte";
+export type { MiniSparklineTone } from "./components/terminal/MiniSparkline.svelte";
+export { default as TerminalDrawer } from "./components/terminal/Drawer.svelte";
+export type { DrawerSide } from "./components/terminal/Drawer.svelte";
 
 // Motion grammar + chart factory. Importing these from any file
 // outside (terminal)/ is discouraged — see eslint restriction.
