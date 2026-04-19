@@ -263,14 +263,20 @@ function main() {
  * Directories covered by the terminal forbidden-pattern sweep.
  * Paths relative to REPO_ROOT. Must stay in sync with the route
  * surface declared in each terminal parity plan (currently
- * docs/plans/2026-04-19-netz-terminal-parity-builder-macro-screener.md §D).
+ * docs/plans/2026-04-19-netz-terminal-parity-builder-macro-screener.md §D.9).
+ *
+ * PR-4b note: ``(terminal)/portfolio/builder`` is deliberately NOT
+ * scanned — that legacy surface is outside the parity target and may
+ * be retired in a follow-up. ``(terminal)/allocation`` +
+ * ``components/allocation`` are the canonical propose→approve surface.
  */
 const ROUTE_SCAN_DIRS = [
 	"frontends/wealth/src/routes/(terminal)/portfolio/live",
-	"frontends/wealth/src/routes/(terminal)/portfolio/builder",
 	"frontends/wealth/src/routes/(terminal)/terminal-screener",
 	"frontends/wealth/src/routes/(terminal)/macro",
+	"frontends/wealth/src/routes/(terminal)/allocation",
 	"frontends/wealth/src/lib/components/terminal",
+	"frontends/wealth/src/lib/components/allocation",
 ];
 
 const SCAN_EXTENSIONS = new Set([".svelte", ".ts"]);

@@ -4,6 +4,11 @@
   18 rows × 5 cols per feedback_datagrid_vs_viewer (4-6 cols max). Row
   clicks are inert (no drill-down in v1); Edit Override emits an event
   the page handler wires to the modal.
+
+  PR-4b — terminal-density re-skin. All colors pulled from
+  ``--terminal-*`` custom properties; row heights respect
+  ``[data-density]`` via ``--t-row-height``. No cursor:pointer on
+  data cells (§G.BUILDER.3) — only the Edit affordance is interactive.
 -->
 <script lang="ts">
 	import { formatPercent } from "@investintell/ui";
@@ -24,55 +29,50 @@
 	}
 </script>
 
-<div class="overflow-x-auto rounded-md border border-border">
-	<table class="w-full text-sm">
-		<thead class="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+<div class="strategic-allocation">
+	<table>
+		<thead>
 			<tr>
-				<th class="text-left px-3 py-2 font-medium">Asset Class</th>
-				<th class="text-right px-3 py-2 font-medium">
+				<th class="align-left">Asset Class</th>
+				<th class="align-right">
 					<span title="Approved target weight from last IPS approval.">Target</span>
 				</th>
-				<th class="text-right px-3 py-2 font-medium">
+				<th class="align-right">
 					<span title="Tolerance before rebalance triggers.">Drift Band</span>
 				</th>
-				<th class="text-right px-3 py-2 font-medium">
+				<th class="align-right">
 					<span title="Operator-set constraint for the next proposal.">Override</span>
 				</th>
-				<th class="text-right px-3 py-2 font-medium">Actions</th>
+				<th class="align-right">Actions</th>
 			</tr>
 		</thead>
 		<tbody>
 			{#each blocks as block (block.block_id)}
-				<tr
-					class="border-t border-border"
-					class:opacity-50={block.excluded_from_portfolio}
-				>
-					<td class="px-3 py-2 text-foreground">
-						<div class="flex items-center gap-2">
+				<tr class:excluded={block.excluded_from_portfolio}>
+					<td class="align-left name">
+						<div class="name-cell">
 							<span>{block.block_name}</span>
 							{#if block.excluded_from_portfolio}
-								<span
-									class="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground uppercase tracking-wider"
-								>
-									Excluded
-								</span>
+								<span class="excluded-pill">Excluded</span>
 							{/if}
 						</div>
 					</td>
-					<td class="px-3 py-2 text-right tabular-nums text-foreground">
-						{block.target_weight !== null ? formatPercent(block.target_weight) : "—"}
+					<td class="align-right numeric">
+						{block.target_weight !== null
+							? formatPercent(block.target_weight)
+							: "—"}
 					</td>
-					<td class="px-3 py-2 text-right tabular-nums text-muted-foreground">
+					<td class="align-right numeric muted">
 						{rangeLabel(block.drift_min, block.drift_max)}
 					</td>
-					<td class="px-3 py-2 text-right tabular-nums text-muted-foreground">
+					<td class="align-right numeric muted">
 						{rangeLabel(block.override_min, block.override_max)}
 					</td>
-					<td class="px-3 py-2 text-right">
+					<td class="align-right">
 						<button
 							type="button"
+							class="edit-btn"
 							onclick={() => onEditOverride(block)}
-							class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-primary hover:bg-accent/40"
 							title="Edit override for this block"
 							aria-label="Edit override for {block.block_name}"
 						>
@@ -85,3 +85,86 @@
 		</tbody>
 	</table>
 </div>
+
+<style>
+	.strategic-allocation {
+		overflow-x: auto;
+		border: var(--terminal-border-hairline);
+		background: var(--terminal-bg-panel-raised);
+	}
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-12);
+	}
+	thead tr {
+		background: var(--terminal-bg-panel-sunken);
+	}
+	thead th {
+		padding: var(--terminal-space-2) var(--terminal-space-3);
+		font-weight: 500;
+		font-size: var(--terminal-text-10);
+		color: var(--terminal-fg-tertiary);
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+	}
+	.align-left {
+		text-align: left;
+	}
+	.align-right {
+		text-align: right;
+	}
+	tbody tr {
+		border-top: var(--terminal-border-hairline);
+		height: var(--t-row-height);
+	}
+	tbody tr.excluded {
+		opacity: 0.5;
+	}
+	tbody td {
+		padding: var(--terminal-space-2) var(--terminal-space-3);
+		color: var(--terminal-fg-primary);
+		line-height: var(--terminal-leading-tight);
+	}
+	.numeric {
+		font-variant-numeric: tabular-nums;
+	}
+	.muted {
+		color: var(--terminal-fg-tertiary);
+	}
+	.name-cell {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--terminal-space-2);
+	}
+	.excluded-pill {
+		font-size: var(--terminal-text-10);
+		padding: 0 var(--terminal-space-2);
+		border: var(--terminal-border-hairline);
+		color: var(--terminal-fg-tertiary);
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+	}
+	.edit-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--terminal-space-1);
+		padding: var(--terminal-space-1) var(--terminal-space-2);
+		border: var(--terminal-border-hairline);
+		background: transparent;
+		color: var(--terminal-accent-amber);
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-10);
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		cursor: pointer;
+		transition: border-color var(--terminal-motion-tick)
+			var(--terminal-motion-easing-out);
+	}
+	.edit-btn:hover,
+	.edit-btn:focus-visible {
+		border-color: var(--terminal-accent-amber);
+		outline: none;
+	}
+</style>

@@ -4,6 +4,9 @@
   Validation: at least one of min/max when saving; min <= max when
   both given; rationale required (min 10 chars) when setting bounds.
   Clear Override bypasses rationale and posts both-NULL.
+
+  PR-4b — terminal-density re-skin. Modal shell + inputs + actions
+  consume --terminal-* tokens. No Tailwind semantic colors.
 -->
 <script lang="ts">
 	import { formatNumber, formatPercent } from "@investintell/ui";
@@ -111,63 +114,54 @@
 </script>
 
 <div
-	class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+	class="modal-backdrop"
 	role="dialog"
 	aria-modal="true"
 	aria-labelledby="override-editor-title"
 >
-	<div class="w-full max-w-md rounded-lg bg-card border border-border p-5">
-		<header class="mb-3">
-			<h3
-				id="override-editor-title"
-				class="text-base font-medium text-foreground"
-			>
+	<div class="modal">
+		<header class="modal__header">
+			<h3 id="override-editor-title" class="modal__title">
 				Edit Override — {block.block_name}
 			</h3>
-			<p class="text-xs text-muted-foreground mt-1">
+			<p class="modal__subtitle">
 				Current target: {block.target_weight !== null
 					? formatPercent(block.target_weight)
-					: "—"}. Override takes effect on next proposal. Current holdings
-				are unaffected.
+					: "—"}. Override takes effect on next proposal. Current holdings are
+				unaffected.
 			</p>
 		</header>
 
-		<div class="space-y-3">
-			<label class="block">
-				<span class="text-xs uppercase tracking-wide text-muted-foreground">
-					Override Min (%)
-				</span>
+		<div class="modal__fields">
+			<label class="field">
+				<span class="field__label">Override Min (%)</span>
 				<input
 					type="number"
 					min="0"
 					max="100"
 					step="0.1"
-					class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
+					class="field__input"
 					bind:value={overrideMinRaw}
 					placeholder="e.g. 5"
 				/>
 			</label>
-			<label class="block">
-				<span class="text-xs uppercase tracking-wide text-muted-foreground">
-					Override Max (%)
-				</span>
+			<label class="field">
+				<span class="field__label">Override Max (%)</span>
 				<input
 					type="number"
 					min="0"
 					max="100"
 					step="0.1"
-					class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
+					class="field__input"
 					bind:value={overrideMaxRaw}
 					placeholder="e.g. 15"
 				/>
 			</label>
-			<label class="block">
-				<span class="text-xs uppercase tracking-wide text-muted-foreground">
-					Rationale (min 10 chars)
-				</span>
+			<label class="field">
+				<span class="field__label">Rationale (min 10 chars)</span>
 				<textarea
 					rows="3"
-					class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
+					class="field__textarea"
 					bind:value={rationale}
 					placeholder="Why is this override needed?"
 				></textarea>
@@ -175,22 +169,22 @@
 		</div>
 
 		{#if errorMsg}
-			<p class="mt-3 text-xs text-destructive">{errorMsg}</p>
+			<p class="modal__error">{errorMsg}</p>
 		{/if}
 
-		<footer class="mt-4 flex items-center justify-between gap-2">
+		<footer class="modal__footer">
 			<button
 				type="button"
-				class="px-3 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10"
+				class="action action--destructive-ghost"
 				onclick={() => void clear()}
 				disabled={saving}
 			>
 				Clear Override
 			</button>
-			<div class="flex items-center gap-2">
+			<div class="modal__footer-right">
 				<button
 					type="button"
-					class="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground"
+					class="action action--ghost"
 					onclick={onClose}
 					disabled={saving}
 				>
@@ -198,7 +192,7 @@
 				</button>
 				<button
 					type="button"
-					class="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm hover:bg-primary/90 disabled:opacity-50"
+					class="action action--primary"
 					onclick={() => void save()}
 					disabled={saving}
 				>
@@ -208,3 +202,146 @@
 		</footer>
 	</div>
 </div>
+
+<style>
+	.modal-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: var(--terminal-z-modal);
+		background: var(--terminal-bg-scrim);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: var(--terminal-space-4);
+	}
+	.modal {
+		width: 100%;
+		max-width: 480px;
+		background: var(--terminal-bg-panel);
+		border: var(--terminal-border-hairline);
+		padding: var(--terminal-space-4);
+		font-family: var(--terminal-font-mono);
+		color: var(--terminal-fg-primary);
+	}
+	.modal__header {
+		margin-bottom: var(--terminal-space-3);
+	}
+	.modal__title {
+		font-size: var(--terminal-text-14);
+		font-weight: 500;
+		margin: 0;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		color: var(--terminal-fg-primary);
+	}
+	.modal__subtitle {
+		font-size: var(--terminal-text-10);
+		color: var(--terminal-fg-tertiary);
+		margin: var(--terminal-space-1) 0 0;
+		line-height: var(--terminal-leading-snug);
+	}
+
+	.modal__fields {
+		display: flex;
+		flex-direction: column;
+		gap: var(--terminal-space-3);
+	}
+	.field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--terminal-space-1);
+	}
+	.field__label {
+		font-size: var(--terminal-text-10);
+		color: var(--terminal-fg-tertiary);
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+	}
+	.field__input,
+	.field__textarea {
+		width: 100%;
+		padding: var(--terminal-space-2) var(--terminal-space-3);
+		background: var(--terminal-bg-panel-sunken);
+		border: var(--terminal-border-hairline);
+		color: var(--terminal-fg-primary);
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-12);
+		font-variant-numeric: tabular-nums;
+	}
+	.field__input:focus-visible,
+	.field__textarea:focus-visible {
+		outline: none;
+		border-color: var(--terminal-accent-amber);
+	}
+	.field__textarea {
+		resize: vertical;
+		min-height: 72px;
+	}
+
+	.modal__error {
+		margin-top: var(--terminal-space-3);
+		font-size: var(--terminal-text-10);
+		color: var(--terminal-status-error);
+	}
+
+	.modal__footer {
+		margin-top: var(--terminal-space-4);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--terminal-space-2);
+	}
+	.modal__footer-right {
+		display: flex;
+		align-items: center;
+		gap: var(--terminal-space-2);
+	}
+
+	.action {
+		display: inline-flex;
+		align-items: center;
+		padding: var(--terminal-space-2) var(--terminal-space-3);
+		background: transparent;
+		border: var(--terminal-border-hairline);
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-11);
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		cursor: pointer;
+		transition: color var(--terminal-motion-tick)
+				var(--terminal-motion-easing-out),
+			border-color var(--terminal-motion-tick) var(--terminal-motion-easing-out);
+	}
+	.action:disabled {
+		color: var(--terminal-fg-disabled);
+		border-color: var(--terminal-fg-disabled);
+		cursor: not-allowed;
+	}
+	.action--ghost {
+		color: var(--terminal-fg-tertiary);
+	}
+	.action--ghost:hover:not(:disabled),
+	.action--ghost:focus-visible:not(:disabled) {
+		color: var(--terminal-fg-primary);
+		border-color: var(--terminal-fg-secondary);
+		outline: none;
+	}
+	.action--primary {
+		color: var(--terminal-accent-amber);
+		border-color: var(--terminal-accent-amber);
+	}
+	.action--primary:hover:not(:disabled),
+	.action--primary:focus-visible:not(:disabled) {
+		background: var(--terminal-bg-panel-sunken);
+		outline: none;
+	}
+	.action--destructive-ghost {
+		color: var(--terminal-status-error);
+		border-color: transparent;
+	}
+	.action--destructive-ghost:hover:not(:disabled),
+	.action--destructive-ghost:focus-visible:not(:disabled) {
+		border-color: var(--terminal-status-error);
+		outline: none;
+	}
+</style>
