@@ -1,0 +1,23 @@
+<!doctype html>
+<!--
+  II Terminal — dark-only institutional workspace.
+  data-theme="dark" is a hard-coded SSR baseline; unlike wealth's setup we
+  intentionally do not register a themeHook, because the terminal visual
+  bundle (docs/ux/Netz Terminal/) is dark-only. X3 will wire ii-tokens on
+  top of this baseline.
+-->
+<html lang="en" data-theme="dark">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta
+			name="description"
+			content="II Terminal — InvestIntell institutional investment workstation."
+		/>
+		<title>II Terminal</title>
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>
