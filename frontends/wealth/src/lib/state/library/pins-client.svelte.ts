@@ -21,12 +21,12 @@
  * `createPinsClient(getToken)` and disposed in onDestroy.
  */
 
-import { createClientApiClient } from "$lib/api/client";
+import { createClientApiClient } from "$wealth/api/client";
 import type {
 	LibraryPin,
 	LibraryPinType,
 	LibraryPinsResponse,
-} from "$lib/types/library";
+} from "$wealth/types/library";
 
 export interface PinsState {
 	loading: boolean;

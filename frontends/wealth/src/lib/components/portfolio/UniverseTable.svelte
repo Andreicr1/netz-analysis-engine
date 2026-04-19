@@ -20,8 +20,8 @@
 	import GripVertical from "lucide-svelte/icons/grip-vertical";
 	import ChevronRight from "lucide-svelte/icons/chevron-right";
 	import { formatPercent } from "@investintell/ui";
-	import { BLOCK_GROUPS, blockDisplay, groupDisplay } from "$lib/constants/blocks";
-	import { workspace, type UniverseFund } from "$lib/state/portfolio-workspace.svelte";
+	import { BLOCK_GROUPS, blockDisplay, groupDisplay } from "$wealth/constants/blocks";
+	import { workspace, type UniverseFund } from "$wealth/state/portfolio-workspace.svelte";
 
 	interface Props {
 		funds: UniverseFund[];

@@ -9,7 +9,7 @@
 -->
 <script lang="ts">
 	import { getContext, onMount } from "svelte";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 
 	interface NewsItem {
 		id: string | number | null;

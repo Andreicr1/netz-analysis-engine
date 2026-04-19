@@ -13,14 +13,14 @@
 <script lang="ts">
 	import { PanelErrorState } from "@investintell/ui/runtime";
 	import { formatPercent } from "@investintell/ui";
-	import BuilderTable from "$lib/components/portfolio/BuilderTable.svelte";
-	import BuilderActionBar from "$lib/components/portfolio/BuilderActionBar.svelte";
-	import CalibrationPanel from "$lib/components/portfolio/CalibrationPanel.svelte";
-	import AllocationBandChart from "$lib/components/portfolio/charts/AllocationBandChart.svelte";
-	import TaaTransitionSparkline from "$lib/components/portfolio/charts/TaaTransitionSparkline.svelte";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
-	import { portfolioDisplayName } from "$lib/constants/blocks";
-	import { taaRegimeLabel } from "$lib/types/taa";
+	import BuilderTable from "$wealth/components/portfolio/BuilderTable.svelte";
+	import BuilderActionBar from "$wealth/components/portfolio/BuilderActionBar.svelte";
+	import CalibrationPanel from "$wealth/components/portfolio/CalibrationPanel.svelte";
+	import AllocationBandChart from "$wealth/components/portfolio/charts/AllocationBandChart.svelte";
+	import TaaTransitionSparkline from "$wealth/components/portfolio/charts/TaaTransitionSparkline.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
+	import { portfolioDisplayName } from "$wealth/constants/blocks";
+	import { taaRegimeLabel } from "$wealth/types/taa";
 
 	type BuilderTab = "allocations" | "market" | "policy";
 	let builderTab = $state<BuilderTab>("allocations");

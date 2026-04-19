@@ -6,7 +6,7 @@
 <script lang="ts">
 	import { formatNumber, formatPercent, formatShortDate } from "@investintell/ui";
 	import { AlertTriangle, CheckCircle, XOctagon, RefreshCw, Clock } from "lucide-svelte";
-	import type { LiveDriftResult, BlockDrift } from "$lib/stores/portfolio-workspace.svelte";
+	import type { LiveDriftResult, BlockDrift } from "$wealth/stores/portfolio-workspace.svelte";
 
 	interface Props {
 		drift: LiveDriftResult | null;

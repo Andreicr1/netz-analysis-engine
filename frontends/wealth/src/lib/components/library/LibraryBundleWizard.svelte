@@ -24,7 +24,7 @@
 	import {
 		bundleDownloadUrl,
 		type BundleBuilder,
-	} from "$lib/state/library/bundle-builder.svelte";
+	} from "$wealth/state/library/bundle-builder.svelte";
 
 	interface Props {
 		bundle: BundleBuilder;

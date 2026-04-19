@@ -7,7 +7,7 @@
 	import { formatNumber } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
-	import type { RiskBudgetResult } from "$lib/types/analytics";
+	import type { RiskBudgetResult } from "$wealth/types/analytics";
 
 	interface Props {
 		data: RiskBudgetResult;

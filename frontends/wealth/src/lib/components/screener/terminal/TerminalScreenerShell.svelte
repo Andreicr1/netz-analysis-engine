@@ -22,7 +22,7 @@
 	import { SvelteMap } from "svelte/reactivity";
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 	import TerminalScreenerFilters, {
 		type FilterState,
 	} from "./TerminalScreenerFilters.svelte";

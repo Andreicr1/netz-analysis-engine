@@ -11,8 +11,8 @@
 		taaRegimeLabel,
 		taaRegimeColor,
 		taaRegimePosture,
-	} from "$lib/types/taa";
-	import type { RegimeBands } from "$lib/types/taa";
+	} from "$wealth/types/taa";
+	import type { RegimeBands } from "$wealth/types/taa";
 
 	interface Props {
 		regimeBands: RegimeBands | null;

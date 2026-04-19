@@ -16,7 +16,7 @@
 	import type {
 		AnalyticsScope,
 		AnalyticsSubject,
-	} from "$lib/portfolio/analytics-types";
+	} from "$wealth/portfolio/analytics-types";
 
 	interface Props {
 		scope: AnalyticsScope;

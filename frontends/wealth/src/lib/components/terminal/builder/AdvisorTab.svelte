@@ -6,7 +6,7 @@
   advisor notes. All text plain institutional — no markdown rendering.
 -->
 <script lang="ts">
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 	import { formatNumber, formatPercent } from "@investintell/ui";
 
 	const run = $derived(workspace.constructionRun);

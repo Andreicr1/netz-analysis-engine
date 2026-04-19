@@ -5,8 +5,8 @@
 -->
 <script lang="ts">
 	import { AlertBanner, EmptyState, formatPercent } from "@investintell/ui";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
-	import type { CusipExposure } from "$lib/types/model-portfolio";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
+	import type { CusipExposure } from "$wealth/types/model-portfolio";
 
 	let isLoading = $derived(workspace.isLoadingOverlap);
 	let data = $derived(workspace.localOverlap);

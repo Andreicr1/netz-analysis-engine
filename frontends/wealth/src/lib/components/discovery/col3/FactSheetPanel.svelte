@@ -6,7 +6,7 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { formatAUM, formatPercent } from "@investintell/ui";
-	import { fetchFundFactSheet } from "$lib/discovery/api";
+	import { fetchFundFactSheet } from "$wealth/discovery/api";
 
 	interface Props {
 		fundId: string;

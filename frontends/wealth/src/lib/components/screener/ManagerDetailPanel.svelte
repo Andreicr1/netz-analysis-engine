@@ -9,9 +9,9 @@
   import { goto } from "$app/navigation";
   import { ArrowLeft, ExternalLink, Loader2, Sparkles, ChartNoAxesCombined, ShieldCheck, Check } from "lucide-svelte";
   import { formatAUM } from "@investintell/ui";
-  import { createClientApiClient } from "$lib/api/client";
-  import type { UnifiedFundItem, UnifiedCatalogPage, ManagerCatalogItem } from "$lib/types/catalog";
-  import { FUND_TYPE_BADGE_MAP } from "$lib/types/catalog";
+  import { createClientApiClient } from "$wealth/api/client";
+  import type { UnifiedFundItem, UnifiedCatalogPage, ManagerCatalogItem } from "$wealth/types/catalog";
+  import { FUND_TYPE_BADGE_MAP } from "$wealth/types/catalog";
 
   interface Props {
     manager: ManagerCatalogItem;

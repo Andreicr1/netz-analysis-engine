@@ -8,7 +8,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { formatNumber, formatPercent, createTerminalChartOptions } from "@investintell/ui";
-  import TerminalChart from "$lib/components/terminal/charts/TerminalChart.svelte";
+  import TerminalChart from "$wealth/components/terminal/charts/TerminalChart.svelte";
 
   interface EffectiveEntry {
     name: string;

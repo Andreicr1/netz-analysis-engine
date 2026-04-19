@@ -8,8 +8,8 @@
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions, echarts } from "@investintell/ui/charts/echarts-setup";
 	import { formatPercent, formatNumber } from "@investintell/ui";
-	import type { NAVPoint } from "$lib/types/model-portfolio";
-	import type { MarketDataStore } from "$lib/stores/market-data.svelte";
+	import type { NAVPoint } from "$wealth/types/model-portfolio";
+	import type { MarketDataStore } from "$wealth/stores/market-data.svelte";
 
 	interface Props {
 		navSeries: NAVPoint[];

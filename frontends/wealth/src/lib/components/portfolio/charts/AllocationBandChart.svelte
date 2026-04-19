@@ -12,10 +12,10 @@
 <script lang="ts">
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { EmptyState, formatPercent } from "@investintell/ui";
-	import type { EffectiveAllocationWithRegime } from "$lib/types/taa";
-	import { taaRegimeLabel, taaRegimeColor } from "$lib/types/taa";
-	import { blockDisplay } from "$lib/constants/blocks";
-	import { chartTokens } from "$lib/components/charts/chart-tokens";
+	import type { EffectiveAllocationWithRegime } from "$wealth/types/taa";
+	import { taaRegimeLabel, taaRegimeColor } from "$wealth/types/taa";
+	import { blockDisplay } from "$wealth/constants/blocks";
+	import { chartTokens } from "$wealth/components/charts/chart-tokens";
 
 	interface Props {
 		allocations: EffectiveAllocationWithRegime[] | null;

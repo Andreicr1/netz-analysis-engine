@@ -14,7 +14,7 @@
  */
 
 import { createSSEStream, type SSEConnection } from "@investintell/ui";
-import { createClientApiClient } from "$lib/api/client";
+import { createClientApiClient } from "$wealth/api/client";
 
 export type BundleStatus =
 	| "idle"

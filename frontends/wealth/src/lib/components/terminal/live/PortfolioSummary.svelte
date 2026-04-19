@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
 	import { formatAUM, formatPercent, formatDate } from "@investintell/ui";
-	import LiveDot from "$lib/components/terminal/data/LiveDot.svelte";
+	import LiveDot from "$wealth/components/terminal/data/LiveDot.svelte";
 
 	interface Props {
 		status: string;

@@ -18,7 +18,7 @@
   ``<svelte:boundary>`` + ``PanelErrorState`` failed snippet.
 -->
 <script lang="ts">
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 	import {
 		EmptyState,
 		formatDateTime,

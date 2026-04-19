@@ -1,0 +1,9 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "frontends/terminal/Dockerfile"
+
+[deploy]
+startCommand = "node build/index.js"
+healthcheckPath = "/"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

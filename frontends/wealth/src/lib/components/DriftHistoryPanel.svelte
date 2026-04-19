@@ -16,8 +16,8 @@
 	} from "@investintell/ui";
 	import { Select } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
-	import { createClientApiClient } from "$lib/api/client";
-	import { resolveWealthStatus } from "$lib/utils/status-maps";
+	import { createClientApiClient } from "$wealth/api/client";
+	import { resolveWealthStatus } from "$wealth/utils/status-maps";
 	import { getContext } from "svelte";
 
 	// Inline types from API schema (DriftEventOut / DriftHistoryOut)

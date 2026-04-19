@@ -20,10 +20,10 @@
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { Card } from "@investintell/ui/components/ui/card";
 	import { ChartContainer } from "@investintell/ui/charts";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
-	import { resolveWealthStatus } from "$lib/utils/status-maps";
+	import { resolveWealthStatus } from "$wealth/utils/status-maps";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 

@@ -7,7 +7,7 @@
 	import { Card } from "@investintell/ui/components/ui/card";
 	import { createSSEStream } from "@investintell/ui/utils";
 	import { onMount, getContext } from "svelte";
-	import { resolveWealthStatus } from "$lib/utils/status-maps";
+	import { resolveWealthStatus } from "$wealth/utils/status-maps";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 

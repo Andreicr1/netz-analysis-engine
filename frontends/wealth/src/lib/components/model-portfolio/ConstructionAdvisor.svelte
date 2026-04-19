@@ -11,12 +11,12 @@
 		formatPercent, formatNumber, ConsequenceDialog, Toast,
 	} from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
-	import { createClientApiClient } from "$lib/api/client";
-	import { runScreenerImport, ScreenerImportError } from "$lib/api/screener-import";
-	import { blockLabel, profileColor } from "$lib/types/model-portfolio";
+	import { createClientApiClient } from "$wealth/api/client";
+	import { runScreenerImport, ScreenerImportError } from "$wealth/api/screener-import";
+	import { blockLabel, profileColor } from "$wealth/types/model-portfolio";
 	import type {
 		ConstructionAdvice, CandidateFund, BlockGap,
-	} from "$lib/types/model-portfolio";
+	} from "$wealth/types/model-portfolio";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 

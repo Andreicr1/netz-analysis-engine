@@ -24,7 +24,7 @@
 	import {
 		TERMINAL_TWEAKS_KEY,
 		type TerminalTweaks,
-	} from "$lib/stores/terminal-tweaks.svelte";
+	} from "$wealth/stores/terminal-tweaks.svelte";
 
 	const tweaks = getContext<TerminalTweaks>(TERMINAL_TWEAKS_KEY);
 

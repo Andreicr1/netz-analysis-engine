@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
 	import { slide } from "svelte/transition";
-	import { createDebouncedState } from "$lib/utils/reactivity";
+	import { createDebouncedState } from "$wealth/utils/reactivity";
 
 	export interface IndicatorEntry {
 		id: string;

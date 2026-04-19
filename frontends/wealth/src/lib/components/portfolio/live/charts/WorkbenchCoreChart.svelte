@@ -37,7 +37,7 @@
 	import { onMount } from "svelte";
 	import { echarts } from "@investintell/ui/charts/echarts-setup";
 	import { formatNumber } from "@investintell/ui";
-	import type { PriceTick } from "$lib/workers/live_price_poll.svelte";
+	import type { PriceTick } from "$wealth/workers/live_price_poll.svelte";
 
 	interface Props {
 		ticks: readonly PriceTick[];

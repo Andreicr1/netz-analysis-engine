@@ -5,7 +5,7 @@
 	import { formatPercent, formatNumber } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
-	import type { ReturnDistribution } from "$lib/types/entity-analytics";
+	import type { ReturnDistribution } from "$wealth/types/entity-analytics";
 
 	interface Props {
 		distribution: ReturnDistribution;

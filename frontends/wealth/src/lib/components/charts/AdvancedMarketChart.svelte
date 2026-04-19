@@ -23,8 +23,8 @@
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions, echarts } from "@investintell/ui/charts/echarts-setup";
 	import { formatCurrency, formatNumber, formatPercent } from "@investintell/ui";
-	import { createClientApiClient } from "$lib/api/client";
-	import type { MarketDataStore } from "$lib/stores/market-data.svelte";
+	import { createClientApiClient } from "$wealth/api/client";
+	import type { MarketDataStore } from "$wealth/stores/market-data.svelte";
 
 	// ── Props ────────────────────────────────────────────────────────────
 	interface Props {

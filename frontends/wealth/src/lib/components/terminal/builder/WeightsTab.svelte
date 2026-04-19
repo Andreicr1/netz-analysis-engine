@@ -7,9 +7,9 @@
 -->
 <script lang="ts">
 	import { formatPercent, formatNumber } from "@investintell/ui";
-	import { BLOCK_GROUPS, blockDisplay, groupDisplay } from "$lib/constants/blocks";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
-	import AchievableReturnBandChart from "$lib/components/portfolio/AchievableReturnBandChart.svelte";
+	import { BLOCK_GROUPS, blockDisplay, groupDisplay } from "$wealth/constants/blocks";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
+	import AchievableReturnBandChart from "$wealth/components/portfolio/AchievableReturnBandChart.svelte";
 
 	// ── Build 3-level tree (same logic as BuilderTable, DnD stripped) ──
 

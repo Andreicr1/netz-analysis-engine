@@ -13,7 +13,7 @@
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { Input } from "@investintell/ui/components/ui/input";
 	import { ChartContainer } from "@investintell/ui/charts";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 	import { getContext } from "svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");

@@ -25,8 +25,8 @@
  * teardown gymnastics.
  */
 
-import { createClientApiClient } from "$lib/api/client";
-import type { LibraryNode, LibraryNodePage } from "$lib/types/library";
+import { createClientApiClient } from "$wealth/api/client";
+import type { LibraryNode, LibraryNodePage } from "$wealth/types/library";
 
 /**
  * State for a single folder path inside the cache.

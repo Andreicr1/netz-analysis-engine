@@ -50,17 +50,17 @@
 	// ─────────────────────────────────────────────────────────────
 
 	async function gotoScreener() {
-		const target = resolve("/terminal-screener");
+		const target = resolve("/screener");
 		await goto(target);
 	}
 
 	async function gotoLive() {
-		const target = resolve("/portfolio/live");
+		const target = resolve("/live");
 		await goto(target);
 	}
 
 	async function gotoResearch() {
-		const target = resolve("/research");
+		const target = resolve("/screener/research");
 		await goto(target);
 	}
 

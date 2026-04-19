@@ -16,7 +16,7 @@
 	import Loader2 from "lucide-svelte/icons/loader-2";
 	import Undo2 from "lucide-svelte/icons/undo-2";
 	import { PanelErrorState } from "@investintell/ui/runtime";
-	import { workspace, type UniverseFund } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace, type UniverseFund } from "$wealth/state/portfolio-workspace.svelte";
 	import UniverseTable from "./UniverseTable.svelte";
 
 	interface Props {

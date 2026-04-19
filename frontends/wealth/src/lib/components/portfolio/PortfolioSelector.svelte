@@ -14,9 +14,9 @@
 <script lang="ts">
 	import { StatusBadge, formatDateTime, EmptyState } from "@investintell/ui";
 	import Plus from "lucide-svelte/icons/plus";
-	import type { ModelPortfolio } from "$lib/types/model-portfolio";
-	import { profileColor, blockLabel } from "$lib/types/model-portfolio";
-	import { portfolioDisplayName } from "$lib/constants/blocks";
+	import type { ModelPortfolio } from "$wealth/types/model-portfolio";
+	import { profileColor, blockLabel } from "$wealth/types/model-portfolio";
+	import { portfolioDisplayName } from "$wealth/constants/blocks";
 
 	interface Props {
 		portfolios: ModelPortfolio[];

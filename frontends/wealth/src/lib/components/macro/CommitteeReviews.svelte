@@ -6,7 +6,7 @@
 	import { getContext } from "svelte";
 	import { goto } from "$app/navigation";
 	import { ConsequenceDialog, StatusBadge, formatDate, formatDateTime, formatNumber } from "@investintell/ui";
-	import { createClientApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$wealth/api/client";
 
 	interface ScoreDelta {
 		region: string;

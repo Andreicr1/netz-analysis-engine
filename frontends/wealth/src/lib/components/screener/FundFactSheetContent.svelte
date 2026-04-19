@@ -7,14 +7,14 @@
 	import { ArrowLeft } from "lucide-svelte";
 	import { formatCompact, formatPercent, formatDate, formatNumber } from "@investintell/ui";
 	import { PanelEmptyState, PanelErrorState } from "@investintell/ui/runtime";
-	import { UNIVERSE_LABELS } from "$lib/types/catalog";
-	import NavPerformanceChart from "$lib/components/charts/NavPerformanceChart.svelte";
-	import SectorAllocationChart from "$lib/components/charts/SectorAllocationChart.svelte";
-	import SectorAllocationTreemap from "$lib/components/charts/SectorAllocationTreemap.svelte";
-	import FundScoringRadar from "$lib/components/charts/FundScoringRadar.svelte";
-	import DecileBoxplot from "$lib/components/charts/DecileBoxplot.svelte";
-	import ReturnDistributionChart from "$lib/components/charts/ReturnDistributionChart.svelte";
-	import RollingReturnsChart from "$lib/components/charts/RollingReturnsChart.svelte";
+	import { UNIVERSE_LABELS } from "$wealth/types/catalog";
+	import NavPerformanceChart from "$wealth/components/charts/NavPerformanceChart.svelte";
+	import SectorAllocationChart from "$wealth/components/charts/SectorAllocationChart.svelte";
+	import SectorAllocationTreemap from "$wealth/components/charts/SectorAllocationTreemap.svelte";
+	import FundScoringRadar from "$wealth/components/charts/FundScoringRadar.svelte";
+	import DecileBoxplot from "$wealth/components/charts/DecileBoxplot.svelte";
+	import ReturnDistributionChart from "$wealth/components/charts/ReturnDistributionChart.svelte";
+	import RollingReturnsChart from "$wealth/components/charts/RollingReturnsChart.svelte";
 	import { getContext, onMount } from "svelte";
 	import "./factsheet.css";
 

@@ -46,7 +46,7 @@
 	import StressImpactMatrixChart from "./charts/StressImpactMatrixChart.svelte";
 	import PortfolioNavHeroChart from "./charts/PortfolioNavHeroChart.svelte";
 	import PortfolioDrawdownUnderwaterChart from "./charts/PortfolioDrawdownUnderwaterChart.svelte";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 	import {
 		ANALYTICS_GROUPS,
 		ANALYTICS_GROUP_LABEL,
@@ -54,8 +54,8 @@
 		type AnalyticsScope,
 		type AnalyticsSubject,
 		type AnalyticsTab,
-	} from "$lib/portfolio/analytics-types";
-	import { buildGridSpec } from "$lib/portfolio/analytics-grid-spec";
+	} from "$wealth/portfolio/analytics-types";
+	import { buildGridSpec } from "$wealth/portfolio/analytics-grid-spec";
 
 	interface Props {
 		scope: AnalyticsScope;

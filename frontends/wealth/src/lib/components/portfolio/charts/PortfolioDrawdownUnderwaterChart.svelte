@@ -10,8 +10,8 @@
 -->
 <script lang="ts">
 	import { EmptyState } from "@investintell/ui";
-	import DrawdownUnderwaterChart from "$lib/components/charts/discovery/DrawdownUnderwaterChart.svelte";
-	import type { NAVPoint } from "$lib/types/model-portfolio";
+	import DrawdownUnderwaterChart from "$wealth/components/charts/discovery/DrawdownUnderwaterChart.svelte";
+	import type { NAVPoint } from "$wealth/types/model-portfolio";
 
 	interface Props {
 		navSeries: NAVPoint[];

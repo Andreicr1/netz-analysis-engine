@@ -23,8 +23,8 @@
 <script lang="ts">
 	import X from "lucide-svelte/icons/x";
 	import { PanelEmptyState, PanelErrorState } from "@investintell/ui/runtime";
-	import MainPortfolioChart from "$lib/components/portfolio/MainPortfolioChart.svelte";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import MainPortfolioChart from "$wealth/components/portfolio/MainPortfolioChart.svelte";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 
 	function handleClose() {
 		workspace.clearAnalytics();

@@ -17,8 +17,8 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { formatPercent } from "@investintell/ui";
-	import GenericEChart from "$lib/components/charts/GenericEChart.svelte";
-	import type { AchievableReturnBand } from "$lib/types/cascade-telemetry";
+	import GenericEChart from "$wealth/components/charts/GenericEChart.svelte";
+	import type { AchievableReturnBand } from "$wealth/types/cascade-telemetry";
 
 	interface Props {
 		band: AchievableReturnBand | null;

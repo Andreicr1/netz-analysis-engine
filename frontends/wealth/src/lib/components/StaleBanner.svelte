@@ -3,7 +3,7 @@
   "Data may be out of date. Pipeline last ran: [time]. [Refresh →]"
 -->
 <script lang="ts">
-	import { formatLastUpdated } from "$lib/stores/stale";
+	import { formatLastUpdated } from "$wealth/stores/stale";
 
 	let {
 		lastUpdated,

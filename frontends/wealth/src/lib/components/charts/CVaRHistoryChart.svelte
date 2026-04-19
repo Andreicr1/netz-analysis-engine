@@ -6,7 +6,7 @@
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
 	import { formatPercent, formatDate } from "@investintell/ui";
-	import type { CVaRPoint } from "$lib/stores/risk-store.svelte";
+	import type { CVaRPoint } from "$wealth/stores/risk-store.svelte";
 
 	interface Props {
 		data: CVaRPoint[];

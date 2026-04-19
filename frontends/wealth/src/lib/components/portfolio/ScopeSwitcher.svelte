@@ -14,8 +14,8 @@
   pure presentation.
 -->
 <script lang="ts">
-	import type { AnalyticsScope } from "$lib/portfolio/analytics-types";
-	import { ANALYTICS_SCOPE_LABEL } from "$lib/portfolio/analytics-types";
+	import type { AnalyticsScope } from "$wealth/portfolio/analytics-types";
+	import { ANALYTICS_SCOPE_LABEL } from "$wealth/portfolio/analytics-types";
 
 	interface Props {
 		value: AnalyticsScope;

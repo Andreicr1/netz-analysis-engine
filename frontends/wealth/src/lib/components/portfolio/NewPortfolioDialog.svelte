@@ -29,8 +29,8 @@
 		Input,
 		Select,
 	} from "@investintell/ui";
-	import type { ModelPortfolio } from "$lib/types/model-portfolio";
-	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import type { ModelPortfolio } from "$wealth/types/model-portfolio";
+	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
 
 	interface Props {
 		open: boolean;
