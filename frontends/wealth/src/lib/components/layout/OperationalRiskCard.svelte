@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onMount, onDestroy } from "svelte";
+	import { getContext, onMount, onDestroy } from "svelte";
+	import { createClientApiClient } from "$wealth/api/client";
 
 	let alerts = $state<any[]>([]);
 	let loading = $state(true);
@@ -7,14 +8,15 @@
 
 	let intervalId: ReturnType<typeof setInterval>;
 
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const api = createClientApiClient(getToken);
+
 	async function fetchAlerts() {
 		try {
-			const res = await fetch("/api/v1/wealth/monitoring/alerts");
-			if (!res.ok) throw new Error("Failed to fetch alerts");
-			alerts = await res.json();
+			alerts = await api.get<any[]>("/wealth/monitoring/alerts");
 			error = null;
 		} catch (err: any) {
-			error = err.message;
+			error = err instanceof Error ? err.message : String(err);
 		} finally {
 			loading = false;
 		}

@@ -9,6 +9,7 @@
   tab-visit tracking gate for Session 3 activation unlock.
 -->
 <script lang="ts">
+	import "@investintell/ui/styles/surfaces/builder";
 	import { getContext } from "svelte";
 	import { SvelteSet } from "svelte/reactivity";
 	import { page } from "$app/state";
@@ -167,7 +168,7 @@
 	<title>Builder — InvestIntell</title>
 </svelte:head>
 
-<div class="builder-shell">
+<div class="builder-shell" data-surface="builder">
 	<!-- LEFT COLUMN (40%) — Command Panel -->
 	<div class="builder-left">
 		<!-- Breadcrumb back to screener -->

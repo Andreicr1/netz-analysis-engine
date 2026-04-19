@@ -64,9 +64,22 @@
 		children: Snippet;
 		/** Density for the LayoutCage: "standard" (24px) or "compact" (8px). */
 		cageDensity?: "standard" | "compact";
+		/**
+		 * Hide the TerminalBreadcrumb workflow stepper row. The II Terminal
+		 * app (frontends/terminal/) sets this to `true` because its TopNav
+		 * already carries the workflow tabs (F1..F6) — rendering the
+		 * breadcrumb too produces a double-nav stack. Wealth's (terminal)/
+		 * routes keep the legacy default (false) while the shell lives in
+		 * both apps; X7 retires the wealth copy entirely.
+		 */
+		hideWorkflowStepper?: boolean;
 	}
 
-	let { children, cageDensity = "standard" }: TerminalShellProps = $props();
+	let {
+		children,
+		cageDensity = "standard",
+		hideWorkflowStepper = false,
+	}: TerminalShellProps = $props();
 
 	// ─── Build metadata ─────────────────────────────────────────
 	// Exposed via vite `define` in frontends/wealth/vite.config.ts
@@ -310,6 +323,7 @@
 <div
 	class="ts-shell"
 	class:ts-shell--has-rail={entity !== null}
+	class:ts-shell--no-crumb={hideWorkflowStepper}
 	data-surface="terminal"
 	data-density={tweaks?.density ?? "standard"}
 	data-accent={tweaks?.accent ?? "amber"}
@@ -325,9 +339,11 @@
 		/>
 	</div>
 
-	<div class="ts-crumb-row">
-		<TerminalBreadcrumb />
-	</div>
+	{#if !hideWorkflowStepper}
+		<div class="ts-crumb-row">
+			<TerminalBreadcrumb />
+		</div>
+	{/if}
 
 	<main class="ts-content">
 		<LayoutCage density={cageDensity}>
@@ -377,11 +393,30 @@
 		isolation: isolate;
 	}
 
+	/* II Terminal path — stepper hidden. Collapse the breadcrumb row
+	 * entirely so the content gets the full height back, including
+	 * the 28px previously reserved by --terminal-shell-breadcrumb. */
+	.ts-shell--no-crumb {
+		grid-template-rows: 32px 1fr 28px;
+		grid-template-areas:
+			"nav"
+			"content"
+			"status";
+	}
+
 	.ts-shell--has-rail {
 		grid-template-columns: 1fr 280px;
 		grid-template-areas:
 			"nav nav"
 			"crumb crumb"
+			"content rail"
+			"status status";
+	}
+
+	.ts-shell--has-rail.ts-shell--no-crumb {
+		grid-template-rows: 32px 1fr 28px;
+		grid-template-areas:
+			"nav nav"
 			"content rail"
 			"status status";
 	}

@@ -243,18 +243,102 @@ function main() {
 	const routeScanErrors = scanRouteSurfaces();
 	errors.push(...routeScanErrors);
 
+	// ── Invariant E — surface CSS isolation ─────────────────────
+	const surfaceErrors = scanSurfaceCssFiles();
+	errors.push(...surfaceErrors);
+
 	if (errors.length > 0) {
 		console.error("[token-sync] terminal drift detected:\n");
 		for (const e of errors) console.error(`  - ${e}`);
 		console.error(
-			`\n[token-sync] FAIL — fix terminal.css, terminal-options.ts, or the offending terminal route/component files.`,
+			`\n[token-sync] FAIL — fix terminal.css, terminal-options.ts, surfaces/*.css, or the offending terminal route/component files.`,
 		);
 		process.exit(1);
 	}
 
 	console.log(
-		`[token-sync] OK — ${cssTokens.size} CSS tokens, ${readVarRefs.size} readVar references, ${defaultKeys.size} DEFAULT_TOKENS keys are in sync; forbidden-pattern scan passed.`,
+		`[token-sync] OK — ${cssTokens.size} CSS tokens, ${readVarRefs.size} readVar references, ${defaultKeys.size} DEFAULT_TOKENS keys are in sync; forbidden-pattern + surface-isolation scans passed.`,
 	);
+}
+
+// ── Invariant E — surface CSS isolation ───────────────────
+//
+// Every rule declared in packages/investintell-ui/src/lib/styles/
+// surfaces/*.css must either (a) override a base --ii-* token that
+// exists in tokens.css, (b) define a new --ii-terminal-* namespaced
+// token, or (c) live inside a [data-surface="..."] selector block.
+//
+// Operationalized as a leak check: bare `--netz-*`, `--term-*`,
+// `--fg-*`, `--up`, `--down`, `--warn`, `--accent` (and their
+// dim/-hot siblings) references or declarations FAIL the scanner.
+// These are bundle-native names that belong in docs/ux/Netz Terminal/
+// sources only — not in the exported surface CSS.
+
+const SURFACE_CSS_DIR = resolve(
+	REPO_ROOT,
+	"packages/investintell-ui/src/lib/styles/surfaces",
+);
+
+/**
+ * Regex for the bundle-native variable prefixes that must not leak
+ * into the exported surface CSS. Matches both usage (`var(--X)`) and
+ * declaration (`--X:`) positions.
+ */
+const LEAK_PATTERNS = [
+	{ label: "netz-*", re: /--netz-[a-z0-9-]*/g },
+	{ label: "term-*", re: /--term-[a-z0-9-]*/g },
+	{ label: "fg-*", re: /--fg-[a-z0-9-]*/g },
+	{ label: "sev-*", re: /--sev-[a-z0-9-]*/g },
+	{ label: "up / up-dim", re: /--up(?:-dim)?\b/g },
+	{ label: "down / down-dim", re: /--down(?:-dim)?\b/g },
+	{ label: "warn (bare)", re: /--warn\b/g },
+	{ label: "accent (bare)", re: /--accent(?:-dim)?\b/g },
+	{ label: "info (bare)", re: /--info\b/g },
+	{ label: "t-size/row/pad (bare)", re: /--t-(?:size-[a-z]+|row(?:-sm)?|pad)\b/g },
+	{ label: "tr-caps (bare)", re: /--tr-caps\b/g },
+	{ label: "ease (bare)", re: /--ease\b/g },
+];
+
+function scanSurfaceCssFiles() {
+	const errors = [];
+	if (!existsSync(SURFACE_CSS_DIR)) return errors;
+	let entries;
+	try {
+		entries = readdirSync(SURFACE_CSS_DIR);
+	} catch {
+		return errors;
+	}
+	for (const name of entries) {
+		if (!name.endsWith(".css")) continue;
+		const abs = join(SURFACE_CSS_DIR, name);
+		const rel = relative(REPO_ROOT, abs).replaceAll("\\", "/");
+		let text;
+		try {
+			text = readFileSync(abs, "utf8");
+		} catch {
+			continue;
+		}
+		// Strip CSS block comments so comment prose mentioning legacy
+		// names (--netz-orange, --fg-primary) does not trip the scan.
+		const stripped = text.replace(/\/\*[\s\S]*?\*\//g, (block) =>
+			block.replace(/[^\n]/g, " "),
+		);
+		for (const rule of LEAK_PATTERNS) {
+			rule.re.lastIndex = 0;
+			let m;
+			while ((m = rule.re.exec(stripped)) !== null) {
+				if (m[0] === "") {
+					rule.re.lastIndex++;
+					continue;
+				}
+				const line = offsetToLine(stripped, m.index);
+				errors.push(
+					`E. ${rel}:${line} bundle-native leak "${m[0]}" (${rule.label}) — rewrite as var(--ii-*) or --ii-terminal-*`,
+				);
+			}
+		}
+	}
+	return errors;
 }
 
 // ── Invariant D — route-dir forbidden-pattern scan ─────────

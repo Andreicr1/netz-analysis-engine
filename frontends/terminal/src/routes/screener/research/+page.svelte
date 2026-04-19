@@ -2,7 +2,16 @@
   Research — Terminal OS risk analysis & charting surface.
 -->
 <script lang="ts">
+	import "@investintell/ui/styles/surfaces/screener";
 	import TerminalResearchShell from "$wealth/components/research/terminal/TerminalResearchShell.svelte";
 </script>
 
-<TerminalResearchShell />
+<div data-surface="screener" class="research-page-root">
+	<TerminalResearchShell />
+</div>
+
+<style>
+	.research-page-root {
+		display: contents;
+	}
+</style>

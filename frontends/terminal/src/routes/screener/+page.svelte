@@ -10,6 +10,7 @@
   FundFocusMode. ESC or backdrop click dismisses FocusMode.
 -->
 <script lang="ts">
+	import "@investintell/ui/styles/surfaces/screener";
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
 	import TerminalScreenerShell from "$wealth/components/screener/terminal/TerminalScreenerShell.svelte";
@@ -102,7 +103,7 @@
 	}
 </script>
 
-<div bind:this={containerEl} data-screener-root class="screener-page-root">
+<div bind:this={containerEl} data-screener-root data-surface="screener" class="screener-page-root">
 	<TerminalScreenerShell filters={currentFilters} onFiltersChange={handleFiltersChange} />
 </div>
 
