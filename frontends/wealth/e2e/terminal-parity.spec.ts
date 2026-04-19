@@ -172,3 +172,75 @@ test.describe("Terminal parity — /portfolio/live smoke", () => {
 		expect(ws.url()).toContain("/live/ws");
 	});
 });
+
+test.describe("Terminal parity — /terminal-screener smoke", () => {
+	test.beforeEach(async ({ page }) => {
+		await page.route("**/api/v1/**", async (route) => {
+			const headers = {
+				...route.request().headers(),
+				"x-dev-actor": `super_admin:${TEST_ORG_ID}`,
+			};
+			await route.continue({ headers });
+		});
+	});
+
+	test("slash focuses the filter rail first input", async ({ page }) => {
+		await page.goto("/terminal-screener");
+		// Wait for the shell to render. The filter rail has its own aria-label.
+		const filterPanel = page.getByRole("region", { name: /Screener filters/i })
+			.or(page.locator("[aria-label='Screener filters']").first());
+		await expect(filterPanel).toBeVisible();
+
+		await page.keyboard.press("/");
+		// The shell's handler focuses the first interactive element inside the
+		// filters panel (search input or first chip button).
+		const active = await page.evaluate(() => {
+			const el = document.activeElement as HTMLElement | null;
+			return el ? { tag: el.tagName, inFilters: !!el.closest("[aria-label='Screener filters']") } : null;
+		});
+		expect(active?.inFilters).toBe(true);
+	});
+
+	test("applying an eliteOnly filter renders a chip with CLEAR ALL", async ({
+		page,
+	}) => {
+		// Deep-link the elite filter so we don't depend on UI toggle order.
+		await page.goto("/terminal-screener?elite=1");
+		const chipRow = page.getByRole("region", { name: /Applied filters/i });
+		await expect(chipRow).toBeVisible();
+		await expect(chipRow.getByRole("button", { name: /Remove Tier Elite only/i })).toBeVisible();
+		await expect(chipRow.getByRole("button", { name: /CLEAR ALL/i })).toBeVisible();
+	});
+
+	test("clicking CLEAR ALL strips filter query params", async ({ page }) => {
+		await page.goto("/terminal-screener?elite=1&max_expense=0.5");
+		const chipRow = page.getByRole("region", { name: /Applied filters/i });
+		await expect(chipRow).toBeVisible();
+		await chipRow.getByRole("button", { name: /CLEAR ALL/i }).click();
+		await expect(page).toHaveURL(/\/terminal-screener(\?|$)/);
+		// No filter-specific params remain.
+		const url = new URL(page.url());
+		expect(url.searchParams.get("elite")).toBeNull();
+		expect(url.searchParams.get("max_expense")).toBeNull();
+	});
+
+	test("ArrowDown highlights the first row and Enter opens FundFocusMode", async ({
+		page,
+	}) => {
+		await page.goto("/terminal-screener");
+		// Wait for at least one row to exist.
+		const firstRow = page.locator("[role='row'][aria-rowindex='2']");
+		await expect(firstRow).toBeVisible({ timeout: 10_000 });
+
+		await page.keyboard.press("ArrowDown");
+		await expect(firstRow).toHaveClass(/highlighted/);
+
+		await page.keyboard.press("Enter");
+		// FundFocusMode mounts a dialog at the page root.
+		const dialog = page.getByRole("dialog").first();
+		await expect(dialog).toBeVisible();
+
+		await page.keyboard.press("Escape");
+		await expect(dialog).toHaveCount(0);
+	});
+});

@@ -19,6 +19,7 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
+	import { SvelteMap } from "svelte/reactivity";
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
 	import { createClientApiClient } from "$lib/api/client";
@@ -26,6 +27,7 @@
 		type FilterState,
 	} from "./TerminalScreenerFilters.svelte";
 	import TerminalDataGrid, { type ScreenerAsset } from "./TerminalDataGrid.svelte";
+	import FilterChipRow from "./FilterChipRow.svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
@@ -76,6 +78,7 @@
 		avg_annual_return_10y: number | null;
 		elite_flag: boolean | null;
 		manager_score: number | null;
+		blended_momentum_score: number | null;
 		in_universe: boolean;
 		approval_status?: string | null;
 		disclosure?: { nav_status?: string | null };
@@ -109,6 +112,7 @@
 			ret1y: raw.avg_annual_return_1y != null ? raw.avg_annual_return_1y * 100 : null,
 			ret10y: raw.avg_annual_return_10y != null ? raw.avg_annual_return_10y * 100 : null,
 			managerScore: raw.manager_score,
+			blendedMomentumScore: raw.blended_momentum_score,
 			inceptionDate: raw.inception_date,
 			isin: raw.isin,
 			navStatus: raw.disclosure?.nav_status ?? null,
@@ -132,6 +136,67 @@
 	let isLoadingMore = $state(false);
 	/** Generation counter — increments on every fresh fetch (filter change). */
 	let fetchGeneration = $state(0);
+
+	// ── Sparkline batch fetch ───────────────────────────
+	/**
+	 * Keyed by instrument_id (UUID). Populated after each catalog fetch
+	 * from POST /screener/sparklines. Passed down to TerminalDataGrid;
+	 * the grid's MiniSparkline column reads by row.instrumentId.
+	 *
+	 * Stored as a Map (not a plain Record) so the prop reference
+	 * changes when the fetch completes — triggers downstream $derived
+	 * reactivity cleanly.
+	 */
+	let sparklineMap = $state<Map<string, number[]>>(new Map());
+	let sparklineFetchId = 0;
+
+	interface SparklineResponsePoint {
+		month: string;
+		nav_close: number;
+		return_1m?: number | null;
+	}
+
+	async function refreshSparklines(currentAssets: ScreenerAsset[]) {
+		const ids = currentAssets
+			.map((a) => a.instrumentId)
+			.filter((id): id is string => id !== null);
+		if (ids.length === 0) {
+			sparklineMap = new Map();
+			return;
+		}
+		const fetchId = ++sparklineFetchId;
+		// Endpoint caps at 100 IDs per call; chunk in parallel and merge.
+		const CHUNK = 100;
+		const chunks: string[][] = [];
+		for (let i = 0; i < ids.length; i += CHUNK) {
+			chunks.push(ids.slice(i, i + CHUNK));
+		}
+		try {
+			const results = await Promise.all(
+				chunks.map((chunk) =>
+					api.post<Record<string, SparklineResponsePoint[]>>(
+						"/screener/sparklines",
+						{ instrument_ids: chunk, months: 12 },
+					),
+				),
+			);
+			if (fetchId !== sparklineFetchId) return; // stale
+			const next = new SvelteMap<string, number[]>();
+			for (const chunkResult of results) {
+				for (const [iid, points] of Object.entries(chunkResult)) {
+					if (!Array.isArray(points) || points.length < 2) continue;
+					next.set(
+						iid,
+						points.map((p) => p.nav_close),
+					);
+				}
+			}
+			sparklineMap = next;
+		} catch {
+			// Non-fatal: sparklines are decorative — MiniSparkline renders
+			// empty svg when no data is present.
+		}
+	}
 
 
 	// ── Query builder ──────────────���────────────────────
@@ -205,6 +270,10 @@
 				if (selectedId && !assets.some((a) => a.id === selectedId)) {
 					selectedId = null;
 				}
+
+				// Fire-and-forget sparkline fetch — decorative overlay,
+				// must not block the catalog render.
+				void refreshSparklines(assets);
 			} catch (err) {
 				if (fetchId !== currentFetchId) return;
 				assets = [];
@@ -238,6 +307,8 @@
 			// Keep the initial total (page 1) — keyset cursor changes the
 			// windowed count on subsequent pages due to WHERE clause shift.
 			nextCursor = page.next_cursor;
+			// Refresh sparkline map for the combined asset set.
+			void refreshSparklines(assets);
 		} catch {
 			// Non-fatal: user can keep scrolling to retry
 		} finally {
@@ -421,6 +492,7 @@
 				</div>
 			</div>
 		{:else}
+			<FilterChipRow {filters} {onFiltersChange} />
 			<svelte:boundary>
 				<TerminalDataGrid
 					bind:this={dataGridRef}
@@ -433,6 +505,7 @@
 					{isLoadingMore}
 					hasMore={nextCursor !== null}
 					{fetchGeneration}
+					{sparklineMap}
 					onSelect={handleSelect}
 					onHighlight={handleHighlight}
 					onApprove={handleApprove}
@@ -485,7 +558,18 @@
 	}
 
 	.ts-filters { grid-area: filters; }
-	.ts-datagrid { grid-area: datagrid; }
+	.ts-datagrid {
+		grid-area: datagrid;
+		display: flex;
+		flex-direction: column;
+	}
+	.ts-datagrid :global(> *) {
+		flex-shrink: 0;
+	}
+	.ts-datagrid :global(> .dg-root) {
+		flex: 1 1 auto;
+		min-height: 0;
+	}
 
 	/* ── Error panel ─────────────────────────────────── */
 	.sep-panel {

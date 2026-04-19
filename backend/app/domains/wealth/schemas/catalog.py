@@ -96,6 +96,9 @@ class UnifiedFundItem(BaseModel):
     elite_flag: bool | None = None
     elite_rank_within_strategy: int | None = None
     manager_score: float | None = None
+    # Blended momentum score (from mv_fund_risk_latest, pre-computed by
+    # global_risk_metrics worker — sanitized 0..100 scale, user-facing).
+    blended_momentum_score: float | None = None
 
     # Org membership (from v_screener_org_membership)
     in_universe: bool = False
