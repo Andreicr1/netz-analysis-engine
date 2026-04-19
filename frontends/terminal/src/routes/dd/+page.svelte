@@ -9,10 +9,10 @@
 	import { getContext } from "svelte";
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
-	import { createClientApiClient } from "$wealth/api/client";
-	import Panel from "$wealth/components/terminal/layout/Panel.svelte";
-	import PanelHeader from "$wealth/components/terminal/layout/PanelHeader.svelte";
-	import DDQueueCard from "$wealth/components/terminal/dd/DDQueueCard.svelte";
+	import { createClientApiClient } from "@investintell/ii-terminal-core/api/client";
+	import Panel from "@investintell/ii-terminal-core/components/terminal/layout/Panel.svelte";
+	import PanelHeader from "@investintell/ii-terminal-core/components/terminal/layout/PanelHeader.svelte";
+	import DDQueueCard from "@investintell/ii-terminal-core/components/terminal/dd/DDQueueCard.svelte";
 
 	interface DDReportQueueItem {
 		id: string;

@@ -8,7 +8,7 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { PanelErrorState } from "@investintell/ui/runtime";
-	import { createClientApiClient } from "$wealth/api/client";
+	import { createClientApiClient } from "@investintell/ii-terminal-core/api/client";
 	import { formatTime } from "@investintell/ui";
 
 	type Severity = "info" | "warning" | "critical";

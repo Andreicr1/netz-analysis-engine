@@ -29,20 +29,20 @@
 	import { page } from "$app/state";
 	import { fly, fade } from "svelte/transition";
 	import { svelteTransitionFor } from "@investintell/ui";
-	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
-	import type { ModelPortfolio } from "$wealth/types/model-portfolio";
+	import { workspace } from "@investintell/ii-terminal-core/state/portfolio-workspace.svelte";
+	import type { ModelPortfolio } from "@investintell/ii-terminal-core/types/model-portfolio";
 
-	import RunControls from "$wealth/components/terminal/builder/RunControls.svelte";
-	import WeightsTab from "$wealth/components/terminal/builder/WeightsTab.svelte";
-	import CascadeTimeline from "$wealth/components/terminal/builder/CascadeTimeline.svelte";
-	import StressTab from "$wealth/components/terminal/builder/StressTab.svelte";
-	import RiskTab from "$wealth/components/terminal/builder/RiskTab.svelte";
-	import AdvisorTab from "$wealth/components/terminal/builder/AdvisorTab.svelte";
-	import BacktestTab from "$wealth/components/terminal/builder/BacktestTab.svelte";
-	import MonteCarloTab from "$wealth/components/terminal/builder/MonteCarloTab.svelte";
-	import RegimeTab from "$wealth/components/terminal/builder/RegimeTab.svelte";
-	import ActivationBar from "$wealth/components/terminal/builder/ActivationBar.svelte";
-	import CalibrationPanel from "$wealth/components/portfolio/CalibrationPanel.svelte";
+	import RunControls from "@investintell/ii-terminal-core/components/terminal/builder/RunControls.svelte";
+	import WeightsTab from "@investintell/ii-terminal-core/components/terminal/builder/WeightsTab.svelte";
+	import CascadeTimeline from "@investintell/ii-terminal-core/components/terminal/builder/CascadeTimeline.svelte";
+	import StressTab from "@investintell/ii-terminal-core/components/terminal/builder/StressTab.svelte";
+	import RiskTab from "@investintell/ii-terminal-core/components/terminal/builder/RiskTab.svelte";
+	import AdvisorTab from "@investintell/ii-terminal-core/components/terminal/builder/AdvisorTab.svelte";
+	import BacktestTab from "@investintell/ii-terminal-core/components/terminal/builder/BacktestTab.svelte";
+	import MonteCarloTab from "@investintell/ii-terminal-core/components/terminal/builder/MonteCarloTab.svelte";
+	import RegimeTab from "@investintell/ii-terminal-core/components/terminal/builder/RegimeTab.svelte";
+	import ActivationBar from "@investintell/ii-terminal-core/components/terminal/builder/ActivationBar.svelte";
+	import CalibrationPanel from "@investintell/ii-terminal-core/components/portfolio/CalibrationPanel.svelte";
 
 	interface Props {
 		portfolios: ModelPortfolio[];

@@ -36,8 +36,8 @@
 	import { goto, invalidateAll } from "$app/navigation";
 	import { page } from "$app/state";
 	import { resolve } from "$app/paths";
-	import { createClientApiClient } from "$wealth/api/client";
-	import type { AllocationProfile } from "$wealth/types/allocation-page";
+	import { createClientApiClient } from "@investintell/ii-terminal-core/api/client";
+	import type { AllocationProfile } from "@investintell/ii-terminal-core/types/allocation-page";
 
 	import BuilderBreadcrumb from "../../../lib/components/builder/BuilderBreadcrumb.svelte";
 	import ProfileStrip from "../../../lib/components/builder/ProfileStrip.svelte";
@@ -47,7 +47,7 @@
 	import StrategicTabContent from "../../../lib/components/builder/StrategicTabContent.svelte";
 	import PortfolioTabContent from "../../../lib/components/builder/PortfolioTabContent.svelte";
 	import StressTabContent from "../../../lib/components/builder/StressTabContent.svelte";
-	import RegimeContextStrip from "$wealth/components/allocation/RegimeContextStrip.svelte";
+	import RegimeContextStrip from "@investintell/ii-terminal-core/components/allocation/RegimeContextStrip.svelte";
 
 	import type { PageData } from "./$types";
 

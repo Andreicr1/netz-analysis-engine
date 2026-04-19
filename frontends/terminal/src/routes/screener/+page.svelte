@@ -13,10 +13,10 @@
 	import "@investintell/ui/styles/surfaces/screener";
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
-	import TerminalScreenerShell from "$wealth/components/screener/terminal/TerminalScreenerShell.svelte";
-	import FundFocusMode from "$wealth/components/terminal/focus-mode/fund/FundFocusMode.svelte";
-	import type { FocusTriggerOptions } from "$wealth/components/terminal/focus-mode/focus-trigger";
-	import { DEFAULT_FILTERS, type FilterState } from "$wealth/components/screener/terminal/TerminalScreenerFilters.svelte";
+	import TerminalScreenerShell from "@investintell/ii-terminal-core/components/screener-terminal/TerminalScreenerShell.svelte";
+	import FundFocusMode from "@investintell/ii-terminal-core/components/terminal/focus-mode/fund/FundFocusMode.svelte";
+	import type { FocusTriggerOptions } from "@investintell/ii-terminal-core/components/terminal/focus-mode/focus-trigger";
+	import { DEFAULT_FILTERS, type FilterState } from "@investintell/ii-terminal-core/components/screener-terminal/TerminalScreenerFilters.svelte";
 
 	// ── URL → FilterState ─────���─────────────────────────
 	function parseFiltersFromURL(params: URLSearchParams): FilterState {

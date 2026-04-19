@@ -18,23 +18,23 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { getContext } from "svelte";
-  import { createClientApiClient } from "$wealth/api/client";
-  import { pinnedRegime } from "$wealth/state/pinned-regime.svelte";
+  import { createClientApiClient } from "@investintell/ii-terminal-core/api/client";
+  import { pinnedRegime } from "@investintell/ii-terminal-core/state/pinned-regime.svelte";
   import { TerminalDrawer, TerminalKbd } from "@investintell/ui";
-  import Panel from "$wealth/components/terminal/layout/Panel.svelte";
-  import PanelHeader from "$wealth/components/terminal/layout/PanelHeader.svelte";
-  import StressHero from "$wealth/components/terminal/macro/StressHero.svelte";
-  import SignalBreakdown from "$wealth/components/terminal/macro/SignalBreakdown.svelte";
-  import RegionalHealthTile from "$wealth/components/terminal/macro/RegionalHealthTile.svelte";
+  import Panel from "@investintell/ii-terminal-core/components/terminal/layout/Panel.svelte";
+  import PanelHeader from "@investintell/ii-terminal-core/components/terminal/layout/PanelHeader.svelte";
+  import StressHero from "@investintell/ii-terminal-core/components/terminal/macro/StressHero.svelte";
+  import SignalBreakdown from "@investintell/ii-terminal-core/components/terminal/macro/SignalBreakdown.svelte";
+  import RegionalHealthTile from "@investintell/ii-terminal-core/components/terminal/macro/RegionalHealthTile.svelte";
   import SparklineWall, {
     type MacroIndicator,
-  } from "$wealth/components/terminal/macro/SparklineWall.svelte";
-  import CommitteeReviewFeed from "$wealth/components/terminal/macro/CommitteeReviewFeed.svelte";
-  import RegimeMatrix from "$wealth/components/terminal/macro/RegimeMatrix.svelte";
+  } from "@investintell/ii-terminal-core/components/terminal/macro/SparklineWall.svelte";
+  import CommitteeReviewFeed from "@investintell/ii-terminal-core/components/terminal/macro/CommitteeReviewFeed.svelte";
+  import RegimeMatrix from "@investintell/ii-terminal-core/components/terminal/macro/RegimeMatrix.svelte";
   import {
     createMacroSimulationStore,
     type RegimeCell,
-  } from "$wealth/components/terminal/macro/macro-simulation-store.svelte";
+  } from "@investintell/ii-terminal-core/components/terminal/macro/macro-simulation-store.svelte";
 
   // -- Types -----------------------------------------------------------
 

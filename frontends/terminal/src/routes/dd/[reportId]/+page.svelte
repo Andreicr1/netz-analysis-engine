@@ -11,15 +11,15 @@
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
 	import { formatDateTime, formatPercent } from "@investintell/ui";
-	import { createClientApiClient } from "$wealth/api/client";
-	import { createTerminalStream } from "$wealth/components/terminal/runtime/stream";
-	import Panel from "$wealth/components/terminal/layout/Panel.svelte";
-	import PanelHeader from "$wealth/components/terminal/layout/PanelHeader.svelte";
-	import LiveDot from "$wealth/components/terminal/data/LiveDot.svelte";
-	import DDChapterSection from "$wealth/components/terminal/dd/DDChapterSection.svelte";
-	import DDApprovalDialog from "$wealth/components/terminal/dd/DDApprovalDialog.svelte";
-	import type { DDReportFull, DDChapter, AuditEvent } from "$wealth/types/dd-report";
-	import { chapterTitle } from "$wealth/types/dd-report";
+	import { createClientApiClient } from "@investintell/ii-terminal-core/api/client";
+	import { createTerminalStream } from "@investintell/ii-terminal-core/components/terminal/runtime/stream";
+	import Panel from "@investintell/ii-terminal-core/components/terminal/layout/Panel.svelte";
+	import PanelHeader from "@investintell/ii-terminal-core/components/terminal/layout/PanelHeader.svelte";
+	import LiveDot from "@investintell/ii-terminal-core/components/terminal/data/LiveDot.svelte";
+	import DDChapterSection from "@investintell/ii-terminal-core/components/terminal/dd/DDChapterSection.svelte";
+	import DDApprovalDialog from "@investintell/ii-terminal-core/components/terminal/dd/DDApprovalDialog.svelte";
+	import type { DDReportFull, DDChapter, AuditEvent } from "@investintell/ii-terminal-core/types/dd-report";
+	import { chapterTitle } from "@investintell/ii-terminal-core/types/dd-report";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);

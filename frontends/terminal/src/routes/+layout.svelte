@@ -24,10 +24,8 @@
   but only reserved for component-level UI (e.g. UserButton) in
   later sprints.
 
-  Component imports during X2 resolve through the transitional
-  `$wealth/*` alias (see tsconfig.json, vite.config.ts, svelte.config.js).
-  X5 promotes these to `@investintell/ii-terminal-core` and drops the
-  alias entirely.
+  Component imports resolve through `@investintell/ii-terminal-core`
+  (promoted in X5a, alias dropped in X5b).
 -->
 <script lang="ts">
 	import "../app.css";
@@ -36,14 +34,14 @@
 	import {
 		createMarketDataStore,
 		type MarketDataStore,
-	} from "$wealth/stores/market-data.svelte";
-	import { TERMINAL_MARKET_DATA_KEY } from "$wealth/components/portfolio/live/workbench-state";
-	import TerminalShell from "$wealth/components/terminal/shell/TerminalShell.svelte";
+	} from "@investintell/ii-terminal-core/stores/market-data.svelte";
+	import { TERMINAL_MARKET_DATA_KEY } from "@investintell/ii-terminal-core/components/portfolio/live/workbench-state";
+	import TerminalShell from "@investintell/ii-terminal-core/components/terminal/shell/TerminalShell.svelte";
 	import {
 		createTerminalTweaks,
 		TERMINAL_TWEAKS_KEY,
 		type TerminalTweaks,
-	} from "$wealth/stores/terminal-tweaks.svelte";
+	} from "@investintell/ii-terminal-core/stores/terminal-tweaks.svelte";
 	import type { LayoutData } from "./$types";
 
 	let { data, children }: { data: LayoutData; children: import("svelte").Snippet } = $props();
