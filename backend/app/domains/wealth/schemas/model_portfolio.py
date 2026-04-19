@@ -385,6 +385,84 @@ class SetOverrideRequest(BaseModel):
         return self
 
 
+# ── PR-A26.3 — Allocation page read endpoints ──────────────────────
+
+
+class StrategicAllocationBlock(BaseModel):
+    """One canonical block row on the allocation page (Section A / C).
+
+    Extends :class:`StrategicAllocationRow` with ``block_name`` for the
+    frontend (humanized label) plus ``approved_from_run_id`` for
+    provenance tracing. ``target_weight`` / ``drift_*`` / ``approved_*``
+    are ``None`` when the block has never been approved.
+    """
+
+    block_id: str
+    block_name: str
+    target_weight: float | None = None
+    drift_min: float | None = None
+    drift_max: float | None = None
+    override_min: float | None = None
+    override_max: float | None = None
+    excluded_from_portfolio: bool = False
+    approved_from_run_id: uuid.UUID | None = None
+    approved_at: datetime | None = None
+    approved_by: str | None = None
+
+
+class StrategicAllocationResponse(BaseModel):
+    """Response for ``GET /portfolio/profiles/{profile}/strategic-allocation``.
+
+    ``cvar_limit`` is resolved from the active ``portfolio_calibration``
+    row for the profile's live/paused model portfolio; it falls back to
+    the institutional default (per-profile) when no portfolio exists
+    yet. ``has_active_approval`` is True iff at least one block row
+    carries a non-NULL ``approved_at`` — i.e. the Strategic IPS has
+    been snapshotted at least once for this (org, profile) pair.
+    """
+
+    organization_id: uuid.UUID
+    profile: str
+    cvar_limit: float
+    has_active_approval: bool
+    last_approved_at: datetime | None = None
+    last_approved_by: str | None = None
+    blocks: list[StrategicAllocationBlock]
+
+
+class ApprovalHistoryEntry(BaseModel):
+    """One row of the approval history table (Section G).
+
+    ``is_active`` mirrors ``superseded_at IS NULL`` — useful on the
+    frontend so the Active badge can be computed without re-checking
+    the superseded timestamp.
+    """
+
+    approval_id: uuid.UUID
+    run_id: uuid.UUID
+    approved_by: str
+    approved_at: datetime
+    superseded_at: datetime | None = None
+    cvar_at_approval: float | None = None
+    expected_return_at_approval: float | None = None
+    cvar_feasible_at_approval: bool
+    operator_message: str | None = None
+    is_active: bool
+
+
+class ApprovalHistoryResponse(BaseModel):
+    """Response for ``GET /portfolio/profiles/{profile}/approval-history``.
+
+    Pagination is offset-based; ``total`` reflects the full count for
+    the (org, profile) pair regardless of limit/offset.
+    """
+
+    organization_id: uuid.UUID
+    profile: str
+    total: int
+    entries: list[ApprovalHistoryEntry]
+
+
 class StressScenarioCatalogEntry(BaseModel):
     """One entry in the stress catalog returned by GET /portfolio/stress-test/scenarios."""
 

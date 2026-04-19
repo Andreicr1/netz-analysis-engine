@@ -34,6 +34,8 @@ from app.domains.wealth.models.model_portfolio import (
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.schemas.generated_report import ReportGenerateRequest
 from app.domains.wealth.schemas.model_portfolio import (
+    ApprovalHistoryEntry,
+    ApprovalHistoryResponse,
     ApprovalResponse,
     ApproveProposalRequest,
     ConstructionAdviceRead,
@@ -58,6 +60,8 @@ from app.domains.wealth.schemas.model_portfolio import (
     RegimeCurrentRead,
     SectorExposureRead,
     SetOverrideRequest,
+    StrategicAllocationBlock,
+    StrategicAllocationResponse,
     StrategicAllocationRow,
     StressScenarioCatalog,
     StressScenarioCatalogEntry,
@@ -5294,4 +5298,275 @@ async def set_override(
         approved_at=row.get("approved_at"),
         approved_by=row.get("approved_by"),
         excluded_from_portfolio=bool(row.get("excluded_from_portfolio") or False),
+    )
+
+
+# ── PR-A26.3 — Allocation page read endpoints ────────────────────────
+
+
+@portfolio_meta_router.get(
+    "/profiles/{profile}/strategic-allocation",
+    response_model=StrategicAllocationResponse,
+    summary=(
+        "PR-A26.3 - Read the 18 canonical Strategic allocation rows for "
+        "(org, profile) with current approval metadata"
+    ),
+)
+async def get_strategic_allocation(
+    profile: str,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    org_id: str = Depends(get_org_id),
+) -> StrategicAllocationResponse:
+    """Return every canonical ``strategic_allocation`` row for the profile.
+
+    Rows emerge in the stable ``CANONICAL_BLOCK_ORDER`` regardless of
+    insertion order so the frontend donut + diff UI can align bars /
+    slices deterministically. ``cvar_limit`` is resolved from the
+    active (live/paused) model portfolio's calibration row; when no
+    portfolio exists yet we fall back to the institutional default
+    per-profile so the KPI card can still render a meaningful value.
+    """
+    from sqlalchemy import text as _sa_text
+
+    from app.domains.wealth.models.model_portfolio import (
+        default_cvar_limit_for_profile,
+    )
+    from app.domains.wealth.utils.block_display import (
+        CANONICAL_BLOCK_ORDER,
+        humanize_block,
+    )
+
+    profile_lc = profile.strip().lower()
+    if profile_lc not in _PROPOSE_VALID_PROFILES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Unknown profile '{profile}'. Valid: "
+                f"{sorted(_PROPOSE_VALID_PROFILES)}"
+            ),
+        )
+
+    org_uuid = uuid.UUID(str(org_id))
+
+    rows_stmt = _sa_text(
+        """
+        SELECT block_id, target_weight, drift_min, drift_max,
+               override_min, override_max, excluded_from_portfolio,
+               approved_from_run_id, approved_at, approved_by
+          FROM strategic_allocation
+         WHERE organization_id = :org
+           AND profile = :profile
+        """
+    )
+    result = await db.execute(
+        rows_stmt,
+        {"org": org_uuid, "profile": profile_lc},
+    )
+    by_block: dict[str, dict[str, Any]] = {
+        str(r["block_id"]): dict(r) for r in result.mappings().all()
+    }
+
+    blocks: list[StrategicAllocationBlock] = []
+    last_approved_at: Any = None
+    last_approved_by: str | None = None
+    has_active_approval = False
+
+    for bid in CANONICAL_BLOCK_ORDER:
+        raw = by_block.get(bid)
+        if raw is None:
+            # Canonical template should have seeded this row via the
+            # A25 trigger — emit a placeholder so the 18-row contract
+            # still holds if the trigger mis-fired.
+            blocks.append(
+                StrategicAllocationBlock(
+                    block_id=bid,
+                    block_name=humanize_block(bid),
+                )
+            )
+            continue
+
+        approved_at = raw.get("approved_at")
+        approved_by = raw.get("approved_by")
+        if approved_at is not None:
+            has_active_approval = True
+            if last_approved_at is None or approved_at > last_approved_at:
+                last_approved_at = approved_at
+                last_approved_by = (
+                    str(approved_by) if approved_by is not None else None
+                )
+
+        blocks.append(
+            StrategicAllocationBlock(
+                block_id=bid,
+                block_name=humanize_block(bid),
+                target_weight=(
+                    float(raw["target_weight"])
+                    if raw.get("target_weight") is not None
+                    else None
+                ),
+                drift_min=(
+                    float(raw["drift_min"])
+                    if raw.get("drift_min") is not None
+                    else None
+                ),
+                drift_max=(
+                    float(raw["drift_max"])
+                    if raw.get("drift_max") is not None
+                    else None
+                ),
+                override_min=(
+                    float(raw["override_min"])
+                    if raw.get("override_min") is not None
+                    else None
+                ),
+                override_max=(
+                    float(raw["override_max"])
+                    if raw.get("override_max") is not None
+                    else None
+                ),
+                excluded_from_portfolio=bool(
+                    raw.get("excluded_from_portfolio") or False
+                ),
+                approved_from_run_id=raw.get("approved_from_run_id"),
+                approved_at=approved_at,
+                approved_by=(
+                    str(approved_by) if approved_by is not None else None
+                ),
+            )
+        )
+
+    # Resolve CVaR limit via the active portfolio for the profile (live
+    # or paused). Fall back to the institutional default when no
+    # portfolio has been created yet so the KPI card always renders.
+    cvar_stmt = (
+        select(PortfolioCalibration.cvar_limit)
+        .join(
+            ModelPortfolio, ModelPortfolio.id == PortfolioCalibration.portfolio_id,
+        )
+        .where(
+            ModelPortfolio.profile == profile_lc,
+            ModelPortfolio.state.in_(("live", "paused")),
+        )
+        .order_by(ModelPortfolio.created_at.desc())
+        .limit(1)
+    )
+    cvar_raw = (await db.execute(cvar_stmt)).scalar_one_or_none()
+    if cvar_raw is None:
+        cvar_limit = float(default_cvar_limit_for_profile(profile_lc))
+    else:
+        cvar_limit = float(cvar_raw)
+
+    return StrategicAllocationResponse(
+        organization_id=org_uuid,
+        profile=profile_lc,
+        cvar_limit=cvar_limit,
+        has_active_approval=has_active_approval,
+        last_approved_at=last_approved_at,
+        last_approved_by=last_approved_by,
+        blocks=blocks,
+    )
+
+
+@portfolio_meta_router.get(
+    "/profiles/{profile}/approval-history",
+    response_model=ApprovalHistoryResponse,
+    summary=(
+        "PR-A26.3 - Paginated approval history for a profile, newest first"
+    ),
+)
+async def get_approval_history(
+    profile: str,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    org_id: str = Depends(get_org_id),
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> ApprovalHistoryResponse:
+    """List ``allocation_approvals`` rows for (org, profile).
+
+    Ordered newest-first on ``approved_at``. ``is_active`` is computed
+    per-row from ``superseded_at IS NULL`` so the frontend can render
+    the Active badge without a second query. ``total`` reflects the
+    full count regardless of pagination.
+    """
+    from sqlalchemy import text as _sa_text
+
+    profile_lc = profile.strip().lower()
+    if profile_lc not in _PROPOSE_VALID_PROFILES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Unknown profile '{profile}'. Valid: "
+                f"{sorted(_PROPOSE_VALID_PROFILES)}"
+            ),
+        )
+
+    org_uuid = uuid.UUID(str(org_id))
+
+    total_stmt = _sa_text(
+        """
+        SELECT COUNT(*) AS n
+          FROM allocation_approvals
+         WHERE organization_id = :org
+           AND profile = :profile
+        """
+    )
+    total = int(
+        (await db.execute(total_stmt, {"org": org_uuid, "profile": profile_lc}))
+        .scalar_one()
+    )
+
+    rows_stmt = _sa_text(
+        """
+        SELECT id, run_id, approved_by, approved_at, superseded_at,
+               cvar_at_approval, expected_return_at_approval,
+               cvar_feasible_at_approval, operator_message
+          FROM allocation_approvals
+         WHERE organization_id = :org
+           AND profile = :profile
+         ORDER BY approved_at DESC
+         LIMIT :limit OFFSET :offset
+        """
+    )
+    result = await db.execute(
+        rows_stmt,
+        {
+            "org": org_uuid,
+            "profile": profile_lc,
+            "limit": limit,
+            "offset": offset,
+        },
+    )
+    entries = [
+        ApprovalHistoryEntry(
+            approval_id=r["id"],
+            run_id=r["run_id"],
+            approved_by=str(r["approved_by"]),
+            approved_at=r["approved_at"],
+            superseded_at=r.get("superseded_at"),
+            cvar_at_approval=(
+                float(r["cvar_at_approval"])
+                if r.get("cvar_at_approval") is not None
+                else None
+            ),
+            expected_return_at_approval=(
+                float(r["expected_return_at_approval"])
+                if r.get("expected_return_at_approval") is not None
+                else None
+            ),
+            cvar_feasible_at_approval=bool(
+                r.get("cvar_feasible_at_approval", True),
+            ),
+            operator_message=r.get("operator_message"),
+            is_active=r.get("superseded_at") is None,
+        )
+        for r in result.mappings().all()
+    ]
+
+    return ApprovalHistoryResponse(
+        organization_id=org_uuid,
+        profile=profile_lc,
+        total=total,
+        entries=entries,
     )
