@@ -141,6 +141,72 @@
 	--terminal-shell-cage-padding: 24px;
 }
 
+/* ── Runtime tweak surfaces ───────────────────────────────── */
+/* Source: docs/plans/2026-04-18-netz-terminal-parity.md §B.1.  */
+/* Density: standard (default) vs compact (Bloomberg-tight).    */
+/* Switched via [data-density="compact"] on terminal-root or    */
+/* on :root for page-wide effect.                               */
+
+:root,
+[data-surface="terminal"] {
+	--t-row-height: 22px;
+	--t-size-hero: var(--terminal-text-24);
+	--t-size-kpi: var(--terminal-text-20);
+	--t-size-label: var(--terminal-text-10);
+
+	/* Severity scale — alerts + ticker. */
+	--sev-info: var(--terminal-accent-cyan);
+	--sev-warn: var(--terminal-status-warn);
+	--sev-critical: var(--terminal-status-error);
+	--up: var(--terminal-status-success);
+	--down: var(--terminal-status-error);
+}
+
+:root[data-density="compact"],
+[data-surface="terminal"][data-density="compact"] {
+	--terminal-space-1: 2px;
+	--terminal-space-2: 6px;
+	--terminal-space-3: 10px;
+	--terminal-space-4: 12px;
+	--terminal-text-10: 9px;
+	--terminal-text-11: 10px;
+	--terminal-text-12: 11px;
+	--terminal-text-14: 12px;
+	--terminal-shell-topbar-height: 28px;
+	--terminal-shell-breadcrumb-height: 24px;
+	--terminal-shell-cage-height: calc(100vh - 80px);
+	--t-row-height: 18px;
+}
+
+/* Accent: user-selectable. Default amber (institutional).     */
+/* Rebind the semantic amber slot so every consumer reading    */
+/* --terminal-accent-amber swaps without code changes.         */
+[data-accent="cyan"] {
+	--terminal-accent-amber: var(--terminal-accent-cyan);
+	--terminal-accent-amber-dim: var(--terminal-accent-cyan-dim);
+}
+[data-accent="violet"] {
+	--terminal-accent-amber: var(--terminal-accent-violet);
+	--terminal-accent-amber-dim: var(--terminal-accent-violet-dim);
+}
+
+/* Light theme — institutional white, still mono-first.        */
+[data-theme="light"],
+[data-theme="light"][data-surface="terminal"] {
+	--terminal-bg-void: #f5f5f0;
+	--terminal-bg-panel: #ffffff;
+	--terminal-bg-panel-raised: #fafaf6;
+	--terminal-bg-panel-sunken: #ededed;
+	--terminal-bg-overlay: #ffffff;
+	--terminal-bg-scrim: rgba(245, 245, 240, 0.72);
+	--terminal-fg-primary: #0a0a0a;
+	--terminal-fg-secondary: #3d3d38;
+	--terminal-fg-tertiary: #6b6b63;
+	--terminal-fg-muted: #b8b8b0;
+	--terminal-fg-disabled: #d8d8d0;
+	--terminal-fg-inverted: #ffffff;
+}
+
 /* prefers-reduced-motion: collapse all choreo slots to 0ms.   */
 /* Components can still honor --terminal-motion-opening etc.  */
 /* but any entrance animation becomes instant.                 */
