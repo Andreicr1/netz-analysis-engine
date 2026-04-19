@@ -30,7 +30,7 @@
 		value: number;
 	}
 
-	type Timeframe = "1D" | "1W" | "1M" | "3M";
+	type Timeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y";
 	export type DataStatus = "live" | "delayed" | "offline";
 
 	interface Props {
@@ -58,6 +58,8 @@
 		{ id: "1W", label: "1W" },
 		{ id: "1M", label: "1M" },
 		{ id: "3M", label: "3M" },
+		{ id: "6M", label: "6M" },
+		{ id: "1Y", label: "1Y" },
 	];
 
 	// ── Chart state ($state for reactivity tracking) ──────────

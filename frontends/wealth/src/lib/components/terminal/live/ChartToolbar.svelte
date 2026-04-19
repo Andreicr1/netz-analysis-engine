@@ -11,7 +11,7 @@
 	import { TERMINAL_MARKET_DATA_KEY } from "$lib/components/portfolio/live/workbench-state";
 	import { createClientApiClient } from "$lib/api/client";
 
-	type Timeframe = "1D" | "1W" | "1M" | "3M" | "1Y";
+	type Timeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y";
 
 	interface Props {
 		ticker: string;
@@ -37,7 +37,7 @@
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
 
-	const TIMEFRAMES: Timeframe[] = ["1D", "1W", "1M", "3M", "1Y"];
+	const TIMEFRAMES: Timeframe[] = ["1D", "1W", "1M", "3M", "6M", "1Y"];
 
 	// Live price from MarketDataStore
 	const tickData = $derived<PriceTick | undefined>(

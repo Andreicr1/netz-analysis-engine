@@ -14,6 +14,7 @@
 	import { resolve } from "$app/paths";
 	import { getContext } from "svelte";
 	import { PanelErrorState } from "@investintell/ui/runtime";
+	import { formatPpDrift } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { MarketDataStore } from "$lib/stores/market-data.svelte";
 	import { TERMINAL_MARKET_DATA_KEY } from "$lib/components/portfolio/live/workbench-state";
@@ -224,7 +225,7 @@
 
 	// ---- Chart state ----
 
-	type Timeframe = "1D" | "1W" | "1M" | "3M" | "1Y";
+	type Timeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y";
 	let selectedTicker = $state<string | null>(null);
 	let chartTimeframe = $state<Timeframe>("1M");
 	let compareTicker = $state<string | null>(null);
@@ -492,14 +493,12 @@
 				const drift = f.actual_weight - f.target_weight;
 				const absDrift = Math.abs(drift);
 				const severity: "warning" | "critical" = absDrift >= 0.03 ? "critical" : "warning";
-				const pct = (absDrift * 100).toFixed(1);
-				const direction = drift > 0 ? "over" : "under";
 				return {
 					id: `drift-${f.instrument_id}`,
 					source: "drift_monitor",
 					alert_type: "drift_breach",
 					severity,
-					title: `${f.ticker} ${direction}weight by ${pct}pp`,
+					title: `${f.ticker} drift ${formatPpDrift(drift, 1)}`,
 					subtitle: null,
 					subject_kind: "instrument",
 					subject_id: f.instrument_id,
@@ -622,7 +621,7 @@
 						{historicalBars}
 						portfolioNavBars={effectiveNavBars}
 						{lastTick}
-						timeframe={chartTimeframe === "1Y" ? "3M" : chartTimeframe}
+						timeframe={chartTimeframe}
 						onTimeframeChange={handleTimeframeChange}
 						{dataStatus}
 					/>
@@ -714,7 +713,7 @@
 	.lw-shell {
 		display: grid;
 		grid-template-columns: 280px 1fr 280px;
-		height: calc(100vh - 88px);
+		height: var(--terminal-shell-cage-height);
 		background: var(--terminal-bg-void);
 		font-family: var(--terminal-font-mono);
 	}
