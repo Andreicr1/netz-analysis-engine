@@ -77,25 +77,62 @@ Figma: `Netz Terminal - Macro.html` + `macro.css` + `macro-app.jsx`
 | M9 | `StressHero` emits `onProceedToAlloc` → `/terminal/allocation`. | Figma button reads `PROCEED TO BUILDER`. | Rename label; route already correct (`(terminal)/allocation`). Copy change only. |
 | M10 | `CommitteeReviewFeed` shows last N reviews inline. | Figma = drawer, closed by default, opens via `Shift+R` OR badge click in TopNav. | Wrap in `<Drawer side="right" width="380">` (new primitive §B.5 OR reuse `TerminalTweaksPanel` drawer pattern). |
 
-### A.BUILDER — `/portfolio/builder`
+### A.BUILDER — `/allocation/[profile]` (propose→approve surface)
 
-Route: `frontends/wealth/src/routes/(terminal)/portfolio/builder/+page.svelte`
-Supporting: `frontends/wealth/src/lib/components/terminal/builder/*.svelte` (12 components — Phase 4+5 complete)
-Figma: `Netz Terminal - Builder.html` + `builder.css` + `builder-app.jsx` + `builder-preview.jsx`
+> **§ BUILDER SCOPE PIVOT (2026-04-19)**
+>
+> The Figma `Netz Terminal - Builder.html` file represents the **legacy pre-A26 architecture** where the operator supplied CVaR + turnover + min-weight + max-single-position sliders, IC views, factor tilts, and region caps to the optimizer as inputs. That input surface has been **deleted from the product model** by the A26 sprint (PRs #214, #217, #219, #220, #221, #222 merged 2026-04-18).
+>
+> **New model (A26.1 + A26.2 + A26.3):** CVaR limit on the IPS is the only mandatory human input. The optimizer runs unconstrained by strategic bands in `propose` mode; the operator reviews the proposal (cascade telemetry + diff bars + 18-block targets) and either **approves atomically** (snapshot → `strategic_allocation` + `allocation_approvals`) or sets **ad-hoc per-block overrides** and re-proposes. Realize mode refuses to run until a Strategic is approved.
+>
+> **Treat the Figma as reference for the _output_ surfaces** (regime header, cascade phase timeline, weights table, risk metrics, stress scenarios, backtest charts — all read-only visualizations of an executed propose run). **Ignore the Figma's input surfaces** — zone B calibration sliders (CVaR/turnover/min-weight), IC views list, factor tilts, region caps, RunControls profile+RUN button. Those are replaced by the ProposeButton / ProposalReviewPanel / OverrideBandsEditor trio already shipped in PR #219.
+>
+> **Canonical Builder route for Terminal parity = `/(terminal)/allocation/[profile]/` (PR #219).**
+> The route `/(terminal)/portfolio/builder/` is **legacy Phase 4+5 Builder** with calibration sliders / tabs / ActivationBar. It is NOT the parity target of PR-4. It may be retired in a follow-up sprint; out of scope for this plan. Opus executor: do not edit `/(terminal)/portfolio/builder/**` in PR-4.
 
-| # | Current | Gap vs Figma | Patch |
+**Route (canonical):** `frontends/wealth/src/routes/(terminal)/allocation/+page.svelte` (3-profile cards) + `frontends/wealth/src/routes/(terminal)/allocation/[profile]/+page.svelte` (per-profile governance surface).
+**Supporting components (PR #219 delivered):** `frontends/wealth/src/lib/components/allocation/{StrategicAllocationTable,AllocationDonut,AllocationTable,ProposalReviewPanel,ProposeButton,OverrideBandsEditor,ApprovalHistoryTable}.svelte` + `BLOCK_INSTRUMENTS.ts` + `types.ts`.
+**Figma:** `Netz Terminal - Builder.html` + `builder.css` + `builder-app.jsx` + `builder-preview.jsx` — reference visually for **output tabs only** (Regime / Weights / Risk / Stress / Backtest / Cascade). Discard all input-surface elements.
+
+**What stays from Figma (visual re-skin targets, mapped to existing PR #219 components):**
+
+| Figma element | Existing component | Parity action |
+|---|---|---|
+| Cascade phase timeline (P1 → P1.5 → P2 → P3 → fallback) | `ProposalReviewPanel` metrics row (currently shows E[r] / CVaR / Target / Feasible badge — does NOT render phase timeline yet) | **NEW primitive** `CascadeTimeline.svelte` (wealth-local to `components/allocation/`) — reads `cascade_telemetry.phases[]` from the propose run. Mount in `ProposalReviewPanel` header above the diff bars. |
+| Regime context strip (top of Figma) | Not rendered on allocation page | **NEW** `RegimeContextStrip.svelte` read-only (current regime + stress + window from `GET /macro/regime`). Mount above the KPI row. |
+| Weights diff bars | `ProposalReviewPanel` diff bar chart (svelte-echarts) | OK — already shipped; re-skin colors to `--terminal-*` tokens. |
+| 18-row allocation table | `StrategicAllocationTable` + `AllocationDonut` | OK — re-skin to Netz Terminal density + tokens. |
+| IPS summary strip (target return / max CVaR / rebalance freq) | None | **NEW** `IpsSummaryStrip.svelte` (wealth-local, §B.7) — reads CVaR limit from `StrategicAllocationResponse.cvar_limit`. Rendered in the KPI row OR as a footer strip. |
+| Breadcrumb + LayoutCage | `(terminal)/+layout.svelte` | OK — already wired. |
+
+**What is REMOVED from Figma (never implement):**
+
+| Figma input element | Why removed | Replacement |
+|---|---|---|
+| Zone B CalibrationPanel (CVaR / turnover / min-weight / max-single-position sliders) | A26 eliminated pre-run IC parameters except CVaR limit. | CVaR limit is set on `portfolio_calibration` via admin API (not in allocation UI per A26.3 Section scope). `OverrideBandsEditor` modal replaces all other block-level constraints. |
+| IC views list (left rail) | A26.1 bypasses BL posterior + `_load_ic_views` in propose mode. | Deleted. |
+| Factor tilts | Never implemented in backend; legacy Figma artifact. | Deleted. |
+| Region caps / sector caps | Replaced by per-block `override_min/override_max` on any of the 18 canonical blocks. | `OverrideBandsEditor` per-block modal. |
+| `RunControls` RUN + profile dropdown | Profile is URL param `[profile]`; "run" is now `ProposeButton`. | `ProposeButton` (SSE-wired, `fetch + ReadableStream`). |
+| `ActivationBar` "all tabs visited" gate | No tabs exist in propose→approve flow. | Deleted. Approval gate is enforced server-side by the approve-proposal endpoint. |
+| MONTE CARLO / ADVISOR tabs | Tab navigation dropped. Advisor output surfaces inline in `ProposalReviewPanel`. | Deleted. (Monte Carlo visualization may return as a post-approval analytics backlog item — out of scope.) |
+
+**Diff rows (current `(terminal)/allocation/**` vs Figma sanitized reference):**
+
+| # | Current | Gap vs Figma (sanitized) | Patch |
 |---|---|---|---|
-| B1 | 2-column 40/60 layout. Left = Zone A/B/C (regime+calibration+runctrl). Right = Zone D (cascade) + Zone E (7 tabs). | Figma = same 40/60 but **Zone B (CalibrationPanel)** uses a dense slider stack (CVaR, turnover, min-weight, max-single-position) in a 2×2 grid; current CalibrationPanel is a vertical list. | Restyle `CalibrationPanel` (imports from `portfolio/` not `terminal/builder/`) — move to `terminal/builder/CalibrationPanel.svelte` OR add a terminal-variant. 2×2 grid; use new `<CalibrationSlider>` primitive (§B.6). |
-| B2 | Tab list: REGIME, WEIGHTS, RISK, STRESS, BACKTEST, MONTE CARLO, ADVISOR. | Figma order: REGIME, WEIGHTS, RISK, STRESS, BACKTEST, MONTE CARLO, ADVISOR + new **CASCADE** detail tab (cascade telemetry JSONB from PR-A11). | **Defer CASCADE tab to backlog** — PR-A11 telemetry panel is a separate sprint (already in memory). Flag only. |
-| B3 | `CascadeTimeline` renders 4 phases (P1 / P1.5 / P2 / P3) with winner badge. | Figma adds **coverage bar** underneath timeline (PR-A14 coverage signal; already shipped in data). | Extend `CascadeTimeline` to render `cascade_telemetry.coverage` as a thin progress bar below the phase row. Color via `--sev-warn` if <50%, `--sev-critical` if <20%, `--terminal-status-success` otherwise. |
-| B4 | `ActivationBar` gates on all-tabs-visited. | Figma footer has left-side `IPS SUMMARY` strip (3 rules chips: target return, max CVaR, rebalance frequency). | Add `<IpsSummaryStrip>` component (§B.7) to `ActivationBar` left slot. Reads from `workspace.ips` (already populated Phase 5). |
-| B5 | Breadcrumb not rendered per-page (done at shell level). | OK. | No-op. |
-| B6 | `.toFixed`/`Intl` audit in builder components. | Grep: run on PR-B open. Expect 0 (Phase 4 shipped clean). | Lint sweep only. |
-| B7 | `data-builder-root` attribute used for LayoutCage override? | Currently no override — cage padding 24px stays. Figma uses edge-to-edge. | Add `data-builder-root` + `:global(.lc-cage--standard:has([data-builder-root])) { padding: var(--terminal-space-2) !important; }` matching screener. Confirm doesn’t break Zone layout. |
-| B8 | RegimeContextStrip renders current regime + stress + window. | OK — matches Figma Zone A. | No-op. |
-| B9 | RunControls = single `RUN` button + profile dropdown. | Figma adds `DRY RUN` secondary button (runs optimizer without persisting). | **Flag as backend dependency.** Dry-run mode requires backend flag on `/portfolio-construction/runs` endpoint. If not supported, ship without dry-run; display tooltip “Coming soon”. Do NOT mock. |
-| B10 | `ConsequenceDialog` fires on destructive actions. | Figma same. | No-op. |
-| B11 | Hardcoded tab ID tuple uses `"MONTE CARLO"` with space. | Figma uses `MONTE-CARLO`. | Cosmetic — no-op unless it breaks URL sync (it doesn’t; tab state is in-memory). |
+| B1 | `/allocation/[profile]/+page.svelte` renders: breadcrumb + KPI row (CVaR / Expected Return / Last Approved / Status badge) + 2-column main grid (Strategic table + donut \| ProposalReviewPanel OR ProposeButton) + ApprovalHistoryTable collapsible. | Figma adds a **RegimeContextStrip** above KPI row (current regime + stress + window). Not yet rendered. | Add `<RegimeContextStrip>` (§B.8) at top of page. Reads `GET /macro/regime` (same endpoint as Macro StressHero) via loader. |
+| B2 | `ProposalReviewPanel` shows metrics row + diff bars + expandable 18-block table + `Approve Allocation` / `Dismiss Proposal` actions. | Figma shows cascade phase timeline (P1 / P1.5 / P2 / P3 winner) between metrics row and diff bars. | Insert `<CascadeTimeline>` (§B.6) between metrics row and diff bars. Reads `cascade_telemetry.phases[]` + `winner_signal` + `coverage` from the propose run payload. |
+| B3 | `ProposalReviewPanel` metrics row: E[r] / CVaR / Target CVaR / Feasible badge. | Figma adds **coverage bar** underneath cascade timeline (PR-A14 coverage signal already in data). | `CascadeTimeline` renders coverage as a thin progress bar under the phase row. Color via `--sev-warn` if <50%, `--sev-critical` if <20%, `--terminal-status-success` otherwise. |
+| B4 | No IPS summary strip — only the inline KPI row. | Figma has dedicated `IPS SUMMARY` strip with pills (CVaR limit, last-approved profile, rebalance cadence). | Add `<IpsSummaryStrip>` (§B.7) beneath the breadcrumb OR as a footer. Reads `StrategicAllocationResponse.cvar_limit` + `last_approved_at` + static cadence label. |
+| B5 | `ApproveRejectBar` / standalone approve+reject bar not present — approve button lives inside `ProposalReviewPanel`. | Figma shows a dedicated footer `ApproveRejectBar` beneath the results zone. | Acceptable as-is — do not duplicate. Keep approve button inside `ProposalReviewPanel`. Cosmetic: align the panel's action footer to Figma's ApproveRejectBar visual (same density, `Pill` accent primary for Approve + `Pill` ghost for Dismiss). |
+| B6 | `.toFixed`/`Intl` audit in allocation components. | — | Grep sweep on PR open; PR #219 shipped clean but verify. Formatters must come from `@netz/ui`. |
+| B7 | `data-allocation-root` attribute for LayoutCage padding override. | Currently uses the `h-[calc(100vh-88px)] p-6 overflow-y-auto` pattern directly. Figma shows edge-to-edge density similar to screener. | Add `data-allocation-root` + match the screener override so cage padding collapses to `--terminal-space-2`. Preserve the `calc(100vh-88px)` height per `feedback_layout_cage_pattern.md`. |
+| B8 | `StrategicAllocationTable` row click: no action. | OK — per PR-A26.3 Section C spec ("no drill-down in v1"). | No-op. Override edit still lives on the row-action icon. |
+| B9 | Approve with `cvar_feasible=false` → confirm modal in `ProposalReviewPanel`. | OK — matches A26.2 Section C spec (`confirm_cvar_infeasible=true` body flag). | No-op. Verify visual parity: destructive tone on `Confirm Approval` button. |
+| B10 | SSE propose flow: `fetch` + `ReadableStream` per `CLAUDE.md` + `ProposeButton`. | OK. | No-op. Verify events `propose_started / optimizer_started / optimizer_phase_complete / propose_ready / propose_cvar_infeasible / completed` render as a progress indicator with cascade-phase awareness (drives §CascadeTimeline update during the stream for pre-settlement visual). |
+| B11 | `OverrideBandsEditor` modal includes rationale textarea (min 10 chars) + min/max numeric + Clear/Save. | OK per A26.2 Section D. | No-op. Re-skin modal tokens to Netz Terminal. |
+| B12 | `ApprovalHistoryTable` collapsible (default collapsed) showing active/superseded rows with CVaR + E[r] snapshots. | OK. | No-op. Re-skin to Terminal density + tokens. |
 
 ---
 
@@ -180,32 +217,55 @@ interface DrawerProps {
 ```
 Mount at shell root (outside LayoutCage — per `feedback_layout_cage_pattern.md`). Backdrop scrim uses `--terminal-bg-scrim`. ESC closes. Focus trap via `focus-trap` or manual.
 
-### B.6 `CalibrationSlider` — **wealth-local (builder only)**
-Path: `frontends/wealth/src/lib/components/terminal/builder/CalibrationSlider.svelte`
-Consumers: Builder only.
+### B.6 `CascadeTimeline` — **wealth-local (allocation only for now)**
+Path: `frontends/wealth/src/lib/components/allocation/CascadeTimeline.svelte`
+Consumers: `ProposalReviewPanel` only. If Builder-legacy page is re-added later, promote then.
 Props:
 ```ts
-interface CalibrationSliderProps {
-  label: string;          // "CVaR LIMIT"
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  unit: string;           // "%" | "pp" | "×"
-  format?: (v: number) => string; // defaults to formatMonoPercent
-  onChange: (v: number) => void;
-  helperText?: string;    // "Operator-set constraint"
-  warning?: string | null; // e.g. "Below 2% may be infeasible"
+interface CascadePhase {
+  id: "phase_1_ru_max_return" | "phase_2_ru_robust" | "phase_3_min_variance" | "phase_4_min_cvar_fallback";
+  status: "succeeded" | "failed" | "skipped" | "degraded";
+  solver?: "clarabel" | "scs" | null;
+  duration_ms?: number | null;
+}
+interface CascadeTimelineProps {
+  phases: CascadePhase[];
+  winnerSignal: string;            // sanitized label: "proposal_ready" | "proposal_cvar_infeasible" | "no_approved_allocation" | ...
+  coverage?: number | null;        // 0..1 from cascade_telemetry.coverage (PR-A14)
+  mode?: "live" | "settled";       // "live" drives dashed phase outlines while SSE streams; "settled" shows winner badge
 }
 ```
-Single-row: label (caps, 10px) + value (mono, 14px) + range input + helper/warning line. Tokens only.
+Horizontal chevron row of 4 phases; winner phase highlighted; coverage bar (thin, full-width) under the row. All colors via `--terminal-*` + `--sev-*` tokens. No `svelte-echarts` — pure markup (cheap to render during SSE progress).
 
-### B.7 `IpsSummaryStrip` — **wealth-local (builder only)**
-Path: `frontends/wealth/src/lib/components/terminal/builder/IpsSummaryStrip.svelte`
-Consumers: Builder only.
-Renders 3 `<Pill tone="neutral" size="xs">` pills for target return, max CVaR, rebalance freq. Reads `workspace.ips` via prop passthrough (NO context in primitive — caller owns).
+### B.7 `IpsSummaryStrip` — **wealth-local (allocation only)**
+Path: `frontends/wealth/src/lib/components/allocation/IpsSummaryStrip.svelte`
+Consumers: Allocation `[profile]` page.
+Props:
+```ts
+interface IpsSummaryStripProps {
+  cvarLimit: number | null;          // from StrategicAllocationResponse.cvar_limit
+  lastApprovedAt: string | null;     // ISO datetime or null
+  lastApprovedBy: string | null;
+  profile: "conservative" | "moderate" | "growth";
+  cadenceLabel?: string;             // default "Quarterly review"
+}
+```
+Renders 3–4 `<Pill tone="neutral" size="xs">` pills: `CVaR ≤ X%`, `Approved {formatRelativeTime}`, `Profile: {label}`, `Cadence: {cadenceLabel}`. Read-only.
 
-### B.8 Keyboard nav util — **reuse existing**
+### B.8 `RegimeContextStrip` — **wealth-local (allocation only)**
+Path: `frontends/wealth/src/lib/components/allocation/RegimeContextStrip.svelte`
+Consumers: Allocation `[profile]` page. (Macro page already has inline regime rendering via StressHero — do not duplicate.)
+Props:
+```ts
+interface RegimeContextStripProps {
+  regime: string;           // e.g. "RISK_OFF"
+  stressLevel: number;      // 0..1
+  window: string;           // "1Y rolling"
+}
+```
+Loader fetches `GET /macro/regime` once at page load; no live tick. Keeps UI copy plain-English (tooltip explains regime label).
+
+### B.9 Keyboard nav util — **reuse existing**
 `TerminalShell` already exposes `isTypingInInput()` helper. Export from `frontends/wealth/src/lib/utils/keyboard.ts` if not already; all new shortcuts (`/`, `↑↓`, `Shift+R`) must guard with it.
 
 ---
@@ -232,15 +292,23 @@ Renders 3 `<Pill tone="neutral" size="xs">` pills for target return, max CVaR, r
 | Sparkline wall (live) | `SparklineWall` via adapter | `MarketDataStore.subscribe(VXX|UUP|IEF)` | OK (MarketDataStore already mounted in layout) |
 | Committee feed | `CommitteeReviewFeed` | `GET /macro/reviews?limit=10` | OK |
 
-### C.BUILDER
+### C.BUILDER (`/allocation/[profile]`)
+
+All endpoints confirmed against A26 prompts and `(terminal)/allocation/[profile]/+page.server.ts`.
+
 | Panel | Component | Source | Status |
 |---|---|---|---|
-| Regime strip | `RegimeContextStrip` | `workspace.regime` | OK |
-| Calibration | `CalibrationPanel` + new sliders | `workspace.calibration` | OK (existing workspace store) |
-| Cascade timeline | `CascadeTimeline` | SSE `/portfolio-construction/runs/:id/stream` → `cascade_telemetry` JSONB (PR-A11) + `coverage` (PR-A14) | OK — already wired |
-| Tabs | 7 tab components | `workspace.run.result` | OK |
-| IPS strip | `IpsSummaryStrip` | `workspace.ips` | OK (Phase 5) |
-| Dry-run button | `RunControls` | `POST /portfolio-construction/runs` with `?dry_run=1` | **GAP — backend dependency.** Do not ship; tooltip disabled. |
+| Strategic allocation (18 rows) | `StrategicAllocationTable` + `AllocationDonut` | `GET /portfolio/profiles/{profile}/strategic-allocation` → `StrategicAllocationResponse` (A26.3 Section A). Rows show `target_weight`, `drift_min/max`, `override_min/max`, `excluded_from_portfolio`, `approved_at/by`. | OK (PR #219 shipped). |
+| Latest proposal | `ProposalReviewPanel` | `GET /portfolio/profiles/{profile}/latest-proposal` → `LatestProposalResponse` (A26.1 Section C) with `cascade_telemetry.proposed_bands[]`, `proposal_metrics`, `winner_signal`. 404 when no proposal exists. | OK (PR #219 shipped). |
+| Propose trigger | `ProposeButton` | `POST /portfolio/profiles/{profile}/propose-allocation` → 202 + `{job_id, sse_url}` (A26.1 Section C). Open SSE via `fetch + ReadableStream`; events: `propose_started / optimizer_started / optimizer_phase_complete / propose_ready / propose_cvar_infeasible / completed`. | OK (PR #219 shipped). |
+| Approve | Action inside `ProposalReviewPanel` | `POST /portfolio/profiles/{profile}/approve-proposal/{run_id}` → body `{confirm_cvar_infeasible: bool, operator_message?: string}` (A26.2 Section C). | OK (PR #219 shipped). Verify confirm-modal fires for `cvar_feasible=false`. |
+| Override per block | `OverrideBandsEditor` | `POST /portfolio/profiles/{profile}/set-override` → body `{block_id, override_min, override_max, rationale}` (A26.2 Section D). | OK (PR #219 shipped). |
+| Approval history | `ApprovalHistoryTable` | `GET /portfolio/profiles/{profile}/approval-history?limit=5&offset=N` → `ApprovalHistoryResponse` (A26.3 Section A). | OK (PR #219 shipped). |
+| Cascade timeline | `CascadeTimeline` (NEW §B.6) | Data subset of `latest-proposal.cascade_telemetry` already fetched. Additionally consumed live during SSE propose events (`mode="live"` during stream, `mode="settled"` after). NO new endpoint. | **NEW — PR-4 ships this**. |
+| Regime strip | `RegimeContextStrip` (NEW §B.8) | `GET /macro/regime` (shared with Macro page). Fetched once at page load via loader. | **NEW — PR-4 ships this**. |
+| IPS summary strip | `IpsSummaryStrip` (NEW §B.7) | Derived client-side from `StrategicAllocationResponse.cvar_limit` + `last_approved_at` + `last_approved_by` + static cadence label. NO new endpoint. | **NEW — PR-4 ships this**. |
+
+**No backend endpoint is introduced by PR-4.** All data is already served by A26.1/A26.2/A26.3 endpoints. `cascade_telemetry.phases[]` structure is read from `LatestProposalResponse.cascade_telemetry` (JSONB); verify field shape against A26.1 Section B telemetry schema at PR-4 open.
 
 ---
 
@@ -269,21 +337,24 @@ Files: `(terminal)/macro/**`, `lib/components/terminal/macro/**`
 - Emojis — hold 0.
 
 ### D.BUILDER
-Files: `(terminal)/portfolio/builder/**`, `lib/components/terminal/builder/**`
-- `.toFixed(` — grep. If found in `WeightsTab`/`RiskTab` (likely — Phase 4 shipped with some raw numeric formatting), replace with `formatMonoPercent` / `formatCompactCurrency`.
-- `new Intl.*` — hold 0.
-- Hardcoded hex in `CascadeTimeline` coverage bar — **must use** `--terminal-status-success` / `--sev-warn` / `--sev-critical`.
-- `localStorage` — hold 0.
+Files: `(terminal)/allocation/**`, `lib/components/allocation/**` (NOT `(terminal)/portfolio/builder/**` — that legacy surface is out of scope for PR-4).
+- `.toFixed(` — grep. Expect 0 (PR #219 shipped using `@netz/ui` formatters); fix any residue.
+- `.toLocaleString(` — hold 0.
+- `new Intl.NumberFormat` / `DateTimeFormat` — hold 0.
+- `new EventSource` — **hold 0**. SSE in `ProposeButton` uses `fetch + ReadableStream`.
+- `localStorage` / `sessionStorage` — hold 0.
+- Hardcoded hex in new `CascadeTimeline` coverage bar — **must use** `--terminal-status-success` / `--sev-warn` / `--sev-critical`.
 - Emojis — hold 0.
+- `{#each … as x}` without `(x.id)` — 0 (18-block tables must key on `block_id`; cascade phases must key on `phase.id`).
 
 ### D.9 CI extension
 Extend `scripts/check-terminal-tokens-sync.mjs` to grep the 3 new route dirs:
 ```
 (terminal)/terminal-screener/**
 (terminal)/macro/**
-(terminal)/portfolio/builder/**
+(terminal)/allocation/**
 ```
-Add to existing list (Terminal.html sprint covered only `(terminal)/portfolio/live/**`).
+Add to existing list (Terminal.html sprint covered only `(terminal)/portfolio/live/**`). Do NOT add `(terminal)/portfolio/builder/**` — that legacy surface is outside the parity target and may be retired in a follow-up.
 
 ---
 
@@ -306,21 +377,29 @@ Add to existing list (Terminal.html sprint covered only `(terminal)/portfolio/li
   - No backend writes on simulation (network tab confirms 0 requests on drag).
 - **Lint**: grep §D.MACRO all 0.
 
-### E.BUILDER
-- **Visual**: 1440×900 parity with `Netz Terminal - Builder.html`; 2×2 calibration grid; IPS summary strip in ActivationBar; cascade coverage bar below timeline.
+### E.BUILDER (`/allocation/[profile]`)
+- **Visual**: 1440×900 parity with the **sanitized** `Netz Terminal - Builder.html` (output surfaces only — regime strip + cascade timeline + weights table + diff bars + approval history). No input sliders, no tab navigation, no ActivationBar.
 - **Runtime**:
-  - Calibration sliders debounce 150ms before writing to `workspace.calibration`.
-  - CascadeTimeline coverage bar tint matches thresholds (§B3).
-  - Tab-visit gate still unlocks ActivationBar after all tabs visited (regression check).
-  - Dry-run button renders disabled with tooltip; does NOT fire requests.
+  - Page loads cleanly for all 3 profiles (`conservative / moderate / growth`) against the dev DB canonical org.
+  - `RegimeContextStrip` renders current regime/stress/window from `/macro/regime`.
+  - `IpsSummaryStrip` renders CVaR pill + approval metadata pills above the 2-column grid.
+  - `CascadeTimeline` renders the 4 phase chevrons with winner highlighted + coverage bar tint (§B6 thresholds).
+  - During SSE propose stream, `CascadeTimeline` is rendered inline inside `ProposeButton`'s progress area (mode="live", phases advance as `optimizer_phase_complete` events arrive). After `completed`, panel flips to `ProposalReviewPanel` with mode="settled".
+  - Approve `cvar_feasible=false` proposal still requires confirm modal; body includes `confirm_cvar_infeasible: true`.
+  - `OverrideBandsEditor` refuses save without rationale (min 10 chars).
+  - ZERO ambiguity that the proposal view is read-only — all edit affordances live in `OverrideBandsEditor` per-block modal; Strategic table cells are never directly editable (regression guard against §G.BUILDER.3).
 - **Lint**: grep §D.BUILDER all 0.
+- **Affordance check (§G.BUILDER.3 regression guard)**:
+  - Diff bars hover cursor is `default`, not `pointer`.
+  - Weights/target cells have no click handlers.
+  - "Override" action icon is the ONLY focusable interactive element in rows.
 
 ### E.ALL (cross-page)
 - `pnpm -F wealth check` exits 0.
 - Playwright smoke (extend `terminal.spec.ts` from PR #234):
   - Screener: `/` → filter chip renders on set → `ESC` clears FocusMode.
   - Macro: drag regime cell → Hero class updates → no network POSTs.
-  - Builder: slider change → coverage bar renders.
+  - Builder (`/allocation/{profile}`): page loads → cascade timeline mounts with 4 phases + coverage bar in `ProposalReviewPanel` when a proposal exists; propose SSE drives live-mode cascade timeline progression.
 - `scripts/check-terminal-tokens-sync.mjs` passes across all 3 routes.
 
 ---
@@ -360,21 +439,35 @@ Size: 3 components touched + 1 new + test. ~350 LoC.
 - Dep: PR-1 (MiniSparkline + Drawer).
 Size: 2 new components + 1 store + 1 adapter + 3 edits. ~480 LoC.
 
-### PR-4 — `feat/terminal-parity-builder`
-**Scope**:
-- `CalibrationSlider.svelte` (§B.6) + `IpsSummaryStrip.svelte` (§B.7).
-- `CalibrationPanel` terminal-variant (2×2 grid).
-- `CascadeTimeline`: coverage bar row.
-- `ActivationBar`: mount `IpsSummaryStrip`.
-- `RunControls`: disabled dry-run button + tooltip (NO backend call).
-- `data-builder-root` + LayoutCage padding override.
-- Lint sweep `.toFixed` in builder components.
-- Playwright smoke extension.
-- Dep: none on PR-2/PR-3 (independent).
-Size: 2 new components + 4 edits + lint sweep. ~380 LoC.
+### PR-4 — `feat/terminal-parity-builder-on-propose-approve`
+**Scope = re-skin + 3 new read-only primitives on top of the existing propose→approve surface (PR #219).** No backend changes, no new endpoints, no input sliders.
+
+**Edits:**
+- NEW `CascadeTimeline.svelte` (§B.6) wealth-local in `components/allocation/`.
+- NEW `IpsSummaryStrip.svelte` (§B.7) wealth-local in `components/allocation/`.
+- NEW `RegimeContextStrip.svelte` (§B.8) wealth-local in `components/allocation/`.
+- Mount `<CascadeTimeline>` inside `ProposalReviewPanel` (between metrics row and diff bars) AND inside `ProposeButton` live-progress area during SSE stream.
+- Mount `<IpsSummaryStrip>` + `<RegimeContextStrip>` in `/allocation/[profile]/+page.svelte` above the 2-column grid.
+- `data-allocation-root` attribute + LayoutCage padding override matching screener density.
+- Token/density re-skin on `StrategicAllocationTable`, `ProposalReviewPanel`, `ApprovalHistoryTable`, `OverrideBandsEditor` — remap any legacy class names to `--terminal-*`; remove any residual hex.
+- Lint sweep `.toFixed` / `Intl.*` across `lib/components/allocation/**`.
+- Extend `scripts/check-terminal-tokens-sync.mjs` with `(terminal)/allocation/**` (if not already covered by PR-1 CI edit).
+- Playwright smoke extension: propose→approve flow with cascade timeline visible (live + settled modes).
+
+**Out of scope (forbidden in PR-4):**
+- Any edit under `/(terminal)/portfolio/builder/**` (legacy surface).
+- Any CVaR slider / turnover slider / min-weight slider / max-single-position slider.
+- Any IC views / factor tilts / region caps UI.
+- Any tab navigation (REGIME / WEIGHTS / RISK / STRESS / BACKTEST / MONTE CARLO / ADVISOR).
+- Any `ActivationBar` / `RunControls` / dry-run button.
+- PR-A13 achievable-return band panel.
+- Backend endpoint changes (cascade_telemetry shape is consumed as-is).
+
+**Dependencies:** PR-1 primitives (`MiniSparkline` unused here, `Drawer` unused here — no hard dep). Independent of PR-2/PR-3.
+**Size estimate:** 3 new components + 4 edits + lint sweep + CI + Playwright. ~420 LoC.
 
 ### PR-5 (optional if PR-4 overflows) — `feat/terminal-parity-builder-lint-sweep`
-Splits the `.toFixed` sweep + data-builder-root override out if PR-4 exceeds one Opus session.
+Splits the token/density re-skin + `.toFixed` sweep out of PR-4 if the 3 new primitives + their integration exceeds one Opus session. Trigger condition: `CascadeTimeline` + live-mode SSE integration lands in PR-4a; re-skin lands in PR-4b.
 
 ---
 
@@ -391,11 +484,14 @@ Splits the `.toFixed` sweep + data-builder-root override out if PR-4 exceeds one
 3. **SparklineWall live-tick subscription churn.** MarketDataStore subscribe/unsubscribe on mount/unmount. Verify `$effect` cleanup unsubscribes all 3 proxies. WS reconnect during page switch shouldn’t leak listeners.
 4. **Tiingo quote for UUP/IEF may not be in default tenant subscription basket.** Backend `MarketDataStore` ticker whitelist — if UUP isn’t subscribed, sparkline stays REST. Flag and defer; not a blocker.
 
-### G.BUILDER
-1. **CalibrationSlider debounce vs optimizer re-run.** Current Phase 4 behavior: any workspace.calibration change invalidates last run. 150ms debounce reduces chatter; confirm doesn’t desync with RunControls `RUN` button state.
-2. **Dry-run button without backend.** Risk of shipping a dead button. Tooltip must be unambiguous (`"Dry-run mode coming in next sprint"`); alternatively, hide behind feature flag `FEATURE_BUILDER_DRY_RUN` (default false).
-3. **`CalibrationPanel` currently imported from `$lib/components/portfolio/` not `terminal/builder/`.** Moving it risks breaking the non-terminal `/portfolio` surface. Safer: copy to `terminal/builder/CalibrationPanel.svelte` as a new variant; keep original intact.
-4. **PR-A13 CVaR slider + achievable-return band.** Memory flags PR-A13 UX brief exists (2026-04-17). This sprint ships the slider ONLY; the band panel is a separate sprint. Do NOT implement band computation here — coordinate with Andrei if Opus attempts to bundle.
+### G.BUILDER (`/allocation/[profile]`)
+1. **Figma confusion — legacy Builder surfaces tempt re-implementation.** Opus executor reading the Figma may try to port calibration sliders / IC views / factor tilts / `RunControls` RUN button / ActivationBar tab gates because the HTML+JSX still contain them. **Mitigation:** the §BUILDER SCOPE PIVOT block at the top of §A.BUILDER is the anchor; re-read before any edit. Any PR-4 commit touching `/(terminal)/portfolio/builder/**` or introducing a CVaR slider / turnover slider / factor-tilts / IC-views UI is out of scope — reject in review.
+2. **Cascade telemetry shape drift.** `cascade_telemetry.phases[]` schema shipped by A26.1 Section B may differ slightly from what `CascadeTimeline` expects. Verify at PR-4 open by fetching `latest-proposal` from dev DB canonical org and pasting the JSONB sample into the PR body. If shape differs (e.g., flat dict keyed by phase name vs. list), adapt `CascadeTimeline` props — do NOT change backend telemetry shape in PR-4.
+3. **Read-only vs. editable affordance ambiguity.** Figma's Weights / Risk / Stress / Backtest tabs historically felt "tweakable" because they sat next to input sliders. In the propose→approve model, those outputs are read-only. **Mitigation:** no hover-cursor=pointer on result cells; no inline editing controls; overrides are explicitly gated behind the `OverrideBandsEditor` modal (per-block), never as a cell edit. Acceptance criteria §E.BUILDER enforces this.
+4. **Live-mode vs. settled-mode cascade timeline.** During SSE propose stream, phases arrive sequentially (`optimizer_phase_complete`). `CascadeTimeline` must degrade gracefully: show pending / in-progress / complete states per phase without flicker. Avoid replacing the component on every event — mutate `phases[]` in place via `$state`.
+5. **`RegimeContextStrip` depends on `/macro/regime`.** That endpoint may not be mounted on the wealth frontend's standard loader context (Macro page fetches it directly). Confirm at PR-4 open that the server loader can call `/macro/regime` without additional auth scope. If not, strip this element and flag as a backlog item (fallback: render without regime strip; don't block PR).
+6. **PR-A13 achievable-return band UX is a future sprint.** Memory flags PR-A13 UX brief exists (2026-04-17). PR-4 visually ships the propose→approve surface; the feasibility-frontier / achievable-return band panel is out of scope. If Opus attempts to bundle, split into a separate PR.
+7. **Legacy `/portfolio/builder` retirement decision not yet made.** That route still mounts tabs + calibration sliders. PR-4 must NOT edit it (scope guard). Separate post-sprint decision: delete the route, leave it dark, or re-target it to embed the new allocation surface. Flag for Andrei.
 
 ---
 
@@ -406,19 +502,19 @@ Splits the `.toFixed` sweep + data-builder-root override out if PR-4 exceeds one
 1. **PR-1 (primitives)** — unblocks both Screener + Macro. Small, low-risk, merge first.
 2. **PR-2 (Screener)** — most isolated; filters + grid rendering. No shell changes. Single data source. Validates MiniSparkline in production.
 3. **PR-3 (Macro)** — introduces RegimeMatrix + Drawer. Depends on PR-1 drawer. Visual complexity mid-tier.
-4. **PR-4 (Builder)** — highest reuse (slider + strip only new), but Builder is already the most complex page — do last so any breaking changes from PR-2/PR-3 primitives surface first.
+4. **PR-4 (Builder = `/allocation/[profile]` propose→approve re-skin)** — 3 new read-only primitives (`CascadeTimeline`, `IpsSummaryStrip`, `RegimeContextStrip`) on top of PR #219 surface. No dependency on PR-2/PR-3; could run in parallel after PR-1 but sequenced last to surface any breakage from Screener/Macro primitive changes before touching the governance-critical allocation page.
 
-Rationale: primitives before consumers; Screener validates shared primitives in simplest context; Macro stress-tests Drawer + live-tick wiring; Builder consumes stable primitives + touches the already-hardened Phase 4+5 surface last.
+Rationale: primitives before consumers; Screener validates shared primitives in simplest context; Macro stress-tests Drawer + live-tick wiring; Builder (`/allocation/[profile]`) consumes stable primitives + ships the scope-pivot read-only primitives last. Split into PR-4a (components + integration) and PR-4b (re-skin + lint sweep) if PR-4 exceeds one Opus session — splitting is recommended given the scope-pivot risk (see §G.BUILDER.1): PR-4a can focus all attention on "do not implement legacy Figma inputs" while PR-4b is purely mechanical token/density work.
 
 ---
 
 ## Appendix — Post-merge backlog (not this sprint)
 
-- CASCADE detail tab in Builder (PR-A11 telemetry panel).
-- PR-A13 achievable-return band panel for Builder.
+- PR-A13 achievable-return band panel for `/allocation/[profile]` (CVaR sensitivity / feasibility frontier visualization).
+- Retirement decision on legacy `/(terminal)/portfolio/builder` route (delete / dark / redirect to `/allocation/[profile]`).
+- CASCADE detail drawer (expand `CascadeTimeline` phase chevron → show full `cascade_telemetry` JSONB per phase including solver / κ / degraded signals).
 - SparklineWall AREA / BARS modes (Macro §M7).
-- Feasibility frontier pre-optimizer UX.
 - `nav_trend_sparkline` column in `global_risk_metrics` worker (if missing).
-- Builder dry-run backend flag.
 - Tiingo subscription basket expansion for macro proxies (UUP/IEF).
 - Touch support for RegimeMatrix drag-drop.
+- Post-approval analytics tabs (Monte Carlo / Backtest) surfaced elsewhere than the governance page — candidate home is `/portfolio/[id]/analytics`.
