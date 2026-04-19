@@ -31,6 +31,7 @@ import argparse
 import asyncio
 import json
 import logging
+import re
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -89,6 +90,7 @@ class Resolution:
     reason: str
 
 
+SOURCE_OVERRIDE = "override"
 SOURCE_MMF = "sec_mmf"
 SOURCE_ETF = "sec_etf"
 SOURCE_BDC = "sec_bdc"
@@ -96,12 +98,35 @@ SOURCE_ESMA = "esma_funds"
 SOURCE_TIINGO = "tiingo_cascade"
 SOURCE_NEEDS_REVIEW = "needs_review"
 
+# PR-A26.3.5 Session 1 — FT Vest Buffer family (FJAN..FDEC) share the
+# SPY-buffered defined-outcome structure. Collapsed to the canonical
+# Balanced label (multi-asset, near-zero residual vol vs SPY). Exact
+# tickers resolved via the class-level regex in ``_resolve_override``.
+_FT_VEST_BUFFER_RE = re.compile(r"^F(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)$")
+_FT_VEST_BUFFER_LABEL = "Balanced"
+
 
 # ---------------------------------------------------------------------------
 # Lookup loaders — load each authoritative table into memory once and index
 # it by the bridge column. This keeps the per-instrument loop O(N) instead
 # of issuing N×4 round-trips.
 # ---------------------------------------------------------------------------
+
+
+async def _load_override_index(db: Any) -> dict[str, tuple[str, str]]:
+    """Return ``{ticker: (strategy_label, rationale)}`` from curated table.
+
+    Priority-0 source (PR-A26.3.5 Session 1). Exact ticker match only —
+    class-level families (FT Vest buffer series) are handled via regex
+    fallback inside ``_resolve_override``.
+    """
+    result = await db.execute(
+        text(
+            "SELECT ticker, strategy_label, rationale "
+            "FROM instrument_strategy_overrides"
+        )
+    )
+    return {row.ticker: (row.strategy_label, row.rationale or "") for row in result}
 
 
 async def _load_mmf_index(db: Any) -> dict[str, tuple[str, str]]:
@@ -241,6 +266,7 @@ async def _load_active_instruments(db: Any) -> list[InstrumentRow]:
 def _resolve(
     inst: InstrumentRow,
     *,
+    overrides: dict[str, tuple[str, str]],
     mmf: dict[str, tuple[str, str]],
     etf_by_series: dict[str, tuple[str, str]],
     etf_by_ticker: dict[str, tuple[str, str]],
@@ -248,6 +274,26 @@ def _resolve(
     esma: dict[str, tuple[str, str]],
     tiingo: dict[str, str],
 ) -> Resolution:
+    # 0. Curator override — highest priority, bypasses every other source.
+    if inst.ticker:
+        hit = overrides.get(inst.ticker)
+        if hit is not None:
+            label, rationale = hit
+            return Resolution(
+                label=label,
+                source=SOURCE_OVERRIDE,
+                source_table="instrument_strategy_overrides",
+                source_value=inst.ticker,
+                reason=rationale or "curator override",
+            )
+        if _FT_VEST_BUFFER_RE.match(inst.ticker):
+            return Resolution(
+                label=_FT_VEST_BUFFER_LABEL,
+                source=SOURCE_OVERRIDE,
+                source_table="instrument_strategy_overrides",
+                source_value=inst.ticker,
+                reason="FT Vest U.S. Equity Buffer ETF family (SPY-buffered defined-outcome)",
+            )
     # 1. MMF — bridge by series_id (CIK is issuer-level; not unique per fund)
     if inst.series_id and inst.series_id in mmf:
         cat, _ = mmf[inst.series_id]
@@ -421,6 +467,7 @@ async def run(*, apply: bool) -> dict[str, Any]:
         # only), and the run-audit row all commit together. Dry-run still
         # persists the audit row so operators have a history.
         async with db.begin():
+            overrides = await _load_override_index(db)
             mmf = await _load_mmf_index(db)
             etf_by_series = await _load_etf_index_by_series(db)
             etf_by_ticker = await _load_etf_index_by_ticker(db)
@@ -430,8 +477,9 @@ async def run(*, apply: bool) -> dict[str, Any]:
             instruments = await _load_active_instruments(db)
 
             logger.info(
-                "loaded indexes: mmf=%d etf_series=%d etf_ticker=%d bdc=%d "
-                "esma=%d tiingo=%d active_instruments=%d",
+                "loaded indexes: overrides=%d mmf=%d etf_series=%d etf_ticker=%d "
+                "bdc=%d esma=%d tiingo=%d active_instruments=%d",
+                len(overrides),
                 len(mmf),
                 len(etf_by_series),
                 len(etf_by_ticker),
@@ -444,6 +492,7 @@ async def run(*, apply: bool) -> dict[str, Any]:
             for inst in instruments:
                 resolution = _resolve(
                     inst,
+                    overrides=overrides,
                     mmf=mmf,
                     etf_by_series=etf_by_series,
                     etf_by_ticker=etf_by_ticker,
@@ -515,6 +564,7 @@ async def run(*, apply: bool) -> dict[str, Any]:
                 "dry_run": not apply,
                 "candidates": len(instruments),
                 "applied_by_source": {
+                    SOURCE_OVERRIDE: counters[SOURCE_OVERRIDE],
                     SOURCE_MMF: counters[SOURCE_MMF],
                     SOURCE_ETF: counters[SOURCE_ETF],
                     SOURCE_BDC: counters[SOURCE_BDC],
