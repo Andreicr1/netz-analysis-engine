@@ -32,25 +32,38 @@
 
 	type Timeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y";
 	export type DataStatus = "live" | "delayed" | "offline";
+	export type ChartMode = "candle" | "line";
+
+	export interface CandleBar {
+		time: number;
+		open: number;
+		high: number;
+		low: number;
+		close: number;
+	}
 
 	interface Props {
 		ticker: string;
 		historicalBars: BarData[];
+		candleBars?: CandleBar[];
 		lastTick: LiveTick | null;
 		portfolioNavBars: BarData[];
 		timeframe: Timeframe;
 		onTimeframeChange: (tf: Timeframe) => void;
 		dataStatus?: DataStatus;
+		mode?: ChartMode;
 	}
 
 	let {
 		ticker,
 		historicalBars,
+		candleBars = [],
 		lastTick,
 		portfolioNavBars,
 		timeframe,
 		onTimeframeChange,
 		dataStatus = "live",
+		mode = "line",
 	}: Props = $props();
 
 	const TIMEFRAMES: { id: Timeframe; label: string }[] = [
@@ -68,6 +81,10 @@
 	let series = $state<any>(null);
 	let navSeries = $state<any>(null);
 	let showNav = $state(true);
+	let lcModule = $state<typeof import("lightweight-charts") | null>(null);
+	let currentSeriesMode = $state<ChartMode | null>(null);
+	/** Last rolled candle — used to aggregate live ticks in candle mode. */
+	let currentCandle: CandleBar | null = null;
 
 	// ── Async chart initialization (SSR-safe) ─────────────────
 	onMount(() => {
@@ -83,18 +100,8 @@
 			});
 			const c = lc.createChart(containerEl, { autoSize: true, ...opts });
 
-			// Series 1: Instrument (baseline — cyan/red)
+			// Series 2: Portfolio NAV (amber line) — stable across mode swaps.
 			const sc = terminalLWSeriesColors();
-			const s = c.addSeries(lc.BaselineSeries, {
-				baseValue: { type: "price", price: 0 },
-				...sc.baseline,
-				lineWidth: 2,
-				priceLineVisible: true,
-				lastValueVisible: true,
-				title: "",
-			});
-
-			// Series 2: Portfolio NAV (amber line)
 			const nav = c.addSeries(lc.LineSeries, {
 				...sc.navOverlay,
 				lineWidth: 2,
@@ -105,8 +112,8 @@
 				lastValueVisible: true,
 			});
 
+			lcModule = lc;
 			chart = c;
-			series = s;
 			navSeries = nav;
 		})();
 
@@ -121,18 +128,135 @@
 		};
 	});
 
+	/**
+	 * Build the instrument series for the current `mode`. Creates the
+	 * baseline/candlestick series on the owning chart, seeds it with
+	 * the appropriate data source, and returns the handle. Keeps the
+	 * <div> container + IChartApi instance stable (plan §A.9 contract).
+	 */
+	function mountInstrumentSeries(lc: typeof import("lightweight-charts"), c: any, m: ChartMode) {
+		const sc = terminalLWSeriesColors();
+		if (m === "candle") {
+			const s = c.addSeries(lc.CandlestickSeries, {
+				upColor: "#22c55e",
+				downColor: "#ef4444",
+				borderUpColor: "#22c55e",
+				borderDownColor: "#ef4444",
+				wickUpColor: "#22c55e",
+				wickDownColor: "#ef4444",
+				priceLineVisible: true,
+				lastValueVisible: true,
+			});
+			return s;
+		}
+		const s = c.addSeries(lc.BaselineSeries, {
+			baseValue: { type: "price", price: 0 },
+			...sc.baseline,
+			lineWidth: 2,
+			priceLineVisible: true,
+			lastValueVisible: true,
+			title: "",
+		});
+		return s;
+	}
+
+	// ── Effect: mode swap (preserve visible range) ───────────
+	// Replaces the instrument series in place when mode changes.
+	// Captures the visible range BEFORE removing the old series and
+	// restores it after the new series is seeded, so the viewport
+	// does not reset on toggle (plan §A.9).
+	$effect(() => {
+		const lc = lcModule;
+		const c = chart;
+		const m = mode;
+		if (!lc || !c) return;
+		if (currentSeriesMode === m && series !== null) return;
+
+		const priorRange = (() => {
+			try {
+				return c.timeScale().getVisibleRange();
+			} catch {
+				return null;
+			}
+		})();
+
+		if (series !== null) {
+			try {
+				c.removeSeries(series);
+			} catch {
+				// If removal fails (e.g. disposed chart), bail — the
+				// next onMount cycle will rebuild from scratch.
+				return;
+			}
+		}
+
+		const next = mountInstrumentSeries(lc, c, m);
+
+		// Swap price-scale mode per series type: percentage for the
+		// baseline line (% change vs first bar), normal for candles
+		// (absolute OHLC values).
+		c.applyOptions({
+			rightPriceScale: {
+				mode: m === "candle" ? lc.PriceScaleMode.Normal : lc.PriceScaleMode.Percentage,
+			},
+		});
+
+		// Seed with data appropriate for the mode.
+		if (m === "candle" && candleBars.length) {
+			next.setData(candleBars);
+			currentCandle = candleBars[candleBars.length - 1] ?? null;
+		} else if (m === "line" && historicalBars.length) {
+			next.applyOptions({
+				baseValue: { type: "price", price: historicalBars[0]!.value },
+			});
+			next.setData(historicalBars);
+			currentCandle = null;
+		}
+
+		// Restore the user's viewport if one existed.
+		if (priorRange) {
+			try {
+				c.timeScale().setVisibleRange(priorRange);
+			} catch {
+				// Ranges can mismatch if the two datasets have
+				// different domains; fall back to fit.
+				c.timeScale().fitContent();
+			}
+		} else {
+			c.timeScale().fitContent();
+		}
+
+		series = next;
+		currentSeriesMode = m;
+	});
+
 	// ── Effect 1: Historical instrument bars ─────────────────
+	// Reseed when the underlying bars array changes AND the current
+	// series matches mode=line. The mode-swap effect above handles
+	// the cross-mode reseed path.
 	$effect(() => {
 		const s = series;
 		const c = chart;
 		const bars = historicalBars;
-		if (!s || !c || !bars.length) return;
+		if (!s || !c || mode !== "line" || !bars.length) return;
+		if (currentSeriesMode !== "line") return;
 
 		s.applyOptions({
 			baseValue: { type: "price", price: bars[0]!.value },
 		});
 		s.setData(bars);
-		c.timeScale().fitContent();
+	});
+
+	// ── Effect 1b: Historical candle bars ────────────────────
+	$effect(() => {
+		const s = series;
+		const c = chart;
+		const bars = candleBars;
+		if (!s || !c || mode !== "candle" || !bars.length) return;
+		if (currentSeriesMode !== "candle") return;
+
+		s.setData(bars);
+		currentCandle = bars[bars.length - 1] ?? null;
 	});
 
 	// ── Effect 2: Portfolio NAV bars ─────────────────────────
@@ -147,9 +271,12 @@
 	});
 
 	// ── Effect 3: NAV visibility toggle ──────────────────────
+	// NAV is hidden in candle mode because the price axis switches to
+	// absolute values — a percent-baselined NAV line on an absolute
+	// OHLC axis is visually misleading.
 	$effect(() => {
 		const ns = navSeries;
-		const visible = showNav;
+		const visible = showNav && mode === "line";
 		if (!ns) return;
 		ns.applyOptions({ visible });
 	});
@@ -159,7 +286,31 @@
 		const s = series;
 		const tick = lastTick;
 		if (!s || !tick) return;
-		s.update({ time: tick.time, value: tick.value });
+
+		if (mode === "line") {
+			s.update({ time: tick.time, value: tick.value });
+			return;
+		}
+
+		// Candle mode: aggregate tick into the current bar. If the
+		// tick timestamp advances past the current bar, roll a new
+		// candle seeded from the prior close. This mirrors plan §A.9
+		// "local tick aggregation" until a dedicated 1m-bars stream
+		// exists on the backend.
+		const price = tick.value;
+		const t = tick.time;
+		if (!currentCandle || t > currentCandle.time) {
+			const open = currentCandle?.close ?? price;
+			currentCandle = { time: t, open, high: price, low: price, close: price };
+		} else {
+			currentCandle = {
+				...currentCandle,
+				high: Math.max(currentCandle.high, price),
+				low: Math.min(currentCandle.low, price),
+				close: price,
+			};
+		}
+		s.update(currentCandle);
 	});
 
 	function toggleNav() {
