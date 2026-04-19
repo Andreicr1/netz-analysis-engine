@@ -82,6 +82,10 @@
 	});
 </script>
 
-<TerminalShell>
+<!-- hideWorkflowStepper: the TopNav already renders the F1..F6 workflow
+	 tabs in the II Terminal app, so the secondary breadcrumb stepper
+	 (SCREENER → TERMINAL → MACRO → BUILDER) would double up the chrome.
+	 Wealth's (terminal)/ routes keep the default (stepper visible). -->
+<TerminalShell hideWorkflowStepper={true}>
 	{@render children()}
 </TerminalShell>

@@ -14,6 +14,7 @@
   pinnedRegime store and never to the backend.
 -->
 <script lang="ts">
+  import "@investintell/ui/styles/surfaces/macro";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { getContext } from "svelte";
@@ -348,7 +349,7 @@
   });
 </script>
 
-<div class="macro-desk" data-macro-root>
+<div class="macro-desk" data-macro-root data-surface="macro">
   {#if loading}
     <div class="macro-state">Loading macro data...</div>
   {:else if fetchError}

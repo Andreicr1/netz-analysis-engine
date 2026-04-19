@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { onMount } from "svelte";
+	import { getContext, onMount } from "svelte";
 	import { formatNumber } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
+	import { createClientApiClient } from "$wealth/api/client";
 	import ScoreCompositionPanel from "./ScoreCompositionPanel.svelte";
 
 	interface Props {
@@ -15,23 +16,27 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
+	// Auth-aware API client — fixes X2 smoke regression where the
+	// terminal app (different dev port) hit its own origin on a
+	// relative /api/v1 path and 404'd. api-client resolves against
+	// VITE_API_BASE_URL and attaches the Clerk bearer token.
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const api = createClientApiClient(getToken);
+
 	// Fetch Data
 	$effect(() => {
 		if (!id) return;
 		loading = true;
 		error = null;
 
-		fetch(`/api/v1/wealth/entity-analytics/${id}`)
-			.then(r => {
-				if (!r.ok) throw new Error("Failed to load entity analytics");
-				return r.json();
-			})
+		api
+			.get<any>(`/wealth/entity-analytics/${id}`)
 			.then(d => {
 				data = d;
 				loading = false;
 			})
 			.catch(e => {
-				error = e.message;
+				error = e instanceof Error ? e.message : String(e);
 				loading = false;
 			});
 	});

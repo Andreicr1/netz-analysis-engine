@@ -19,6 +19,7 @@
   (strategic / history / proposal / regime) re-fetch in parallel.
 -->
 <script lang="ts">
+	import "@investintell/ui/styles/surfaces/builder";
 	import { invalidateAll } from "$app/navigation";
 	import { resolve } from "$app/paths";
 	import { getContext } from "svelte";
@@ -88,7 +89,7 @@
 	);
 </script>
 
-<div data-allocation-root class="allocation-root">
+<div data-allocation-root data-surface="builder" class="allocation-root">
 	{#if strategicErr || !strategic || !profile}
 		<div class="allocation-error">
 			<h2 class="allocation-error__title">Unable to load allocation</h2>
