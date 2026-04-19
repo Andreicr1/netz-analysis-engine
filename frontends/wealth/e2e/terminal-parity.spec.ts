@@ -244,3 +244,70 @@ test.describe("Terminal parity — /terminal-screener smoke", () => {
 		await expect(dialog).toHaveCount(0);
 	});
 });
+
+test.describe("Terminal parity — /macro smoke", () => {
+	test.beforeEach(async ({ page }) => {
+		await page.route("**/api/v1/**", async (route) => {
+			const headers = {
+				...route.request().headers(),
+				"x-dev-actor": `super_admin:${TEST_ORG_ID}`,
+			};
+			await route.continue({ headers });
+		});
+	});
+
+	test("Shift+R toggles the committee reviews drawer", async ({ page }) => {
+		await page.goto("/macro");
+		await expect(page.getByRole("dialog", { name: /Committee Reviews/i })).toHaveCount(0);
+
+		await page.keyboard.press("Shift+R");
+		const drawer = page.getByRole("dialog", { name: /Committee Reviews/i });
+		await expect(drawer).toBeVisible();
+
+		await page.keyboard.press("Escape");
+		await expect(drawer).toHaveCount(0);
+	});
+
+	test("RegimeMatrix arrow-key simulation does not hit the network", async ({
+		page,
+	}) => {
+		const mutatingRequests: string[] = [];
+		await page.route("**/api/v1/**", async (route) => {
+			const req = route.request();
+			if (req.method() !== "GET") {
+				mutatingRequests.push(`${req.method()} ${req.url()}`);
+			}
+			await route.continue();
+		});
+
+		await page.goto("/macro");
+		const matrix = page.getByRole("grid", { name: /Regime simulation matrix/i });
+		await expect(matrix).toBeVisible();
+		await matrix.focus();
+
+		// Drive the matrix entirely via keyboard — arrow moves + Enter
+		// commits — and confirm no POST/PATCH/PUT fired.
+		await page.keyboard.press("ArrowDown");
+		await page.keyboard.press("ArrowRight");
+		await page.keyboard.press("Enter");
+
+		const banner = page.locator("text=SIMULATION").first();
+		await expect(banner).toBeVisible();
+
+		// Reset via button clears the banner without any network call.
+		await page.getByRole("button", { name: /Reset regime simulation/i }).click();
+		await expect(banner).toHaveCount(0);
+
+		expect(mutatingRequests).toEqual([]);
+	});
+
+	test("StressHero CTA reads PROCEED TO BUILDER and targets /allocation", async ({
+		page,
+	}) => {
+		await page.goto("/macro");
+		const cta = page.getByRole("button", { name: /PROCEED TO BUILDER/i });
+		await expect(cta).toBeVisible();
+		await cta.click();
+		await expect(page).toHaveURL(/\/allocation(\/|$)/);
+	});
+});

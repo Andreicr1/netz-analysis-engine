@@ -1,22 +1,39 @@
 <!--
   /macro — Macro Desk (Terminal Command Center).
 
-  Layout: StressHero (full-width) → SignalBreakdown (2-col) →
-  Bottom grid: Regional Health (5fr) | Indicators (4fr) | Committee (3fr).
-  Terminal-native primitives only.
+  Four-zone layout per plan §M1:
+    Zone 1: StressHero (7fr) + RegimeMatrix (5fr) side-by-side
+    Zone 2: SignalBreakdown (full-width)
+    Zone 3: RegionalHealth (6fr) + SparklineWall (6fr)
+    CommitteeReviewFeed lives in a right-anchored drawer, toggled
+    via Shift+R or the badge in the zone-1 header. It never sits
+    inline in the main grid.
+
+  The RegimeMatrix is a page-scoped simulation — it writes to a
+  local store (macro-simulation-store.svelte.ts), never to the global
+  pinnedRegime store and never to the backend.
 -->
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { getContext } from "svelte";
   import { createClientApiClient } from "$lib/api/client";
   import { pinnedRegime } from "$lib/state/pinned-regime.svelte";
+  import { TerminalDrawer, TerminalKbd } from "@investintell/ui";
   import Panel from "$lib/components/terminal/layout/Panel.svelte";
   import PanelHeader from "$lib/components/terminal/layout/PanelHeader.svelte";
   import StressHero from "$lib/components/terminal/macro/StressHero.svelte";
   import SignalBreakdown from "$lib/components/terminal/macro/SignalBreakdown.svelte";
   import RegionalHealthTile from "$lib/components/terminal/macro/RegionalHealthTile.svelte";
-  import SparklineWall from "$lib/components/terminal/macro/SparklineWall.svelte";
+  import SparklineWall, {
+    type MacroIndicator,
+  } from "$lib/components/terminal/macro/SparklineWall.svelte";
   import CommitteeReviewFeed from "$lib/components/terminal/macro/CommitteeReviewFeed.svelte";
+  import RegimeMatrix from "$lib/components/terminal/macro/RegimeMatrix.svelte";
+  import {
+    createMacroSimulationStore,
+    type RegimeCell,
+  } from "$lib/components/terminal/macro/macro-simulation-store.svelte";
 
   // -- Types -----------------------------------------------------------
 
@@ -96,15 +113,16 @@
   let scores = $state<MacroScoresResponse | null>(null);
   let regime = $state<GlobalRegimeRead | null>(null);
   let reviews = $state<MacroReviewRead[]>([]);
-  let sparklineData = $state<Array<{
-    name: string;
-    currentValue: number;
-    previousValue: number;
-    history: Array<{ date: string; value: number }>;
-    unit: string;
-  }>>([]);
+  let sparklineData = $state<MacroIndicator[]>([]);
   let loading = $state(true);
   let fetchError = $state(false);
+
+  // Page-scoped simulation store — never reads/writes pinnedRegime.
+  const simulation = createMacroSimulationStore();
+
+  // Committee Reviews drawer — closed by default, toggled via
+  // Shift+R or the header badge click.
+  let committeeDrawerOpen = $state(false);
 
   // -- FRED series config ----------------------------------------------
 
@@ -155,7 +173,7 @@
   }
 
   async function fetchSparklines(signal: AbortSignal) {
-    const results: typeof sparklineData = [];
+    const results: MacroIndicator[] = [];
 
     const fetches = SPARKLINE_SERIES.map(async (cfg) => {
       try {
@@ -170,6 +188,7 @@
           const current = last.value;
           const previous = history.length > 1 ? history[history.length - 2]!.value : current;
           results.push({
+            seriesId: cfg.seriesId,
             name: cfg.name,
             currentValue: current,
             previousValue: previous,
@@ -196,24 +215,16 @@
 
   // -- Derived views ---------------------------------------------------
 
-  const financialSignals = $derived(
+  const financialEffWeight = $derived(
     (regime?.signal_breakdown ?? [])
       .filter((s) => s.category === "financial")
-      .sort((a, b) => b.weight_effective - a.weight_effective),
-  );
-
-  const realEconSignals = $derived(
-    (regime?.signal_breakdown ?? [])
-      .filter((s) => s.category === "real_economy")
-      .sort((a, b) => b.weight_effective - a.weight_effective),
-  );
-
-  const financialEffWeight = $derived(
-    financialSignals.reduce((sum, s) => sum + s.weight_effective, 0),
+      .reduce((sum, s) => sum + s.weight_effective, 0),
   );
 
   const realEconEffWeight = $derived(
-    realEconSignals.reduce((sum, s) => sum + s.weight_effective, 0),
+    (regime?.signal_breakdown ?? [])
+      .filter((s) => s.category === "real_economy")
+      .reduce((sum, s) => sum + s.weight_effective, 0),
   );
 
   interface TileData {
@@ -256,6 +267,13 @@
 
   const isPinned = $derived(pinnedRegime.current !== null);
 
+  // Effective regime shown on the Hero: the real one by default, or
+  // the simulated label when the matrix has a committed cell. The
+  // simulated label never propagates to `pinnedRegime`.
+  const effectiveRegimeLabel = $derived(
+    simulation.label ?? regime?.raw_regime ?? "Unknown",
+  );
+
   function handlePinRegime() {
     if (!regime) return;
     pinnedRegime.pin({
@@ -270,8 +288,45 @@
   }
 
   function handleProceedToAlloc() {
-    goto("/terminal/allocation");
+    // Route groups (`(terminal)`) are invisible in URLs — target is
+    // `/allocation`, NOT `/terminal/allocation`.
+    goto(resolve("/allocation"));
   }
+
+  function handleSimulateCell(cell: RegimeCell | null) {
+    simulation.setCell(cell);
+  }
+
+  // -- Keyboard: Shift+R toggles the committee drawer ------------------
+
+  function isEditableTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    const tag = target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    if (target.isContentEditable) return true;
+    const role = target.getAttribute("role");
+    if (role === "textbox" || role === "searchbox" || role === "combobox") return true;
+    return false;
+  }
+
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    const handler = (event: KeyboardEvent) => {
+      if (
+        event.shiftKey &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        (event.key === "R" || event.key === "r")
+      ) {
+        if (isEditableTarget(event.target)) return;
+        event.preventDefault();
+        committeeDrawerOpen = !committeeDrawerOpen;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  });
 
   // -- Effects ---------------------------------------------------------
 
@@ -299,20 +354,35 @@
   {:else if fetchError}
     <div class="macro-state macro-state--error">Failed to load macro data. Retrying...</div>
   {:else}
-    <StressHero
-      stressScore={regime?.stress_score ?? 0}
-      regimeLabel={regime?.raw_regime ?? "Unknown"}
-      asOfDate={regime?.as_of_date ?? ""}
-      {financialEffWeight}
-      {realEconEffWeight}
-      {isPinned}
-      onPin={handlePinRegime}
-      onUnpin={handleUnpinRegime}
-      onProceedToAlloc={handleProceedToAlloc}
-    />
+    <!-- Zone 1: Hero + RegimeMatrix side-by-side. -->
+    <div class="macro-zone macro-zone--hero">
+      <div class="macro-hero">
+        <StressHero
+          stressScore={regime?.stress_score ?? 0}
+          regimeLabel={effectiveRegimeLabel}
+          asOfDate={regime?.as_of_date ?? ""}
+          {financialEffWeight}
+          {realEconEffWeight}
+          {isPinned}
+          onPin={handlePinRegime}
+          onUnpin={handleUnpinRegime}
+          onProceedToAlloc={handleProceedToAlloc}
+        />
+      </div>
+      <div class="macro-matrix">
+        <RegimeMatrix
+          activeRegime={regime?.raw_regime ?? "Unknown"}
+          simulatedCell={simulation.cell}
+          onSimulate={handleSimulateCell}
+        />
+      </div>
+    </div>
 
+    <!-- Zone 2: SignalBreakdown full-width. -->
     <SignalBreakdown signals={regime?.signal_breakdown ?? []} />
 
+    <!-- Zone 3: RegionalHealth + SparklineWall (6fr/6fr). Committee
+         reviews live in a drawer (Shift+R), never inline. -->
     <div class="macro-bottom">
       <div class="macro-regions">
         <Panel>
@@ -339,22 +409,34 @@
           <SparklineWall indicators={sparklineData} />
         </Panel>
       </div>
-
-      <div class="macro-feed">
-        <Panel scrollable>
-          {#snippet header()}
-            <PanelHeader label="COMMITTEE REVIEWS">
-              {#snippet actions()}
-                <span class="macro-review-count">{reviews.length}</span>
-              {/snippet}
-            </PanelHeader>
-          {/snippet}
-          <CommitteeReviewFeed reviews={reviewCards} />
-        </Panel>
-      </div>
     </div>
+
+    <!-- Floating committee drawer toggle + shortcut hint. -->
+    <button
+      type="button"
+      class="macro-committee-fab"
+      aria-label="Open committee reviews (Shift+R)"
+      aria-expanded={committeeDrawerOpen}
+      onclick={() => (committeeDrawerOpen = !committeeDrawerOpen)}
+    >
+      <span class="macro-committee-fab__label">COMMITTEE</span>
+      <span class="macro-committee-fab__count">{reviews.length}</span>
+      <span class="macro-committee-fab__kbd">
+        <TerminalKbd keys={["Shift", "R"]} />
+      </span>
+    </button>
   {/if}
 </div>
+
+<TerminalDrawer
+  open={committeeDrawerOpen}
+  label="Committee Reviews"
+  side="right"
+  width={400}
+  onClose={() => (committeeDrawerOpen = false)}
+>
+  <CommitteeReviewFeed reviews={reviewCards} />
+</TerminalDrawer>
 
 <style>
   .macro-desk {
@@ -366,17 +448,33 @@
     font-family: var(--terminal-font-mono);
     overflow-y: auto;
     padding: 24px;
+    position: relative;
+  }
+
+  .macro-zone--hero {
+    display: grid;
+    grid-template-columns: 7fr 5fr;
+    gap: var(--terminal-space-3);
+    flex-shrink: 0;
+  }
+
+  .macro-hero,
+  .macro-matrix {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
   }
 
   .macro-bottom {
     display: grid;
-    grid-template-columns: 5fr 4fr 3fr;
+    grid-template-columns: 6fr 6fr;
     gap: var(--terminal-space-3);
     flex: 1;
     min-height: 0;
   }
 
-  .macro-regions {
+  .macro-regions,
+  .macro-sparklines {
     min-height: 0;
     overflow: hidden;
   }
@@ -387,28 +485,49 @@
     gap: var(--terminal-space-2);
   }
 
-  .macro-sparklines {
-    min-height: 0;
-    overflow: hidden;
+  /* Floating committee toggle — sits bottom-right above the
+     statusbar so it doesn't collide with the TerminalTweaksPanel
+     FAB (that one is higher-right). */
+  .macro-committee-fab {
+    position: fixed;
+    bottom: calc(var(--terminal-shell-statusbar-height) + var(--terminal-space-3));
+    right: calc(var(--terminal-space-3) + 48px);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--terminal-space-2);
+    padding: 4px var(--terminal-space-3);
+    background: var(--terminal-bg-panel-raised);
+    border: var(--terminal-border-hairline);
+    color: var(--terminal-fg-secondary);
+    font-family: var(--terminal-font-mono);
+    font-size: var(--terminal-text-10);
+    letter-spacing: var(--terminal-tracking-caps);
+    cursor: pointer;
+    z-index: var(--terminal-z-toast);
   }
-
-  .macro-feed {
-    min-height: 0;
-    overflow: hidden;
+  .macro-committee-fab:hover {
+    color: var(--terminal-accent-amber);
+    border-color: var(--terminal-accent-amber);
   }
-
-  .macro-review-count {
+  .macro-committee-fab:focus-visible {
+    outline: var(--terminal-border-focus);
+    outline-offset: 1px;
+  }
+  .macro-committee-fab__label {
+    font-weight: 600;
+  }
+  .macro-committee-fab__count {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 18px;
-    height: 16px;
+    min-width: 16px;
     padding: 0 4px;
-    font-size: var(--terminal-text-10);
-    font-weight: 700;
+    background: var(--terminal-bg-panel-sunken);
+    color: var(--terminal-fg-primary);
     font-variant-numeric: tabular-nums;
-    background: var(--terminal-fg-muted);
-    color: var(--terminal-fg-inverted);
+  }
+  .macro-committee-fab__kbd {
+    display: inline-flex;
   }
 
   .macro-state {
