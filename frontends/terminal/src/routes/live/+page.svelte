@@ -18,31 +18,31 @@
 	import { getContext } from "svelte";
 	import { PanelErrorState } from "@investintell/ui/runtime";
 	import { formatPpDrift } from "@investintell/ui";
-	import { createClientApiClient } from "$wealth/api/client";
-	import type { MarketDataStore } from "$wealth/stores/market-data.svelte";
-	import { TERMINAL_MARKET_DATA_KEY } from "$wealth/components/portfolio/live/workbench-state";
+	import { createClientApiClient } from "@investintell/ii-terminal-core/api/client";
+	import type { MarketDataStore } from "@investintell/ii-terminal-core/stores/market-data.svelte";
+	import { TERMINAL_MARKET_DATA_KEY } from "@investintell/ii-terminal-core/components/portfolio/live/workbench-state";
 	import type { PageData } from "./$types";
 	import type {
 		ModelPortfolio,
 		InstrumentWeight,
-	} from "$wealth/types/model-portfolio";
+	} from "@investintell/ii-terminal-core/types/model-portfolio";
 
 	// Components
 	import Watchlist, {
 		type WatchlistItem,
-	} from "$wealth/components/terminal/live/Watchlist.svelte";
-	import ChartToolbar from "$wealth/components/terminal/live/ChartToolbar.svelte";
-	import PortfolioSummary from "$wealth/components/terminal/live/PortfolioSummary.svelte";
+	} from "@investintell/ii-terminal-core/components/terminal/live/Watchlist.svelte";
+	import ChartToolbar from "@investintell/ii-terminal-core/components/terminal/live/ChartToolbar.svelte";
+	import PortfolioSummary from "@investintell/ii-terminal-core/components/terminal/live/PortfolioSummary.svelte";
 	import HoldingsTable, {
 		type HoldingRow,
-	} from "$wealth/components/terminal/live/HoldingsTable.svelte";
-	import NewsFeed from "$wealth/components/terminal/live/NewsFeed.svelte";
-	import MacroRegimePanel from "$wealth/components/terminal/live/MacroRegimePanel.svelte";
-	import TradeLog from "$wealth/components/terminal/live/TradeLog.svelte";
-	import AlertStreamPanel from "$wealth/components/terminal/live/AlertStreamPanel.svelte";
-	import RebalanceFocusMode from "$wealth/components/terminal/live/RebalanceFocusMode.svelte";
-	import TerminalPriceChart from "$wealth/components/portfolio/live/charts/TerminalPriceChart.svelte";
-	import type { BarData, LiveTick } from "$wealth/components/portfolio/live/charts/TerminalPriceChart.svelte";
+	} from "@investintell/ii-terminal-core/components/terminal/live/HoldingsTable.svelte";
+	import NewsFeed from "@investintell/ii-terminal-core/components/terminal/live/NewsFeed.svelte";
+	import MacroRegimePanel from "@investintell/ii-terminal-core/components/terminal/live/MacroRegimePanel.svelte";
+	import TradeLog from "@investintell/ii-terminal-core/components/terminal/live/TradeLog.svelte";
+	import AlertStreamPanel from "@investintell/ii-terminal-core/components/terminal/live/AlertStreamPanel.svelte";
+	import RebalanceFocusMode from "@investintell/ii-terminal-core/components/terminal/live/RebalanceFocusMode.svelte";
+	import TerminalPriceChart from "@investintell/ii-terminal-core/components/portfolio/live/charts/TerminalPriceChart.svelte";
+	import type { BarData, LiveTick } from "@investintell/ii-terminal-core/components/portfolio/live/charts/TerminalPriceChart.svelte";
 
 	let { data }: { data: PageData } = $props();
 

@@ -16,7 +16,7 @@
 		ALLOCATION_PROFILES,
 		PROFILE_LABELS,
 		type AllocationProfile,
-	} from "$wealth/types/allocation-page";
+	} from "@investintell/ii-terminal-core/types/allocation-page";
 
 	interface Props {
 		current: AllocationProfile;

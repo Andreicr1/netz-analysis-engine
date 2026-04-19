@@ -47,6 +47,14 @@
  *      glyphs (see `feedback_no_emojis.md`). Scoped to the 4
  *      terminal route dirs + shared component dir.
  *
+ *   H. The standalone terminal frontend at frontends/terminal/src/
+ *      MUST NOT import from the transitional `$wealth/*` alias.
+ *      After X5b the terminal consumes all shared components,
+ *      stores, state, types, utils, api, and constants via the
+ *      promoted `@investintell/ii-terminal-core` package. Any
+ *      `from "$wealth/..."` or `import("$wealth/...")` statement
+ *      in the terminal source tree FAILS this invariant.
+ *
  *   G. User-visible strings in terminal chrome (top nav brand,
  *      status bar brand, aria-labels, alt, placeholder, title
  *      attributes, and visible text nodes) MUST NOT contain the
@@ -261,6 +269,10 @@ function main() {
 	const terminalShadcnErrors = scanTerminalRoutesForShadcn();
 	errors.push(...terminalShadcnErrors);
 
+	// ── Invariant H — terminal must not import $wealth/* ──────
+	const wealthAliasErrors = scanTerminalForWealthAlias();
+	errors.push(...wealthAliasErrors);
+
 	// ── Invariant G — no hardcoded Netz in user-visible chrome ──
 	const brandErrors = scanChromeBrandLeaks();
 	errors.push(...brandErrors);
@@ -269,7 +281,7 @@ function main() {
 		console.error("[token-sync] terminal drift detected:\n");
 		for (const e of errors) console.error(`  - ${e}`);
 		console.error(
-			`\n[token-sync] FAIL — fix terminal.css, terminal-options.ts, surfaces/*.css, or the offending terminal route/component files.`,
+			`\n[token-sync] FAIL — fix terminal.css, terminal-options.ts, surfaces/*.css, frontends/terminal/src/, or the offending terminal route/component files.`,
 		);
 		process.exit(1);
 	}
@@ -780,6 +792,65 @@ function scanChromeBrandLeaks() {
 				const line = offsetToLine(scanText, m.index);
 				errors.push(
 					`G. ${rel}:${line} hardcoded Netz brand in ${rule.label}: "${m[0].trim()}" — product chrome defaults to "II"; tenant name injected via orgName prop`,
+				);
+			}
+		}
+	}
+	return errors;
+}
+
+// ── Invariant H — terminal must not import from $wealth/* ──
+//
+// frontends/terminal/ is the standalone II Terminal app. X2 copied
+// routes in via a transitional `$wealth/*` alias; X5a promoted the
+// shared surface to `@investintell/ii-terminal-core`; X5b removed
+// the alias from tsconfig/vite/svelte.config and rewrote every
+// import. This invariant prevents regressions: any new terminal
+// file that reaches back into wealth via `$wealth/...` FAILS the
+// scanner.
+//
+// Comments that mention `$wealth` in prose are allowed (documenting
+// history is fine) — only `from "$wealth/..."`, `from '$wealth/...'`,
+// and `import("$wealth/...")` statements are treated as offenses.
+
+const TERMINAL_SRC_DIR = resolve(REPO_ROOT, "frontends/terminal/src");
+
+const WEALTH_ALIAS_PATTERNS = [
+	{ label: "from '$wealth/...'", re: /\bfrom\s+(["'`])\$wealth\/[^"'`]*\1/g },
+	{ label: "import('$wealth/...')", re: /\bimport\s*\(\s*(["'`])\$wealth\/[^"'`]*\1\s*\)/g },
+];
+
+function scanTerminalForWealthAlias() {
+	const errors = [];
+	if (!existsSync(TERMINAL_SRC_DIR)) return errors;
+
+	for (const absFile of walkFiles(TERMINAL_SRC_DIR)) {
+		const ext = extname(absFile);
+		if (!SCAN_EXTENSIONS.has(ext) && ext !== ".js") continue;
+		const rel = relative(REPO_ROOT, absFile).replaceAll("\\", "/");
+		let text;
+		try {
+			text = readFileSync(absFile, "utf8");
+		} catch {
+			continue;
+		}
+		// Strip comments + <style> blocks: legacy prose that mentions
+		// $wealth/* is allowed, only live import statements fail.
+		const decommented = stripCommentary(text, ext);
+		const scanText =
+			ext === ".svelte" ? stripStyleBlocks(decommented) : decommented;
+
+		for (const rule of WEALTH_ALIAS_PATTERNS) {
+			rule.re.lastIndex = 0;
+			let m;
+			while ((m = rule.re.exec(scanText)) !== null) {
+				if (m[0] === "") {
+					rule.re.lastIndex++;
+					continue;
+				}
+				const line = offsetToLine(scanText, m.index);
+				errors.push(
+					`H. ${rel}:${line} forbidden ${rule.label}: ${m[0].trim()} — import from @investintell/ii-terminal-core/* instead`,
 				);
 			}
 		}

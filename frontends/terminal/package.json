@@ -21,6 +21,7 @@
 		"@fontsource/ibm-plex-sans": "^5.0.0",
 		"@fontsource/ibm-plex-mono": "^5.0.0",
 		"@fontsource/montserrat": "^5.0.0",
+		"@investintell/ii-terminal-core": "workspace:*",
 		"@investintell/ui": "workspace:*",
 		"@tanstack/svelte-table": "9.0.0-alpha.10",
 		"@tanstack/svelte-virtual": "^3.0.0",

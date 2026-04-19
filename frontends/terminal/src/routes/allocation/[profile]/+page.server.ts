@@ -15,15 +15,15 @@
  */
 import type { PageServerLoad } from "./$types";
 import { okData, errData, type RouteData } from "@investintell/ui/runtime";
-import { createServerApiClient } from "$wealth/api/client";
+import { createServerApiClient } from "@investintell/ii-terminal-core/api/client";
 import {
 	ALLOCATION_PROFILES,
 	type AllocationProfile,
 	type ApprovalHistoryResponse,
 	type LatestProposalResponse,
 	type StrategicAllocationResponse,
-} from "$wealth/types/allocation-page";
-import type { ModelPortfolio } from "$wealth/types/model-portfolio";
+} from "@investintell/ii-terminal-core/types/allocation-page";
+import type { ModelPortfolio } from "@investintell/ii-terminal-core/types/model-portfolio";
 
 const FETCH_TIMEOUT_MS = 8000;
 

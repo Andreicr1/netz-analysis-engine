@@ -11,9 +11,9 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { page } from "$app/state";
-	import { workspace } from "$wealth/state/portfolio-workspace.svelte";
-	import type { ModelPortfolio } from "$wealth/types/model-portfolio";
-	import StressTab from "$wealth/components/terminal/builder/StressTab.svelte";
+	import { workspace } from "@investintell/ii-terminal-core/state/portfolio-workspace.svelte";
+	import type { ModelPortfolio } from "@investintell/ii-terminal-core/types/model-portfolio";
+	import StressTab from "@investintell/ii-terminal-core/components/terminal/builder/StressTab.svelte";
 
 	interface Props {
 		portfolios: ModelPortfolio[];

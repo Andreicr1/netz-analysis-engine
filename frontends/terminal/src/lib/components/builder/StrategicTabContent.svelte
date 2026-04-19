@@ -19,13 +19,13 @@
 -->
 <script lang="ts">
 	import { formatDateTime, formatPercent } from "@investintell/ui";
-	import IpsSummaryStrip from "$wealth/components/allocation/IpsSummaryStrip.svelte";
-	import StrategicAllocationTable from "$wealth/components/allocation/StrategicAllocationTable.svelte";
-	import AllocationDonut from "$wealth/components/allocation/AllocationDonut.svelte";
-	import ProposalReviewPanel from "$wealth/components/allocation/ProposalReviewPanel.svelte";
-	import ProposeButton from "$wealth/components/allocation/ProposeButton.svelte";
-	import OverrideBandsEditor from "$wealth/components/allocation/OverrideBandsEditor.svelte";
-	import ApprovalHistoryTable from "$wealth/components/allocation/ApprovalHistoryTable.svelte";
+	import IpsSummaryStrip from "@investintell/ii-terminal-core/components/allocation/IpsSummaryStrip.svelte";
+	import StrategicAllocationTable from "@investintell/ii-terminal-core/components/allocation/StrategicAllocationTable.svelte";
+	import AllocationDonut from "@investintell/ii-terminal-core/components/allocation/AllocationDonut.svelte";
+	import ProposalReviewPanel from "@investintell/ii-terminal-core/components/allocation/ProposalReviewPanel.svelte";
+	import ProposeButton from "@investintell/ii-terminal-core/components/allocation/ProposeButton.svelte";
+	import OverrideBandsEditor from "@investintell/ii-terminal-core/components/allocation/OverrideBandsEditor.svelte";
+	import ApprovalHistoryTable from "@investintell/ii-terminal-core/components/allocation/ApprovalHistoryTable.svelte";
 	import {
 		PROFILE_LABELS,
 		type AllocationProfile,
@@ -33,7 +33,7 @@
 		type LatestProposalResponse,
 		type StrategicAllocationBlock,
 		type StrategicAllocationResponse,
-	} from "$wealth/types/allocation-page";
+	} from "@investintell/ii-terminal-core/types/allocation-page";
 
 	interface Props {
 		profile: AllocationProfile;

@@ -3,7 +3,7 @@
 -->
 <script lang="ts">
 	import "@investintell/ui/styles/surfaces/screener";
-	import TerminalResearchShell from "$wealth/components/research/terminal/TerminalResearchShell.svelte";
+	import TerminalResearchShell from "@investintell/ii-terminal-core/components/research/terminal/TerminalResearchShell.svelte";
 </script>
 
 <div data-surface="screener" class="research-page-root">

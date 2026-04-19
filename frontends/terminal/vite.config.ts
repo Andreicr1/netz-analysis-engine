@@ -19,25 +19,14 @@ export default defineConfig({
 		"import.meta.env.VITE_ENV": JSON.stringify(BUILD_ENV),
 	},
 	resolve: {
-		// X2 transitional — terminal has no src/lib of its own. Both
-		// $lib (so shared wealth components can resolve their own
-		// internal $lib/* imports) and $wealth (explicit transitional
-		// marker in copied terminal route files) point at the wealth
-		// component tree. Using the array form with explicit regex
-		// patterns is required because the object form is merged with
-		// SvelteKit's own alias injection and the plugin's default
-		// `$lib → src/lib` wins in that merge. Array aliases are
-		// evaluated in order — ours run first. X5 promotes these
-		// components to @investintell/ii-terminal-core and removes both.
+		// X2 transitional holdover: $lib still redirects to wealth's
+		// src/lib because copied wealth components may resolve internal
+		// $lib/* imports through this terminal config. $wealth alias
+		// was removed in X5b after migration to
+		// @investintell/ii-terminal-core. Array form required because
+		// the object form merges with SvelteKit's alias injection and
+		// plugin defaults win; array aliases run first in declared order.
 		alias: [
-			{
-				find: /^\$wealth\/(.*)$/,
-				replacement: path.resolve(__dirname, "../wealth/src/lib/$1"),
-			},
-			{
-				find: /^\$wealth$/,
-				replacement: path.resolve(__dirname, "../wealth/src/lib"),
-			},
 			{
 				find: /^\$lib\/(.*)$/,
 				replacement: path.resolve(__dirname, "../wealth/src/lib/$1"),

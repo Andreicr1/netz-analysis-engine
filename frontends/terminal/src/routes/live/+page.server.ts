@@ -9,8 +9,8 @@
  */
 
 import type { PageServerLoad } from "./$types";
-import { createServerApiClient } from "$wealth/api/client";
-import type { ModelPortfolio } from "$wealth/types/model-portfolio";
+import { createServerApiClient } from "@investintell/ii-terminal-core/api/client";
+import type { ModelPortfolio } from "@investintell/ii-terminal-core/types/model-portfolio";
 
 export const load: PageServerLoad = async ({ parent, url }) => {
 	const { token } = await parent();
