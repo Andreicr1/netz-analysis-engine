@@ -6,12 +6,19 @@
   to human-readable progress lines → refetch latest-proposal on
   completion. User can navigate away; the propose run completes in
   the DB regardless.
+
+  PR-4a — the SSE stream drives a live CascadeTimeline inside the
+  progress area. The three phase entries are seeded on propose start
+  and mutated in place as ``optimizer_phase_complete`` events arrive
+  (see §G.BUILDER.4 — mutate in place, don't remount the component).
 -->
 <script lang="ts">
 	import { formatPercent } from "@investintell/ui";
 	import { Loader2, Wand2 } from "lucide-svelte";
+	import CascadeTimeline from "./CascadeTimeline.svelte";
 	import type {
 		AllocationProfile,
+		CascadePhaseAttempt,
 		JobCreatedResponse,
 	} from "$lib/types/allocation-page";
 
@@ -33,9 +40,27 @@
 		apiBase,
 	}: Props = $props();
 
+	const LIVE_PHASES: readonly string[] = [
+		"phase_1_ru_max_return",
+		"phase_2_ru_robust",
+		"phase_3_min_cvar",
+	];
+
+	function seedPhases(): CascadePhaseAttempt[] {
+		return LIVE_PHASES.map((phase) => ({
+			phase,
+			status: "pending",
+			solver: null,
+			wall_ms: 0,
+			objective_value: null,
+			cvar_within_limit: null,
+		}));
+	}
+
 	let running = $state(false);
 	let statusText = $state("");
 	let errorMsg = $state<string | null>(null);
+	let livePhases = $state<CascadePhaseAttempt[]>([]);
 
 	const EVENT_LABELS: Record<string, string> = {
 		propose_started: "Preparing universe…",
@@ -45,6 +70,31 @@
 		propose_cvar_infeasible: "Proposal ready (CVaR infeasible)",
 		completed: "Finalizing…",
 	};
+
+	function applyPhaseEvent(rawPayload: string): void {
+		if (!rawPayload) return;
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(rawPayload);
+		} catch {
+			return;
+		}
+		if (!parsed || typeof parsed !== "object") return;
+		const record = parsed as Record<string, unknown>;
+		const phase = typeof record.phase === "string" ? record.phase : null;
+		const status = typeof record.status === "string" ? record.status : null;
+		if (!phase || !status) return;
+		const idx = livePhases.findIndex((p) => p.phase === phase);
+		if (idx === -1) return;
+		livePhases[idx] = {
+			...livePhases[idx]!,
+			status,
+			objective_value:
+				typeof record.objective_value === "number"
+					? record.objective_value
+					: livePhases[idx]!.objective_value,
+		};
+	}
 
 	async function streamProgress(sseUrl: string): Promise<void> {
 		const token = await getToken();
@@ -73,13 +123,16 @@
 			buffer = lines.pop() ?? "";
 			for (const chunk of lines) {
 				let eventName = "message";
-				let dataLines: string[] = [];
+				const dataLines: string[] = [];
 				for (const line of chunk.split("\n")) {
 					if (line.startsWith("event:")) eventName = line.slice(6).trim();
 					else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
 				}
 				const label = EVENT_LABELS[eventName];
 				if (label) statusText = label;
+				if (eventName === "optimizer_phase_complete") {
+					applyPhaseEvent(dataLines.join("\n"));
+				}
 				if (
 					eventName === "completed" ||
 					eventName === "propose_ready" ||
@@ -104,6 +157,7 @@
 		running = true;
 		errorMsg = null;
 		statusText = "Starting…";
+		livePhases = seedPhases();
 		try {
 			const resp = await apiPost<JobCreatedResponse>(
 				`/portfolio/profiles/${profile}/propose-allocation`,
@@ -150,6 +204,11 @@
 
 	{#if running || statusText}
 		<p class="mt-3 text-xs text-muted-foreground">{statusText}</p>
+	{/if}
+	{#if livePhases.length > 0}
+		<div class="mt-3">
+			<CascadeTimeline phases={livePhases} mode="live" />
+		</div>
 	{/if}
 	{#if errorMsg}
 		<p class="mt-2 text-xs text-destructive">{errorMsg}</p>

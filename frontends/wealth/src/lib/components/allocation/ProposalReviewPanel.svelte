@@ -12,6 +12,7 @@
 	import { formatDateTime, formatNumber, formatPercent } from "@investintell/ui";
 	import { CheckCircle2, AlertTriangle } from "lucide-svelte";
 	import GenericEChart from "$lib/components/charts/GenericEChart.svelte";
+	import CascadeTimeline from "./CascadeTimeline.svelte";
 	import type {
 		AllocationProfile,
 		ApproveProposalRequest,
@@ -149,7 +150,7 @@
 			{/if}
 		</header>
 
-		<dl class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-sm">
+		<dl class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 text-sm">
 			<div>
 				<dt class="text-xs uppercase tracking-wide text-muted-foreground">Proposed E[r]</dt>
 				<dd class="tabular-nums text-foreground">
@@ -183,6 +184,17 @@
 				</dd>
 			</div>
 		</dl>
+
+		{#if proposal.phase_attempts.length > 0}
+			<div class="mb-4">
+				<CascadeTimeline
+					phases={proposal.phase_attempts}
+					winnerSignal={proposal.winner_signal}
+					coverage={proposal.coverage}
+					mode="settled"
+				/>
+			</div>
+		{/if}
 
 		<div class="mb-4">
 			<GenericEChart options={diffChartOptions} height={420} />

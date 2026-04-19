@@ -294,14 +294,53 @@ class ProposalMetrics(BaseModel):
     cvar_feasible: bool
 
 
+class CascadePhaseAttempt(BaseModel):
+    """One phase of the PR-A12 RU LP cascade.
+
+    Surfaces the subset of ``cascade_telemetry.phase_attempts[i]`` that
+    the frontend CascadeTimeline renders. Persisted in full on
+    ``portfolio_construction_runs.cascade_telemetry`` by the executor;
+    this schema is a read-only view.
+    """
+
+    phase: str
+    status: str
+    solver: str | None = None
+    wall_ms: int = 0
+    objective_value: float | None = None
+    cvar_within_limit: bool | None = None
+
+
+class CoverageSummary(BaseModel):
+    """Universe coverage summary from PR-A14.
+
+    Mirrors the JSONB block persisted by the construction executor.
+    ``pct_covered`` is 0..1; ``hard_fail`` is True when the coverage gate
+    aborted the cascade.
+    """
+
+    pct_covered: float | None = None
+    hard_fail: bool = False
+    n_total_blocks: int | None = None
+    n_covered_blocks: int | None = None
+    missing_blocks: list[str] = Field(default_factory=list)
+
+
 class LatestProposalResponse(BaseModel):
-    """Response for ``GET /portfolio/profiles/{profile}/latest-proposal``."""
+    """Response for ``GET /portfolio/profiles/{profile}/latest-proposal``.
+
+    PR-4a — additive ``phase_attempts`` and ``coverage`` surface the
+    existing ``cascade_telemetry`` JSONB fields already persisted by the
+    construction executor; no backend behavior changes.
+    """
 
     run_id: uuid.UUID
     requested_at: datetime
     winner_signal: str
     proposed_bands: list[ProposedBand]
     proposal_metrics: ProposalMetrics
+    phase_attempts: list[CascadePhaseAttempt] = Field(default_factory=list)
+    coverage: CoverageSummary | None = None
 
 
 class JobCreatedResponse(BaseModel):
