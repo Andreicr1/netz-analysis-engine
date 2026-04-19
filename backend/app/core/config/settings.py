@@ -59,6 +59,7 @@ class Settings(BaseSettings):
         "https://wealth.investintell.com",
         "https://credit.investintell.com",
         "https://admin.investintell.com",
+        "https://terminal.investintell.com",
         # Cloudflare Pages (legacy)
         "https://netz-wealth.pages.dev",
         "https://netz-credit.pages.dev",

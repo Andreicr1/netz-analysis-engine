@@ -1,5 +1,6 @@
 .PHONY: check test lint typecheck architecture serve migrate migration help pipeline \
        dev-ui build-ui dev-credit build-credit dev-wealth build-wealth \
+       dev-terminal build-terminal check-terminal lint-terminal \
        dev-all build-all lint-frontend check-all types coverage-runtime \
        tokens-sync loadtest
 
@@ -99,6 +100,18 @@ dev-wealth:
 build-wealth:
 	pnpm --filter netz-wealth-os build
 
+dev-terminal:
+	pnpm --filter ii-terminal dev
+
+build-terminal:
+	pnpm --filter ii-terminal build
+
+check-terminal:
+	pnpm --filter ii-terminal check
+
+lint-terminal:
+	pnpm --filter ii-terminal lint
+
 dev-all:
 	pnpm exec turbo run dev
 
@@ -132,6 +145,10 @@ help:
 	@echo "make build-ui    - Build @investintell/ui package"
 	@echo "make dev-credit  - Credit frontend dev server"
 	@echo "make dev-wealth  - Wealth frontend dev server"
+	@echo "make dev-terminal - II Terminal frontend dev server (:5175)"
+	@echo "make build-terminal - Build II Terminal frontend"
+	@echo "make check-terminal - svelte-check on II Terminal"
+	@echo "make lint-terminal  - ESLint on II Terminal"
 	@echo "make dev-all     - All packages in parallel (Turborepo)"
 	@echo "make build-all   - Build all packages (topological order)"
 	@echo "make lint-frontend - ESLint all frontend packages"

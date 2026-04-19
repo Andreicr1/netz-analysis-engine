@@ -1,0 +1,39 @@
+{
+	"name": "ii-terminal",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"check": "svelte-check --tsconfig ./tsconfig.json",
+		"lint": "eslint src/"
+	},
+	"dependencies": {
+		"@clerk/clerk-js": "^6.3.2",
+		"@fontsource/ibm-plex-sans": "^5.0.0",
+		"@fontsource/ibm-plex-mono": "^5.0.0",
+		"@fontsource/montserrat": "^5.0.0",
+		"@investintell/ui": "workspace:*",
+		"clerk-sveltekit": "^0.4.3",
+		"svelte-clerk": "^1.1.3"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-node": "^5.5.4",
+		"@sveltejs/kit": "^2.0.0",
+		"@sveltejs/vite-plugin-svelte": "^5.0.0",
+		"@tailwindcss/vite": "^4.2.1",
+		"@typescript-eslint/parser": "^8.58.1",
+		"eslint": "^10.0.3",
+		"eslint-plugin-svelte": "^3.17.0",
+		"svelte": "^5.0.0",
+		"svelte-check": "^4.0.0",
+		"svelte-eslint-parser": "^1.6.0",
+		"tailwindcss": "^4.0.0",
+		"typescript": "^5.5.0",
+		"typescript-eslint": "^8.57.1",
+		"vite": "^6.0.0"
+	},
+	"packageManager": "pnpm@10.28.1"
+}
