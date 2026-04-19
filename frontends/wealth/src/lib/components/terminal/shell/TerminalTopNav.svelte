@@ -85,7 +85,8 @@
 		userInitials: string;
 		/**
 		 * Organization name shown on the tenant switcher placeholder.
-		 * Empty string fallback renders "NETZ".
+		 * Empty string fallback renders "II" (InvestIntell product
+		 * default for unauthenticated / pre-hydration chrome).
 		 */
 		orgName: string;
 	}
@@ -202,7 +203,7 @@
 	const displayUserInitials = $derived(
 		userInitials.length > 0 ? userInitials : "—",
 	);
-	const displayOrgName = $derived(orgName.length > 0 ? orgName : "NETZ");
+	const displayOrgName = $derived(orgName.length > 0 ? orgName : "II");
 
 	const alertBadgeLabel = $derived(
 		alertCount > 99 ? "99+" : String(alertCount),
@@ -228,7 +229,7 @@
 <nav class="tn-nav" aria-label="Terminal primary navigation">
 	<div class="tn-brand">
 		<span class="tn-brand-mark">▣</span>
-		<span class="tn-brand-name">NETZ / TERMINAL</span>
+		<span class="tn-brand-name">{displayOrgName} / TERMINAL</span>
 	</div>
 
 	<ul class="tn-tabs" role="list">
