@@ -1,14 +1,17 @@
 /**
- * PR-A26.3 Section B — Allocation page server loader.
+ * X3.1 Builder Workspace — unified loader.
  *
- * Uses the RouteData<T> contract (§3.2 Stability Guardrails). Strategic
- * is the only hard dependency; history + proposal + regime degrade
- * gracefully to empty / null when the backend returns 404 or times out.
+ * Merges the former /allocation/[profile] strategic loader with
+ * /portfolio/builder's portfolio list so a single server load
+ * hydrates all three tabs (STRATEGIC / PORTFOLIO / STRESS).
  *
- * PR-4a — adds an optional ``regime`` fetch (``GET /macro/regime``)
- * used by ``RegimeContextStrip``. Null when the regime_detection
- * worker has never run or the endpoint is unavailable; never blocks
- * page load.
+ * Uses the RouteData<T> contract for the strategic branch (§3.2
+ * Stability Guardrails) — that is the only hard dependency. History,
+ * proposal, regime, and portfolios each degrade gracefully to empty
+ * / null on failure so a single upstream blip never blanks the page.
+ *
+ * Parallelism: every endpoint fires via Promise.all with per-request
+ * timeouts so the slowest call caps the page TTFB, not their sum.
  */
 import type { PageServerLoad } from "./$types";
 import { okData, errData, type RouteData } from "@investintell/ui/runtime";
@@ -20,6 +23,7 @@ import {
 	type LatestProposalResponse,
 	type StrategicAllocationResponse,
 } from "$wealth/types/allocation-page";
+import type { ModelPortfolio } from "$wealth/types/model-portfolio";
 
 const FETCH_TIMEOUT_MS = 8000;
 
@@ -44,10 +48,14 @@ interface LoadResult {
 	history: ApprovalHistoryResponse;
 	proposal: LatestProposalResponse | null;
 	regime: RegimeSnapshot | null;
+	portfolios: ModelPortfolio[];
 	actorRole: string | null;
 }
 
-export const load: PageServerLoad = async ({ params, parent }): Promise<LoadResult> => {
+export const load: PageServerLoad = async ({
+	params,
+	parent,
+}): Promise<LoadResult> => {
 	const { token, actor } = await parent();
 	const actorRole = actor?.role ?? null;
 
@@ -59,6 +67,7 @@ export const load: PageServerLoad = async ({ params, parent }): Promise<LoadResu
 			history: emptyHistory(profileRaw),
 			proposal: null,
 			regime: null,
+			portfolios: [],
 			actorRole,
 		};
 	}
@@ -73,6 +82,7 @@ export const load: PageServerLoad = async ({ params, parent }): Promise<LoadResu
 			history: emptyHistory(profileRaw),
 			proposal: null,
 			regime: null,
+			portfolios: [],
 			actorRole,
 		};
 	}
@@ -80,7 +90,9 @@ export const load: PageServerLoad = async ({ params, parent }): Promise<LoadResu
 
 	const api = createServerApiClient(token);
 
-	const strategicPromise = (async (): Promise<RouteData<StrategicAllocationResponse>> => {
+	const strategicPromise = (async (): Promise<
+		RouteData<StrategicAllocationResponse>
+	> => {
 		try {
 			const resp = await api.get<StrategicAllocationResponse>(
 				`/portfolio/profiles/${profile}/strategic-allocation`,
@@ -139,14 +151,30 @@ export const load: PageServerLoad = async ({ params, parent }): Promise<LoadResu
 		}))
 		.catch(() => null);
 
-	const [strategic, history, proposal, regime] = await Promise.all([
-		strategicPromise,
-		historyPromise,
-		proposalPromise,
-		regimePromise,
-	]);
+	const portfoliosPromise = api
+		.get<ModelPortfolio[]>("/model-portfolios", undefined, {
+			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+		})
+		.catch((): ModelPortfolio[] => []);
 
-	return { profile, strategic, history, proposal, regime, actorRole };
+	const [strategic, history, proposal, regime, portfolios] =
+		await Promise.all([
+			strategicPromise,
+			historyPromise,
+			proposalPromise,
+			regimePromise,
+			portfoliosPromise,
+		]);
+
+	return {
+		profile,
+		strategic,
+		history,
+		proposal,
+		regime,
+		portfolios,
+		actorRole,
+	};
 };
 
 function emptyHistory(profile: string): ApprovalHistoryResponse {
