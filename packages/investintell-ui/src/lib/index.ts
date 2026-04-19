@@ -99,6 +99,21 @@ export type { BaseChartProps } from "./charts/index.js";
 export { default as SparklineSVG } from "./components/ui/charts/SparklineSVG.svelte";
 
 // ── Terminal primitives ──────────────────────────────────────
+// Components under @investintell/ui/components/terminal/*. Importing
+// these from any file outside (terminal)/ is discouraged — see
+// eslint restriction in frontends/eslint.config.js.
+export { default as TerminalPill } from "./components/terminal/Pill.svelte";
+export type { PillTone, PillSize, PillAs } from "./components/terminal/Pill.svelte";
+export { default as TerminalKbd } from "./components/terminal/Kbd.svelte";
+export { default as TerminalKpiCard } from "./components/terminal/KpiCard.svelte";
+export type { KpiCardSize, KpiDeltaTone } from "./components/terminal/KpiCard.svelte";
+export { default as TerminalDensityToggle } from "./components/terminal/DensityToggle.svelte";
+export type { Density } from "./components/terminal/DensityToggle.svelte";
+export { default as TerminalAccentPicker } from "./components/terminal/AccentPicker.svelte";
+export type { Accent } from "./components/terminal/AccentPicker.svelte";
+export { default as TerminalThemeToggle } from "./components/terminal/ThemeToggle.svelte";
+export type { TerminalTheme } from "./components/terminal/ThemeToggle.svelte";
+
 // Motion grammar + chart factory. Importing these from any file
 // outside (terminal)/ is discouraged — see eslint restriction.
 export {
