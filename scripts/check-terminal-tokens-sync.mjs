@@ -247,6 +247,10 @@ function main() {
 	const surfaceErrors = scanSurfaceCssFiles();
 	errors.push(...surfaceErrors);
 
+	// ── Invariant F — terminal routes must not use shadcn classes ─
+	const terminalShadcnErrors = scanTerminalRoutesForShadcn();
+	errors.push(...terminalShadcnErrors);
+
 	if (errors.length > 0) {
 		console.error("[token-sync] terminal drift detected:\n");
 		for (const e of errors) console.error(`  - ${e}`);
@@ -500,6 +504,116 @@ function offsetToLine(text, offset) {
 		if (text[i] === "\n") line++;
 	}
 	return line;
+}
+
+// ── Invariant F — shadcn semantic classes in terminal routes ──
+//
+// The terminal app at frontends/terminal/ is a pure terminal-native
+// surface: IBM Plex Mono, navy/orange bundle palette, zero shadcn
+// dependency. Shadcn semantic Tailwind classes (bg-card, text-
+// foreground, border-border, text-primary, hover:bg-accent/30 etc.)
+// render transparent-on-transparent there because the shadcn CSS
+// layer is not loaded — the X3 visual migration ports the palette
+// via surfaces/*.css, not via shadcn's own stylesheet.
+//
+// Any `.svelte` file under frontends/terminal/src/routes/** that
+// uses a shadcn class FAILS this invariant. The fix is a terminal-
+// native component (see frontends/terminal/src/lib/components/**)
+// or the bundle's .bd-* / .mc-* / .ts-* surface classes.
+
+const TERMINAL_ROUTES_DIR = resolve(
+	REPO_ROOT,
+	"frontends/terminal/src/routes",
+);
+
+/**
+ * Shadcn semantic class patterns. We match them as whole-word CSS
+ * class tokens so we don't trip on user-authored class names that
+ * happen to contain these substrings ("my-custom-foreground" etc.).
+ * The `\b` word-boundary on each side + the HTML-attribute context
+ * (either class="..." or class:foo={...}) is enforced by only scanning
+ * matches inside class attribute strings (see scanClassAttributes).
+ */
+const SHADCN_CLASS_PATTERNS = [
+	// Backgrounds
+	"bg-card",
+	"bg-card-foreground",
+	"bg-popover",
+	"bg-popover-foreground",
+	"bg-primary",
+	"bg-primary-foreground",
+	"bg-secondary",
+	"bg-secondary-foreground",
+	"bg-muted",
+	"bg-muted-foreground",
+	"bg-accent",
+	"bg-accent-foreground",
+	"bg-destructive",
+	"bg-destructive-foreground",
+	"bg-success",
+	"bg-success-foreground",
+	"bg-warning",
+	// Text
+	"text-foreground",
+	"text-muted-foreground",
+	"text-card-foreground",
+	"text-popover-foreground",
+	"text-primary",
+	"text-primary-foreground",
+	"text-secondary",
+	"text-secondary-foreground",
+	"text-accent",
+	"text-accent-foreground",
+	"text-destructive",
+	"text-destructive-foreground",
+	"text-success",
+	"text-warning",
+	// Borders
+	"border-border",
+	"border-input",
+	"border-primary",
+	"border-destructive",
+	"ring-ring",
+	"ring-offset-background",
+];
+
+function scanTerminalRoutesForShadcn() {
+	const errors = [];
+	if (!existsSync(TERMINAL_ROUTES_DIR)) return errors;
+
+	for (const absFile of walkFiles(TERMINAL_ROUTES_DIR)) {
+		if (extname(absFile) !== ".svelte") continue;
+		const rel = relative(REPO_ROOT, absFile).replaceAll("\\", "/");
+		let text;
+		try {
+			text = readFileSync(absFile, "utf8");
+		} catch {
+			continue;
+		}
+		// Strip <style> blocks: scoped component CSS uses its own
+		// class names and is not subject to this rule.
+		const scanText = stripStyleBlocks(text);
+
+		for (const cls of SHADCN_CLASS_PATTERNS) {
+			// Match the class token inside a class="..." attribute or a
+			// bare string — require a non-alphanumeric boundary on each
+			// side (permitting slashes for Tailwind opacity modifiers,
+			// e.g. "bg-accent/30", and colons for hover/focus etc.).
+			const escaped = cls.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+			const re = new RegExp(
+				`(?<![A-Za-z0-9_-])${escaped}(?:\\/[0-9]{1,3})?(?![A-Za-z0-9_-])`,
+				"g",
+			);
+			let m;
+			while ((m = re.exec(scanText)) !== null) {
+				const line = offsetToLine(scanText, m.index);
+				errors.push(
+					`F. ${rel}:${line} forbidden shadcn class "${m[0]}" — use terminal-native CSS via surfaces/*.css or var(--terminal-*)`,
+				);
+			}
+		}
+	}
+	return errors;
 }
 
 main();
