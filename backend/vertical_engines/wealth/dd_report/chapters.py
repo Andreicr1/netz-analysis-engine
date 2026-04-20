@@ -172,6 +172,9 @@ def _build_user_content(
                 if prospectus_stats.get("avg_annual_return_10y") is not None:
                     parts.append(f"- 10 Years: {prospectus_stats['avg_annual_return_10y']:.2f}%")
 
+    if chapter_tag == "performance_analysis":
+        parts.extend(_render_attribution_block(evidence_context))
+
         if chapter_tag == "fee_analysis":
             parts.append("\n## Prospectus Fee Table (SEC RR1)")
             if prospectus_stats.get("expense_ratio_pct") is not None:
@@ -337,3 +340,71 @@ def _build_user_content(
             parts.append(f"\n### {tag}\n{summary[:500]}")
 
     return "\n".join(parts)
+
+
+# Sanitised copy for Netz-owned rail badges. Frontend and LLM prompts read
+# this mapping — never the raw quant vocabulary ("Sharpe regression", etc).
+_RAIL_BADGE_COPY: dict[str, tuple[str, str]] = {
+    "RAIL_HOLDINGS": (
+        "HIGH CONFIDENCE — position-level",
+        "Attribution derived from disclosed holdings.",
+    ),
+    "RAIL_IPCA": (
+        "MEDIUM-HIGH CONFIDENCE — factor model",
+        "Attribution derived from a proprietary factor model.",
+    ),
+    "RAIL_PROXY": (
+        "MEDIUM CONFIDENCE — benchmark proxy",
+        "Attribution derived from the fund's primary benchmark exposure.",
+    ),
+    "RAIL_RETURNS": (
+        "LOW-MEDIUM CONFIDENCE — style regression",
+        "Attribution inferred from {n_months} months of returns.",
+    ),
+    "RAIL_NONE": (
+        "INSUFFICIENT DATA",
+        "Not enough history to produce a reliable attribution.",
+    ),
+}
+
+
+def _render_attribution_block(evidence_context: dict[str, Any]) -> list[str]:
+    """Render the sanitised attribution section for performance_analysis.
+
+    Consumes the dispatcher output attached upstream as
+    ``evidence_context["attribution"]`` — never surfaces raw quant terms
+    (R², tracking error labels, regression jargon) in UI copy.
+    """
+    attribution = evidence_context.get("attribution")
+    if not attribution:
+        return []
+
+    badge = attribution.get("badge")
+    copy = _RAIL_BADGE_COPY.get(str(badge)) if badge else None
+    if copy is None:
+        return []
+
+    heading, subtitle_template = copy
+    out: list[str] = ["\n## Attribution"]
+    out.append(f"- Confidence: **{heading}**")
+
+    returns_based = attribution.get("returns_based")
+    n_months = (returns_based or {}).get("n_months")
+    subtitle = (
+        subtitle_template.format(n_months=n_months)
+        if n_months and "{n_months}" in subtitle_template
+        else subtitle_template.replace(" {n_months} months", "")
+    )
+    out.append(f"- {subtitle}")
+
+    if badge == "RAIL_RETURNS" and returns_based:
+        exposures = returns_based.get("exposures") or []
+        if exposures:
+            out.append("\n### Style Exposures")
+            for exp in exposures:
+                weight = float(exp.get("weight", 0.0))
+                if weight < 1e-4:
+                    continue
+                out.append(f"- {exp.get('ticker', '—')}: {weight * 100:.1f}%")
+
+    return out
