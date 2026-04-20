@@ -65,6 +65,7 @@ quant = [
     "scikit-learn>=1.6",
     "datacommons-client[Pandas]>=1.0",
     "arch>=7.0",
+    "lmoments3==1.0.8",
 ]
 edgar = [
     "edgartools>=5.23,<6.0",
@@ -347,6 +348,7 @@ type = "forbidden"
 source_modules = [
     "quant_engine.regime_service",
     "quant_engine.cvar_service",
+    "quant_engine.evt",
     "quant_engine.attribution_service",
     "quant_engine.fred_service",
     "quant_engine.portfolio_metrics_service",
