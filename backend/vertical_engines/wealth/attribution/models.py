@@ -100,6 +100,38 @@ class ReturnsBasedResult:
 
 
 @dataclass(frozen=True, slots=True)
+class SectorWeight:
+    """Single-sector aggregate from the holdings matview."""
+
+    sector: str
+    issuer_category: str
+    weight: float
+    aum_usd: float
+    holdings_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class HoldingsBasedResult:
+    """Output of the holdings rail (matview-backed sector aggregation).
+
+    Per PR-Q4 scope: fund-side sector weights + AUM coverage. Full
+    Brinson-Fachler (allocation/selection/interaction) lands in PR-Q5.
+
+    When ``degraded`` is True, ``sectors`` is empty and ``degraded_reason``
+    carries the machine-readable cause (``low_aum_coverage``, ``stale_filing``,
+    ``no_filing``, ``matview_stale``).
+    """
+
+    sectors: tuple[SectorWeight, ...]
+    period_of_report: date | None
+    coverage_pct: float
+    confidence: float
+    holdings_count: int
+    degraded: bool = False
+    degraded_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class AttributionRequest:
     """Input for the fund-level attribution dispatcher."""
 
@@ -126,7 +158,7 @@ class FundAttributionResult:
     asof: date
     badge: RailBadge
     returns_based: ReturnsBasedResult | None = None
-    holdings_based: object | None = None  # PR-Q4
+    holdings_based: HoldingsBasedResult | None = None
     proxy: object | None = None  # PR-Q5
     ipca: object | None = None  # PR-Q9
     reason: str | None = None

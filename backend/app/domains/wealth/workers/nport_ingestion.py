@@ -101,12 +101,55 @@ async def run_nport_ingestion(months: int = 12) -> dict[str, Any]:
                 "sectors_enriched": enriched,
             }
             logger.info("nport_ingestion_complete", **summary)
-            return summary
 
         finally:
             await db.execute(
                 text(f"SELECT pg_advisory_unlock({NPORT_LOCK_ID})"),
             )
+
+    # ── matview refresh — OUTSIDE the advisory lock 900_018 ──
+    # REFRESH CONCURRENTLY takes an EXCLUSIVE lock on the matview itself
+    # (not on sec_nport_holdings), so holding 900_018 while refreshing would
+    # needlessly block the next ingestion run. Fresh session, isolated failure.
+    refresh_status = await _refresh_sector_attribution_matview()
+    summary["matview_refresh"] = refresh_status
+    return summary
+
+
+async def _refresh_sector_attribution_matview() -> dict[str, Any]:
+    """REFRESH MATERIALIZED VIEW CONCURRENTLY mv_nport_sector_attribution.
+
+    Idempotent (P5). Fails open — any error is logged and returned as a
+    status dict but does not raise. The next run will retry.
+    """
+    import time
+
+    start = time.monotonic()
+    try:
+        async with async_session() as refresh_db:
+            await refresh_db.execute(
+                text(
+                    "REFRESH MATERIALIZED VIEW CONCURRENTLY "
+                    "mv_nport_sector_attribution",
+                ),
+            )
+            await refresh_db.commit()
+        duration_s = round(time.monotonic() - start, 3)
+        logger.info(
+            "nport_matview_refresh_complete",
+            matview="mv_nport_sector_attribution",
+            duration_s=duration_s,
+        )
+        return {"status": "refreshed", "duration_s": duration_s}
+    except Exception as exc:
+        duration_s = round(time.monotonic() - start, 3)
+        logger.warning(
+            "nport_matview_refresh_failed",
+            matview="mv_nport_sector_attribution",
+            error=str(exc),
+            duration_s=duration_s,
+        )
+        return {"status": "failed", "error": str(exc), "duration_s": duration_s}
 
 
 async def _get_ciks_from_registered_funds(db: AsyncSession) -> list[str]:

@@ -27,11 +27,16 @@ from quant_engine.attribution_service import (
     compute_attribution,
     compute_multi_period_attribution,
 )
+from vertical_engines.wealth.attribution.holdings_based import (
+    run_holdings_rail as _run_holdings_rail,
+)
 from vertical_engines.wealth.attribution.models import (
     AttributionRequest,
     FundAttributionResult,
+    HoldingsBasedResult,
     RailBadge,
     ReturnsBasedResult,
+    SectorWeight,
     StyleExposure,
 )
 from vertical_engines.wealth.attribution.returns_based import fit_style
@@ -249,12 +254,34 @@ _ReturnsFetch = Callable[
     Awaitable[tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], tuple[str, ...]]],
 ]
 
+# Public async seam for the holdings rail. Tests override this to simulate
+# matview states without a live DB. Signature mirrors
+# ``holdings_based.run_holdings_rail`` minus the session-only kwargs.
+_HoldingsFetch = Callable[
+    [AttributionRequest, "AsyncSession | None"],
+    Awaitable[HoldingsBasedResult | None],
+]
+
+
+async def _default_holdings_fetch(
+    request: AttributionRequest,
+    db: "AsyncSession | None",
+) -> HoldingsBasedResult | None:
+    if db is None:
+        return None
+    try:
+        return await _run_holdings_rail(request, db)
+    except Exception as exc:  # pragma: no cover — defensive, fall through
+        logger.warning("holdings_rail_errored", error=str(exc))
+        return None
+
 
 async def compute_fund_attribution(
     request: AttributionRequest,
     db: "AsyncSession | None" = None,
     *,
     returns_fetch: _ReturnsFetch | None = None,
+    holdings_fetch: _HoldingsFetch | None = None,
     redis_client: Any | None = None,
 ) -> FundAttributionResult:
     """Run the fund-level attribution cascade.
@@ -280,6 +307,20 @@ async def compute_fund_attribution(
     cached = await _cache_get(redis_client, cache_key)
     if cached is not None:
         return cached
+
+    # Rail 1 — holdings (N-PORT matview). Highest confidence. Falls through
+    # to the returns rail on None (no CIK) or degraded (stale/low coverage).
+    hfetch = holdings_fetch or _default_holdings_fetch
+    holdings_result: HoldingsBasedResult | None = None
+    try:
+        holdings_result = await hfetch(request, db)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("holdings_fetch_failed", error=str(exc))
+
+    if holdings_result is not None and not holdings_result.degraded:
+        result = _build_holdings_result(request, holdings_result)
+        await _cache_set(redis_client, cache_key, result)
+        return result
 
     fetch = returns_fetch or _fetch_returns_monthly
     try:
@@ -312,6 +353,27 @@ async def compute_fund_attribution(
     result = _build_result(request, returns_result)
     await _cache_set(redis_client, cache_key, result)
     return result
+
+
+def _build_holdings_result(
+    request: AttributionRequest,
+    holdings: HoldingsBasedResult,
+) -> FundAttributionResult:
+    """Wrap a successful holdings rail into the dispatcher envelope."""
+    metadata = {
+        "n_sectors": str(len(holdings.sectors)),
+        "coverage_pct": f"{holdings.coverage_pct:.4f}",
+        "holdings_count": str(holdings.holdings_count),
+    }
+    if holdings.period_of_report is not None:
+        metadata["period_of_report"] = holdings.period_of_report.isoformat()
+    return FundAttributionResult(
+        fund_instrument_id=request.fund_instrument_id,
+        asof=request.asof,
+        badge=RailBadge.RAIL_HOLDINGS,
+        holdings_based=holdings,
+        metadata=metadata,
+    )
 
 
 def _build_result(
@@ -403,6 +465,7 @@ async def _cache_set(
 
 def _serialize_result(result: FundAttributionResult) -> dict[str, Any]:
     rb = result.returns_based
+    hb = result.holdings_based
     return {
         "fund_instrument_id": str(result.fund_instrument_id),
         "asof": result.asof.isoformat(),
@@ -421,6 +484,28 @@ def _serialize_result(result: FundAttributionResult) -> dict[str, Any]:
             "n_months": rb.n_months,
             "degraded": rb.degraded,
             "degraded_reason": rb.degraded_reason,
+        },
+        "holdings_based": None
+        if hb is None
+        else {
+            "sectors": [
+                {
+                    "sector": s.sector,
+                    "issuer_category": s.issuer_category,
+                    "weight": s.weight,
+                    "aum_usd": s.aum_usd,
+                    "holdings_count": s.holdings_count,
+                }
+                for s in hb.sectors
+            ],
+            "period_of_report": (
+                hb.period_of_report.isoformat() if hb.period_of_report else None
+            ),
+            "coverage_pct": hb.coverage_pct,
+            "confidence": hb.confidence,
+            "holdings_count": hb.holdings_count,
+            "degraded": hb.degraded,
+            "degraded_reason": hb.degraded_reason,
         },
     }
 
@@ -445,11 +530,35 @@ def _deserialize_result(data: dict[str, Any]) -> FundAttributionResult:
             degraded_reason=rb_raw.get("degraded_reason"),
         )
 
+    hb_raw = data.get("holdings_based")
+    hb = None
+    if hb_raw is not None:
+        period_str = hb_raw.get("period_of_report")
+        hb = HoldingsBasedResult(
+            sectors=tuple(
+                SectorWeight(
+                    sector=s["sector"],
+                    issuer_category=s["issuer_category"],
+                    weight=float(s["weight"]),
+                    aum_usd=float(s["aum_usd"]),
+                    holdings_count=int(s["holdings_count"]),
+                )
+                for s in hb_raw["sectors"]
+            ),
+            period_of_report=_date.fromisoformat(period_str) if period_str else None,
+            coverage_pct=float(hb_raw["coverage_pct"]),
+            confidence=float(hb_raw["confidence"]),
+            holdings_count=int(hb_raw["holdings_count"]),
+            degraded=bool(hb_raw["degraded"]),
+            degraded_reason=hb_raw.get("degraded_reason"),
+        )
+
     return FundAttributionResult(
         fund_instrument_id=_UUID(data["fund_instrument_id"]),
         asof=_date.fromisoformat(data["asof"]),
         badge=RailBadge(data["badge"]),
         returns_based=rb,
+        holdings_based=hb,
         reason=data.get("reason"),
         metadata=dict(data.get("metadata") or {}),
     )
