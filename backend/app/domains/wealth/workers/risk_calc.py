@@ -622,6 +622,16 @@ def _compute_metrics_from_returns(
     else:
         metrics["data_quality_flags"] = {}
 
+    # EVT Extreme Risk (PR-Q6)
+    # Uses full history (up to 10y) for stable GPD fit of the loss tail.
+    # Surfaces cvar_99_evt, cvar_999_evt, and evt_xi_shape.
+    from quant_engine.evt.pot_gpd import extreme_var_evt
+
+    evt_res = extreme_var_evt(returns, quantiles=(0.99, 0.999))
+    metrics["cvar_99_evt"] = _round_or_none(evt_res.cvar_99)
+    metrics["cvar_999_evt"] = _round_or_none(evt_res.cvar_999)
+    metrics["evt_xi_shape"] = _round_or_none(evt_res.fit.xi)
+
     return metrics
 
 
