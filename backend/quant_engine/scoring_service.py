@@ -23,6 +23,7 @@ class RiskMetrics(Protocol):
 
     return_1y: Decimal | float | None
     sharpe_1y: Decimal | float | None
+    sharpe_cf: Decimal | float | None
     max_drawdown_1y: Decimal | float | None
     information_ratio_1y: Decimal | float | None
 
@@ -232,6 +233,36 @@ def _normalize(
     if max_val == min_val:
         return 50.0
     return max(0.0, min(100.0, (value - min_val) / (max_val - min_val) * 100))
+
+
+def _resolve_sharpe_input(
+    metrics: RiskMetrics,
+    config: dict[str, Any] | None,
+) -> float | None:
+    """Return the Sharpe value used by ``risk_adjusted_return``.
+
+    Flag OFF (default): reads ``sharpe_1y`` — bit-for-bit identical to pre-G1
+    behavior. Flag ON: reads ``sharpe_cf``; falls back to ``sharpe_1y`` with
+    a warning when the robust value has not yet been backfilled.
+    """
+    use_robust = False
+    if config is not None:
+        try:
+            raw = config.get("use_robust_sharpe", False)
+            use_robust = bool(raw)
+        except (AttributeError, TypeError):
+            use_robust = False
+
+    if use_robust:
+        sharpe_cf = getattr(metrics, "sharpe_cf", None)
+        if sharpe_cf is not None:
+            return float(sharpe_cf)
+        logger.warning(
+            "risk_adjusted_return.sharpe_cf_missing_fallback_to_sharpe_1y",
+            flag="use_robust_sharpe",
+        )
+
+    return float(metrics.sharpe_1y) if metrics.sharpe_1y is not None else None
 
 
 def _compute_fee_efficiency(
@@ -522,7 +553,7 @@ def compute_fund_score(
     ret_1y = float(metrics.return_1y) if metrics.return_1y is not None else None
     components["return_consistency"] = _normalize(ret_1y, -0.20, 0.40, pm.get("return_consistency"))
 
-    sharpe = float(metrics.sharpe_1y) if metrics.sharpe_1y is not None else None
+    sharpe = _resolve_sharpe_input(metrics, config)
     components["risk_adjusted_return"] = _normalize(sharpe, -1.0, 3.0, pm.get("risk_adjusted_return"))
 
     dd = float(metrics.max_drawdown_1y) if metrics.max_drawdown_1y is not None else None

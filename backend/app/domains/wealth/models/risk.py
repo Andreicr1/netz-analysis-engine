@@ -60,6 +60,14 @@ class FundRiskMetrics(Base):
     max_drawdown_3y: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
     sharpe_1y: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
     sharpe_3y: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    # Robust Sharpe (Cornish-Fisher adjusted + Opdyke 95% CI). Populated by
+    # the global_risk_metrics worker per PR-Q1. Consumed by scoring_service
+    # only when `wealth.scoring.use_robust_sharpe` ConfigService flag is ON.
+    sharpe_cf: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    sharpe_cf_skew: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    sharpe_cf_kurt: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    sharpe_cf_ci_lower: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    sharpe_cf_ci_upper: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
     sortino_1y: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
 
     # Relative metrics

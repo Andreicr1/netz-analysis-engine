@@ -38,6 +38,7 @@ from quant_engine.return_statistics_service import (
     compute_sharpe_ratio,
     compute_sortino_ratio,
 )
+from quant_engine.scoring_components import robust_sharpe as _robust_sharpe_mod
 from quant_engine.scoring_service import compute_fund_score
 from quant_engine.talib_momentum_service import (
     compute_flow_momentum,
@@ -586,6 +587,22 @@ def _compute_metrics_from_returns(
     metrics["sharpe_1y"] = _round_or_none(_compute_sharpe(returns, 252, risk_free_rate))
     metrics["sharpe_3y"] = _round_or_none(_compute_sharpe(returns, 3 * 252, risk_free_rate))
     metrics["sortino_1y"] = _round_or_none(_compute_sortino(returns, 252, risk_free_rate))
+
+    # Robust Sharpe (Cornish-Fisher adjusted + Opdyke 95% CI). Populated
+    # ALWAYS per PR-Q1 — read by scoring_service only when flag is ON.
+    # Uses daily returns over the 3y window when available, else the full
+    # series, with periods_per_year=252 to match the daily sharpe_1y scale.
+    cf_window = returns[-(3 * 252):] if len(returns) >= 3 * 252 else returns
+    cf_result = _robust_sharpe_mod.robust_sharpe(
+        cf_window,
+        rf_rate=risk_free_rate / 252.0,
+        periods_per_year=252,
+    )
+    metrics["sharpe_cf"] = _round_or_none(cf_result.sharpe_cornish_fisher)
+    metrics["sharpe_cf_skew"] = _round_or_none(cf_result.skewness)
+    metrics["sharpe_cf_kurt"] = _round_or_none(cf_result.excess_kurtosis)
+    metrics["sharpe_cf_ci_lower"] = _round_or_none(cf_result.ci_lower_95)
+    metrics["sharpe_cf_ci_upper"] = _round_or_none(cf_result.ci_upper_95)
 
     # GARCH(1,1) conditional volatility (BL-11)
     # Fallback: EWMA(λ=0.94) preserves volatility clustering without
