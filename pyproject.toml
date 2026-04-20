@@ -35,6 +35,7 @@ dependencies = [
     "aeon>=0.11",
     "pandas-ta>=0.4.67b0",
     "playwright>=1.43.0",
+    "ijson>=3.3",
 ]
 
 [project.optional-dependencies]
