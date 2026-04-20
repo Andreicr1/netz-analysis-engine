@@ -776,7 +776,7 @@
 	}
 
 	.lw-left-tradelog {
-		flex: 15;
+		flex: 20;
 		min-height: 0;
 		overflow: hidden;
 	}
