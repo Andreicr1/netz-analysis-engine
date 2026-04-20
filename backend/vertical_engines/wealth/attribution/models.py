@@ -132,6 +132,73 @@ class HoldingsBasedResult:
 
 
 @dataclass(frozen=True, slots=True)
+class BrinsonSectorEffect:
+    """Per-sector decomposition of the Brinson-Fachler active return."""
+
+    sector: str
+    portfolio_weight: float
+    benchmark_weight: float
+    portfolio_return: float
+    benchmark_return: float
+    allocation_effect: float
+    selection_effect: float
+    interaction_effect: float
+
+
+@dataclass(frozen=True, slots=True)
+class BrinsonResult:
+    """Canonical Brinson-Fachler attribution output.
+
+    ``total_active_return`` is the algebraic sum of the three aggregate
+    effects — it must reconcile with the naive portfolio-minus-benchmark
+    return within floating-point tolerance when both sides cover the
+    same sector universe. See tests for the identity invariant.
+    """
+
+    allocation_effect: float
+    selection_effect: float
+    interaction_effect: float
+    total_active_return: float
+    by_sector: tuple[BrinsonSectorEffect, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class BenchmarkResolution:
+    """Output of the canonical benchmark resolver.
+
+    ``match_type`` is one of {``"exact"``, ``"fuzzy"``, ``"class_fallback"``,
+    ``"null"``, ``"unmatched"``}. When no proxy can be found (null input or
+    unmatched) the identifier fields are None.
+    """
+
+    match_type: str
+    proxy_etf_ticker: str | None = None
+    proxy_etf_cik: str | None = None
+    proxy_etf_series_id: str | None = None
+    asset_class: str | None = None
+    similarity: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BenchmarkProxyResult:
+    """Output of the proxy rail (PR-Q5).
+
+    When ``degraded`` is True, ``brinson`` is still populated with
+    whatever weight comparison was possible (active effects may be zero
+    if sector returns were unavailable). ``degraded_reason`` carries the
+    machine-readable cause (``benchmark_unresolved``, ``proxy_no_holdings``,
+    ``sector_returns_unavailable``, ``stale_filing``).
+    """
+
+    resolution: BenchmarkResolution
+    brinson: BrinsonResult
+    confidence: float
+    period_of_report: date | None = None
+    degraded: bool = False
+    degraded_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class AttributionRequest:
     """Input for the fund-level attribution dispatcher."""
 
@@ -159,7 +226,7 @@ class FundAttributionResult:
     badge: RailBadge
     returns_based: ReturnsBasedResult | None = None
     holdings_based: HoldingsBasedResult | None = None
-    proxy: object | None = None  # PR-Q5
+    proxy: "BenchmarkProxyResult | None" = None
     ipca: object | None = None  # PR-Q9
     reason: str | None = None
     metadata: dict[str, str] = field(default_factory=dict)

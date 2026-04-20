@@ -413,6 +413,9 @@ def _render_attribution_block(evidence_context: dict[str, Any]) -> list[str]:
                 out.append(f"- {label}: {weight * 100:.1f}%")
             out.append(f"\n- Portfolio coverage: {coverage * 100:.1f}%")
 
+    if badge == "RAIL_PROXY":
+        out.extend(_render_proxy_block(attribution))
+
     if badge == "RAIL_RETURNS" and returns_based:
         exposures = returns_based.get("exposures") or []
         if exposures:
@@ -422,6 +425,70 @@ def _render_attribution_block(evidence_context: dict[str, Any]) -> list[str]:
                 if weight < 1e-4:
                     continue
                 out.append(f"- {exp.get('ticker', '—')}: {weight * 100:.1f}%")
+
+    return out
+
+
+_PROXY_INTRO = (
+    "Why the manager beat/lagged — asset mix vs. stock picks vs. timing"
+)
+
+
+def _render_proxy_block(attribution: dict[str, Any]) -> list[str]:
+    """Render the Brinson-Fachler table when the proxy rail wins.
+
+    Sanitised copy: raw quant vocabulary ("Brinson-Fachler",
+    "allocation effect") never leaves this module. UI headings use the
+    product phrasing ("Asset mix contribution", "Security selection",
+    "Timing & interaction").
+    """
+    proxy = attribution.get("proxy")
+    if not proxy:
+        return []
+
+    brinson = proxy.get("brinson") or {}
+    sectors = brinson.get("by_sector") or []
+
+    out: list[str] = [f"\n### {_PROXY_INTRO}"]
+
+    out.append(
+        f"- Asset mix contribution: {float(brinson.get('allocation_effect', 0.0)) * 100:.2f}%",
+    )
+    out.append(
+        f"- Security selection: {float(brinson.get('selection_effect', 0.0)) * 100:.2f}%",
+    )
+    out.append(
+        f"- Timing & interaction: {float(brinson.get('interaction_effect', 0.0)) * 100:.2f}%",
+    )
+    out.append(
+        f"- Total active return: {float(brinson.get('total_active_return', 0.0)) * 100:.2f}%",
+    )
+
+    if sectors:
+        out.append("\n### Sector breakdown")
+        # Top 11 sectors by absolute total effect (allocation + selection + interaction)
+        ranked = sorted(
+            sectors,
+            key=lambda s: abs(
+                float(s.get("allocation_effect", 0.0))
+                + float(s.get("selection_effect", 0.0))
+                + float(s.get("interaction_effect", 0.0)),
+            ),
+            reverse=True,
+        )
+        for sec in ranked[:11]:
+            label = _sanitize_sector_label(str(sec.get("sector", "")))
+            total = (
+                float(sec.get("allocation_effect", 0.0))
+                + float(sec.get("selection_effect", 0.0))
+                + float(sec.get("interaction_effect", 0.0))
+            )
+            out.append(f"- {label}: {total * 100:+.2f}%")
+
+    resolution = proxy.get("resolution") or {}
+    ticker = resolution.get("proxy_etf_ticker")
+    if ticker:
+        out.append(f"\n- Benchmark proxy: {ticker}")
 
     return out
 

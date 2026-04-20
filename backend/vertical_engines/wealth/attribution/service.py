@@ -27,11 +27,18 @@ from quant_engine.attribution_service import (
     compute_attribution,
     compute_multi_period_attribution,
 )
+from vertical_engines.wealth.attribution.benchmark_proxy import (
+    run_proxy_rail as _run_proxy_rail,
+)
 from vertical_engines.wealth.attribution.holdings_based import (
     run_holdings_rail as _run_holdings_rail,
 )
 from vertical_engines.wealth.attribution.models import (
     AttributionRequest,
+    BenchmarkProxyResult,
+    BenchmarkResolution,
+    BrinsonResult,
+    BrinsonSectorEffect,
     FundAttributionResult,
     HoldingsBasedResult,
     RailBadge,
@@ -262,6 +269,14 @@ _HoldingsFetch = Callable[
     Awaitable[HoldingsBasedResult | None],
 ]
 
+# Public async seam for the proxy rail. Tests override this to simulate
+# benchmark resolution + Brinson math without a live DB. Signature
+# mirrors ``benchmark_proxy.run_proxy_rail`` minus the session-only kwargs.
+_ProxyFetch = Callable[
+    [AttributionRequest, "AsyncSession | None"],
+    Awaitable[BenchmarkProxyResult | None],
+]
+
 
 async def _default_holdings_fetch(
     request: AttributionRequest,
@@ -276,12 +291,26 @@ async def _default_holdings_fetch(
         return None
 
 
+async def _default_proxy_fetch(
+    request: AttributionRequest,
+    db: "AsyncSession | None",
+) -> BenchmarkProxyResult | None:
+    if db is None:
+        return None
+    try:
+        return await _run_proxy_rail(request, db)
+    except Exception as exc:  # pragma: no cover — defensive, fall through
+        logger.warning("proxy_rail_errored", error=str(exc))
+        return None
+
+
 async def compute_fund_attribution(
     request: AttributionRequest,
     db: "AsyncSession | None" = None,
     *,
     returns_fetch: _ReturnsFetch | None = None,
     holdings_fetch: _HoldingsFetch | None = None,
+    proxy_fetch: _ProxyFetch | None = None,
     redis_client: Any | None = None,
 ) -> FundAttributionResult:
     """Run the fund-level attribution cascade.
@@ -322,6 +351,22 @@ async def compute_fund_attribution(
         await _cache_set(redis_client, cache_key, result)
         return result
 
+    # Rail 2 — benchmark proxy. Resolves primary_benchmark to a canonical
+    # ETF and runs Brinson-Fachler against that ETF's N-PORT holdings.
+    # Degrades when benchmark is unresolved, proxy has no holdings, or
+    # sector returns aren't available yet.
+    pfetch = proxy_fetch or _default_proxy_fetch
+    proxy_result: BenchmarkProxyResult | None = None
+    try:
+        proxy_result = await pfetch(request, db)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("proxy_fetch_failed", error=str(exc))
+
+    if proxy_result is not None and not proxy_result.degraded:
+        result = _build_proxy_result(request, proxy_result)
+        await _cache_set(redis_client, cache_key, result)
+        return result
+
     fetch = returns_fetch or _fetch_returns_monthly
     try:
         r_fund, r_styles, tickers = await fetch(request, db)
@@ -353,6 +398,30 @@ async def compute_fund_attribution(
     result = _build_result(request, returns_result)
     await _cache_set(redis_client, cache_key, result)
     return result
+
+
+def _build_proxy_result(
+    request: AttributionRequest,
+    proxy: BenchmarkProxyResult,
+) -> FundAttributionResult:
+    """Wrap a successful proxy rail into the dispatcher envelope."""
+    metadata: dict[str, str] = {
+        "match_type": proxy.resolution.match_type,
+        "n_sectors": str(len(proxy.brinson.by_sector)),
+    }
+    if proxy.resolution.proxy_etf_ticker:
+        metadata["proxy_ticker"] = proxy.resolution.proxy_etf_ticker
+    if proxy.resolution.asset_class:
+        metadata["asset_class"] = proxy.resolution.asset_class
+    if proxy.period_of_report is not None:
+        metadata["period_of_report"] = proxy.period_of_report.isoformat()
+    return FundAttributionResult(
+        fund_instrument_id=request.fund_instrument_id,
+        asof=request.asof,
+        badge=RailBadge.RAIL_PROXY,
+        proxy=proxy,
+        metadata=metadata,
+    )
 
 
 def _build_holdings_result(
@@ -466,6 +535,7 @@ async def _cache_set(
 def _serialize_result(result: FundAttributionResult) -> dict[str, Any]:
     rb = result.returns_based
     hb = result.holdings_based
+    px = result.proxy
     return {
         "fund_instrument_id": str(result.fund_instrument_id),
         "asof": result.asof.isoformat(),
@@ -484,6 +554,43 @@ def _serialize_result(result: FundAttributionResult) -> dict[str, Any]:
             "n_months": rb.n_months,
             "degraded": rb.degraded,
             "degraded_reason": rb.degraded_reason,
+        },
+        "proxy": None
+        if px is None
+        else {
+            "resolution": {
+                "match_type": px.resolution.match_type,
+                "proxy_etf_ticker": px.resolution.proxy_etf_ticker,
+                "proxy_etf_cik": px.resolution.proxy_etf_cik,
+                "proxy_etf_series_id": px.resolution.proxy_etf_series_id,
+                "asset_class": px.resolution.asset_class,
+                "similarity": px.resolution.similarity,
+            },
+            "brinson": {
+                "allocation_effect": px.brinson.allocation_effect,
+                "selection_effect": px.brinson.selection_effect,
+                "interaction_effect": px.brinson.interaction_effect,
+                "total_active_return": px.brinson.total_active_return,
+                "by_sector": [
+                    {
+                        "sector": s.sector,
+                        "portfolio_weight": s.portfolio_weight,
+                        "benchmark_weight": s.benchmark_weight,
+                        "portfolio_return": s.portfolio_return,
+                        "benchmark_return": s.benchmark_return,
+                        "allocation_effect": s.allocation_effect,
+                        "selection_effect": s.selection_effect,
+                        "interaction_effect": s.interaction_effect,
+                    }
+                    for s in px.brinson.by_sector
+                ],
+            },
+            "confidence": px.confidence,
+            "period_of_report": (
+                px.period_of_report.isoformat() if px.period_of_report else None
+            ),
+            "degraded": px.degraded,
+            "degraded_reason": px.degraded_reason,
         },
         "holdings_based": None
         if hb is None
@@ -553,12 +660,59 @@ def _deserialize_result(data: dict[str, Any]) -> FundAttributionResult:
             degraded_reason=hb_raw.get("degraded_reason"),
         )
 
+    px_raw = data.get("proxy")
+    px: BenchmarkProxyResult | None = None
+    if px_raw is not None:
+        res_raw = px_raw["resolution"]
+        resolution = BenchmarkResolution(
+            match_type=str(res_raw["match_type"]),
+            proxy_etf_ticker=res_raw.get("proxy_etf_ticker"),
+            proxy_etf_cik=res_raw.get("proxy_etf_cik"),
+            proxy_etf_series_id=res_raw.get("proxy_etf_series_id"),
+            asset_class=res_raw.get("asset_class"),
+            similarity=(
+                float(res_raw["similarity"])
+                if res_raw.get("similarity") is not None
+                else None
+            ),
+        )
+        brinson_raw = px_raw["brinson"]
+        brinson = BrinsonResult(
+            allocation_effect=float(brinson_raw["allocation_effect"]),
+            selection_effect=float(brinson_raw["selection_effect"]),
+            interaction_effect=float(brinson_raw["interaction_effect"]),
+            total_active_return=float(brinson_raw["total_active_return"]),
+            by_sector=tuple(
+                BrinsonSectorEffect(
+                    sector=str(s["sector"]),
+                    portfolio_weight=float(s["portfolio_weight"]),
+                    benchmark_weight=float(s["benchmark_weight"]),
+                    portfolio_return=float(s["portfolio_return"]),
+                    benchmark_return=float(s["benchmark_return"]),
+                    allocation_effect=float(s["allocation_effect"]),
+                    selection_effect=float(s["selection_effect"]),
+                    interaction_effect=float(s["interaction_effect"]),
+                )
+                for s in brinson_raw.get("by_sector") or ()
+            ),
+        )
+        period_str = px_raw.get("period_of_report")
+        px = BenchmarkProxyResult(
+            resolution=resolution,
+            brinson=brinson,
+            confidence=float(px_raw["confidence"]),
+            period_of_report=_date.fromisoformat(period_str) if period_str else None,
+            degraded=bool(px_raw.get("degraded", False)),
+            degraded_reason=px_raw.get("degraded_reason"),
+        )
+
     return FundAttributionResult(
         fund_instrument_id=_UUID(data["fund_instrument_id"]),
         asof=_date.fromisoformat(data["asof"]),
         badge=RailBadge(data["badge"]),
         returns_based=rb,
         holdings_based=hb,
+        proxy=px,
         reason=data.get("reason"),
         metadata=dict(data.get("metadata") or {}),
     )
