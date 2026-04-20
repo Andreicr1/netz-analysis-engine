@@ -24,7 +24,10 @@ ENV PUBLIC_CLERK_PUBLISHABLE_KEY=$PUBLIC_CLERK_PUBLISHABLE_KEY
 ENV PUBLIC_API_BASE_URL=$PUBLIC_API_BASE_URL
 
 # Build UI packages then terminal frontend
-RUN pnpm --filter @netz/ui build && pnpm --filter @investintell/ui build && pnpm --filter ii-terminal build
+RUN pnpm --filter @netz/ui build \
+  && pnpm --filter @investintell/ui build \
+  && pnpm --filter @investintell/ii-terminal-core build \
+  && pnpm --filter ii-terminal build
 
 WORKDIR /app/frontends/terminal
 EXPOSE 3000
