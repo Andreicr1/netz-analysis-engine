@@ -397,6 +397,22 @@ def _render_attribution_block(evidence_context: dict[str, Any]) -> list[str]:
     )
     out.append(f"- {subtitle}")
 
+    if badge == "RAIL_HOLDINGS":
+        holdings_based = attribution.get("holdings_based")
+        sectors = (holdings_based or {}).get("sectors") or []
+        coverage = float((holdings_based or {}).get("coverage_pct") or 0.0)
+        if sectors:
+            out.append("\n### Sector Weights")
+            # Cap at 11 rows to mirror the GICS ceiling; matview may return
+            # more when issuer_category splits are non-trivial.
+            for sec in sectors[:11]:
+                weight = float(sec.get("weight", 0.0))
+                if weight < 1e-4:
+                    continue
+                label = _sanitize_sector_label(str(sec.get("sector", "")))
+                out.append(f"- {label}: {weight * 100:.1f}%")
+            out.append(f"\n- Portfolio coverage: {coverage * 100:.1f}%")
+
     if badge == "RAIL_RETURNS" and returns_based:
         exposures = returns_based.get("exposures") or []
         if exposures:
@@ -408,3 +424,25 @@ def _render_attribution_block(evidence_context: dict[str, Any]) -> list[str]:
                 out.append(f"- {exp.get('ticker', '—')}: {weight * 100:.1f}%")
 
     return out
+
+
+# Raw N-PORT issuer codes are never shown to clients. Keep everything else
+# pass-through — the enrichment worker already resolves equity CUSIPs to GICS.
+_NPORT_SECTOR_COPY: dict[str, str] = {
+    "CORP": "Corporate",
+    "UST": "US Treasury",
+    "USGA": "US Government Agency",
+    "USGSE": "US Government Sponsored Enterprise",
+    "NUSS": "Non-US Sovereign",
+    "MUN": "Municipal",
+    "RF": "Registered Fund",
+    "PF": "Private Fund",
+    "OTHER": "Other",
+    "Unknown": "Other",
+    "Unclassified": "Other",
+}
+
+
+def _sanitize_sector_label(raw: str) -> str:
+    key = raw.strip()
+    return _NPORT_SECTOR_COPY.get(key, key or "Other")

@@ -1,0 +1,156 @@
+{
+  "run_at": "2026-04-20T10:18:22.427975+00:00",
+  "schema_reconciliation": {
+    "filer_cik": "cik",
+    "period_of_report": "report_date",
+    "industry_sector": "sector",
+    "issuer_category": "asset_class",
+    "value_usd": "market_value",
+    "sic_code": null
+  },
+  "block_a_coverage": {
+    "total_rows": 414565,
+    "sector_null": 366,
+    "pct_null": "0.09",
+    "asset_class_filled": 414546,
+    "pct_asset_class_filled": "100.00",
+    "distinct_sectors": 9,
+    "distinct_asset_classes": 20
+  },
+  "block_b_top_sectors": [
+    {
+      "sector": "CORP",
+      "n": 250860
+    },
+    {
+      "sector": "MUN",
+      "n": 92734
+    },
+    {
+      "sector": "UST",
+      "n": 20687
+    },
+    {
+      "sector": "USGSE",
+      "n": 16219
+    },
+    {
+      "sector": "OTHER",
+      "n": 9690
+    },
+    {
+      "sector": "USGA",
+      "n": 9298
+    },
+    {
+      "sector": "RF",
+      "n": 9195
+    },
+    {
+      "sector": "NUSS",
+      "n": 5406
+    },
+    {
+      "sector": "PF",
+      "n": 110
+    }
+  ],
+  "block_b2_top_asset_classes": [
+    {
+      "asset_class": "EC",
+      "n": 181575
+    },
+    {
+      "asset_class": "DBT",
+      "n": 175217
+    },
+    {
+      "asset_class": "ABS-MBS",
+      "n": 28829
+    },
+    {
+      "asset_class": "STIV",
+      "n": 6866
+    },
+    {
+      "asset_class": "LON",
+      "n": 6026
+    },
+    {
+      "asset_class": "ABS-O",
+      "n": 5958
+    },
+    {
+      "asset_class": "ABS-CBDO",
+      "n": 5081
+    },
+    {
+      "asset_class": "EP",
+      "n": 2128
+    },
+    {
+      "asset_class": "OTHER",
+      "n": 1377
+    },
+    {
+      "asset_class": "SN",
+      "n": 550
+    },
+    {
+      "asset_class": "ABS-APCP",
+      "n": 228
+    },
+    {
+      "asset_class": "RA",
+      "n": 200
+    },
+    {
+      "asset_class": "DE",
+      "n": 196
+    },
+    {
+      "asset_class": "DFE",
+      "n": 102
+    },
+    {
+      "asset_class": "DIR",
+      "n": 97
+    },
+    {
+      "asset_class": "RE",
+      "n": 46
+    },
+    {
+      "asset_class": "COMM",
+      "n": 39
+    },
+    {
+      "asset_class": "DCO",
+      "n": 20
+    },
+    {
+      "asset_class": "DCR",
+      "n": 7
+    },
+    {
+      "asset_class": "DO",
+      "n": 4
+    }
+  ],
+  "block_c_classification_columns": [
+    {
+      "column_name": "sector",
+      "data_type": "text"
+    }
+  ],
+  "block_d_sic_stats": {
+    "applicable": false,
+    "reason": "sic_code column does not exist on sec_nport_holdings"
+  },
+  "scenario": "A",
+  "scenario_rationale": "sector fill rate >= 90% (pct_null=0.09%). Use sector directly.",
+  "recommendation": {
+    "migration_0133_needed": false,
+    "matview_strategy": "COALESCE(NULLIF(btrim(sector), ''), 'Unclassified')"
+  }
+}
