@@ -194,6 +194,15 @@ def _build_user_content(
         parts.append("\n## Risk Metrics")
         for key, val in risk.items():
             if val is not None:
+                # Qualitative mapping for EVT shape parameter (PR-Q6)
+                if key == "evt_xi_shape":
+                    label = _map_tail_heaviness(val)
+                    if label:
+                        parts.append(f"- Tail Heaviness: {label}")
+                    continue
+                # NEVER expose raw xi, u, beta values in copy (PR-Q6 invariant)
+                if key in ("evt_u_threshold", "evt_beta_scale"):
+                    continue
                 parts.append(f"- {key}: {val}")
 
     # SEC holdings data for investment_strategy (N-PORT primary, 13F overlay)
@@ -508,6 +517,26 @@ _NPORT_SECTOR_COPY: dict[str, str] = {
     "Unknown": "Other",
     "Unclassified": "Other",
 }
+
+
+def _map_tail_heaviness(xi: float | Any) -> str | None:
+    """Map GPD shape parameter xi to qualitative tail-heaviness labels.
+
+    Reference: PR-Q6 and EDHEC Spec §4.
+    """
+    if xi is None:
+        return None
+    try:
+        val = float(xi)
+        if val < 0:
+            return "Light"
+        if val < 0.15:
+            return "Normal"
+        if val < 0.5:
+            return "Heavy"
+        return "Extreme"
+    except (TypeError, ValueError):
+        return None
 
 
 def _sanitize_sector_label(raw: str) -> str:

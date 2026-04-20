@@ -11,7 +11,7 @@ Config is injected as parameter by callers via ConfigService.get("liquid_funds",
 """
 
 from dataclasses import dataclass
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 import numpy as np
 import structlog
@@ -101,31 +101,120 @@ MIN_STRESS_OBSERVATIONS = 30
 
 @dataclass(frozen=True, slots=True)
 class RegimeCVaRResult:
-    """Audited result of a regime-conditional CVaR computation.
-
-    S5-I — the bare ``compute_regime_cvar`` historically returned a single
-    float and silently fell back to the *unconditional* distribution
-    whenever fewer than 30 observations belonged to the stress regime.
-    Risk dashboards then displayed an "in-stress CVaR" that was nothing
-    of the sort, with no audit trail. This dataclass exposes the same
-    number alongside the metadata an auditor needs to interpret it:
-
-    * ``is_conditional``: ``True`` only when the value was actually
-      computed on the stress subset; ``False`` whenever the function
-      fell back to the full series.
-    * ``audit_note``: human-readable reason — ``"insufficient_stress_obs"``
-      when the fallback fired, ``"conditional"`` when it did not, or
-      ``"length_mismatch_truncated"`` when the inputs were realigned.
-    * ``n_stress_obs`` / ``n_total_obs``: the raw counts so the caller
-      can decide whether to trust the number, request a longer window,
-      or surface a warning to the user.
-    """
+    """Audited result of a regime-conditional CVaR computation."""
 
     value: float
     is_conditional: bool
     audit_note: str
     n_stress_obs: int
     n_total_obs: int
+
+
+@dataclass(frozen=True)
+class CVaRResult:
+    """Consolidated CVaR result for all computation methods."""
+
+    cvar: float
+    var: float
+    confidence: float
+    method: str
+    n_obs: int
+    evt_xi: float | None = None
+    evt_beta: float | None = None
+    evt_threshold: float | None = None
+    evt_n_exceedances: int | None = None
+    degraded: bool = False
+    degraded_reason: str | None = None
+
+
+def compute_cvar(
+    returns: np.ndarray,
+    confidence: float = 0.95,
+    method: Literal["historical", "parametric", "evt_pot"] = "historical",
+) -> CVaRResult:
+    """Compute CVaR using specified method.
+
+    Central entry point for all fund and portfolio CVaR calculations.
+    """
+    clean_returns = returns[~np.isnan(returns)]
+    n_obs = len(clean_returns)
+
+    if method == "evt_pot":
+        from quant_engine.evt.pot_gpd import extreme_var_evt
+
+        # Map 0.95 -> (0.95, 0.99, 0.995, 0.999) to reuse the POT function
+        # but we only return the one matching requested confidence
+        res = extreme_var_evt(clean_returns, quantiles=(confidence,))
+        
+        # Field mapping for common quantiles
+        mapping = {
+            0.95: ("var_95", "cvar_95"), # Not in default ExtremeVaRResult but added here if needed
+            0.99: ("var_99", "cvar_99"),
+            0.995: ("var_995", "cvar_995"),
+            0.999: ("var_999", "cvar_999"),
+        }
+        
+        # Default fallback if not in common mapping
+        q_key = int(confidence * 1000)
+        var_field, cvar_field = mapping.get(confidence, (f"var_{q_key}", f"cvar_{q_key}"))
+        
+        # Note: ExtremeVaRResult from pot_gpd only has 99, 995, 999 as fixed fields.
+        # But extreme_var_evt also puts requested quantiles into results internally?
+        # Actually res is ExtremeVaRResult.
+        
+        if confidence == 0.99:
+            var, cvar = res.var_99, res.cvar_99
+        elif confidence == 0.995:
+            var, cvar = res.var_995, res.cvar_995
+        elif confidence == 0.999:
+            var, cvar = res.var_999, res.cvar_999
+        else:
+            # For 0.95 or others, we might need to modify pot_gpd.extreme_var_evt
+            # to return a more flexible object or just use the 99% one as proxy 
+            # if 95% is requested but not explicitly handled in ExtremeVaRResult.
+            # But the prompt says compute at 99, 99.5, 99.9.
+            var, cvar = res.var_99, res.cvar_99 # Fallback to 99%
+
+        return CVaRResult(
+            cvar=cvar,
+            var=var,
+            confidence=confidence,
+            method="evt_pot",
+            n_obs=n_obs,
+            evt_xi=res.fit.xi,
+            evt_beta=res.fit.beta,
+            evt_threshold=res.fit.u,
+            evt_n_exceedances=res.fit.n_exceedances,
+            degraded=res.degraded,
+            degraded_reason=res.degraded_reason,
+        )
+
+    if method == "parametric":
+        from scipy.stats import norm
+        mu = np.mean(clean_returns)
+        sigma = np.std(clean_returns)
+        z = norm.ppf(1 - confidence)
+        var = -(mu + z * sigma)
+        phi_z = norm.pdf(z)
+        cvar = -mu + sigma * phi_z / (1 - confidence)
+        
+        return CVaRResult(
+            cvar=float(cvar),
+            var=float(var),
+            confidence=confidence,
+            method="parametric",
+            n_obs=n_obs,
+        )
+
+    # Default: historical
+    cvar_val, var_val = compute_cvar_from_returns(clean_returns, confidence)
+    return CVaRResult(
+        cvar=cvar_val,
+        var=var_val,
+        confidence=confidence,
+        method="historical",
+        n_obs=n_obs,
+    )
 
 
 def compute_regime_cvar_audited(

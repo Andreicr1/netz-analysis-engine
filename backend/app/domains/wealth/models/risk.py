@@ -150,3 +150,8 @@ class FundRiskMetrics(Base):
     elite_risk_off: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
     elite_inflation: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
     elite_crisis: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
+
+    # EVT Extreme Risk (PR-Q6)
+    cvar_99_evt: Mapped[Decimal | None] = mapped_column(Numeric(12, 6), nullable=True)
+    cvar_999_evt: Mapped[Decimal | None] = mapped_column(Numeric(12, 6), nullable=True)
+    evt_xi_shape: Mapped[Decimal | None] = mapped_column(Numeric(12, 6), nullable=True)

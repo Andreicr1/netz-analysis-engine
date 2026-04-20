@@ -101,6 +101,9 @@ def gather_quant_metrics(
             "dtw_drift_score": _to_float(row.dtw_drift_score),
             "volatility_garch": _to_float(getattr(row, "volatility_garch", None)),
             "cvar_95_conditional": _to_float(getattr(row, "cvar_95_conditional", None)),
+            "cvar_99_evt": _to_float(getattr(row, "cvar_99_evt", None)),
+            "cvar_999_evt": _to_float(getattr(row, "cvar_999_evt", None)),
+            "evt_xi_shape": _to_float(getattr(row, "evt_xi_shape", None)),
         }
 
     except Exception:
@@ -134,6 +137,9 @@ def gather_risk_metrics(
         "volatility_1y": profile.get("volatility_1y"),
         "volatility_garch": profile.get("volatility_garch"),
         "max_drawdown_1y": profile.get("max_drawdown_1y"),
+        "cvar_99_evt": profile.get("cvar_99_evt"),
+        "cvar_999_evt": profile.get("cvar_999_evt"),
+        "evt_xi_shape": profile.get("evt_xi_shape"),
         "sharpe_1y": profile.get("sharpe_1y"),
         "sortino_1y": profile.get("sortino_1y"),
         "beta_1y": profile.get("beta_1y"),
