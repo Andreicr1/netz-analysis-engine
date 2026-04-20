@@ -1,0 +1,253 @@
+/* ============================================================
+   Netz Wealth Management — Colors & Type
+   Derived from the "Branding Netz.fig" Figma source.
+   Corporate navy + warm orange + cool pale blue.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=IBM+Plex+Sans+Condensed:wght@300;400;500;600&family=Montserrat:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
+
+/* Font-family substitutions for slides:
+   - Charter (proprietary) → Source Serif 4
+   - Arboria (proprietary) → DM Sans
+   Declared as @font-face aliases so existing CSS keeps working. */
+@font-face { font-family: "Charter"; src: local("Source Serif 4"), local("Source Serif Pro"), local("Charter"); font-weight: 100 900; font-style: normal; }
+@font-face { font-family: "Charter"; src: local("Source Serif 4"), local("Source Serif Pro"), local("Charter"); font-weight: 100 900; font-style: italic; }
+@font-face { font-family: "Arboria"; src: local("DM Sans"), local("Arboria"); font-weight: 100 900; font-style: normal; }
+@font-face { font-family: "Arboria"; src: local("DM Sans"), local("Arboria"); font-weight: 100 900; font-style: italic; }
+
+:root {
+  /* ---------- Brand Core ---------- */
+  --netz-navy:            #001B5C;   /* rgb(0,27,92)  — primary brand; 7717× in Figma */
+  --netz-navy-2:          #002F6C;   /* rgb(0,47,108) — soft navy accent for large type */
+  --netz-orange:          #FF965A;   /* rgb(255,150,90) — primary accent, 8611× */
+  --netz-orange-tint:     #FFE7D2;   /* rgb(255,231,210) — warm tint */
+  --netz-orange-soft:     #F7AF7F;   /* rgb(247,175,127) — softer accent */
+  --netz-sky:             #E4F3FF;   /* rgb(228,243,255) — signature pale section bg */
+  --netz-sky-2:           #E5F3FF;   /* rgb(229,243,255) — alt */
+  --netz-sky-3:           #B1C6E5;   /* rgb(177,198,229) — deeper pale */
+  --netz-steel:           #6689BC;   /* rgb(102,137,188) — desaturated mid blue */
+  --netz-steel-2:         #648ABE;   /* rgb(100,138,190) */
+  --netz-indigo:          #30558E;   /* rgb(48,85,142)  — deeper denim */
+  --netz-royal:           #0147B6;   /* rgb(1,71,182)   — rare highlight */
+  --netz-cyan:            #38C3FD;   /* rgb(56,195,253) — rare data accent */
+
+  /* ---------- Neutrals ---------- */
+  --netz-white:           #FFFFFF;
+  --netz-offwhite:        #FCFCFC;   /* paper — primary light bg */
+  --netz-ink:             #222222;   /* body text */
+  --netz-ink-2:           #252525;   /* body text alt */
+  --netz-ink-3:           #373737;   /* softer body */
+  --netz-graphite:        #10181E;   /* near-black for UI chrome */
+  --netz-slate:           #455A64;   /* secondary UI gray */
+  --netz-stone:           #828282;   /* muted */
+  --netz-stone-2:         #707171;   /* muted 2 */
+  --netz-silver:          #979797;   /* divider / placeholder */
+  --netz-mist:            #D7D9D2;   /* warm light gray — also used for subdued text */
+  --netz-mist-2:          #D9D9D6;
+  --netz-fog:             #DCDCDC;   /* input border / divider */
+  --netz-smoke:           #E0E0E0;
+  --netz-cloud:           #F0F0F0;
+
+  /* ---------- Semantic Colors ---------- */
+  --color-bg:             var(--netz-offwhite);
+  --color-bg-section:     var(--netz-sky);
+  --color-bg-dark:        var(--netz-navy);
+  --color-surface:        var(--netz-white);
+
+  --color-fg:             var(--netz-navy);       /* primary headings */
+  --color-fg-body:        var(--netz-ink);        /* body text */
+  --color-fg-muted:       var(--netz-stone);
+  --color-fg-invert:      var(--netz-white);
+  --color-fg-on-navy:     var(--netz-white);
+
+  --color-accent:         var(--netz-orange);
+  --color-accent-hover:   #FFA775;                /* lightened 8% */
+  --color-accent-press:   #E8834B;                /* darkened 10% */
+  --color-accent-soft:    var(--netz-orange-tint);
+
+  --color-link:           var(--netz-navy);
+  --color-link-hover:     var(--netz-orange);
+
+  --color-border:         var(--netz-fog);
+  --color-border-strong:  var(--netz-silver);
+  --color-divider-invert: rgba(255,255,255,.14);
+
+  --color-focus:          var(--netz-orange);
+
+  /* ---------- Typography ---------- */
+  --font-sans:      "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-sans-cond: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+  --font-display:   "Montserrat", "IBM Plex Sans", sans-serif;  /* brand wordmark & callouts */
+  --font-body:      "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+
+  /* Type scale — anchored on Figma's dominant sizes: 96,56,40,32,24,20,16,14,12 */
+  --fs-hero:       96px;
+  --fs-display:    56px;
+  --fs-h1:         40px;
+  --fs-h2:         32px;
+  --fs-h3:         24px;
+  --fs-h4:         20px;
+  --fs-body:       16px;
+  --fs-small:      14px;
+  --fs-caption:    12px;
+
+  --lh-tight:      1.1;      /* Figma titles use this letter-spaced -2% */
+  --lh-snug:       1.2;
+  --lh-normal:     1.35;
+  --lh-relaxed:    1.5;
+
+  --tracking-tight: -0.02em;  /* display type */
+  --tracking-normal: 0;
+  --tracking-wide:  0.04em;
+
+  --fw-light:    300;
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semi:     600;
+  --fw-bold:     700;
+
+  /* ---------- Spacing (8pt) ---------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+  --space-10: 144px; /* page gutter on Site */
+
+  /* ---------- Radii ---------- */
+  --radius-xs:   2px;
+  --radius-sm:   4px;    /* buttons */
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-pill: 999px;
+
+  /* ---------- Elevation ---------- */
+  --shadow-xs: 0 1px 2px rgba(0,27,92,.06);
+  --shadow-sm: 0 2px 6px rgba(0,27,92,.08);
+  --shadow-md: 0 8px 24px rgba(0,27,92,.10);
+  --shadow-lg: 0 24px 48px rgba(0,27,92,.14);
+
+  /* ---------- Motion ---------- */
+  --ease-out: cubic-bezier(.2,.6,.2,1);
+  --ease-in-out: cubic-bezier(.4,0,.2,1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 360ms;
+
+  /* ---------- Layout ---------- */
+  --page-max:   1280px;
+  --gutter:     144px;
+  --slide-w:    1920px;
+  --slide-h:    1080px;
+}
+
+/* ============================================================
+   Semantic elements
+   ============================================================ */
+
+html { font-family: var(--font-body); color: var(--color-fg-body); background: var(--color-bg); }
+body { margin: 0; font-size: var(--fs-body); line-height: var(--lh-normal); }
+
+/* Display / brand hero */
+.netz-hero {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-light);
+  font-size: var(--fs-hero);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--netz-navy-2);
+}
+
+/* Slide title */
+.netz-display {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-light);
+  font-size: var(--fs-display);
+  line-height: 1.2;
+  color: var(--netz-navy);
+}
+
+h1, .h1 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-h1);
+  line-height: var(--lh-snug);
+  color: var(--netz-navy);
+  margin: 0;
+}
+h2, .h2 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-light);
+  font-size: var(--fs-h2);
+  line-height: 1.25;
+  color: var(--netz-navy);
+  margin: 0;
+}
+h3, .h3 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-semi);
+  font-size: var(--fs-h3);
+  line-height: var(--lh-snug);
+  color: var(--netz-navy);
+  margin: 0;
+}
+h4, .h4 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-semi);
+  font-size: var(--fs-h4);
+  line-height: var(--lh-snug);
+  color: var(--netz-navy);
+  margin: 0;
+}
+
+p, .body {
+  font-family: var(--font-body);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-body);
+  line-height: var(--lh-relaxed);
+  color: var(--color-fg-body);
+  text-wrap: pretty;
+}
+.body-lg {
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-light);
+  line-height: 1.33;
+  color: var(--netz-navy);
+}
+.small  { font-size: var(--fs-small); line-height: 1.43; }
+.caption{ font-size: var(--fs-caption); line-height: 1.4; color: var(--netz-stone); letter-spacing: .02em; }
+
+/* Eyebrow / date tag used in slide corners */
+.eyebrow {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-light);
+  font-size: var(--fs-h4);
+  letter-spacing: var(--tracking-tight);
+  color: var(--netz-navy);
+  text-transform: none;
+}
+
+/* Wordmark-style display (Montserrat, -2% tracking) */
+.netz-wordmark {
+  font-family: var(--font-display);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-tight);
+  color: var(--netz-navy);
+}
+
+/* Utility bg classes */
+.bg-paper   { background: var(--color-bg); }
+.bg-sky     { background: var(--color-bg-section); }
+.bg-navy    { background: var(--color-bg-dark); color: var(--color-fg-on-navy); }
+.bg-navy h1, .bg-navy h2, .bg-navy h3, .bg-navy h4 { color: var(--color-fg-on-navy); }
+
+a { color: var(--color-link); text-decoration: none; transition: color var(--dur-base) var(--ease-out); }
+a:hover { color: var(--color-link-hover); }
+
+/* Focus ring */
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: 2px; }
