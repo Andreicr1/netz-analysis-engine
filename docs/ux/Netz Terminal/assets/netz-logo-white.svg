@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 100" fill="none">
+  <path d="M 4 90 L 30 10 L 54 10 L 28 90 Z" fill="#FCFCFC"></path>
+  <path d="M 80 28 L 102 50 L 80 72 L 58 50 Z" fill="#FF965A"></path>
+  <path d="M 106 10 L 130 10 L 104 90 L 80 90 Z" fill="#FCFCFC"></path>
+  <g fill="#FCFCFC">
+    <text x="160" y="78" font-family="Montserrat, &#39;Helvetica Neue&#39;, Arial, sans-serif" font-weight="500" font-size="84" letter-spacing="-2">netz</text>
+  </g>
+</svg>
