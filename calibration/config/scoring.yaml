@@ -14,3 +14,11 @@ scoring_weights:
   information_ratio: 0.15
   flows_momentum: 0.10
   fee_efficiency: 0.10
+
+# G1 (PR-Q1) — Cornish-Fisher adjusted robust Sharpe.
+# When false (default), risk_adjusted_return reads fund_risk_metrics.sharpe_1y
+# — identical to pre-G1 behavior. When true, reads sharpe_cf and falls back to
+# sharpe_1y with a warning if the robust value is not yet backfilled.
+# Flip only AFTER global_risk_metrics has populated sharpe_cf for all active
+# instruments (see docs/superpowers/specs/2026-04-19-edhec-gaps-followup.md §3.1).
+use_robust_sharpe: false
