@@ -1,9 +1,16 @@
 <!--
-  HoldingsTable -- portfolio positions with live prices.
+  HoldingsTable — 8-column Bloomberg-style holdings grid.
 
-  Bottom-right panel. Columns: Fund, Ticker, Weight, Target,
-  Drift, Price, Change. Row click selects ticker for chart.
-  Sticky header, scrollable body.
+  Structure mirrors docs/ux/Netz Terminal/terminal-panels.jsx's
+  `Holdings` component: TK · NAME/SECTOR · LAST · CHG% · WT ·
+  DRIFT-BAR · Δpp · TGT. Sortable columns, client-side filter,
+  drift visualized with a ±4pp centered bar.
+
+  Consumes bundle surface classes from
+  @investintell/ui/styles/surfaces/terminal.css (globally imported
+  by frontends/terminal/src/app.css): .panel, .phead, .holdings-head,
+  .holdings-row, .drift-bar-wrap, .drift-mid, .drift-bar,
+  .sortable, .sort-active.
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
@@ -17,6 +24,8 @@
 		ticker: string;
 		weight: number;
 		target_weight: number;
+		/** Optional asset class / sector label shown as a sub-line on the NAME cell. */
+		asset_class?: string;
 	}
 
 	interface Props {
@@ -33,228 +42,309 @@
 		return marketStore.priceMap.get(ticker.toUpperCase());
 	}
 
-	function driftStatus(drift: number): "aligned" | "watch" | "breach" {
-		const abs = Math.abs(drift);
-		if (abs >= 0.03) return "breach";
-		if (abs >= 0.02) return "watch";
-		return "aligned";
+	type SortKey =
+		| "ticker"
+		| "name"
+		| "price"
+		| "change"
+		| "weight"
+		| "drift"
+		| "target";
+	type SortDir = "asc" | "desc";
+
+	let sortKey = $state<SortKey>("weight");
+	let sortDir = $state<SortDir>("desc");
+	let filter = $state("");
+
+	function toggleSort(k: SortKey) {
+		if (sortKey === k) {
+			sortDir = sortDir === "asc" ? "desc" : "asc";
+		} else {
+			sortKey = k;
+			sortDir = "desc";
+		}
 	}
+
+	function sortIndicator(k: SortKey): string {
+		if (sortKey !== k) return "";
+		return sortDir === "asc" ? "\u25B2" : "\u25BC";
+	}
+
+	const filteredSorted = $derived.by<HoldingRow[]>(() => {
+		const q = filter.trim().toUpperCase();
+		let list = holdings;
+		if (q) {
+			list = list.filter(
+				(r) =>
+					r.ticker.toUpperCase().includes(q) ||
+					r.fund_name.toUpperCase().includes(q) ||
+					(r.asset_class ?? "").toUpperCase().includes(q),
+			);
+		}
+		const arr = list.slice();
+		arr.sort((a, b) => {
+			let av: number | string;
+			let bv: number | string;
+			if (sortKey === "ticker") {
+				av = a.ticker;
+				bv = b.ticker;
+			} else if (sortKey === "name") {
+				av = a.fund_name;
+				bv = b.fund_name;
+			} else if (sortKey === "price") {
+				av = getTickData(a.ticker)?.price ?? 0;
+				bv = getTickData(b.ticker)?.price ?? 0;
+			} else if (sortKey === "change") {
+				av = getTickData(a.ticker)?.change_pct ?? 0;
+				bv = getTickData(b.ticker)?.change_pct ?? 0;
+			} else if (sortKey === "weight") {
+				av = a.weight;
+				bv = b.weight;
+			} else if (sortKey === "target") {
+				av = a.target_weight;
+				bv = b.target_weight;
+			} else {
+				av = Math.abs(a.weight - a.target_weight);
+				bv = Math.abs(b.weight - b.target_weight);
+			}
+			if (typeof av === "string" && typeof bv === "string") {
+				return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+			}
+			const an = av as number;
+			const bn = bv as number;
+			return sortDir === "asc" ? an - bn : bn - an;
+		});
+		return arr;
+	});
+
+	/** ±4pp visual cap — bundle default. */
+	const DRIFT_VISUAL_CAP_PP = 4;
 </script>
 
-<div class="ht-root">
-	<div class="ht-header">
-		<span class="ht-label">HOLDINGS</span>
-		<span class="ht-count">{holdings.length}</span>
+<div class="panel holdings-panel">
+	<div class="phead">
+		<div>
+			<span class="title">Holdings</span>
+			<span class="counter">{filteredSorted.length}/{holdings.length}</span>
+		</div>
+		<div class="actions">
+			<input
+				class="holdings-filter"
+				type="text"
+				placeholder="FILTER"
+				bind:value={filter}
+				aria-label="Filter holdings"
+			/>
+		</div>
 	</div>
 
-	<div class="ht-body">
-		<table class="ht-table">
-			<thead>
-				<tr>
-					<th class="ht-th ht-th--name" scope="col">Fund</th>
-					<th class="ht-th ht-th--ticker" scope="col">Ticker</th>
-					<th class="ht-th ht-th--num" scope="col">Weight</th>
-					<th class="ht-th ht-th--num" scope="col">Target</th>
-					<th class="ht-th ht-th--num" scope="col">Drift</th>
-					<th class="ht-th ht-th--num" scope="col">Price</th>
-					<th class="ht-th ht-th--num" scope="col">Change</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each holdings as h (h.instrument_id)}
-					{@const tick = getTickData(h.ticker)}
-					{@const drift = h.weight - h.target_weight}
-					{@const ds = driftStatus(drift)}
-					{@const changePct = tick?.change_pct ?? 0}
-					<!-- svelte-ignore a11y_click_events_have_key_events -->
-					<tr
-						class="ht-row"
-						class:ht-row--selected={selectedTicker?.toUpperCase() === h.ticker.toUpperCase()}
-						onclick={() => onSelect(h.ticker)}
-					>
-						<td class="ht-td ht-td--name" title={h.fund_name}>{h.fund_name}</td>
-						<td class="ht-td ht-td--ticker">{h.ticker}</td>
-						<td class="ht-td ht-td--num">{formatPercent(h.weight, 1)}</td>
-						<td class="ht-td ht-td--num ht-muted">{formatPercent(h.target_weight, 1)}</td>
-						<td
-							class="ht-td ht-td--num"
-							class:ht-drift-aligned={ds === "aligned"}
-							class:ht-drift-watch={ds === "watch"}
-							class:ht-drift-breach={ds === "breach"}
-						>
-							{drift >= 0 ? "+" : ""}{formatPercent(drift, 2)}
-						</td>
-						<td class="ht-td ht-td--num">
-							{tick?.price ? formatCurrency(tick.price) : "\u2014"}
-						</td>
-						<td
-							class="ht-td ht-td--num"
-							class:ht-up={changePct >= 0}
-							class:ht-down={changePct < 0}
-						>
-							{changePct !== 0 ? formatPercent(changePct, 2) : "\u2014"}
-						</td>
-					</tr>
-				{/each}
+	<div class="holdings-head">
+		<span
+			class="sortable"
+			class:sort-active={sortKey === "ticker"}
+			onclick={() => toggleSort("ticker")}
+			onkeydown={(e) => e.key === "Enter" && toggleSort("ticker")}
+			role="button"
+			tabindex="0"
+		>TK {sortIndicator("ticker")}</span>
+		<span
+			class="sortable"
+			class:sort-active={sortKey === "name"}
+			onclick={() => toggleSort("name")}
+			onkeydown={(e) => e.key === "Enter" && toggleSort("name")}
+			role="button"
+			tabindex="0"
+		>NAME / SECTOR</span>
+		<span
+			class="sortable"
+			class:sort-active={sortKey === "price"}
+			onclick={() => toggleSort("price")}
+			onkeydown={(e) => e.key === "Enter" && toggleSort("price")}
+			role="button"
+			tabindex="0"
+			style="text-align: right"
+		>LAST {sortIndicator("price")}</span>
+		<span
+			class="sortable"
+			class:sort-active={sortKey === "change"}
+			onclick={() => toggleSort("change")}
+			onkeydown={(e) => e.key === "Enter" && toggleSort("change")}
+			role="button"
+			tabindex="0"
+			style="text-align: right"
+		>CHG% {sortIndicator("change")}</span>
+		<span
+			class="sortable"
+			class:sort-active={sortKey === "weight"}
+			onclick={() => toggleSort("weight")}
+			onkeydown={(e) => e.key === "Enter" && toggleSort("weight")}
+			role="button"
+			tabindex="0"
+			style="text-align: right"
+		>WT {sortIndicator("weight")}</span>
+		<span style="text-align: center">DRIFT</span>
+		<span
+			class="sortable"
+			class:sort-active={sortKey === "drift"}
+			onclick={() => toggleSort("drift")}
+			onkeydown={(e) => e.key === "Enter" && toggleSort("drift")}
+			role="button"
+			tabindex="0"
+			style="text-align: right"
+		>Δ pp {sortIndicator("drift")}</span>
+		<span style="text-align: right">TGT</span>
+	</div>
 
-				{#if holdings.length === 0}
-					<tr>
-						<td class="ht-td ht-empty" colspan="7">No holdings</td>
-					</tr>
-				{/if}
-			</tbody>
-		</table>
+	<div class="holdings-body">
+		{#each filteredSorted as r (r.instrument_id)}
+			{@const tick = getTickData(r.ticker)}
+			{@const price = tick?.price ?? 0}
+			{@const changePct = tick?.change_pct ?? 0}
+			{@const driftFrac = r.weight - r.target_weight}
+			{@const driftPp = driftFrac * 100}
+			{@const absDriftPp = Math.abs(driftPp)}
+			{@const barPct = Math.min(1, absDriftPp / DRIFT_VISUAL_CAP_PP)}
+			{@const barLeft = driftPp >= 0 ? "50%" : `${50 - barPct * 50}%`}
+			{@const barWidth = `${barPct * 50}%`}
+			{@const driftTone =
+				absDriftPp >= 3 ? "down" : absDriftPp >= 2 ? "warn" : "up"}
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<div
+				class="holdings-row"
+				class:selected={selectedTicker?.toUpperCase() === r.ticker.toUpperCase()}
+				onclick={() => onSelect(r.ticker)}
+				role="button"
+				tabindex="0"
+				onkeydown={(e) => e.key === "Enter" && onSelect(r.ticker)}
+			>
+				<span class="tk">{r.ticker}</span>
+				<span class="nm" title={r.fund_name}>
+					<span>{r.fund_name}</span>
+					{#if r.asset_class}
+						<span class="nm-sector">{r.asset_class}</span>
+					{/if}
+				</span>
+				<span class="px">{price > 0 ? formatCurrency(price) : "\u2014"}</span>
+				<span class="dp" class:up={changePct >= 0} class:down={changePct < 0}>
+					{changePct !== 0
+						? (changePct >= 0 ? "+" : "") + formatPercent(changePct, 2)
+						: "\u2014"}
+				</span>
+				<span class="wt">{formatPercent(r.weight, 1)}</span>
+				<span class="drift-bar-wrap">
+					<span class="drift-mid"></span>
+					<span
+						class="drift-bar"
+						class:drift-tone-down={driftTone === "down"}
+						class:drift-tone-warn={driftTone === "warn"}
+						class:drift-tone-up={driftTone === "up"}
+						style="left: {barLeft}; width: {barWidth}"
+					></span>
+				</span>
+				<span
+					class="tgt drift-delta"
+					class:drift-tone-down={driftTone === "down"}
+					class:drift-tone-warn={driftTone === "warn"}
+					class:drift-tone-up={driftTone === "up"}
+				>{driftPp >= 0 ? "+" : ""}{driftPp.toFixed(2)}</span>
+				<span class="tgt">{formatPercent(r.target_weight, 1)}</span>
+			</div>
+		{/each}
+
+		{#if holdings.length === 0}
+			<div class="holdings-empty">No holdings</div>
+		{/if}
+		{#if holdings.length > 0 && filteredSorted.length === 0}
+			<div class="holdings-empty">No matches</div>
+		{/if}
 	</div>
 </div>
 
 <style>
-	.ht-root {
+	.holdings-panel {
 		display: flex;
 		flex-direction: column;
-		width: 100%;
 		height: 100%;
 		min-height: 0;
 		overflow: hidden;
-		background: var(--terminal-bg-panel);
-		font-family: var(--terminal-font-mono);
 	}
 
-	.ht-header {
+	.holdings-filter {
+		appearance: none;
+		width: 110px;
+		height: 18px;
+		padding: 0 6px;
+		font-family: var(--ii-terminal-font-mono, var(--terminal-font-mono));
+		font-size: 10px;
+		letter-spacing: 0.04em;
+		color: var(--ii-text-primary, var(--terminal-fg-primary));
+		background: var(--ii-surface-alt, var(--terminal-bg-panel-raised));
+		border: 1px solid var(--ii-border-subtle, var(--terminal-fg-muted));
+		outline: none;
+	}
+
+	.holdings-filter:focus {
+		border-color: var(--ii-brand-primary, var(--terminal-accent-amber));
+	}
+
+	.holdings-filter::placeholder {
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+	}
+
+	/* Per-column name cell: primary text + sector sub-line. */
+	.holdings-row .nm {
 		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		flex-shrink: 0;
-		height: 28px;
-		padding: 0 var(--terminal-space-2);
-		border-bottom: var(--terminal-border-hairline);
+		align-items: baseline;
+		gap: 6px;
+		min-width: 0;
 	}
 
-	.ht-label {
-		font-size: var(--terminal-text-10);
-		font-weight: 700;
-		letter-spacing: var(--terminal-tracking-caps);
-		color: var(--terminal-fg-tertiary);
-		text-transform: uppercase;
-	}
-
-	.ht-count {
-		font-size: var(--terminal-text-10);
-		font-weight: 700;
-		color: var(--terminal-fg-tertiary);
-	}
-
-	.ht-body {
-		flex: 1;
-		min-height: 0;
-		overflow-y: auto;
-	}
-
-	.ht-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-variant-numeric: tabular-nums;
-	}
-
-	/* -- Headers -- */
-	.ht-th {
-		position: sticky;
-		top: 0;
-		z-index: 2;
-		padding: var(--terminal-space-1) var(--terminal-space-2);
-		font-size: 9px;
-		font-weight: 700;
-		letter-spacing: var(--terminal-tracking-caps);
-		text-transform: uppercase;
-		color: var(--terminal-fg-muted);
-		background: var(--terminal-bg-panel);
-		border-bottom: var(--terminal-border-hairline);
-		white-space: nowrap;
-	}
-
-	.ht-th--name {
-		text-align: left;
-	}
-
-	.ht-th--ticker {
-		text-align: left;
-	}
-
-	.ht-th--num {
-		text-align: right;
-	}
-
-	/* -- Cells -- */
-	.ht-td {
-		padding: var(--terminal-space-1) var(--terminal-space-2);
-		font-size: var(--terminal-text-10);
-		color: var(--terminal-fg-secondary);
-		border-bottom: var(--terminal-border-hairline);
-		white-space: nowrap;
-	}
-
-	.ht-td--name {
-		text-align: left;
-		font-size: var(--terminal-text-11);
-		font-weight: 500;
-		color: var(--terminal-fg-primary);
-		max-width: 200px;
+	.holdings-row .nm > span:first-child {
 		overflow: hidden;
 		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--ii-text-primary, var(--terminal-fg-primary));
 	}
 
-	.ht-td--ticker {
-		text-align: left;
-		font-size: var(--terminal-text-10);
-		color: var(--terminal-fg-tertiary);
+	.nm-sector {
+		flex-shrink: 0;
+		font-size: 9px;
+		letter-spacing: 0.06em;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		text-transform: uppercase;
 	}
 
-	.ht-td--num {
-		text-align: right;
+	/* Drift-bar tones — extend the bundle's neutral orange bar with
+	   a semantic severity color when drift crosses ±2pp / ±3pp. */
+	.holdings-row .drift-bar.drift-tone-up {
+		background: var(--ii-success, var(--terminal-status-success));
+	}
+	.holdings-row .drift-bar.drift-tone-warn {
+		background: var(--ii-warning, var(--terminal-status-warn));
+	}
+	.holdings-row .drift-bar.drift-tone-down {
+		background: var(--ii-danger, var(--terminal-status-error));
 	}
 
-	.ht-muted {
-		color: var(--terminal-fg-tertiary);
+	/* Δpp text colour */
+	.drift-delta.drift-tone-up {
+		color: var(--ii-success, var(--terminal-status-success));
+		font-weight: 600;
+	}
+	.drift-delta.drift-tone-warn {
+		color: var(--ii-warning, var(--terminal-status-warn));
+		font-weight: 600;
+	}
+	.drift-delta.drift-tone-down {
+		color: var(--ii-danger, var(--terminal-status-error));
+		font-weight: 600;
 	}
 
-	.ht-empty {
+	.holdings-empty {
+		padding: 24px 12px;
 		text-align: center;
-		padding: var(--terminal-space-6);
-		color: var(--terminal-fg-muted);
-	}
-
-	/* -- Row interaction -- */
-	.ht-row {
-		cursor: pointer;
-		transition: background var(--terminal-motion-tick);
-	}
-
-	.ht-row:hover {
-		background: var(--terminal-bg-panel-raised);
-	}
-
-	.ht-row--selected {
-		background: var(--terminal-bg-panel-raised);
-	}
-
-	/* -- Drift colors -- */
-	.ht-drift-aligned {
-		color: var(--terminal-status-success);
-	}
-
-	.ht-drift-watch {
-		color: var(--terminal-status-warn);
-	}
-
-	.ht-drift-breach {
-		color: var(--terminal-status-error);
-	}
-
-	/* -- P&L colors -- */
-	.ht-up {
-		color: var(--terminal-status-success);
-	}
-
-	.ht-down {
-		color: var(--terminal-status-error);
+		font-family: var(--ii-terminal-font-mono, var(--terminal-font-mono));
+		font-size: 10px;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
 	}
 </style>

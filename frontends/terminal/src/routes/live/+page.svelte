@@ -75,11 +75,12 @@
 		instrument_id: string;
 		ticker: string;
 		name: string;
+		asset_class: string | null;
 	}
 
 	let instrumentMap = $state<Map<string, InstrumentInfo>>(new Map());
 
-	// Fetch instruments to resolve instrument_id -> ticker
+	// Fetch instruments to resolve instrument_id -> ticker + asset_class
 	$effect(() => {
 		const _id = selected?.id;
 		if (!_id) {
@@ -87,7 +88,7 @@
 			return;
 		}
 		let cancelled = false;
-		api.get<Array<{ instrument_id: string; ticker: string | null; name: string }>>(
+		api.get<Array<{ instrument_id: string; ticker: string | null; name: string; asset_class?: string | null }>>(
 			"/instruments",
 		)
 			.then((instruments) => {
@@ -100,6 +101,7 @@
 							instrument_id: inst.instrument_id,
 							ticker: inst.ticker,
 							name: inst.name,
+							asset_class: inst.asset_class ?? null,
 						});
 					}
 				}
@@ -112,6 +114,10 @@
 			cancelled = true;
 		};
 	});
+
+	function resolveAssetClass(instrumentId: string): string | undefined {
+		return instrumentMap.get(instrumentId)?.asset_class ?? undefined;
+	}
 
 	// ---- Target funds + resolved tickers ----
 
@@ -222,6 +228,7 @@
 					ticker,
 					weight: actualMap.get(f.instrument_id) ?? f.weight,
 					target_weight: f.weight,
+					asset_class: resolveAssetClass(f.instrument_id),
 				};
 			})
 			.filter((r): r is HoldingRow => r !== null);
