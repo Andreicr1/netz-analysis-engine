@@ -200,7 +200,7 @@ Terminal uses `lightweight-charts` via `TerminalPriceChart.svelte` which
 handles its own crosshair and tooltip. Not a structural gap — the lib
 provides equivalent affordances. Leave as-is.
 
-### 2.6 MacroRegime → MacroRegimePanel (major divergence)
+### 2.6 MacroRegime → MacroRegimePanel (major divergence — deferred)
 
 Bundle `MacroRegime` (`terminal-panels.jsx:431-452`) shows **6 regional
 regime rows** (US / EU / CN / BR / JP / EM-xCN) with stress % + trend
@@ -210,20 +210,19 @@ Terminal `MacroRegimePanel.svelte` shows **8 FRED indicators** (VIX /
 CPI / DXY / 10Y / IG / HY / FF / UNRATE) with value + delta arrow.
 Answers "what are my market indicators?".
 
-**D-13** Same slot, **different panel**. The bundle's choice is the
-correct LIVE-workbench affordance (regional regime snapshot belongs on
-a PM desk); the current terminal panel duplicates what `/macro`
-already does.
-**Fix candidate:** rewrite `MacroRegimePanel.svelte` to render 6
-regional rows backed by the `GET /macro/scores` endpoint (which the
-`/macro` page already uses). Each row: region code → composite score
-(as stress %) → arrow (trend vs prior month) → short label (e.g.
-"Mid-cycle expansion"). Header label changes from "MARKET CONDITIONS"
-to "MACRO REGIME".
-**Backend confirmation needed:** verify `/macro/scores` returns a per-
-region composite and that we can derive a short qualitative label
-without a new endpoint. If the label has to come from the committee
-review text, rendering blank or `—` for label is acceptable.
+**D-13 — DEFERRED.** Backend verification (2026-04-19):
+`GET /macro/scores` returns regions keyed by US / EUROPE / ASIA / EM —
+**4 regions, not 6**, with `composite_score`, `coverage`, `dimensions`,
+and `analysis_text` (free-text committee summary, not a row-sized
+label). There is **no per-region qualitative label** like "Mid-cycle
+expansion". Rewriting the panel to `US — 42 — ↗ —` rows with no trend
+and no label is strictly worse than the existing FRED indicators: it
+ships jargon (a composite score number) without the surrounding context
+that makes a regime snapshot useful.
+
+To do this right, the backend needs to expose a per-region regime label
+(either as a new column on `macro_regional_snapshots` or derived from
+the committee review's executive summary). Tracked as future work.
 
 ### 2.7 PortfolioSelector / Summary / NewsFeed / TradeLog / AlertStream
 
@@ -384,6 +383,20 @@ Terminal has `FundFocusMode.svelte` — structure TBD in fix phase.
 `macro-data.jsx` (+ `macro.css`)
 **Terminal:** `frontends/terminal/src/routes/macro/+page.svelte`
 
+### 5.0 D-10 / D-21 verification note (2026-04-19)
+
+- `GET /market-data/historical/{ticker}` accepts an optional `start_date`
+  ISO query param; the terminal's current call at `live/+page.svelte`
+  does **not** pass it, so every TF button renders the default
+  6-month window. D-10's "add 5Y/MAX" fix therefore also resolves a
+  pre-existing bug: wiring `start_date` from the active TF makes all
+  timeframes actually work.
+- `GET /macro/scores` returns 4 regions (US/EUROPE/ASIA/EM), no per-
+  region label. `/macro` zone layout does not contain a per-region
+  tile grid — StressHero + SignalBreakdown + SparklineWall are all
+  global-scoped. A region segment in a new macro toolbar would
+  therefore be decorative. D-21 deferred.
+
 ### 5.1 Grid topology — significant divergence
 
 Bundle lays out:
@@ -469,10 +482,10 @@ Items marked **FIX** are implementable this sprint; items marked
 | D-7 | LIVE | Holdings | Column order mismatch | **FIX** |
 | D-8 | LIVE | Holdings | No filter input | **FIX** |
 | D-9 | LIVE | Holdings | No column sort | **FIX** |
-| D-10 | LIVE | ChartToolbar | Missing 5Y and MAX timeframes | **FIX** |
+| D-10 | LIVE | ChartToolbar | Missing 5Y and MAX timeframes | **FIX** (verified backend supports `start_date`; also fixes pre-existing bug where TF buttons don't pass a lookback) |
 | D-11 | LIVE | ChartToolbar | Missing REBALANCE button | **FIX** |
-| D-12 | LIVE | ChartToolbar | Price not "big" (22px class) | **FIX** |
-| D-13 | LIVE | MacroRegimePanel | Wrong panel identity — indicators instead of regional regime | **FIX** |
+| D-12 | LIVE | ChartToolbar | Price not "big" (22px class) | **FIX** (capped at 16px — 22px won't fit in 32px toolbar without bumping `lw-toolbar` height) |
+| D-13 | LIVE | MacroRegimePanel | Wrong panel identity — indicators instead of regional regime | **DEFER** (verified: `/macro/scores` returns 4 regions only (US/EUROPE/ASIA/EM) with `composite_score` but **no per-region qualitative label**. Rewrite would ship `US — 42 — ↗ —` rows with no trend and no label — strictly worse than existing FRED indicators. Needs backend to expose per-region regime label before this is a net gain.) |
 | D-14 | BUILDER | ZoneB calibration | Presets / factor tilts / caps missing | DEFER (backend plumbing) |
 | D-15 | BUILDER | TabStrip | No pulsing tabs during cascade | DEFER (needs phase-tab mapping) |
 | D-16 | SCREENER | FilterRail | No SAVE PRESET | DEFER (persistence) |
@@ -480,7 +493,7 @@ Items marked **FIX** are implementable this sprint; items marked
 | D-18 | SCREENER | ResultsTable | Column set vs bundle's 15 | Verify / **FIX** |
 | D-19 | SCREENER | Toolbar | Summary line, EXPORT CSV, + COMPARE | Verify / **FIX** (partial) |
 | D-20 | SCREENER | FundFocus | Full modal structure | Verify in fix pass |
-| D-21 | MACRO | Toolbar | Missing Region seg + LIQ pill + REGIME pill | **FIX** (partial — REGION seg + regime pill) |
+| D-21 | MACRO | Toolbar | Missing Region seg + LIQ pill + REGIME pill | **DEFER** (verified: `/macro` renders zones, not a per-region tile grid. A Region segment would be decorative — StressHero, SignalBreakdown, SparklineWall are all global-scoped. Adding the toggle without a filter target is exactly the "jargon UI without function" anti-pattern `feedback_smart_backend_dumb_frontend` forbids. Requires a redesign of the zone layout to accept region scoping first.) |
 | D-22 | MACRO | Right col | Missing macro news feed | DEFER (data source) |
 | D-23 | MACRO | RegimeMatrix | 4 quadrants + trail + drag | Verify in fix pass |
 
