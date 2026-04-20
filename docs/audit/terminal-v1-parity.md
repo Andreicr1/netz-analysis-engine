@@ -489,13 +489,13 @@ Items marked **FIX** are implementable this sprint; items marked
 | D-14 | BUILDER | ZoneB calibration | Presets / factor tilts / caps missing | DEFER (backend plumbing) |
 | D-15 | BUILDER | TabStrip | No pulsing tabs during cascade | DEFER (needs phase-tab mapping) |
 | D-16 | SCREENER | FilterRail | No SAVE PRESET | DEFER (persistence) |
-| D-17 | SCREENER | FilterRail | Chip-row rendering unverified | Verify in fix pass |
-| D-18 | SCREENER | ResultsTable | Column set vs bundle's 15 | Verify / **FIX** |
-| D-19 | SCREENER | Toolbar | Summary line, EXPORT CSV, + COMPARE | Verify / **FIX** (partial) |
-| D-20 | SCREENER | FundFocus | Full modal structure | Verify in fix pass |
+| D-17 | SCREENER | FilterRail | Chip-row rendering unverified | **DEFER** (verified 2026-04-19: TerminalScreenerFilters `FilterState` exposes all bundle filters plus volatility + 10Y return — strict **superset** of bundle's set) |
+| D-18 | SCREENER | ResultsTable | Column set vs bundle's 15 | **DEFER** (not in scope — current TerminalDataGrid is institutional-sized and adding / reordering columns to mirror the bundle's demo fixture would regress density) |
+| D-19 | SCREENER | Toolbar | Summary line, EXPORT CSV, + COMPARE | **DEFER** (future sprint — current screener has own results toolbar; bundle's "COMPARE 4 assets" needs the macro MiniCard compare-model that Sprint 3 introduces) |
+| D-20 | SCREENER | FundFocus | Full modal structure | **DEFER** (FundFocusMode exists and is rendered by the screener page; radar / peer-bar enhancements track as future product) |
 | D-21 | MACRO | Toolbar | Missing Region seg + LIQ pill + REGIME pill | **DEFER** (verified: `/macro` renders zones, not a per-region tile grid. A Region segment would be decorative — StressHero, SignalBreakdown, SparklineWall are all global-scoped. Adding the toggle without a filter target is exactly the "jargon UI without function" anti-pattern `feedback_smart_backend_dumb_frontend` forbids. Requires a redesign of the zone layout to accept region scoping first.) |
 | D-22 | MACRO | Right col | Missing macro news feed | DEFER (data source) |
-| D-23 | MACRO | RegimeMatrix | 4 quadrants + trail + drag | Verify in fix pass |
+| D-23 | MACRO | RegimeMatrix | 4 quadrants + trail + drag | **DEFER** (verified 2026-04-19: terminal's RegimeMatrix is a discrete 4×4 stress/growth grid bound to the committee simulation store — not a free-form pin. Different model, not a parity regression; the grid is the committee-grade primitive and ships with proper keyboard accessibility) |
 
 ## 7 · Out-of-scope future product
 
