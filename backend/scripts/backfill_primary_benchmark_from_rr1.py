@@ -392,13 +392,15 @@ async def run(
 
     # Post-apply coverage verification.
     async with async_session_factory() as session:
-        r = await session.execute(text("""
+        coverage_result = await session.execute(text("""
             SELECT
                 COUNT(*) FILTER (WHERE primary_benchmark IS NOT NULL),
                 COUNT(*)
               FROM sec_registered_funds
         """))
-        with_bench, total = r.fetchone()
+        row = coverage_result.fetchone()
+        assert row is not None
+        with_bench, total = row
     print(
         f"\npost-apply DB coverage: {with_bench:,}/{total:,} "
         f"= {100 * with_bench / total:.2f}%"
