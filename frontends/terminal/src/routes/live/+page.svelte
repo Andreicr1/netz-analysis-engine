@@ -236,7 +236,29 @@
 
 	// ---- Chart state ----
 
-	type Timeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y";
+	type Timeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "5Y" | "MAX";
+
+	// Lookback days per timeframe — passed as start_date to the
+	// historical endpoint so every TF button actually widens the
+	// returned window. Prior to D-10 the call sent no start_date
+	// and every TF rendered the same default 6-month window.
+	const TF_LOOKBACK_DAYS: Record<Timeframe, number> = {
+		"1D": 3,
+		"1W": 10,
+		"1M": 35,
+		"3M": 95,
+		"6M": 190,
+		"1Y": 370,
+		"5Y": 1830,
+		MAX: 14600, // ~40 years; backend caps as needed
+	};
+
+	function tfStartDate(tf: Timeframe): string {
+		const days = TF_LOOKBACK_DAYS[tf];
+		const d = new Date(Date.now() - days * 86_400_000);
+		return d.toISOString().slice(0, 10);
+	}
+
 	type ChartMode = "candle" | "line";
 	let selectedTicker = $state<string | null>(null);
 	let chartTimeframe = $state<Timeframe>("1M");
@@ -284,12 +306,13 @@
 			return;
 		}
 		let cancelled = false;
+		const start = tfStartDate(chartTimeframe);
 		api.get<{
 			ticker: string;
 			interval: string;
 			bars: Array<{ timestamp: string; open: number | null; high: number | null; low: number | null; close: number | null; volume: number }>;
 			source: string;
-		}>(`/market-data/historical/${encodeURIComponent(t)}`)
+		}>(`/market-data/historical/${encodeURIComponent(t)}?start_date=${start}`)
 			.then((res) => {
 				if (cancelled) return;
 				const raw = (res.bars ?? []).filter((b) => b.close != null);
@@ -372,17 +395,19 @@
 
 	$effect(() => {
 		const ct = compareTicker;
+		const _tf = chartTimeframe;
 		if (!ct) {
 			compareNavBars = [];
 			return;
 		}
 		let cancelled = false;
+		const start = tfStartDate(chartTimeframe);
 		api.get<{
 			ticker: string;
 			interval: string;
 			bars: Array<{ timestamp: string; open: number | null; high: number | null; low: number | null; close: number | null; volume: number }>;
 			source: string;
-		}>(`/market-data/historical/${encodeURIComponent(ct)}`)
+		}>(`/market-data/historical/${encodeURIComponent(ct)}?start_date=${start}`)
 			.then((res) => {
 				if (cancelled) return;
 				compareNavBars = (res.bars ?? [])
@@ -650,6 +675,7 @@
 						onClearCompare={handleClearCompare}
 						mode={chartMode}
 						onModeChange={(m) => (chartMode = m)}
+						onRebalance={handleRebalanceOpen}
 					/>
 				</div>
 
