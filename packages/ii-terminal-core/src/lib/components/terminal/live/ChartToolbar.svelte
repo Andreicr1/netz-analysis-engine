@@ -11,7 +11,7 @@
 	import { TERMINAL_MARKET_DATA_KEY } from "../../../components/portfolio/live/workbench-state";
 	import { createClientApiClient } from "../../../api/client";
 
-	type Timeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y";
+	type Timeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "5Y" | "MAX";
 	export type ChartMode = "candle" | "line";
 
 	interface Props {
@@ -24,6 +24,10 @@
 		onClearCompare: () => void;
 		mode?: ChartMode;
 		onModeChange?: (m: ChartMode) => void;
+		/** Opens the Rebalance FocusMode. Bundle renders the same primary
+		 * CTA in the chart toolbar; terminal routes it to the /live page's
+		 * URL-driven rebalance handler. */
+		onRebalance?: () => void;
 	}
 
 	let {
@@ -36,13 +40,14 @@
 		onClearCompare,
 		mode = "line",
 		onModeChange,
+		onRebalance,
 	}: Props = $props();
 
 	const marketStore = getContext<MarketDataStore>(TERMINAL_MARKET_DATA_KEY);
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
 
-	const TIMEFRAMES: Timeframe[] = ["1D", "1W", "1M", "3M", "6M", "1Y"];
+	const TIMEFRAMES: Timeframe[] = ["1D", "1W", "1M", "3M", "6M", "1Y", "5Y", "MAX"];
 
 	const CHART_MODES: { id: ChartMode; label: string }[] = [
 		{ id: "candle", label: "CANDLE" },
@@ -220,6 +225,15 @@
 		<button type="button" class="ct-indicators-btn" disabled title="Coming in Session B">
 			Indicators
 		</button>
+
+		{#if onRebalance}
+			<span class="ct-divider"></span>
+			<!-- Rebalance primary CTA — mirrors bundle's toolbar layout (D-11). -->
+			<button type="button" class="ct-rebalance-btn" onclick={onRebalance}>
+				<span aria-hidden="true">&#x27F2;</span>
+				REBALANCE
+			</button>
+		{/if}
 	</div>
 </div>
 
@@ -266,14 +280,21 @@
 	}
 
 	.ct-price {
-		font-size: var(--terminal-text-11);
-		font-weight: 600;
+		/* D-12: scale up to approximate the bundle's .chart-price-big
+		 * affordance while still fitting the shared 32px toolbar row.
+		 * Bundle uses ~22px in a taller 2-line ticker-head; a flat
+		 * 16px keeps parity with the "price-is-the-primary-signal"
+		 * intent without forcing a toolbar height change. */
+		font-size: 16px;
+		font-weight: 700;
 		color: var(--terminal-fg-primary);
 		font-variant-numeric: tabular-nums;
+		letter-spacing: -0.01em;
 	}
 
 	.ct-change {
-		font-size: var(--terminal-text-10);
+		font-size: 12px;
+		font-weight: 600;
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -425,5 +446,34 @@
 		background: transparent;
 		border: 1px solid transparent;
 		cursor: not-allowed;
+	}
+
+	/* -- Rebalance primary CTA (D-11) -- */
+	.ct-rebalance-btn {
+		appearance: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 3px 10px;
+		font-family: var(--terminal-font-mono);
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--terminal-accent-amber);
+		background: transparent;
+		border: 1px solid var(--terminal-accent-amber-dim);
+		cursor: pointer;
+		transition: background var(--terminal-motion-tick), color var(--terminal-motion-tick);
+	}
+
+	.ct-rebalance-btn:hover {
+		background: var(--terminal-bg-panel-raised);
+		color: var(--terminal-fg-primary);
+	}
+
+	.ct-rebalance-btn:focus-visible {
+		outline: var(--terminal-border-focus);
+		outline-offset: 1px;
 	}
 </style>

@@ -1,16 +1,18 @@
 <!--
-  Watchlist -- left panel of the Live Workbench.
+  Watchlist — left panel of the Live Workbench.
 
-  Shows portfolio holdings as live tickers with prices from
-  MarketDataStore. Footer has a ticker search input to look up
-  any Tiingo-available instrument via REST quote endpoint.
+  4-col layout (TICKER · NAME · LAST · CHG%) matches
+  docs/ux/Netz Terminal/terminal-panels.jsx Watchlist component.
+  Rows flash up/down on price tick (D-3).
 
-  Layout: 240px fixed-width sidebar, scrollable items, sticky
-  header + footer.
+  Consumes bundle classes from @investintell/ui/styles/surfaces/
+  terminal.css: .panel, .phead, .wl-header, .wl-row (+ .tk .nm .px
+  .chg / .flash-up / .flash-down). Footer ticker search is retained
+  over the bundle's decorative `+` button — it actually looks up
+  Tiingo-available instruments.
 -->
 <script lang="ts">
-	import { getContext } from "svelte";
-	import { formatPercent, formatCurrency } from "@investintell/ui";
+	import { getContext, untrack } from "svelte";
 	import type { MarketDataStore, PriceTick } from "../../../stores/market-data.svelte";
 	import { TERMINAL_MARKET_DATA_KEY } from "../../../components/portfolio/live/workbench-state";
 	import { createClientApiClient } from "../../../api/client";
@@ -46,6 +48,38 @@
 	function getTickData(ticker: string): PriceTick | undefined {
 		return marketStore.priceMap.get(ticker.toUpperCase());
 	}
+
+	// ── Price-tick flash (D-3) ──────────────────────────────────
+	// Tracks previous price per ticker (non-reactive map) and flags
+	// the row with "flash-up" / "flash-down" for 500ms when the
+	// store's priceMap snapshot reassigns. The effect runs at most
+	// once per tickBuffer flush (250ms), not per render.
+	const prevPrices = new Map<string, number>();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- transient UI animation state driven by store flushes; full reassignment only fires on genuine change.
+	let flashMap = $state<Map<string, "up" | "down">>(new Map());
+
+	$effect(() => {
+		const snap = marketStore.priceMap;
+		const changes: Array<[string, "up" | "down"]> = [];
+		for (const [t, tick] of snap) {
+			const prev = prevPrices.get(t);
+			if (prev !== undefined && tick.price !== prev) {
+				changes.push([t, tick.price > prev ? "up" : "down"]);
+			}
+			prevPrices.set(t, tick.price);
+		}
+		if (changes.length === 0) return;
+		const nextFlash = new Map(untrack(() => flashMap));
+		for (const [k, v] of changes) nextFlash.set(k, v);
+		flashMap = nextFlash;
+		const changedKeys = changes.map(([k]) => k);
+		const id = setTimeout(() => {
+			const cleared = new Map(untrack(() => flashMap));
+			for (const k of changedKeys) cleared.delete(k);
+			flashMap = cleared;
+		}, 500);
+		return () => clearTimeout(id);
+	});
 
 	async function handleSearch(e: SubmitEvent) {
 		e.preventDefault();
@@ -90,48 +124,53 @@
 	}
 </script>
 
-<div class="wl-root">
-	<!-- Header -->
-	<div class="wl-header">
-		<span class="wl-label">WATCHLIST</span>
-		<span class="wl-portfolio" title={portfolioName}>{portfolioName}</span>
+<div class="panel watchlist-panel">
+	<div class="phead">
+		<div>
+			<span class="title">Watchlist</span>
+			<span class="counter">{allItems.length}</span>
+		</div>
+		<div class="actions wl-portfolio-tag" title={portfolioName}>
+			{portfolioName}
+		</div>
 	</div>
 
-	<!-- Items -->
-	<div class="wl-items">
+	<div class="wl-header">
+		<span>TICKER</span>
+		<span>NAME</span>
+		<span style="text-align: right">LAST</span>
+		<span style="text-align: right">CHG%</span>
+	</div>
+
+	<div class="wl-body">
 		{#each allItems as item (item.ticker)}
+			{@const tkUpper = item.ticker.toUpperCase()}
 			{@const tick = getTickData(item.ticker)}
 			{@const price = tick?.price ?? 0}
 			{@const changePct = tick?.change_pct ?? 0}
-			{@const isPositive = changePct >= 0}
+			{@const flash = flashMap.get(tkUpper)}
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<button
-				type="button"
+			<div
 				class="wl-row"
-				class:wl-row--selected={selectedTicker?.toUpperCase() === item.ticker.toUpperCase()}
+				class:selected={selectedTicker?.toUpperCase() === tkUpper}
+				class:flash-up={flash === "up"}
+				class:flash-down={flash === "down"}
 				onclick={() => onSelect(item.ticker)}
+				role="button"
+				tabindex="0"
+				onkeydown={(e) => e.key === "Enter" && onSelect(item.ticker)}
 			>
-				<div class="wl-row-left">
-					<span class="wl-ticker">{item.ticker}</span>
-					<span class="wl-name" title={item.name}>{item.name}</span>
-					{#if item.weight > 0}
-						<span class="wl-weight">{formatPercent(item.weight, 1)}</span>
-					{/if}
-				</div>
-				<div class="wl-row-right">
-					<span
-						class="wl-change"
-						class:wl-up={isPositive}
-						class:wl-down={!isPositive}
-					>
-						{isPositive ? "\u25B2" : "\u25BC"}
-						{formatPercent(Math.abs(changePct), 2)}
-					</span>
-					<span class="wl-price">
-						{price > 0 ? formatCurrency(price) : "\u2014"}
-					</span>
-				</div>
-			</button>
+				<span class="tk">{item.ticker}</span>
+				<span class="nm" title={item.name}>{item.name}</span>
+				<span class="px">
+					{price > 0 ? price.toFixed(2) : "\u2014"}
+				</span>
+				<span class="chg" class:up={changePct >= 0} class:down={changePct < 0}>
+					{changePct !== 0
+						? (changePct >= 0 ? "+" : "") + changePct.toFixed(2)
+						: "\u2014"}
+				</span>
+			</div>
 		{/each}
 
 		{#if allItems.length === 0}
@@ -139,7 +178,6 @@
 		{/if}
 	</div>
 
-	<!-- Footer: search -->
 	<form class="wl-search" onsubmit={handleSearch}>
 		<input
 			type="text"
@@ -155,148 +193,43 @@
 </div>
 
 <style>
-	.wl-root {
+	.watchlist-panel {
 		display: flex;
 		flex-direction: column;
-		width: 100%;
 		height: 100%;
 		min-height: 0;
 		overflow: hidden;
-		background: var(--terminal-bg-panel);
-		font-family: var(--terminal-font-mono);
 	}
 
-	/* -- Header -- */
-	.wl-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		flex-shrink: 0;
-		height: 28px;
-		padding: 0 var(--terminal-space-2);
-		border-bottom: var(--terminal-border-hairline);
-	}
-
-	.wl-label {
-		font-size: var(--terminal-text-10);
-		font-weight: 700;
-		letter-spacing: var(--terminal-tracking-caps);
-		color: var(--terminal-fg-tertiary);
+	.wl-portfolio-tag {
+		font-size: 9px;
+		letter-spacing: 0.06em;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
 		text-transform: uppercase;
-	}
-
-	.wl-portfolio {
-		font-size: var(--terminal-text-10);
-		color: var(--terminal-fg-muted);
 		max-width: 120px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
-	/* -- Items -- */
-	.wl-items {
+	.wl-body {
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
 	}
 
-	.wl-row {
-		appearance: none;
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		width: 100%;
-		height: 36px;
-		padding: 0 var(--terminal-space-2);
-		background: transparent;
-		border: none;
-		border-bottom: 1px solid var(--terminal-fg-muted);
-		border-left: 2px solid transparent;
-		cursor: pointer;
-		transition: background var(--terminal-motion-tick);
-		text-align: left;
-	}
-
-	.wl-row:hover {
-		background: var(--terminal-bg-panel-raised);
-	}
-
-	.wl-row--selected {
-		background: var(--terminal-bg-panel-raised);
-		border-left-color: var(--terminal-accent-amber);
-	}
-
-	.wl-row-left {
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-		min-width: 0;
-	}
-
-	.wl-ticker {
-		font-size: var(--terminal-text-11);
-		font-weight: 700;
-		color: var(--terminal-fg-primary);
-		letter-spacing: var(--terminal-tracking-caps);
-	}
-
-	.wl-name {
-		font-size: var(--terminal-text-10);
-		color: var(--terminal-fg-tertiary);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		max-width: 110px;
-	}
-
-	.wl-weight {
-		font-size: var(--terminal-text-10);
-		color: var(--terminal-fg-muted);
-	}
-
-	.wl-row-right {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 1px;
-		flex-shrink: 0;
-	}
-
-	.wl-change {
-		font-size: var(--terminal-text-10);
-		font-variant-numeric: tabular-nums;
-	}
-
-	.wl-up {
-		color: var(--terminal-status-success);
-	}
-
-	.wl-down {
-		color: var(--terminal-status-error);
-	}
-
-	.wl-price {
-		font-size: var(--terminal-text-11);
-		font-weight: 600;
-		color: var(--terminal-fg-primary);
-		font-variant-numeric: tabular-nums;
-	}
-
 	.wl-empty {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		height: 80px;
-		font-size: var(--terminal-text-11);
-		color: var(--terminal-fg-muted);
+		padding: 24px 12px;
+		text-align: center;
+		font-family: var(--ii-terminal-font-mono, var(--terminal-font-mono));
+		font-size: 10px;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
 	}
 
-	/* -- Search footer -- */
 	.wl-search {
 		flex-shrink: 0;
 		height: 28px;
-		border-top: var(--terminal-border-hairline);
+		border-top: 1px solid var(--ii-border-subtle, var(--terminal-fg-muted));
 		position: relative;
 	}
 
@@ -304,28 +237,28 @@
 		appearance: none;
 		width: 100%;
 		height: 100%;
-		padding: 0 var(--terminal-space-2);
-		font-family: var(--terminal-font-mono);
-		font-size: var(--terminal-text-10);
-		color: var(--terminal-fg-primary);
-		background: var(--terminal-bg-panel-sunken);
+		padding: 0 10px;
+		font-family: var(--ii-terminal-font-mono, var(--terminal-font-mono));
+		font-size: 10px;
+		color: var(--ii-text-primary, var(--terminal-fg-primary));
+		background: var(--ii-surface-alt, var(--terminal-bg-panel-raised));
 		border: none;
 		outline: none;
 	}
 
 	.wl-search-input::placeholder {
-		color: var(--terminal-fg-muted);
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
 	}
 
 	.wl-search-input:focus {
-		box-shadow: inset 0 0 0 1px var(--terminal-accent-amber);
+		box-shadow: inset 0 0 0 1px var(--ii-brand-primary, var(--terminal-accent-amber));
 	}
 
 	.wl-search-error {
 		position: absolute;
-		top: -20px;
-		left: var(--terminal-space-2);
+		top: -18px;
+		left: 10px;
 		font-size: 9px;
-		color: var(--terminal-status-error);
+		color: var(--ii-danger, var(--terminal-status-error));
 	}
 </style>
