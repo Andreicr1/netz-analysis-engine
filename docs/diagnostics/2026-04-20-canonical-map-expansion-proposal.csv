@@ -1,0 +1,179 @@
+canonical_name,ciks_impact,proposed_etf_ticker,asset_class,top_raw_aliases
+S&P 500 Index,155,SPY,equity_us_large_cap,"S&P 500 Index | S&P 500 Index reflects no deduction for fees, expenses or taxes | S&P 500 Index reflects no deduction for fees, expenses, or taxes | S&P 500 Index reflects no deductions for fees, expenses or taxes | S&P 500 Index&#160;"
+Bloomberg U.s.. Aggregate Bond Index,103,AGG,fi_us_aggregate,"Bloomberg U.S.Aggregate Bond Index | Bloomberg U.S.Aggregate Bond Index reflects no deduction for fees, expenses, or taxes | Bloomberg U.S.Aggregate Bond Index reflects no deductions for fees, expenses or taxes | Bloomberg U.S.Aggregate Bond Index&#160; | Bloomberg U.S.Aggregate Bond Total Return Index"
+Russell 3000 Index,68,IWV,equity_us_total,"RUSSELL 3000 Index | Russell 3000 Index | Russell 3000 Index reflects no deduction for fees, expenses, or taxes | Russell 3000 Index reflects no deductions for fees, expenses or taxes | Russell 3000 Index&#160;"
+Russell 1000 Growth Index,42,IWF,equity_us_large_growth,"RUSSELL 1000 GROWTH Index | Russell 1000 Growth Index | Russell 1000 Growth Index reflects no deduction for fees, expenses, or taxes | Russell 1000 Growth Index&#160; | Russell 1000 Growth Total Return Index"
+Russell 1000 Value Index,41,IWD,equity_us_large_value,"RUSSELL 1000 VALUE Index | Russell 1000 Value Index | Russell 1000 Value Index reflects no deduction for fees, expenses or taxes | Russell 1000 Value Index reflects no deduction for fees, expenses, or taxes | Russell 1000 Value Index reflects no deductions for fees, expenses or taxes"
+Russell 1000 Index,41,IWB,equity_us_large_cap,"RUSSELL 1000 Index | Russell 1000 Index | Russell 1000 Index reflects no deduction for fees, expenses, or taxes | Russell 1000 Index reflects no deductions for fees, expenses or taxes | Russell 1000 Index&#160;"
+Bloomberg Municipal Bond Index,36,MUB,fi_us_muni,"Bloomberg Municipal Bond Index | Bloomberg Municipal Bond Index reflects no deduction for fees, expenses, or taxes | Bloomberg Municipal Bond Index&#160;"
+MSCI EAFE Index,33,EFA,equity_developed_ex_us,"MSCI EAFE Index | MSCI EAFE Index reflects no deduction for fees, expenses, or taxes, except foreign withholding taxes | MSCI EAFE Index reflects no deductions for fees, expenses or taxes | MSCI EAFE Index&#160; | MSCI EAFE NR Index"
+Russell 2000 Index,30,IWM,equity_us_small,"RUSSELL 2000 Index | Russell 2000 Index | Russell 2000 Index reflects no deductions for fees, expenses or taxes | Russell 2000 Index&#160; | Russell 2000 Total Return Index"
+MSCI Emerging Markets Index,27,EEM,equity_emerging,"MSCI Emerging Markets Index | MSCI Emerging Markets Index reflects no deductions for fees, expenses or taxes | MSCI Emerging Markets Index&#160; | MSCI Emerging Markets Total Return Index"
+Russell 2000 Growth Index,25,IWO,equity_us_small_growth,RUSSELL 2000 GROWTH Index | Russell 2000 Growth Index | Russell 2000 Growth Total Return Index
+Russell 2000 Value Index,22,IWN,equity_us_small_value,"RUSSELL 2000 VALUE Index | Russell 2000 Value Index | Russell 2000 Value Index reflects no deduction for fees, expenses or taxes | Russell 2000 Value Index reflects no deductions for fees, expenses or taxes | Russell 2000 Value Index&#160;"
+Russell MidCap Growth Index,20,IWP,equity_us_mid_growth,"RUSSELL MIDCAP GROWTH Index | Russell Midcap Growth Index | Russell Midcap Growth Index reflects no deduction for fees, expenses, or taxes | Russell Midcap Growth Total Return Index"
+MSCI World Index,18,URTH,equity_developed_world,"MSCI WORLD Index | MSCI World Index | MSCI World Index&#160; | MSCI World NR Index reflects no deduction for fees, expenses, or taxes, except foreign withholding taxes"
+MSCI ACWI Index,16,ACWI,equity_global,MSCI ACWI Index | MSCI ACWI Total Return Index | MSCI All Country World Index NR
+MSCI ACWI,15,ACWI,equity_global,MSCI All Country World Index | MSCI All Country World Index&#160;
+Bloomberg Global Aggregate Index,14,BNDX,fi_global_aggregate,Bloomberg Global Aggregate Index | Bloomberg Global Aggregate Index&#160;
+Bloomberg U.s.. Aggregate Index,14,AGG,fi_us_aggregate,BLOOMBERG U.S.AGGREGATE Index | Bloomberg U.S.Aggregate Index | Bloomberg U.S.Aggregate Index&#160;
+Russell MidCap Value Index,13,IWS,equity_us_mid_value,"RUSSELL MIDCAP VALUE Index | Russell MidCap Value Index | Russell Midcap Value Index | Russell Midcap Value Index reflects no deduction for fees, expenses or taxes | Russell Midcap Value Index reflects no deductions for fees, expenses or taxes"
+S&P MidCap 400 Index,12,MDY,equity_us_mid,S&P MidCap 400 Index | S&P MidCap 400 Index&#160;
+Russell MidCap Index,12,IWR,equity_us_mid,"RUSSELL MIDCAP Index | Russell Midcap Index | Russell Midcap Index reflects no deduction for fees, expenses or taxes | Russell Midcap Index reflects no deductions for fees, expenses or taxes"
+Nasdaq-100 Index,12,QQQ,equity_us_large_growth,NASDAQ - 100 Total Return Index | NASDAQ-100 Index | NASDAQ-100 Index&#160; | NASDAQ-100 Total Return Index | Nasdaq-100 Index
+MSCI ACWI Ex U.s.. Index,11,ACWX,equity_developed_emerging_ex_us,"MSCI ACWI ex U.S.Index | MSCI ACWI ex U.S.Index reflects no deduction for fees, expenses, or taxes"
+Bloomberg U.s.. Universal Index,10,UBND,fi_us_universal,"Bloomberg U.S.Universal Index | Bloomberg U.S.Universal Index reflects no deductions for fees, expenses or taxes | Bloomberg U.S.Universal Total Return Index"
+Bloomberg Global Aggregate Bond Index,9,BNDX,fi_global_aggregate,Bloomberg Global Aggregate Bond Index | Bloomberg Global Aggregate Bond Index Reflects No Deduction For Fees Expenses Or Taxes | Bloomberg Global Aggregate Bond Index&#160;
+Russell 2500 Index,9,IWM,equity_us_small,RUSSELL 2500 Index | Russell 2500 Index | Russell 2500 Total Return Index
+Nasdaq Composite Index,9,ONEQ,equity_us_large_growth,NASDAQ Composite Index | NASDAQ Composite Total Return Index | Nasdaq Composite Index | Nasdaq Composite Index&#160;
+Russell 2500 Value Index,8,SMLV,equity_us_small_value,Russell 2500 Value Index | Russell 2500 Value Total Return Index
+ICE BofA U.S.3-month Treasury Bill Index,8,BIL,fi_us_cash,ICE BofA U.S.3-Month Treasury Bill Index | ICE BofA U.S.3-Month Treasury Bill Total Return Index&#160;
+Russell 3000 Value Index,8,IWW,equity_us_value,RUSSELL 3000 VALUE Index | Russell 3000 Value Index | Russell 3000 Value Total Return Index
+S&P Composite 1500 Index,8,ITOT,equity_us_total,S&P COMPOSITE 1500 Index | S&P Composite 1500 Index | S&P Composite 1500 Index&#160; | S&P Composite 1500 Total Return Index
+ICE BofA 3-month U.s.. Treasury Bill Index,7,BIL,fi_us_cash,ICE BofA 3-Month U.S.Treasury Bill Index
+S&P 500 Growth Index,7,IVW,equity_us_large_growth,S&P 500 Growth Index
+S&P 500 Value Index,7,IVE,equity_us_large_value,S&P 500 Value Index
+MSCI U.s.. Index,7,VTI,equity_us_total,MSCI U.S.Index | MSCI U.S.Index&#160;
+S&P UBS Leveraged Loan Index,7,BKLN,fi_us_bankloan,"S&P UBS Leveraged Loan Index | S&P UBS Leveraged Loan Index reflects no deductions for fees, expenses or taxes"
+MSCI World Ex U.s.. Index,7,VEA,equity_developed_ex_us,MSCI World Ex U.S.Index | MSCI World ex U.S.Index
+S&P Municipal Bond Index,6,MUB,fi_us_muni,"S&P Municipal Bond Index | S&P Municipal Bond Index reflects no deductions for fees, expenses or taxes"
+S&P SmallCap 600 Index,6,IJR,equity_us_small,S&P SmallCap 600 Index | S&P SmallCap 600 TR Index
+Russell 3000 Growth Index,6,IWZ,equity_us_growth,RUSSELL 3000 GROWTH Index | Russell 3000 Growth Index | Russell 3000 Growth Total Return Index
+MSCI EAFE Value Index,6,EFV,equity_developed_value,MSCI EAFE Value Index | MSCI EAFE Value Index&#160;
+Russell 2500 Growth Index,5,SMLG,equity_us_small_growth,Russell 2500 Growth Index
+Bloomberg U.s.. Municipal Bond Index,5,MUB,fi_us_muni,Bloomberg U.S.Municipal Bond Index
+Bloomberg Commodity Index,5,DJP,alt_commodities,Bloomberg Commodity Index
+S&P 500 Equal Weight Index,5,RSP,equity_us_large_cap,S&P 500 Equal Weight Index | S&P 500 Equal Weight Total Return Index
+Bloomberg U.s.. Corporate Bond Index,5,LQD,fi_us_corporate,"Bloomberg U.S.Corporate Bond Index | Bloomberg U.S.Corporate Bond Index reflects no deduction for fees, expenses, or taxes"
+ICE BofA U.s.. High Yield Index,5,HYG,fi_us_hy,"ICE BofA U.S.High Yield Index | ICE BofA U.S.High Yield Index reflects no deduction for fees, expenses, or taxes"
+Bloomberg U.s.. Treasury Index,4,GOVT,fi_us_treasury,Bloomberg U.S.Treasury Index
+Morningstar LSTA U.s.. Leveraged Loan Index,4,BKLN,fi_us_bankloan,Morningstar LSTA U.S.Leveraged Loan Index
+S&P Biotechnology Select Industry Index,4,XBI,equity_us_biotech,S&P Biotechnology Select Industry Index
+S&P MidCap 400 Growth Index,4,IJK,equity_us_mid_growth,S&P MidCap 400 Growth Index
+S&P MidCap 400 Value Index,4,IJJ,equity_us_mid_value,S&P MidCap 400 Value Index
+S&P SmallCap 600 Growth Index,4,IJT,equity_us_small_growth,S&P SmallCap 600 Growth Index
+S&P SmallCap 600 Value Index,4,IJS,equity_us_small_value,S&P SmallCap 600 Value Index
+Dow Jones U.s.. Total Stock Market Float Adjusted Index,4,SCHB,equity_us_total,Dow Jones U.S.Total Stock Market Float Adjusted Index
+ICE BofA U.s.. Broad Market Index,4,AGG,fi_us_aggregate,ICE BofA U.S.Broad Market Index
+JP Morgan CLOIE AAA Index,4,JAAA,fi_us_clo_aaa,JP Morgan CLOIE AAA Index | JP Morgan CLOIE AAA Index&#160; | JP Morgan CLOIE AAA Total Return Index
+S&P 500 Utilities Index,3,XLU,equity_us_utilities,S&P 500 Utilities Index
+S&P 1500 Index,3,ITOT,equity_us_total,S&P 1500 Index
+Bloomberg Intermediate U.s.. Aggregate Bond Index,3,IAGG,fi_us_intermediate,Bloomberg Intermediate U.S.Aggregate Bond Index
+MSCI Europe Index,3,VGK,equity_europe,MSCI Europe Index
+Bloomberg U.S.1-3 Year Government/credit Bond Index,3,BIV,fi_us_short,Bloomberg U.S.1-3 Year Government/Credit Bond Index
+Bloomberg Minnesota Municipal Bond Index,3,MUB,fi_us_muni,Bloomberg Minnesota Municipal Bond Index
+ICE BofA U.s.. High Yield Constrained Index,3,HYG,fi_us_hy,ICE BofA U.S.High Yield Constrained Index
+Bloomberg U.s.. Corporate Index,3,LQD,fi_us_corporate,Bloomberg U.S.Corporate Index
+ICE BofA U.s.. Treasury Bill Index,3,BIL,fi_us_cash,ICE BofA U.S.Treasury Bill Index
+Bloomberg Municipal High Yield Bond Index,3,HYD,fi_us_muni_hy,Bloomberg Municipal High Yield Bond Index
+ICE BOFA 3-month U.s.. Treasury BILL Index,3,BIL,fi_us_cash,ICE BOFA 3-MONTH U.S.TREASURY BILL Index
+Bloomberg High Yield Very Liquid Index,3,USHY,fi_us_hy,Bloomberg High Yield Very Liquid Index
+Bloomberg U.s.. MBS Index,3,MBB,fi_us_mbs,Bloomberg U.S.MBS Index
+MSCI ACWI IMI Index,3,ACWI,equity_global,MSCI ACWI IMI Index
+Bloomberg Aggregate Bond Index,3,AGG,fi_us_aggregate,Bloomberg Aggregate Bond Index
+MSCI Japan Index,3,EWJ,equity_japan,MSCI Japan Index
+S&P 500 Information Technology Index,3,XLK,equity_us_technology,S&P 500 Information Technology Index
+Bloomberg U.S.1-5 Year Government/credit Index,3,BIV,fi_us_short,Bloomberg U.S.1-5 Year Government/Credit Index
+ICE BofA U.s.. All Capital Securities Index,3,PFF,fi_us_preferred,ICE BofA U.S.All Capital Securities Index | ICE BofA U.S.All Capital Securities Index&#160;
+Bloomberg U.s.. Universal Bond Index,3,UBND,fi_us_universal,Bloomberg U.S.Universal Bond Index | Bloomberg U.S.Universal Bond Index&#160;
+S&P National Amt-free Municipal Bond Index,2,MUB,fi_us_muni,S&P National AMT-Free Municipal Bond Index
+Lipper Balanced Funds Index,2,AOR,allocation_balanced,Lipper Balanced Funds Index
+Bloomberg U.S.2000 Index,2,IWM,equity_us_small,Bloomberg U.S.2000 Index
+MSCI U.s.. Minimum Volatility Index,2,USMV,equity_us_minvol,MSCI U.S.Minimum Volatility Index
+Bloomberg Pennsylvania Municipal Bond Index,2,MUB,fi_us_muni,Bloomberg Pennsylvania Municipal Bond Index
+Bloomberg 1 Year Municipal Bond Index,2,SUB,fi_us_muni_short,Bloomberg 1 Year Municipal Bond Index
+FTSE World Government Bond Index,2,BWX,fi_global_treasury,FTSE World Government Bond Index
+Bloomberg U.s.. Corporate High Yield Index,2,HYG,fi_us_hy,Bloomberg U.S.Corporate High Yield Index
+Morningstar LSTA U.s.. Leveraged Loan 100 Index,2,BKLN,fi_us_bankloan,Morningstar LSTA U.S.Leveraged Loan 100 Index
+Russell 1000 Equal Weight Index,2,EQAL,equity_us_large_cap,Russell 1000 Equal Weight Index
+S&P 500 Financials Index,2,XLF,equity_us_financials,S&P 500 Financials Index
+ICE BofA U.s.. Cash Pay High Yield Constrained Index,2,HYG,fi_us_hy,ICE BofA U.S.Cash Pay High Yield Constrained Index
+Bloomberg 3-15 Year Blend Municipal Bond Index,2,MUB,fi_us_muni,Bloomberg 3-15 Year Blend Municipal Bond Index
+Bloomberg U.s.. Credit Index,2,LQD,fi_us_corporate,Bloomberg U.S.Credit Index
+ICE BofA 1 3 Year U.s.. Treasury Index,2,SHY,fi_us_short,ICE BofA 1 3 Year U.S.Treasury Index
+S&P 1000 Index,2,IWM,equity_us_small,S&P 1000 Index
+Bloomberg 1-3 Month U.s.. Treasury Bill Index,2,BIL,fi_us_cash,Bloomberg 1-3 Month U.S.Treasury Bill Index
+Bloomberg U.s.. Government Inflation-linked Bond Index,2,TIP,fi_us_tips,Bloomberg U.S.Government Inflation-Linked Bond Index
+Bloomberg U.s.. Intermediate Corporate Bond Index,2,IGIB,fi_us_corporate,Bloomberg U.S.Intermediate Corporate Bond Index
+S&P Banks Select Industry Index,2,KBE,equity_us_banks,S&P Banks Select Industry Index
+S&P Oil & Gas Equipment & Services Select Industry Index,2,XES,equity_us_energy,S&P Oil & Gas Equipment & Services Select Industry Index
+S&P Pharmaceuticals Select Industry Index,2,XPH,equity_us_pharma,S&P Pharmaceuticals Select Industry Index
+Bloomberg U.s.. Government/credit 1-3 Year Index,2,BIV,fi_us_short,Bloomberg U.S.Government/Credit 1-3 Year Index
+MSCI ACWI Ex U.s.. Investable Market Index,2,VXUS,equity_developed_emerging_ex_us,MSCI ACWI ex U.S.Investable Market Index
+Dow Jones U.s.. Select Dividend Index,2,DVY,equity_us_dividend,Dow Jones U.S.Select Dividend Index
+JP Morgan EMBI Global Diversified Index,2,EMB,fi_em_sovereign,JP Morgan EMBI Global Diversified Index
+S&P Target Date To 2055 Index,2,VFFVX,allocation_target_date_2055,S&P Target Date To 2055 Index
+S&P Target Date To 2030 Index,2,VTHRX,allocation_target_date_2030,S&P Target Date To 2030 Index
+S&P Target Date To 2035 Index,2,VTTHX,allocation_target_date_2035,S&P Target Date To 2035 Index
+S&P Target Date To 2040 Index,2,VFORX,allocation_target_date_2040,S&P Target Date To 2040 Index
+S&P Target Date To 2045 Index,2,VTIVX,allocation_target_date_2045,S&P Target Date To 2045 Index
+S&P Target Date To 2050 Index,2,VFIFX,allocation_target_date_2050,S&P Target Date To 2050 Index
+S&P Target Date To 2060 Index,2,VTTSX,allocation_target_date_2060,S&P Target Date To 2060 Index
+ICE BofA 3 Month U.s.. Treasury Bill Index,2,BIL,fi_us_cash,ICE BofA 3 Month U.S.Treasury Bill Index
+Russell Mid Cap Index,2,IWR,equity_us_mid,Russell Mid Cap Index | Russell Mid Cap Total Return Index
+MSCI ACWI Ex U.S.. Index,2,ACWX,equity_developed_emerging_ex_us,MSCI ACWI EX-U.S.Index | MSCI ACWI ex-U.S.Index
+Bloomberg 1-year Municipal Bond Index,2,SUB,fi_us_muni_short,Bloomberg 1-Year Municipal Bond Index | Bloomberg 1-Year Municipal Bond Index&#160;
+ICE BofA 1-3 Year U.s.. Treasury Index,2,SHY,fi_us_short,ICE BofA 1-3 Year U.S.Treasury Index | ICE BofA 1-3 Year U.S.Treasury Index&#160;
+Nasdaq 100 Index,2,QQQ,equity_us_large_growth,NASDAQ 100 Total Return Index | Nasdaq 100 Total Return Index
+Bloomberg U.s.. Municipal Bond Index*,1,MUB,fi_us_muni,Bloomberg U.S.Municipal Bond Index*
+S&P Municipal Bond Index*,1,MUB,fi_us_muni,"S&P Municipal Bond Index* reflects no deductions for fees, expenses or taxes"
+Russell 3000 Index?,1,IWV,equity_us_total,Russell 3000 Index?
+CRSP U.s.. Total Market Index,1,VTI,equity_us_total,CRSP U.S.Total Market Index
+MSCI World Ex U.S.. Index,1,VEA,equity_developed_ex_us,MSCI World ex-U.S.Index
+MSCI Emerging Markets Index?,1,EEM,equity_emerging,MSCI Emerging Markets Index?
+ICE BOFA U.s.. ALL Capital Securities Index,1,PFF,fi_us_preferred,ICE BOFA U.S.ALL CAPITAL SECURITIES Index
+ICE BofA U.S.3 Month Treasury Bill Index,1,BIL,fi_us_cash,ICE BofA U.S.3 Month Treasury Bill Index
+Bloomberg 3 15 Year Blend Municipal Bond Index,1,MUB,fi_us_muni,Bloomberg 3 15 Year Blend Municipal Bond Index
+S&P 500index,1,SPY,equity_us_large_cap,S&P 500Index
+S&P Total Market Index,1,SPTM,equity_us_total,S&P Total Market Index
+S&P 1500 Index-,1,ITOT,equity_us_total,S&P 1500 Index -
+Bloomberg U.s.. Aggregatebond Index,1,AGG,fi_us_aggregate,Bloomberg U.S.AggregateBond Index
+Bloomberg U.s.. Aggregate BOND Index,1,AGG,fi_us_aggregate,BLOOMBERG U.S.AGGREGATE BOND Index
+S&P 500 Index),1,SPY,equity_us_large_cap,S&P 500 Index)
+MSCI World Index),1,URTH,equity_developed_world,MSCI World Index)
+MSCI Emerging Markets Index),1,EEM,equity_emerging,MSCI Emerging Markets Index)
+MSCI World Index-,1,URTH,equity_developed_world,MSCI World Index -
+S&P Small Cap 600 Index,1,IJR,equity_us_small,S&P Small Cap 600 Index
+
+UNMAPPED BELOW (need human decision or skip)
+canonical_name,ciks_impact,,,top_raw_aliases
+MSCI All Country World Ex U.S.. Index-nr,6,,,MSCI All Country World Ex-U.S.Index-NR | MSCI All Country World ex-U.S.Index-NR
+MSCI All Country World Ex U.s.. Index Index,3,,,MSCI All Country World Ex U.S.Index NR
+"S&P Total Market Index (returns Do Not Reflect Deductions For Fees, Expenses Or Taxes)",3,,,"S&P Total Market Index (Returns do not reflect deductions for fees, expenses or taxes)"
+MSCI ACWI-nr,3,,,MSCI All Country World Index-NR
+MSCI All-country World Index,3,,,"MSCI All-Country World Index reflects no deduction for fees, expenses, or taxes, except foreign withholding taxes | MSCI All-Country World NR Index reflects no deduction for fees, expenses, or taxes, except foreign withholding taxes"
+MSCI All Country World Ex U.s.. Index,3,,,MSCI All Country World Ex U.S.Index&#160; | MSCI All Country World ex U.S.Index | MSCI All Country World ex U.S.Index&#160;
+S&P 500 Index ( Index,2,,,"S&P 500 Index (Index returns do not reflect deductions for fees, expenses or taxes)"
+Morningstar LSTA Leveraged Loan Index,2,,,Morningstar LSTA Leveraged Loan Index
+Morningstar U.s.. Moderate Target Allocation Index,2,,,Morningstar U.S.Moderate Target Allocation Index
+FTSE 3-month U.s.. Treasury Bill Index,2,,,FTSE 3-Month U.S.Treasury Bill Index
+Bloomberg U.s.. Aggregate Float Adjusted Index,2,,,Bloomberg U.S.Aggregate Float Adjusted Index
+MSCI India Index,2,,,MSCI India Index
+Bloomberg U.s.. Corporate High Yield Bond Index,2,,,Bloomberg U.S.Corporate High Yield Bond Index
+"MSCI ACWI (reflects Reinvested Dividends Net Of Withholding Taxes, But",2,,,"MSCI All Country World Index (reflects reinvested dividends net of withholding taxes, but reflects no deduction for fees, expenses or taxes)"
+CBOE S&P 500 Buywrite Monthly Index,2,,,CBOE S&P 500 BuyWrite Monthly Index
+Bloomberg U.s.. Short Aggregate Enhanced Yield Index,2,,,Bloomberg U.S.Short Aggregate Enhanced Yield Index
+Bloomberg U.s.. Short Aggregate Composite Index,2,,,Bloomberg U.S.Short Aggregate Composite Index
+MSCI AC World Index,2,,,MSCI AC World Index
+S&P 500 Health Care Index,2,,,S&P 500 Health Care Index
+Bloomberg 1-5 Year U.s.. Government/credit Index,2,,,Bloomberg 1-5 Year U.S.Government/Credit Index
+Morningstar Aggressive Target Risk Index,2,,,Morningstar Aggressive Target Risk Index
+MSCI ACWI Investable Market Index,2,,,MSCI ACWI Investable Market Index
+S&P Global Broad Market Index,2,,,S&P Global Broad Market Index
+Bloomberg 1-5 Year Government/credit Index,2,,,Bloomberg 1-5 Year Government/Credit Index
+Bloomberg U.s.. Corporate High Yield 2% Issuer Capped Index,2,,,Bloomberg U.S.Corporate High Yield 2% Issuer Capped Index
+Bloomberg 500 Index,2,,,Bloomberg 500 Index
+CBOE S&P 500 Buywrite Index,2,,,CBOE S&P 500 BuyWrite Index
+Bloomberg U.s.. Government/credit Bond Index,2,,,"Bloomberg U.S.Government/Credit Bond Index | Bloomberg U.S.Government/Credit Bond Index reflects no deductions for fees, expenses or taxes"
+Bloomberg U.s.. Intermediate Credit Index,2,,,"Bloomberg U.S.Intermediate Credit Index | Bloomberg U.S.Intermediate Credit Index reflects no deductions for fees, expenses or taxes"
+Bloomberg U.s.. Intermediate Government/credit Index,2,,,"Bloomberg U.S.Intermediate Government/Credit Index | Bloomberg U.S.Intermediate Government/Credit Index reflects no deductions for fees, expenses or taxes"
+S&P Municipal Bond Investment Grade Intermediate Index,2,,,"S&P Municipal Bond Investment Grade Intermediate Index | S&P Municipal Bond Investment Grade Intermediate Index reflects no deductions for fees, expenses or taxes"
+S&P Municipal Bond Investment Grade Short Index,2,,,"S&P Municipal Bond Investment Grade Short Index | S&P Municipal Bond Investment Grade Short Index reflects no deductions for fees, expenses or taxes"
+NYSE Technology Index,2,,,"NYSE Technology Index | NYSE Technology Index reflects no deductions for fees, expenses or taxes"
+Morningstar Moderate Target Risk Index,2,,,"Morningstar Moderate Target Risk Index | Morningstar Moderate Target Risk Index reflects no deductions for fees, expenses or taxes"
+MSCI ACWI All Cap Index,2,,,MSCI ACWI All Cap Index | MSCI ACWI All Cap Index&#160;
+S&P Target Risk Moderate Index,2,,,S&P Target Risk Moderate Index | S&P Target Risk Moderate Index&#160;
+MSCI Kokusai Index,2,,,MSCI Kokusai Index | MSCI Kokusai Index&#160;
+S&P 500 Scored & Screened Index,2,,,S&P 500 Scored & Screened Index | S&P 500 Scored & Screened Index&#160;
+Russell 2500tm Value Index,2,,,Russell 2500TM Value Index | Russell 2500TM Value Index&#160;
+Bloomberg 1-15 Year Municipal Bond Index,2,,,Bloomberg 1-15 Year Municipal Bond Index | Bloomberg 1-15 Year Municipal Bond Index&#160;
