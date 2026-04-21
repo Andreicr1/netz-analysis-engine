@@ -148,43 +148,60 @@ async def ingest_sec_xbrl_facts(
 
                 ctx = get_context("spawn")
                 with cf.ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as proc_pool:
-                    # Split files into worker-sized chunks
-                    # 4x over-subscription for load balance
-                    chunk_size = max(10, len(files) // (workers * 4)) if workers > 0 else len(files)
+                    chunk_size = 20
                     chunks = [files[i:i+chunk_size] for i in range(0, len(files), chunk_size)]
-                    
-                    future_to_chunk = {proc_pool.submit(_parse_file_chunk, chunk): chunk for chunk in chunks}
-                    
-                    # Process futures as they complete
-                    for fut in cf.as_completed(future_to_chunk):
-                        chunk = future_to_chunk[fut]
-                        try:
-                            records = fut.result()
-                            # Separate errors from real records
-                            errors = [r for r in records if "_error" in r]
-                            real_records = [r for r in records if "_error" not in r]
-                            
-                            files_failed += len(errors)
-                            for e in errors:
-                                _log.error(f"Failed to parse {e['_path']}: {e['_error']}")
-                                
-                            if real_records:
-                                if not dry_run:
-                                    # Batch into DB by chunks up to 50k to control memory
-                                    sub_batch_size = 50_000
-                                    for i in range(0, len(real_records), sub_batch_size):
-                                        await _copy_batch_to_db(pool, real_records[i:i+sub_batch_size])
-                                total_rows_inserted += len(real_records)
-                                
-                            # Successful files in this chunk
-                            files_processed += len(chunk) - len(errors)
-                            
-                            # Logging progress every ~1000 files
-                            if files_processed % 1000 < chunk_size or files_processed == total_files:
-                                _log.info(f"Progress: {files_processed}/{total_files} files done. Total inserted: {total_rows_inserted}")
+                    max_in_flight = workers * 2
 
-                        except Exception as e:
-                            _log.error(f"Future error: {e}")
+                    pending: set[cf.Future] = set()
+                    chunk_iter = iter(enumerate(chunks))
+
+                    def submit_next() -> bool:
+                        try:
+                            idx, chunk = next(chunk_iter)
+                            fut = proc_pool.submit(_parse_file_chunk, chunk)
+                            fut._chunk = chunk  # type: ignore[attr-defined]
+                            pending.add(fut)
+                            return True
+                        except StopIteration:
+                            return False
+
+                    # Seed initial batch
+                    for _ in range(min(max_in_flight, len(chunks))):
+                        submit_next()
+
+                    while pending:
+                        done, pending = cf.wait(pending, return_when=cf.FIRST_COMPLETED)
+                        for fut in done:
+                            chunk = fut._chunk  # type: ignore[attr-defined]
+                            try:
+                                records = fut.result()
+                                errors = [r for r in records if "_error" in r]
+                                real_records = [r for r in records if "_error" not in r]
+
+                                files_failed += len(errors)
+                                for e in errors:
+                                    _log.error(f"Failed to parse {e['_path']}: {e['_error']}")
+
+                                if real_records:
+                                    if not dry_run:
+                                        sub_batch_size = 20_000
+                                        for i in range(0, len(real_records), sub_batch_size):
+                                            await _copy_batch_to_db(pool, real_records[i:i+sub_batch_size])
+                                    total_rows_inserted += len(real_records)
+
+                                files_processed += len(chunk) - len(errors)
+                                del records, real_records
+
+                                if files_processed % 500 < chunk_size or files_processed == total_files:
+                                    _log.info(f"Progress: {files_processed}/{total_files} files done. Total inserted: {total_rows_inserted}")
+
+                            except Exception:
+                                _log.exception("Future error processing chunk of %d files", len(chunk))
+
+                        # Refill pending up to max_in_flight
+                        while len(pending) < max_in_flight:
+                            if not submit_next():
+                                break
 
                 final_count = await conn.fetchval("SELECT COUNT(*) FROM sec_xbrl_facts")
                 actual_inserted = final_count - initial_count if initial_count is not None and final_count is not None else 0
