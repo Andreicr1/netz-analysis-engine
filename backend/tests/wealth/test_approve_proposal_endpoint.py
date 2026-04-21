@@ -131,15 +131,14 @@ def _make_db_for_approve(
     # Approvals supersede/insert — no RETURNING, so bare MagicMock ok.
     generic_result = MagicMock()
 
-    execute_calls = {"i": 0}
+    first_call = {"done": False}
 
     async def _execute(stmt, params: dict | None = None):
-        execute_calls["i"] += 1
-        # First call is the run lookup.
-        if execute_calls["i"] == 1:
+        if not first_call["done"]:
+            first_call["done"] = True
             return run_result
-        # Next 18 are SA band updates.
-        if 2 <= execute_calls["i"] <= 19 and params and "block_id" in params:
+        # SA band update calls carry "block_id" in params.
+        if params and "block_id" in params:
             return _make_sa_result(params["block_id"])
         return generic_result
 
@@ -245,22 +244,53 @@ async def test_approve_missing_run_404() -> None:
 
 
 @pytest.mark.asyncio
-async def test_approve_template_incomplete_500() -> None:
-    """Propose run with fewer than 18 bands is a structural invariant bug."""
-    run = _make_run(n_bands=17)
+async def test_approve_partial_bands_succeeds() -> None:
+    """Propose run with fewer than 18 bands succeeds with partial snapshot.
+
+    Regression: the old strict len != 18 guard raised 500 even when the
+    run legitimately completed with a smaller universe. The approve flow
+    now works with whatever band count the run produced.
+    """
+    run = _make_run(n_bands=5)
     db = _make_db_for_approve(run=run)
 
-    with pytest.raises(HTTPException) as excinfo:
-        await approve_proposal(
-            profile="moderate",
-            run_id=run.id,
-            body=ApproveProposalRequest(),
-            db=db,
-            user=_make_user(),
-            actor=_make_actor(),
-            org_id="00000000-0000-0000-0000-000000000001",
-        )
-    assert excinfo.value.status_code == 500
+    resp = await approve_proposal(
+        profile="moderate",
+        run_id=run.id,
+        body=ApproveProposalRequest(),
+        db=db,
+        user=_make_user(),
+        actor=_make_actor(),
+        org_id="00000000-0000-0000-0000-000000000001",
+    )
+    # Snapshot reflects only the bands present in the run.
+    assert len(resp.strategic_snapshot) == 5
+    assert resp.run_id == run.id
+
+
+@pytest.mark.asyncio
+async def test_approve_no_bands_succeeds() -> None:
+    """Approve run with no proposed_bands records audit trail only.
+
+    Regression: approve-proposal used to raise 500 when proposed_bands
+    was empty or absent from cascade_telemetry.
+    """
+    run = _make_run(n_bands=0)
+    # Override telemetry to remove proposed_bands entirely.
+    run.cascade_telemetry["proposed_bands"] = []
+    db = _make_db_for_approve(run=run)
+
+    resp = await approve_proposal(
+        profile="moderate",
+        run_id=run.id,
+        body=ApproveProposalRequest(),
+        db=db,
+        user=_make_user(),
+        actor=_make_actor(),
+        org_id="00000000-0000-0000-0000-000000000001",
+    )
+    assert resp.strategic_snapshot == []
+    assert resp.cvar_feasible_at_approval is True
 
 
 @pytest.mark.asyncio

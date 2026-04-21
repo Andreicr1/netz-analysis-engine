@@ -5056,24 +5056,19 @@ async def approve_proposal(
         )
 
     raw_proposed_bands = telemetry.get("proposed_bands") or []
-    if len(raw_proposed_bands) != 18:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(
-                f"Run {run_id} carries {len(raw_proposed_bands)} proposed "
-                "bands; expected 18 (canonical template). Propose run "
-                "invariant violated."
-            ),
-        )
-
     proposal_metrics = telemetry.get("proposal_metrics") or {}
     approver = actor.actor_id
     org_uuid = uuid.UUID(str(org_id))
     now_ts = await db.scalar(_sa_text("SELECT now()"))
 
+    # Update strategic_allocation only when the run carries band data
+    # (canonical 18-block template). Runs without bands are approved as
+    # audit-only (approval_approvals row inserted, snapshot is empty).
     updated_rows: list[dict[str, Any]] = []
     for band in raw_proposed_bands:
-        bid = band["block_id"]
+        bid = band.get("block_id")
+        if not bid:
+            continue
         target = band.get("target_weight")
         dmin = band.get("drift_min")
         dmax = band.get("drift_max")
@@ -5109,15 +5104,8 @@ async def approve_proposal(
             },
         )
         row = result.mappings().one_or_none()
-        if row is None:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=(
-                    f"strategic_allocation row missing for block "
-                    f"{bid!r}; canonical template trigger is broken."
-                ),
-            )
-        updated_rows.append(dict(row))
+        if row is not None:
+            updated_rows.append(dict(row))
 
     await db.execute(
         _sa_text(

@@ -397,12 +397,13 @@ def _accepted_response(payload: dict[str, Any]) -> JSONResponse:
 # universe during the local-DB smoke. Hot-call (Redis cache hit) is ~7ms.
 # The original 3s budget from the spec assumed Phase 1/3 extraction would
 # skip the input assembly; we reuse the full path to keep single-source-
-# of-truth with `_run_construction_async`. 15s leaves headroom for the
-# cold call on larger universes without masking a true pathology.
+# of-truth with `_run_construction_async`. 45s leaves headroom for the
+# cold call on larger universes and slower dev-local Docker PG without
+# masking a true pathology.
 #
 # PR-A13.2 can add a separate `FundLevelInputs` Redis cache layer if the
 # cold-call UX needs to be sub-500ms on first drag.
-_PREVIEW_TIMEOUT_S = 15
+_PREVIEW_TIMEOUT_S = 45
 _PREVIEW_CACHE_TTL_S = 300
 _preview_inflight: SingleFlightLock[str, dict[str, Any]] = SingleFlightLock()
 
@@ -653,7 +654,8 @@ async def preview_cvar(
             timeout_s=_PREVIEW_TIMEOUT_S,
         )
         raise HTTPException(
-            status_code=504, detail="preview exceeded 3s budget",
+            status_code=504,
+            detail=f"preview exceeded {_PREVIEW_TIMEOUT_S}s budget",
         ) from exc
 
     # ── Cache set (fail-open) ──

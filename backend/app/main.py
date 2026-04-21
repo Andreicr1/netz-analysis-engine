@@ -113,6 +113,7 @@ from app.domains.wealth.routes.discovery_analysis import (
 from app.domains.wealth.routes.discovery_fcl import router as wealth_discovery_fcl_router
 from app.domains.wealth.routes.documents import router as wealth_documents_router
 from app.domains.wealth.routes.entity_analytics import router as wealth_entity_analytics_router
+from app.domains.wealth.routes.entity_analytics import wealth_alias_router as wealth_entity_analytics_alias_router
 from app.domains.wealth.routes.exposure import router as wealth_exposure_router
 from app.domains.wealth.routes.fact_sheets import router as wealth_fact_sheets_router
 
@@ -544,6 +545,7 @@ api_v1.include_router(wealth_instruments_router)
 api_v1.include_router(wealth_allocation_router)
 api_v1.include_router(wealth_analytics_router)
 api_v1.include_router(wealth_entity_analytics_router)
+api_v1.include_router(wealth_entity_analytics_alias_router)
 api_v1.include_router(wealth_portfolios_router)
 api_v1.include_router(wealth_risk_router)
 api_v1.include_router(wealth_risk_timeseries_router)

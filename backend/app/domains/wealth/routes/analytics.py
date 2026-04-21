@@ -742,10 +742,15 @@ async def get_factor_analysis(
     try:
         returns_matrix, _, _ = await fetch_returns_matrix(db, block_ids)
     except ValueError as e:
-        logger.error("factor_analysis_inputs_error", profile=profile, error=str(e))
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Insufficient NAV data to compute factor analysis",
+        logger.warning(
+            "factor_analysis_insufficient_data",
+            profile=profile,
+            error=str(e),
+        )
+        return FactorAnalysisResponse(
+            profile=profile,
+            data_available=False,
+            as_of_date=date.today(),
         )
 
     # Align weights to returns matrix columns (fetch_returns_matrix may
