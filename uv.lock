@@ -1297,6 +1297,23 @@ wheels = [
 ]
 
 [[package]]
+name = "ipca"
+version = "0.6.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "joblib" },
+    { name = "numba" },
+    { name = "numpy" },
+    { name = "progressbar" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/93/7e/99359c582fb8378f3cc61c66b64e9f0b9805c457d35e084248442059af82/ipca-0.6.7.tar.gz", hash = "sha256:ff3a013249de1fc2775b31fb7315cb710d15f5daa34318bfc444ad7be2d158db", size = 15503, upload-time = "2021-04-22T08:41:03.895Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d8/c6/4b3f0535d3f7c2589e3634ffa104e842149950811d8c6b3953a7f87c6a15/ipca-0.6.7-py3-none-any.whl", hash = "sha256:6e3df5dbb26a17f88c9042e37bded3b261f213d9bc50e132e784f16ece2905f2", size = 14958, upload-time = "2021-04-22T08:41:01.93Z" },
+]
+
+[[package]]
 name = "jinja2"
 version = "3.1.6"
 source = { registry = "https://pypi.org/simple" }
@@ -1950,6 +1967,7 @@ quant = [
     { name = "arch" },
     { name = "cvxpy" },
     { name = "datacommons-client", extra = ["pandas"] },
+    { name = "ipca" },
     { name = "lmoments3" },
     { name = "numpy" },
     { name = "scikit-learn" },
@@ -1977,6 +1995,7 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28" },
     { name = "ijson", specifier = ">=3.3" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.1" },
+    { name = "ipca", marker = "extra == 'quant'", specifier = "==0.6.7" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "lmoments3", marker = "extra == 'quant'", specifier = "==1.0.8" },
     { name = "matplotlib", specifier = ">=3.9" },
@@ -2563,6 +2582,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
 ]
+
+[[package]]
+name = "progressbar"
+version = "2.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a3/a6/b8e451f6cff1c99b4747a2f7235aa904d2d49e8e1464e0b798272aa84358/progressbar-2.5.tar.gz", hash = "sha256:5d81cb529da2e223b53962afd6c8ca0f05c6670e40309a7219eacc36af9b6c63", size = 10046, upload-time = "2018-06-29T02:32:00.222Z" }
 
 [[package]]
 name = "psycopg"

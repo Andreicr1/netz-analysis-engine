@@ -209,6 +209,21 @@ class AttributionRequest:
         "SPY", "IWM", "EFA", "EEM", "AGG", "HYG", "LQD",
     )
     min_months: int = 36
+    fund_asset_class: str | None = None
+    fund_cik: str | None = None
+    period_start: date | None = None
+    period_end: date | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class IPCAResult:
+    """Output of IPCA factor model attribution."""
+
+    factor_names: list[str]
+    factor_exposures: list[float]
+    factor_returns_contribution: list[float]
+    alpha: float
+    confidence: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,7 +241,7 @@ class FundAttributionResult:
     badge: RailBadge
     returns_based: ReturnsBasedResult | None = None
     holdings_based: HoldingsBasedResult | None = None
-    proxy: "BenchmarkProxyResult | None" = None
-    ipca: object | None = None  # PR-Q9
+    proxy: BenchmarkProxyResult | None = None
+    ipca: IPCAResult | None = None  # PR-Q9
     reason: str | None = None
     metadata: dict[str, str] = field(default_factory=dict)

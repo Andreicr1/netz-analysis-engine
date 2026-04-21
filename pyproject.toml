@@ -61,7 +61,7 @@ quant = [
     "numpy>=2.0",
     "scipy>=1.14",
     "cvxpy>=1.5",
-
+    "ipca==0.6.7",
     "statsmodels>=0.14",
     "scikit-learn>=1.6",
     "datacommons-client[Pandas]>=1.0",
