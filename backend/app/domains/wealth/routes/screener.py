@@ -2100,6 +2100,19 @@ async def get_catalog_fund_detail(
 
 
 @router.get(
+    "/catalog/detail/{external_id}",
+    response_model=FundDetailOut,
+    summary="Enriched fund detail — frontend alias",
+    include_in_schema=False,
+)
+async def get_catalog_fund_detail_alias(
+    external_id: str,
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> FundDetailOut:
+    return await get_catalog_fund_detail(external_id=external_id, db=db)
+
+
+@router.get(
     "/catalog/{external_id}/fact-sheet",
     response_model=FundFactSheet,
     summary="Comprehensive fact-sheet data for a single fund",
