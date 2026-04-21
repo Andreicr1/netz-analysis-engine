@@ -71,12 +71,16 @@ async def fetch_returns_matrix(
     """
     start_date = date.today() - timedelta(days=int(lookback_days * 1.5))
 
-    # Pick one approved instrument per block from instruments_org (org-scoped via RLS).
-    # Falls back to deprecated funds_universe if instruments_org is empty.
+    # Pick one non-rejected instrument per block from instruments_org
+    # (org-scoped via RLS). Excluded: rejected instruments — they were
+    # explicitly removed from the universe and may have stale/zero NAV.
+    # Pending and approved instruments are both eligible; a recently-added
+    # pending instrument is still part of the intended universe.
     io_stmt = (
         select(InstrumentOrg.block_id, InstrumentOrg.instrument_id)
         .where(
             InstrumentOrg.block_id.in_(block_ids),
+            InstrumentOrg.approval_status != "rejected",
         )
         .distinct(InstrumentOrg.block_id)
         .order_by(InstrumentOrg.block_id, InstrumentOrg.selected_at.desc())
@@ -119,6 +123,21 @@ async def fetch_returns_matrix(
     grouped: dict[str, dict[str, float]] = defaultdict(dict)
     for fid, nav_date, ret in ret_result.all():
         grouped[str(fid)][str(nav_date)] = float(ret)
+
+    # Prune funds whose individual history is shorter than MIN_OBSERVATIONS.
+    # A single fund with inception < 120 trading days ago reduces the strict
+    # intersection (df.dropna) to ≤ its own count, silently breaking all
+    # other funds in the block. Filter before alignment so the cascade can
+    # proceed with the remaining long-history funds.
+    fund_ids = [
+        fid for fid in fund_ids
+        if len(grouped.get(fid, {})) >= MIN_OBSERVATIONS
+    ]
+    if len(fund_ids) < 2:
+        raise ValueError(
+            f"Need ≥2 blocks with ≥{MIN_OBSERVATIONS} days of history, "
+            f"found {len(fund_ids)} after pruning short-history funds"
+        )
 
     matrix, common_dates = _align_returns_with_ffill(grouped, fund_ids)
 
