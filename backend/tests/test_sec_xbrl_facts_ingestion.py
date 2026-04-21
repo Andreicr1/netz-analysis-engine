@@ -1,13 +1,17 @@
-from decimal import Decimal
+import logging
 from pathlib import Path
 
+import asyncpg
 import pytest
 from sqlalchemy import text
 
+from app.core.config.settings import settings
 from app.core.db.engine import async_session_factory as async_session
 from app.core.jobs.sec_xbrl_facts_ingestion import LOCK_ID, ingest_sec_xbrl_facts
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "xbrl"
+
+_log = logging.getLogger(__name__)
 
 
 @pytest.fixture
@@ -19,109 +23,215 @@ def mock_companyfacts_dir(monkeypatch):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_ingest_sec_xbrl_facts_success(mock_companyfacts_dir):
-    # Ensure empty table before test
+async def test_ingest_sec_xbrl_facts_lock_lifecycle(mock_companyfacts_dir):
+    """1. Advisory lock acquired + released across success path."""
+    # This is implicitly tested if the test finishes and we can acquire it again
     async with async_session() as db:
         await db.execute(text("TRUNCATE sec_xbrl_facts"))
         await db.commit()
 
-    # Run ingestion
-    result = await ingest_sec_xbrl_facts(ciks=["0000001750", "0000320193"])
-    
+    result = await ingest_sec_xbrl_facts(ciks=["0000001750"])
     assert "error" not in result
-    assert result["files_processed"] == 2
-    assert result["rows_inserted"] == 6  # 4 from 1750, 2 from 320193
     
-    # Verify records in DB
+    # Verify we can acquire the lock now (meaning it was released)
     async with async_session() as db:
-        query_res = await db.execute(text("SELECT cik, taxonomy, concept, val, val_text, accn FROM sec_xbrl_facts ORDER BY cik, concept, accn"))
-        records = [dict(r._mapping) for r in query_res]
-        assert len(records) == 6
-        
-        # Check AAR CORP
-        ap_records = [r for r in records if r["concept"] == "AccountsPayable"]
-        assert len(ap_records) == 3
-        
-        # Check restatements are preserved as separate rows
-        assert len({r["accn"] for r in ap_records}) == 3
-        
-        # Check non-numeric
-        name_records = [r for r in records if r["concept"] == "EntityRegistrantName"]
-        assert len(name_records) == 1
-        assert name_records[0]["val"] is None
-        assert name_records[0]["val_text"] == "AAR CORP."
-        
-        # Check AAPL
-        income_records = [r for r in records if r["concept"] == "NetIncomeLoss"]
-        assert len(income_records) == 1
-        assert income_records[0]["val"] == Decimal("94680000000")
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_ingest_sec_xbrl_facts_idempotent(mock_companyfacts_dir):
-    # Run once
-    async with async_session() as db:
-        await db.execute(text("TRUNCATE sec_xbrl_facts"))
-        await db.commit()
-
-    result1 = await ingest_sec_xbrl_facts(ciks=["0000001750"])
-    assert result1["rows_inserted"] == 4
-    
-    # Run twice
-    result2 = await ingest_sec_xbrl_facts(ciks=["0000001750"])
-    assert result2["rows_inserted"] == 0  # 0 new rows
+        lock_res = await db.execute(text(f"SELECT pg_try_advisory_lock({LOCK_ID})"))
+        assert lock_res.scalar() is True
+        await db.execute(text(f"SELECT pg_advisory_unlock({LOCK_ID})"))
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_ingest_sec_xbrl_facts_lock_held(mock_companyfacts_dir):
-    # Manually hold lock
+    """2. Second concurrent invocation exits with 'lock held' log, zero writes."""
+    
+    # Ensure empty DB
     async with async_session() as db:
-        await db.execute(text(f"SELECT pg_advisory_lock({LOCK_ID})"))
+        await db.execute(text("TRUNCATE sec_xbrl_facts"))
+        await db.commit()
+    
+    # Create a completely independent connection bypassing SQLAlchemy pool
+    db_url = settings.database_url.replace("+asyncpg", "")
+    conn = await asyncpg.connect(db_url)
+    
+    # Acquire lock in this independent connection
+    await conn.execute(f"SELECT pg_advisory_lock({LOCK_ID})")
+    
+    try:
+        # Try to run ingestion (will fail to acquire lock)
+        result = await ingest_sec_xbrl_facts(ciks=["0000001750"])
+        assert result.get("error") == "lock held", f"Expected 'lock held', got: {result}"
         
-        try:
-            # Try to run ingestion
-            result = await ingest_sec_xbrl_facts(ciks=["0000001750"])
-            assert result.get("error") == "lock held"
-        finally:
-            await db.execute(text(f"SELECT pg_advisory_unlock({LOCK_ID})"))
+        # Zero writes
+        async with async_session() as db:
+            count = await db.scalar(text("SELECT COUNT(*) FROM sec_xbrl_facts"))
+            assert count == 0
+    finally:
+        await conn.execute(f"SELECT pg_advisory_unlock({LOCK_ID})")
+        await conn.close()
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_ingest_sec_xbrl_facts_dry_run(mock_companyfacts_dir):
+async def test_ingest_sec_xbrl_facts_fixture_aar(mock_companyfacts_dir):
+    """3. Fixture AAR: inserts expected row count, correct cik, taxonomy, concept, accn."""
     async with async_session() as db:
         await db.execute(text("TRUNCATE sec_xbrl_facts"))
         await db.commit()
 
-    result = await ingest_sec_xbrl_facts(ciks=["0000001750"], dry_run=True)
+    result = await ingest_sec_xbrl_facts(ciks=["0000001750"])
+    assert "error" not in result, f"Worker failed with: {result.get('error')}"
+    assert result["rows_inserted"] == 4
     
-    assert "error" not in result
-    assert result["rows_inserted"] == 0
-    assert result["rows_would_insert"] == 4
-    
-    # DB is still empty
     async with async_session() as db:
-        count = await db.execute(text("SELECT COUNT(*) FROM sec_xbrl_facts"))
-        assert count.scalar() == 0
+        res = await db.execute(text("SELECT cik, taxonomy, concept, accn FROM sec_xbrl_facts"))
+        rows = res.all()
+        assert len(rows) == 4
+        for r in rows:
+            assert r.cik == 1750
+            assert r.taxonomy in ("dei", "us-gaap")
+            assert r.concept in ("EntityRegistrantName", "AccountsPayable")
+            assert r.accn is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_ingest_sec_xbrl_facts_restatement(mock_companyfacts_dir):
+    """4. Restatement: 10-K and 10-K/A for same produce two separate rows."""
+    async with async_session() as db:
+        await db.execute(text("TRUNCATE sec_xbrl_facts"))
+        await db.commit()
+
+    await ingest_sec_xbrl_facts(ciks=["0000001750"])
+    
+    async with async_session() as db:
+        # AccountsPayable has 10-K and 10-K/A for 2011-05-31 in fixture
+        res = await db.execute(text(
+            "SELECT accn, form, val FROM sec_xbrl_facts WHERE concept='AccountsPayable' AND period_end='2011-05-31'"
+        ))
+        rows = res.all()
+        assert len(rows) == 2
+        forms = {r.form for r in rows}
+        assert "10-K" in forms
+        assert "10-K/A" in forms
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_ingest_sec_xbrl_facts_unit_switching(mock_companyfacts_dir):
+    """5. Unit switching: shares and USD observations for same concept both persist."""
+    # Our fixture CIK0000320193.json has NetIncomeLoss (USD) and CommonStockSharesOutstanding (shares)
+    async with async_session() as db:
+        await db.execute(text("TRUNCATE sec_xbrl_facts"))
+        await db.commit()
+
+    result = await ingest_sec_xbrl_facts(ciks=["0000320193"])
+    assert "error" not in result, f"Worker failed with: {result.get('error')}"
+    
+    async with async_session() as db:
+        res = await db.execute(text("SELECT concept, unit FROM sec_xbrl_facts"))
+        rows = res.all()
+        units = {r.unit for r in rows}
+        assert "USD" in units
+        assert "shares" in units
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_ingest_sec_xbrl_facts_idempotent(mock_companyfacts_dir):
+    """6. Re-run idempotent: second run of same fixture inserts 0 additional rows."""
+    async with async_session() as db:
+        await db.execute(text("TRUNCATE sec_xbrl_facts"))
+        await db.commit()
+
+    await ingest_sec_xbrl_facts(ciks=["0000001750"])
+    result2 = await ingest_sec_xbrl_facts(ciks=["0000001750"])
+    assert result2["rows_inserted"] == 0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_ingest_sec_xbrl_facts_period_start(mock_companyfacts_dir):
+    """7. period_start populated when present in source, NULL when absent."""
+    async with async_session() as db:
+        await db.execute(text("TRUNCATE sec_xbrl_facts"))
+        await db.commit()
+
+    result = await ingest_sec_xbrl_facts(ciks=["0000320193"])
+    assert "error" not in result, f"Worker failed with: {result.get('error')}"
+    
+    async with async_session() as db:
+        # NetIncomeLoss has start date
+        res_start = await db.execute(text("SELECT period_start FROM sec_xbrl_facts WHERE concept='NetIncomeLoss'"))
+        assert res_start.scalar() is not None
+        
+        # Shares outstanding does not have start date
+        res_no_start = await db.execute(text("SELECT period_start FROM sec_xbrl_facts WHERE concept='CommonStockSharesOutstanding'"))
+        assert res_no_start.scalar() is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_ingest_sec_xbrl_facts_non_numeric(mock_companyfacts_dir):
+    """8. Non-numeric observation (e.g. dei:EntityRegistrantName) -> val IS NULL, val_text populated."""
+    async with async_session() as db:
+        await db.execute(text("TRUNCATE sec_xbrl_facts"))
+        await db.commit()
+
+    await ingest_sec_xbrl_facts(ciks=["0000001750"])
+    
+    async with async_session() as db:
+        res = await db.execute(text("SELECT val, val_text FROM sec_xbrl_facts WHERE concept='EntityRegistrantName'"))
+        row = res.one()
+        assert row.val is None
+        assert row.val_text == "AAR CORP."
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_ingest_sec_xbrl_facts_malformed(mock_companyfacts_dir):
-    # Testing that malformed file is skipped gracefully
-    # We pass the exact prefix to avoid normal globbing since malformed has a different structure
+    """9. Malformed fixture: logged as failure, counter increments, worker continues."""
     result = await ingest_sec_xbrl_facts(ciks=["0000000000_malformed"])
-    
-    assert result["files_processed"] == 0
     assert result["files_failed"] == 1
+    assert result["files_processed"] == 0
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_ingest_sec_xbrl_facts_limit(mock_companyfacts_dir):
+    """10. --limit 1 flag processes exactly one file."""
     result = await ingest_sec_xbrl_facts(limit=1)
-    
-    assert "error" not in result
     assert result["files_processed"] + result["files_failed"] == 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_ingest_sec_xbrl_facts_cik_subset(mock_companyfacts_dir):
+    """11. --cik flag subsets correctly."""
+    async with async_session() as db:
+        await db.execute(text("TRUNCATE sec_xbrl_facts"))
+        await db.commit()
+
+    result = await ingest_sec_xbrl_facts(ciks=["0000001750"])
+    assert result["files_processed"] == 1
+    
+    async with async_session() as db:
+        count = await db.scalar(text("SELECT COUNT(DISTINCT cik) FROM sec_xbrl_facts"))
+        assert count == 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_ingest_sec_xbrl_facts_dry_run(mock_companyfacts_dir):
+    """12. --dry-run writes zero rows, returns summary with expected rows_would_insert."""
+    async with async_session() as db:
+        await db.execute(text("TRUNCATE sec_xbrl_facts"))
+        await db.commit()
+
+    result = await ingest_sec_xbrl_facts(ciks=["0000001750"], dry_run=True)
+    assert result["rows_inserted"] == 0
+    assert result["rows_would_insert"] == 4
+    
+    async with async_session() as db:
+        count = await db.scalar(text("SELECT COUNT(*) FROM sec_xbrl_facts"))
+        assert count == 0

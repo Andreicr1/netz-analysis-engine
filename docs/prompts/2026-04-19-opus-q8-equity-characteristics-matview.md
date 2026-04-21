@@ -8,7 +8,7 @@ loc_estimate: 350
 reviewer: data-platform
 ---
 
-# Opus Prompt — PR-Q8: Equity Characteristics
+# Prompt — PR-Q8: Equity Characteristics
 
 ## Goal
 

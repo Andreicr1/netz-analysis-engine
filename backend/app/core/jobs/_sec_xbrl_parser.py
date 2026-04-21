@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 import ijson
 
@@ -28,12 +28,12 @@ def iter_facts_from_file(path: Path) -> Iterator[XbrlFact]:
     """Parse SEC CompanyFacts JSON efficiently using ijson."""
     with open(path, "rb") as f:
         parser = ijson.parse(f)
-        cik = None
-        obs = {}
+        cik: int | None = None
+        obs: dict[str, Any] = {}
         in_obs = False
-        taxonomy = None
-        concept = None
-        unit = None
+        taxonomy: str | None = None
+        concept: str | None = None
+        unit: str | None = None
 
         for prefix, event, value in parser:
             if prefix == "cik" and event == "number":
@@ -73,21 +73,22 @@ def iter_facts_from_file(path: Path) -> Iterator[XbrlFact]:
                             end_date = datetime.strptime(obs["end"], "%Y-%m-%d").date()
                             filed_date = datetime.strptime(obs["filed"], "%Y-%m-%d").date()
                             
-                            yield XbrlFact(
-                                cik=cik,
-                                taxonomy=taxonomy,
-                                concept=concept,
-                                unit=unit,
-                                period_end=end_date,
-                                period_start=start_date,
-                                val=val_num,
-                                val_text=val_text,
-                                accn=obs["accn"],
-                                fy=obs.get("fy"),
-                                fp=obs.get("fp"),
-                                form=obs["form"],
-                                filed=filed_date
-                            )
+                            if cik is not None and taxonomy is not None and concept is not None and unit is not None:
+                                yield XbrlFact(
+                                    cik=cik,
+                                    taxonomy=taxonomy,
+                                    concept=concept,
+                                    unit=unit,
+                                    period_end=end_date,
+                                    period_start=start_date,
+                                    val=val_num,
+                                    val_text=val_text,
+                                    accn=obs["accn"],
+                                    fy=obs.get("fy"),
+                                    fp=obs.get("fp"),
+                                    form=obs["form"],
+                                    filed=filed_date
+                                )
                         elif in_obs and len(parts) == 7:
                             field = parts[6]
                             obs[field] = value
