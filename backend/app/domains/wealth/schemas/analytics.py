@@ -142,10 +142,11 @@ class FactorContribution(BaseModel):
 
 class FactorAnalysisResponse(BaseModel):
     profile: str
-    systematic_risk_pct: float
-    specific_risk_pct: float
+    data_available: bool = True
+    systematic_risk_pct: float = 0.0
+    specific_risk_pct: float = 0.0
     factor_contributions: list[FactorContribution] = Field(default_factory=list)
-    r_squared: float
+    r_squared: float = 0.0
     portfolio_factor_exposures: dict[str, float] = Field(default_factory=dict)
     as_of_date: date | None = None
 
