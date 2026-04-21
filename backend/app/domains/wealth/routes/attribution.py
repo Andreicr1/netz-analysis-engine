@@ -22,6 +22,7 @@ from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.benchmark_nav import BenchmarkNav
 from app.domains.wealth.models.block import AllocationBlock
+from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.model_portfolio import ModelPortfolio
 from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.schemas.attribution import AttributionRead, SectorAttributionRead
@@ -136,6 +137,8 @@ async def get_attribution(
         })
 
     # 6. Load NavTimeseries for fund returns
+    # Primary source: live portfolio fund_selection_schema.
+    # Fallback: instruments_org (approved instruments with block assignment).
     fund_selection = live_portfolio.fund_selection_schema if live_portfolio else None
     instruments_by_block: dict[str, list[str]] = {}
     if fund_selection:
@@ -146,6 +149,20 @@ async def get_attribution(
                 if isinstance(f, dict) and f.get("instrument_id") and f.get("block_id"):
                     bid = f["block_id"]
                     instruments_by_block.setdefault(bid, []).append(f["instrument_id"])
+
+    if not instruments_by_block:
+        # No live portfolio or empty fund_selection_schema — fall back to the
+        # org's approved instrument universe so attribution can still run.
+        org_stmt = select(InstrumentOrg.instrument_id, InstrumentOrg.block_id).where(
+            InstrumentOrg.block_id.in_(block_ids),
+            InstrumentOrg.approval_status == "approved",
+        )
+        org_result = await db.execute(org_stmt)
+        for row in org_result.all():
+            if row.block_id and row.instrument_id:
+                instruments_by_block.setdefault(row.block_id, []).append(
+                    str(row.instrument_id)
+                )
 
     all_instrument_ids: list[str] = []
     for ids in instruments_by_block.values():
