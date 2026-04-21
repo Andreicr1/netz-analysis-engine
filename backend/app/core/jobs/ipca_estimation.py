@@ -38,7 +38,7 @@ async def run_ipca_estimation(db: AsyncSession, asof: date | None = None) -> Non
         """
         SELECT i.asset_class,
                e.instrument_id,
-               e.obs_date,
+               e.as_of,
                e.size, e.value, e.momentum, e.quality, e.investment, e.profitability,
                n.nav_date,
                (array_agg(n.nav ORDER BY n.nav_date DESC))[1] AS nav_eom
@@ -46,8 +46,8 @@ async def run_ipca_estimation(db: AsyncSession, asof: date | None = None) -> Non
         JOIN instruments_universe i ON i.instrument_id = e.instrument_id
         LEFT JOIN nav_timeseries n 
           ON n.instrument_id = e.instrument_id 
-          AND date_trunc('month', n.nav_date)::date = date_trunc('month', e.obs_date)::date
-        WHERE e.obs_date <= :asof
+          AND date_trunc('month', n.nav_date)::date = date_trunc('month', e.as_of)::date
+        WHERE e.as_of <= :asof
         GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
         """
     )
@@ -61,7 +61,7 @@ async def run_ipca_estimation(db: AsyncSession, asof: date | None = None) -> Non
         {
             "asset_class": r.asset_class or "Equity",
             "instrument_id": str(r.instrument_id),
-            "obs_date": r.obs_date,
+            "obs_date": r.as_of,
             "size": float(r.size) if r.size else np.nan,
             "value": float(r.value) if r.value else np.nan,
             "momentum": float(r.momentum) if r.momentum else np.nan,
