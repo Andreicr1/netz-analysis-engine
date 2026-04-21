@@ -33,6 +33,9 @@ from vertical_engines.wealth.attribution.benchmark_proxy import (
 from vertical_engines.wealth.attribution.holdings_based import (
     run_holdings_rail as _run_holdings_rail,
 )
+from vertical_engines.wealth.attribution.ipca_rail import (
+    run_ipca_rail as _run_ipca_rail,
+)
 from vertical_engines.wealth.attribution.models import (
     AttributionRequest,
     BenchmarkProxyResult,
@@ -41,6 +44,7 @@ from vertical_engines.wealth.attribution.models import (
     BrinsonSectorEffect,
     FundAttributionResult,
     HoldingsBasedResult,
+    IPCAResult,
     RailBadge,
     ReturnsBasedResult,
     SectorWeight,
@@ -351,6 +355,20 @@ async def compute_fund_attribution(
         await _cache_set(redis_client, cache_key, result)
         return result
 
+    # Rail 1.5 — IPCA factor model.
+    # Gives cross-sectional factor attribution when OOS R² is high enough.
+    ipca_result: IPCAResult | None = None
+    try:
+        if db is not None:
+            ipca_result = await _run_ipca_rail(request, db)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("ipca_fetch_failed", error=str(exc))
+
+    if ipca_result is not None:
+        result = _build_ipca_result(request, ipca_result)
+        await _cache_set(redis_client, cache_key, result)
+        return result
+
     # Rail 2 — benchmark proxy. Resolves primary_benchmark to a canonical
     # ETF and runs Brinson-Fachler against that ETF's N-PORT holdings.
     # Degrades when benchmark is unresolved, proxy has no holdings, or
@@ -398,6 +416,24 @@ async def compute_fund_attribution(
     result = _build_result(request, returns_result)
     await _cache_set(redis_client, cache_key, result)
     return result
+
+
+def _build_ipca_result(
+    request: AttributionRequest,
+    ipca: IPCAResult,
+) -> FundAttributionResult:
+    """Wrap a successful IPCA rail into the dispatcher envelope."""
+    metadata = {
+        "n_factors": str(len(ipca.factor_names)),
+        "alpha": f"{ipca.alpha:.4f}",
+    }
+    return FundAttributionResult(
+        fund_instrument_id=request.fund_instrument_id,
+        asof=request.asof,
+        badge=RailBadge.RAIL_IPCA,
+        ipca=ipca,
+        metadata=metadata,
+    )
 
 
 def _build_proxy_result(

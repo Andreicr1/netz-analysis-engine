@@ -425,6 +425,18 @@ def _render_attribution_block(evidence_context: dict[str, Any]) -> list[str]:
     if badge == "RAIL_PROXY":
         out.extend(_render_proxy_block(attribution))
 
+    if badge == "RAIL_IPCA":
+        ipca = attribution.get("ipca")
+        if ipca:
+            out.append("\n### Style Exposures")
+            names = ipca.get("factor_names", [])
+            exposures = ipca.get("factor_exposures", [])
+            for i, name in enumerate(names):
+                if i < len(exposures):
+                    val = float(exposures[i])
+                    # PR-Q9 invariant: Zero raw beta values in copy, format as %
+                    out.append(f"- {name}: {val * 100:.1f}%")
+
     if badge == "RAIL_RETURNS" and returns_based:
         exposures = returns_based.get("exposures") or []
         if exposures:
