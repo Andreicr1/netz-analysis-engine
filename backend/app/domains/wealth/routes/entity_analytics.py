@@ -61,6 +61,10 @@ logger = structlog.get_logger()
 
 router = APIRouter(prefix="/analytics")
 
+# Alias router: frontend calls /wealth/entity-analytics/{entity_id}
+# while the canonical path is /analytics/entity/{entity_id}.
+wealth_alias_router = APIRouter(prefix="/wealth")
+
 _WINDOW_DAYS = {"3m": 63, "6m": 126, "1y": 252, "3y": 756, "5y": 1260}
 
 
@@ -718,4 +722,31 @@ async def get_active_share(
         n_benchmark_positions=result.n_benchmark_positions,
         n_common_positions=result.n_common_positions,
         as_of_date=today,
+    )
+
+
+# ── Frontend alias — /wealth/entity-analytics/{entity_id} ───────────────────
+# The frontend calls /wealth/entity-analytics/{cik} but the canonical backend
+# path is /analytics/entity/{entity_id}.  This alias delegates to the same
+# handler so existing frontend code works without a URL change.
+
+@wealth_alias_router.get(
+    "/entity-analytics/{entity_id}",
+    response_model=EntityAnalyticsResponse,
+    summary="Entity analytics vitrine — frontend alias",
+    include_in_schema=False,
+)
+async def get_entity_analytics_alias(
+    entity_id: str,
+    window: str = Query("1y", pattern="^(3m|6m|1y|3y|5y)$"),
+    benchmark_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> EntityAnalyticsResponse:
+    return await get_entity_analytics(
+        entity_id=entity_id,
+        window=window,
+        benchmark_id=benchmark_id,
+        db=db,
+        user=user,
     )
