@@ -5,6 +5,7 @@ depends_on: 0009 (admin_infrastructure).
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0010"

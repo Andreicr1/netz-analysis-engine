@@ -18,8 +18,9 @@ Create Date: 2026-03-18
 import logging
 
 import psycopg
-from alembic import op
 from sqlalchemy import text
+
+from alembic import op
 
 logger = logging.getLogger(__name__)
 

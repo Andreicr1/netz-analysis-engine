@@ -12,8 +12,9 @@ depends_on: 0044 (blended_benchmarks).
 """
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0045_instruments_global"
 down_revision = "0044_blended_benchmarks"

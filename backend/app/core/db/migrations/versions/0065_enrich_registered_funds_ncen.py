@@ -10,6 +10,7 @@ Create Date: 2026-03-28
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0065_enrich_registered_funds_ncen"

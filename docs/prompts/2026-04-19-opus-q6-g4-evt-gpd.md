@@ -8,7 +8,7 @@ loc_estimate: 620
 reviewer: quant
 ---
 
-# Opus Prompt — PR-Q6: G4 EVT Extreme Risk
+# Prompt — PR-Q6: G4 EVT Extreme Risk
 
 ## Goal
 

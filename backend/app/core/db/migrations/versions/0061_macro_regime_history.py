@@ -12,6 +12,7 @@ Create Date: 2026-03-27
 import os
 
 import psycopg
+
 from alembic import op
 
 revision = "0061_macro_regime_history"

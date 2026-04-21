@@ -8,6 +8,7 @@ depends_on: 0042 (bis_imf_hypertables).
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0043_esma_isin_ticker_fund_lei"

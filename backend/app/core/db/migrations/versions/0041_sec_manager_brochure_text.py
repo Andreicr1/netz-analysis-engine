@@ -8,6 +8,7 @@ depends_on: 0040 (sec_nport_holdings).
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0041_sec_manager_brochure_text"

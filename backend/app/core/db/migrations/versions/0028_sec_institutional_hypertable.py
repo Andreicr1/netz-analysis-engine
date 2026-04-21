@@ -20,6 +20,7 @@ depends_on: 0027 (nav_portfolio_hypertables).
 import os
 
 import psycopg
+
 from alembic import op
 
 revision = "0028_sec_inst_hypertable"

@@ -1,13 +1,13 @@
 """Worker for quarterly IPCA factor model estimation."""
 import json
-from datetime import date, datetime
 import uuid
+from datetime import date
 
-import pandas as pd
 import numpy as np
+import pandas as pd
+import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-import structlog
 
 from quant_engine.factor_model_ipca_service import fit_universe
 from quant_engine.ipca.drift_monitor import compute_gamma_drift

@@ -1,23 +1,21 @@
 """Tests for IPCA attribution rail (≥ 5 dispatcher tests)."""
-import json
 from datetime import date
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import numpy as np
 import pytest
 
+from quant_engine.ipca.fit import IPCAFit
 from vertical_engines.wealth.attribution.models import (
     AttributionRequest,
-    HoldingsBasedResult,
     BenchmarkProxyResult,
     BenchmarkResolution,
     BrinsonResult,
-    FundAttributionResult,
+    HoldingsBasedResult,
     RailBadge,
 )
 from vertical_engines.wealth.attribution.service import compute_fund_attribution
-from quant_engine.ipca.fit import IPCAFit
 
 
 @pytest.fixture

@@ -12,6 +12,7 @@ Revises: 0068_instruments_org
 import os
 
 import psycopg
+
 from alembic import op
 
 revision = "0069_globalize_instruments_nav"

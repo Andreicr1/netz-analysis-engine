@@ -30,7 +30,6 @@ from sqlalchemy import text
 
 from app.core.db.engine import async_session_factory
 
-
 # Every capture MUST start with a recognized index provider — the only
 # reliable way to reject generic filler ("the Index", "its benchmark index",
 # "parent index") that the A0 v1 patterns produced. Context clauses
@@ -278,7 +277,7 @@ def _print_stratified(stratified: dict[str, list[dict]]) -> None:
             try:
                 print(f"      desc      = {snippet!r}")
             except UnicodeEncodeError:
-                print(f"      desc      = <unicode>  (see CSV)")
+                print("      desc      = <unicode>  (see CSV)")
 
 
 def main() -> int:

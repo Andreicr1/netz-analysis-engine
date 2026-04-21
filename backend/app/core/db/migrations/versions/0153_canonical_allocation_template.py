@@ -38,6 +38,7 @@ the Python-side enum extension lives in ``schemas/sanitized.py``.
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0153_canonical_allocation_template"

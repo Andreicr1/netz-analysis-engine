@@ -10,6 +10,7 @@ depends_on: 0010 (tenant_asset_slug_rls_fix).
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0012"

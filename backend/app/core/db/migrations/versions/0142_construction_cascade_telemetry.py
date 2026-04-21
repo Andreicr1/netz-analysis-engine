@@ -19,8 +19,9 @@ Create Date: 2026-04-16
 from __future__ import annotations
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
+
+from alembic import op
 
 revision: str = "0142_construction_cascade_telemetry"
 down_revision: str | None = "0141_portfolio_status_degraded"

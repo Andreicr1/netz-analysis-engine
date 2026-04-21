@@ -5,6 +5,7 @@ Reference: PR-Q6 and EDHEC Spec §4.
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0169_add_cvar_evt_cols"

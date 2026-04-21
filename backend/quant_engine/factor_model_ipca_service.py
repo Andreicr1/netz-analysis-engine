@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import structlog
-from scipy import stats
 
 from quant_engine.factor_model_service import FactorModelResult
 from quant_engine.ipca.fit import IPCAFit, fit_ipca
@@ -30,12 +28,16 @@ def fit_universe(
     max_k: int = 6,
 ) -> IPCAFit:
     """Fit IPCA universe with walk-forward CV to select optimal K."""
-    aligned_returns, aligned_chars = panel.align(characteristics, join="inner")
+    aligned_returns, aligned_chars = panel.align(characteristics, join="inner", axis=0)
     
-    if aligned_chars.empty:
+    if aligned_returns.empty or aligned_chars.empty:
         raise ValueError("No matching characteristics for panel_returns")
-    
-    mask = aligned_chars.notna().all(axis=1) & aligned_returns.notna().iloc[:, 0]
+
+    mask = aligned_chars.notna().all(axis=1)
+    if isinstance(aligned_returns, pd.DataFrame):
+        mask = mask & aligned_returns.notna().iloc[:, 0]
+    else:
+        mask = mask & aligned_returns.notna()
     aligned_chars = aligned_chars[mask]
     aligned_returns = aligned_returns[mask]
     

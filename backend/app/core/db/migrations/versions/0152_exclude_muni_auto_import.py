@@ -28,6 +28,7 @@ org-scoped level.
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0152_exclude_muni_auto_import"

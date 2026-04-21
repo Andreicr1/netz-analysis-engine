@@ -1,20 +1,21 @@
 """IPCA attribution rail."""
 from __future__ import annotations
 
-import json
-from datetime import date, timedelta
-from uuid import UUID
+from datetime import timedelta
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 import statsmodels.api as sm
+import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-import structlog
 
 from quant_engine.ipca.fit import IPCAFit
+from vertical_engines.wealth.attribution.holdings_based import (
+    latest_period_for_cik,
+    resolve_fund_cik,
+)
 from vertical_engines.wealth.attribution.models import AttributionRequest, IPCAResult
-from vertical_engines.wealth.attribution.holdings_based import resolve_fund_cik, latest_period_for_cik
 
 logger = structlog.get_logger()
 

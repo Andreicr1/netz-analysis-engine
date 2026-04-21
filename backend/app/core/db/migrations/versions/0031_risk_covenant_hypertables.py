@@ -15,6 +15,7 @@ depends_on: 0030 (audit_event_hypertables).
 import os
 
 import psycopg
+
 from alembic import op
 
 revision = "0031_risk_covenant_hypertables"

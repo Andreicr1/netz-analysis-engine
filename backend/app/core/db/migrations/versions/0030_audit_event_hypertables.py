@@ -20,6 +20,7 @@ depends_on: 0029 (drift_alert_hypertables).
 import os
 
 import psycopg
+
 from alembic import op
 
 revision = "0030_audit_event_hypertables"

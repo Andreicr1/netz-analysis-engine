@@ -14,8 +14,9 @@ Reversible.
 """
 from __future__ import annotations
 
-from alembic import op
 from sqlalchemy import text
+
+from alembic import op
 
 revision = "0158_instrument_strategy_overrides"
 down_revision = "0157_fuzzy_bridge_audit"

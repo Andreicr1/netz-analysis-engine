@@ -58,7 +58,7 @@ async def seeded_factor_model_universe():
     start = as_of - timedelta(days=n_days + 10)
 
     rng = np.random.default_rng(20260415)
-    block_ids = [uuid.uuid4() for _ in range(7)]
+    block_ids = [str(uuid.uuid4()) for _ in range(7)]
     block_tickers = ["SPY", "IEF", "HYG", "IWM", "IWD", "IWF", "EFA"]
     instrument_ids = [uuid.uuid4() for _ in range(n_funds)]
 
@@ -69,13 +69,13 @@ async def seeded_factor_model_universe():
             await conn.execute(
                 """
                 INSERT INTO allocation_blocks (
-                    block_id, organization_id, name, benchmark_ticker,
-                    target_weight, is_active, created_at, updated_at
+                    block_id, geography, asset_class, display_name, benchmark_ticker,
+                    is_active, created_at, updated_at
                 )
-                VALUES ($1::uuid, $2::uuid, $3, $4, 0.1, true, now(), now())
+                VALUES ($1, 'Global', 'Equity', $2, $3, true, now(), now())
                 ON CONFLICT (block_id) DO NOTHING
                 """,
-                bid, ORG_ID, f"{TEST_PREFIX}-{ticker}", ticker,
+                bid, f"{TEST_PREFIX}-{ticker}", ticker,
             )
 
         # ── 2. benchmark_nav (7 tickers × n_days) ─────────────────────
@@ -87,8 +87,8 @@ async def seeded_factor_model_universe():
                 bench_rows.append((bid, d, 100.0 + d_off * 0.01, ret))
         await conn.executemany(
             """
-            INSERT INTO benchmark_nav (block_id, nav_date, nav_value, return_1d)
-            VALUES ($1::uuid, $2, $3, $4)
+            INSERT INTO benchmark_nav (block_id, nav_date, nav, return_1d)
+            VALUES ($1, $2, $3, $4)
             ON CONFLICT (block_id, nav_date) DO NOTHING
             """,
             bench_rows,
@@ -109,6 +109,21 @@ async def seeded_factor_model_universe():
             macro_rows,
         )
 
+        # ── 3.5. instruments_universe (20 funds) ─────────────────────
+        inst_rows = []
+        for iid in instrument_ids:
+            inst_rows.append((iid, f"{TEST_PREFIX}-inst-{iid}", "fund", "Equity"))
+        await conn.executemany(
+            """
+            INSERT INTO instruments_universe (
+                instrument_id, instrument_type, name, asset_class, geography, attributes
+            )
+            VALUES ($1::uuid, 'fund', $2, 'Equity', 'Global', '{"aum_usd": 1000000.0, "manager_name": "Test", "inception_date": "2020-01-01"}'::jsonb)
+            ON CONFLICT (instrument_id) DO NOTHING
+            """,
+            [(iid, f"Fund {iid}") for iid in instrument_ids],
+        )
+
         # ── 4. nav_timeseries (20 funds × n_days) ────────────────────
         nav_rows = []
         for iid in instrument_ids:
@@ -118,7 +133,7 @@ async def seeded_factor_model_universe():
                 nav_rows.append((iid, d, 100.0 * (1 + ret), ret))
         await conn.executemany(
             """
-            INSERT INTO nav_timeseries (instrument_id, nav_date, nav_value, return_1d)
+            INSERT INTO nav_timeseries (instrument_id, nav_date, nav, return_1d)
             VALUES ($1::uuid, $2, $3, $4)
             ON CONFLICT (instrument_id, nav_date) DO NOTHING
             """,
@@ -139,7 +154,7 @@ async def seeded_factor_model_universe():
                 instrument_ids,
             )
             await conn.execute(
-                "DELETE FROM benchmark_nav WHERE block_id = ANY($1::uuid[])",
+                "DELETE FROM benchmark_nav WHERE block_id = ANY($1::text[])",
                 block_ids,
             )
             await conn.execute(
@@ -148,7 +163,7 @@ async def seeded_factor_model_universe():
                 start, start + timedelta(days=n_days),
             )
             await conn.execute(
-                "DELETE FROM allocation_blocks WHERE block_id = ANY($1::uuid[])",
+                "DELETE FROM allocation_blocks WHERE block_id = ANY($1::text[])",
                 block_ids,
             )
         finally:

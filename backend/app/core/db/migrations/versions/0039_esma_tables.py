@@ -12,6 +12,7 @@ depends_on: 0038 (manager_screener_indexes_continuous_aggs).
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0039_esma_tables"

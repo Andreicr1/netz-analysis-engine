@@ -19,6 +19,7 @@ depends_on: 0163 (mv_nport_sector_attribution).
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0164_cusip_map_tiingo_enrichment"

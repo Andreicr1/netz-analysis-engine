@@ -9,6 +9,7 @@ Create Date: 2026-03-28
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0066_fund_class_xbrl_fees"

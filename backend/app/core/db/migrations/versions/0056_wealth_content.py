@@ -7,8 +7,9 @@ revision = "0056_wealth_content"
 down_revision = "0056_dd_report_status_add_failed"
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from alembic import op
 
 
 def upgrade() -> None:

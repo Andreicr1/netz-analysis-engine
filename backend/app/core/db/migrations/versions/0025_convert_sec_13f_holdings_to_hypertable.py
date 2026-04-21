@@ -25,6 +25,7 @@ depends_on: 0024 (add_sector_to_sec_13f_holdings).
 import os
 
 import psycopg
+
 from alembic import op
 
 revision = "0025_sec_13f_hypertable"

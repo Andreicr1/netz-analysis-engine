@@ -41,8 +41,9 @@ depends_on: 0167.
 
 from __future__ import annotations
 
-from alembic import op
 from sqlalchemy import text
+
+from alembic import op
 
 revision = "0168_expand_canonical_map_fsds_q1_2025"
 down_revision = "0167_primary_benchmark_backfill_log"
