@@ -83,6 +83,7 @@ import os
 from collections.abc import Sequence
 
 import psycopg
+
 from alembic import op
 
 revision: str = "0114_wealth_vector_chunks_hypertable"

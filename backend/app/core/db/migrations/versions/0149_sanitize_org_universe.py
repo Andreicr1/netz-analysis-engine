@@ -26,6 +26,7 @@ warning is emitted if ``downgrade`` is invoked.
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0149_sanitize_org_universe"

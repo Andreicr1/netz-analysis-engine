@@ -42,8 +42,8 @@ def _build_synthetic_market(
     raw = factor_loading * common[:, None] + np.sqrt(1 - factor_loading**2) * idio
 
     ids = [uuid.uuid4() for _ in range(n_funds)]
-    start = date(2021, 4, 14)
-    dates = [start + timedelta(days=i) for i in range(n_days)]
+    end_date = date(2026, 4, 14)
+    dates = [end_date - timedelta(days=n_days - 1 - i) for i in range(n_days)]
 
     fund_returns: dict[str, dict[date, float]] = {}
     for col, iid in enumerate(ids):
@@ -60,6 +60,9 @@ async def test_compute_fund_level_inputs_happy_path_20_fund_synthetic() -> None:
     with patch(
         "app.domains.wealth.services.quant_queries._fetch_returns_by_type",
         new=AsyncMock(return_value=(returns, "log")),
+    ), patch(
+        "app.domains.wealth.services.quant_queries._resolve_trace_instrument_ids",
+        new=AsyncMock(return_value={}),
     ), patch(
         "app.domains.wealth.services.quant_queries._fetch_return_horizons",
         new=AsyncMock(return_value={
@@ -112,8 +115,8 @@ async def test_compute_fund_level_inputs_collinear_funds_raises() -> None:
     rng = np.random.default_rng(11)
     n_days = 1260
     ids = [uuid.uuid4() for _ in range(4)]
-    start = date(2021, 4, 14)
-    dates = [start + timedelta(days=i) for i in range(n_days)]
+    end_date = date(2026, 4, 14)
+    dates = [end_date - timedelta(days=n_days - 1 - i) for i in range(n_days)]
     returns: dict[str, dict[date, float]] = {}
     # Rank-1: every fund is an exact copy of the first series.
     base_series = rng.standard_normal(n_days) * 0.01
@@ -124,6 +127,9 @@ async def test_compute_fund_level_inputs_collinear_funds_raises() -> None:
     with patch(
         "app.domains.wealth.services.quant_queries._fetch_returns_by_type",
         new=AsyncMock(return_value=(returns, "log")),
+    ), patch(
+        "app.domains.wealth.services.quant_queries._resolve_trace_instrument_ids",
+        new=AsyncMock(return_value={}),
     ), patch(
         "app.domains.wealth.services.quant_queries.fetch_strategic_weights_for_funds",
         new=AsyncMock(return_value=np.full(4, 0.25)),
@@ -152,10 +158,13 @@ async def test_compute_fund_level_inputs_insufficient_data_raises_value_error() 
         "app.domains.wealth.services.quant_queries._fetch_returns_by_type",
         new=AsyncMock(return_value=(short, "log")),
     ), patch(
+        "app.domains.wealth.services.quant_queries._resolve_trace_instrument_ids",
+        new=AsyncMock(return_value={}),
+    ), patch(
         "app.domains.wealth.services.quant_queries._maybe_regime_condition_cov",
         return_value=None,
     ):
-        with pytest.raises(ValueError, match="Insufficient aligned"):
+        with pytest.raises(ValueError, match="Need ≥2 funds"):
             await compute_fund_level_inputs(
                 db, ids, mu_prior="equilibrium",
                 as_of_date=date(2026, 4, 14),
@@ -173,6 +182,9 @@ async def test_compute_fund_level_inputs_historical_1y_mode_does_not_call_thbb()
         "app.domains.wealth.services.quant_queries._fetch_returns_by_type",
         new=AsyncMock(return_value=(returns, "log")),
     ), patch(
+        "app.domains.wealth.services.quant_queries._resolve_trace_instrument_ids",
+        new=AsyncMock(return_value={}),
+    ), patch(
         "app.domains.wealth.services.quant_queries._fetch_return_horizons",
         new=thbb_mock,
     ), patch(
@@ -187,3 +199,4 @@ async def test_compute_fund_level_inputs_historical_1y_mode_does_not_call_thbb()
     thbb_mock.assert_not_awaited()
     assert result.prior_weights_used == {"10y": 0.0, "5y": 0.0, "eq": 0.0}
     assert result.n_funds_by_history["1y_only"] == 5
+

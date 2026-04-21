@@ -8,6 +8,7 @@ Global tables — no organization_id, no RLS.
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0044_blended_benchmarks"

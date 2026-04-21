@@ -18,6 +18,7 @@ depends_on: 0037 (ofr_hedge_fund_hypertable).
 import os
 
 import psycopg
+
 from alembic import op
 
 revision = "0038_mgr_screener_idx_aggs"

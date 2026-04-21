@@ -24,9 +24,9 @@ load_dotenv(_root / ".env.dev", override=False)
 load_dotenv(_backend / ".env", override=False)
 load_dotenv(_root / ".env", override=False)
 
-from alembic import context
 from sqlalchemy import create_engine, pool, text
 
+from alembic import context
 from app.core.db.base import Base
 
 config = context.config

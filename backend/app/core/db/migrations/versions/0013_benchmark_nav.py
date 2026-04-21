@@ -12,6 +12,7 @@ depends_on: 0012 (instruments_universe_additive).
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0013"

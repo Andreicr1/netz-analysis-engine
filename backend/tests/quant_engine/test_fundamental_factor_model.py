@@ -215,7 +215,8 @@ async def test_k_equals_six_contract_with_stubbed_factor_returns(monkeypatch):
     n_days = 1260
     rng = np.random.default_rng(2026)
     raw_returns = rng.standard_normal((n_days, n_funds)) * 0.01
-    dates = [date(2021, 1, 1) + timedelta(days=i) for i in range(n_days)]
+    as_of_date = date(2026, 4, 14)
+    dates = [as_of_date - timedelta(days=n_days - 1 - i) for i in range(n_days)]
 
     returns_dict = {
         str(iid): {d: float(raw_returns[j, i]) for j, d in enumerate(dates)}
@@ -255,6 +256,9 @@ async def test_k_equals_six_contract_with_stubbed_factor_returns(monkeypatch):
     with patch(
         "app.domains.wealth.services.quant_queries._fetch_returns_by_type",
         new=AsyncMock(return_value=(returns_dict, "log")),
+    ), patch(
+        "app.domains.wealth.services.quant_queries._resolve_trace_instrument_ids",
+        new=AsyncMock(return_value={}),
     ), patch(
         "app.domains.wealth.services.quant_queries._fetch_return_horizons",
         new=AsyncMock(
@@ -343,20 +347,26 @@ async def test_single_index_fallback_when_n_less_than_20(monkeypatch):
     n_days = 200
     rng = np.random.default_rng(2026)
     raw_returns = rng.standard_normal((n_days, n_funds)) * 0.01
-    dates = [date(2021, 1, 1) + timedelta(days=i) for i in range(n_days)]
+    as_of_date = date(2026, 4, 14)
+    dates = [as_of_date - timedelta(days=n_days - 1 - i) for i in range(n_days)]
     
     returns_dict = {}
     for i, iid in enumerate(ids):
         returns_dict[str(iid)] = {d: float(raw_returns[j, i]) for j, d in enumerate(dates)}
 
     db = AsyncMock()
-    
+
     with patch(
         "app.domains.wealth.services.quant_queries._fetch_returns_by_type",
         new=AsyncMock(return_value=(returns_dict, "log")),
     ), patch(
-        "app.domains.wealth.services.quant_queries._fetch_return_horizons",
-        new=AsyncMock(return_value={str(iid): {"10y": 0.05, "5y": 0.05} for iid in ids}),
+        "app.domains.wealth.services.quant_queries._resolve_trace_instrument_ids",
+        new=AsyncMock(return_value={}),
+    ), patch(
+        "app.domains.wealth.services.quant_queries._resolve_trace_instrument_ids",
+        new=AsyncMock(return_value={}),
+    ), patch(
+        "app.domains.wealth.services.quant_queries._fetch_return_horizons",        new=AsyncMock(return_value={str(iid): {"10y": 0.05, "5y": 0.05} for iid in ids}),
     ), patch(
         "app.domains.wealth.services.quant_queries.fetch_strategic_weights_for_funds",
         new=AsyncMock(return_value=np.full(n_funds, 1 / n_funds)),

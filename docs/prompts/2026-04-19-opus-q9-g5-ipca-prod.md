@@ -8,7 +8,7 @@ loc_estimate: 1100
 reviewer: quant
 ---
 
-# Opus Prompt — PR-Q9: G5 IPCA Production (Option A)
+# Prompt — PR-Q9: G5 IPCA Production (Option A)
 
 ## Goal
 

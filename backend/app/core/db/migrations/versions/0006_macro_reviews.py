@@ -8,6 +8,7 @@ depends_on: 0005 (macro_regional_snapshots must exist for FK).
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0006"

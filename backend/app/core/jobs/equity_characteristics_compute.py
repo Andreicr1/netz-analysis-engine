@@ -19,7 +19,6 @@ import structlog
 from sqlalchemy import text
 
 from app.core.db.engine import async_session_factory as async_session
-from app.services.storage_client import get_storage_client
 from app.domains.wealth.services.characteristics_derivation import (
     derive_book_to_market,
     derive_investment_growth,
@@ -28,6 +27,7 @@ from app.domains.wealth.services.characteristics_derivation import (
     derive_quality_roa,
     derive_size,
 )
+from app.services.storage_client import get_storage_client
 
 logger = structlog.get_logger()
 

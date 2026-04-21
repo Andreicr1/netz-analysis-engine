@@ -11,6 +11,7 @@ from pathlib import Path
 
 import sqlalchemy as sa
 import yaml
+
 from alembic import op
 
 revision = "0004"

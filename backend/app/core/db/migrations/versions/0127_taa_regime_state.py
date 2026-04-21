@@ -11,8 +11,9 @@ Create Date: 2026-04-12
 from __future__ import annotations
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from alembic import op
 
 revision = "0127_taa_regime_state"
 down_revision = "0126_seed_na_equity_large_block"

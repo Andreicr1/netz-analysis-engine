@@ -8,6 +8,7 @@ revision = "0057_sec_fund_classes"
 down_revision = "0056_wealth_content"
 
 import sqlalchemy as sa
+
 from alembic import op
 
 

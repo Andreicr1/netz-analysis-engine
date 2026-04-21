@@ -14,7 +14,7 @@
       "default": "./dist/index.js"
     },
     "./components/*": {
-      "types": "./dist/components/*",
+      "types": "./dist/components/*.d.ts",
       "svelte": "./dist/components/*",
       "default": "./dist/components/*"
     },

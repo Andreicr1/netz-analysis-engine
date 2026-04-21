@@ -3,13 +3,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-from ipca import InstrumentedPCA
 import structlog
+from ipca import InstrumentedPCA
 
 logger = structlog.get_logger()
 
@@ -55,7 +54,7 @@ def fit_ipca(
 ) -> IPCAFit:
     """Fit Kelly-Pruitt-Su IPCA model."""
     # Ensure MultiIndex alignment
-    aligned_returns, aligned_chars = panel_returns.align(characteristics, join="inner")
+    aligned_returns, aligned_chars = panel_returns.align(characteristics, join="inner", axis=0)
     
     # Missing characteristic column edge case handled implicitly by pandas alignment,
     # but we can explicitly check:
@@ -82,9 +81,11 @@ def fit_ipca(
 
     gamma = np.asarray(reg.Gamma, dtype=np.float64)
     factor_returns = np.asarray(reg.Factors, dtype=np.float64)
-    r_squared_total, r_squared_predictive = reg.score()
+    r_squared_total = reg.score(X=X, y=y, indices=aligned_chars.index)
     
-    if not reg.converged:
+    converged = getattr(reg, "converged", True)
+    n_iterations = getattr(reg, "n_iter_", 0) or getattr(reg, "n_iter", 0)
+    if not converged:
         logger.warning("ipca_fit_did_not_converge", K=K, max_iter=max_iter)
 
     dates = None
@@ -98,7 +99,7 @@ def fit_ipca(
         intercept=intercept,
         r_squared=float(r_squared_total),
         oos_r_squared=None,
-        converged=reg.converged,
-        n_iterations=reg.n_iter,
+        converged=converged,
+        n_iterations=n_iterations,
         dates=dates,
     )

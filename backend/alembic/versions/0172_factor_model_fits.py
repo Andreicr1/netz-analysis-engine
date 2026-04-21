@@ -5,9 +5,10 @@ Revises: 0171_equity_characteristics_monthly
 Create Date: 2026-04-20
 
 """
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = '0172_factor_model_fits'
 down_revision = '0171_equity_characteristics_monthly'

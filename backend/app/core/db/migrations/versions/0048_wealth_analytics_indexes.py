@@ -18,6 +18,7 @@ depends_on: 0047 (screener_redesign_indexes).
 import os
 
 import psycopg
+
 from alembic import op
 
 revision = "0048_wealth_analytics_indexes"
