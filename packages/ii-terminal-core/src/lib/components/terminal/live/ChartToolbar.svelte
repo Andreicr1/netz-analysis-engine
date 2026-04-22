@@ -6,7 +6,8 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { formatCurrency, formatPercent, TerminalPill } from "@investintell/ui";
+	import { formatCurrency, formatPercent } from "@investintell/ui";
+	import { TerminalPill } from "../primitives";
 	import type { MarketDataStore, PriceTick } from "../../../stores/market-data.svelte";
 	import { TERMINAL_MARKET_DATA_KEY } from "../../../components/portfolio/live/workbench-state";
 	import { createClientApiClient } from "../../../api/client";

@@ -1,6 +1,6 @@
 import { render, fireEvent } from "@testing-library/svelte";
 import { describe, expect, test, vi } from "vitest";
-import Pill from "./Pill.svelte";
+import Pill from "../Pill.svelte";
 
 describe("Pill", () => {
 	test("renders as span by default", () => {

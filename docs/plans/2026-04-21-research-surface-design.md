@@ -67,13 +67,14 @@ A plataforma precisa de uma interface para análise quantitativa multi-ativo e a
 - [ ] **Unit 2: Backend API Contracts (Scatter & Structural Correlation)**
 **Goal**: Criar rotas para Scatter colunar e Correlação (Job-or-Stream).
 **Requirements**: R1, R2, R4
-**Dependencies**: Unit 1
+**Dependencies**: None
 **Files**:
 - Modify: `backend/app/domains/wealth/routes/correlation.py`
-**Approach**: Implementar síncrono para N<=50, 202 Accepted para N>50. Implementar SHA-256 caching no Redis e normalização PSD/Higham para a matriz estrutural (denoised). Retornar `regime_state_at_calc` e `effective_window_days` na resposta.
+**Approach**: Implementar limite rígido de N=200 para prevenir travamentos. Implementar execução síncrona para N<=50, e 202 Accepted via SSE para 50 < N <= 200. Implementar SHA-256 caching no Redis e normalização PSD/Higham para a matriz estrutural (denoised). Retornar `strategy_map`, `regime_state_at_calc` e `effective_window_days` na resposta.
 **Test scenarios**:
-- Edge case: Para universo N>50, valida a criação do job e o hash correto de Redis cache.
-- Happy path: Cálculo de N<=50 retorna 200 OK com matriz PSD estrita (diagonal 1).
+- Error path: Retorna 400 Bad Request se N > 200.
+- Edge case: Para universo 50 < N <= 200, valida a criação do job e o hash correto de Redis cache.
+- Happy path: Cálculo de N<=50 retorna 200 OK com matriz PSD estrita (diagonal 1) e `strategy_map` preenchido.
 
 - [ ] **Unit 3: Frontend Research Scatter & Correlation (Multi-Fund)**
 **Goal**: Implementar a rota `/screener/research` com Scatter e Heatmap.

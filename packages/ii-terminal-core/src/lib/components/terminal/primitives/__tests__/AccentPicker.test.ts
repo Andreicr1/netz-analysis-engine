@@ -1,6 +1,6 @@
 import { render, fireEvent } from "@testing-library/svelte";
 import { describe, expect, test, vi } from "vitest";
-import AccentPicker from "./AccentPicker.svelte";
+import AccentPicker from "../AccentPicker.svelte";
 
 describe("AccentPicker", () => {
 	test("renders three radiogroup swatches", () => {
