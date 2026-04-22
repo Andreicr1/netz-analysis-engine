@@ -47,13 +47,12 @@
  *      glyphs (see `feedback_no_emojis.md`). Scoped to the 4
  *      terminal route dirs + shared component dir.
  *
- *   H. The standalone terminal frontend at frontends/terminal/src/
- *      MUST NOT import from the transitional `$wealth/*` alias.
- *      After X5b the terminal consumes all shared components,
- *      stores, state, types, utils, api, and constants via the
- *      promoted `@investintell/ii-terminal-core` package. Any
- *      `from "$wealth/..."` or `import("$wealth/...")` statement
- *      in the terminal source tree FAILS this invariant.
+ *   H. The standalone terminal frontend and ii-terminal-core package
+ *      MUST NOT reach back into the wealth frontend. Terminal-owned
+ *      code consumes shared components, stores, state, types, utils,
+ *      api, and constants via `@investintell/ii-terminal-core` and
+ *      `@investintell/ui`. Imports through local app aliases or path
+ *      references to the wealth frontend FAIL this invariant.
  *
  *   G. User-visible strings in terminal chrome (top nav brand,
  *      status bar brand, aria-labels, alt, placeholder, title
@@ -269,9 +268,9 @@ function main() {
 	const terminalShadcnErrors = scanTerminalRoutesForShadcn();
 	errors.push(...terminalShadcnErrors);
 
-	// ── Invariant H — terminal must not import $wealth/* ──────
-	const wealthAliasErrors = scanTerminalForWealthAlias();
-	errors.push(...wealthAliasErrors);
+	// ── Invariant H — terminal/core must not depend on wealth ───
+	const wealthIsolationErrors = scanTerminalForWealthCoupling();
+	errors.push(...wealthIsolationErrors);
 
 	// ── Invariant G — no hardcoded Netz in user-visible chrome ──
 	const brandErrors = scanChromeBrandLeaks();
@@ -799,34 +798,46 @@ function scanChromeBrandLeaks() {
 	return errors;
 }
 
-// ── Invariant H — terminal must not import from $wealth/* ──
+// ── Invariant H — terminal/core must not depend on wealth ──
 //
-// frontends/terminal/ is the standalone II Terminal app. X2 copied
-// routes in via a transitional `$wealth/*` alias; X5a promoted the
-// shared surface to `@investintell/ii-terminal-core`; X5b removed
-// the alias from tsconfig/vite/svelte.config and rewrote every
-// import. This invariant prevents regressions: any new terminal
-// file that reaches back into wealth via `$wealth/...` FAILS the
-// scanner.
+// frontends/terminal/ is the standalone II Terminal app. Shared
+// implementation belongs in packages/ii-terminal-core or
+// packages/investintell-ui. This invariant prevents regressions:
+// app code and terminal-core code must not reach back into the
+// wealth frontend by path, by transitional alias, or by local app
+// alias imports.
 //
-// Comments that mention `$wealth` in prose are allowed (documenting
-// history is fine) — only `from "$wealth/..."`, `from '$wealth/...'`,
-// and `import("$wealth/...")` statements are treated as offenses.
+// Comments that mention historical aliases in prose are allowed for
+// import checks. Concrete path/config strings are still rejected.
 
-const TERMINAL_SRC_DIR = resolve(REPO_ROOT, "frontends/terminal/src");
-
-const WEALTH_ALIAS_PATTERNS = [
-	{ label: "from '$wealth/...'", re: /\bfrom\s+(["'`])\$wealth\/[^"'`]*\1/g },
-	{ label: "import('$wealth/...')", re: /\bimport\s*\(\s*(["'`])\$wealth\/[^"'`]*\1\s*\)/g },
+const TERMINAL_ISOLATION_DIRS = [
+	resolve(REPO_ROOT, "frontends/terminal"),
+	resolve(REPO_ROOT, "packages/ii-terminal-core/src/lib"),
 ];
 
-function scanTerminalForWealthAlias() {
-	const errors = [];
-	if (!existsSync(TERMINAL_SRC_DIR)) return errors;
+const WEALTH_IMPORT_PATTERNS = [
+	{ label: "from '$wealth/...'", re: /\bfrom\s+(["'`])\$wealth\/[^"'`]*\1/g },
+	{ label: "import('$wealth/...')", re: /\bimport\s*\(\s*(["'`])\$wealth\/[^"'`]*\1\s*\)/g },
+	{ label: "from '$lib/...'", re: /\bfrom\s+(["'`])\$lib\/[^"'`]*\1/g },
+	{ label: "import('$lib/...')", re: /\bimport\s*\(\s*(["'`])\$lib\/[^"'`]*\1\s*\)/g },
+];
 
-	for (const absFile of walkFiles(TERMINAL_SRC_DIR)) {
+const WEALTH_PATH_PATTERNS = [
+	{ label: "wealth frontend path", re: /frontends\/wealth/g },
+	{ label: "relative wealth path", re: /\.\.\/wealth/g },
+	{ label: "wealth source path", re: /wealth\/src\/lib/g },
+	{ label: "terminal local alias", re: /\$lib:\s*["'`][^"'`]*wealth/g },
+	{ label: "terminal local alias", re: /find:\s*\/\^\\\$lib/g },
+];
+
+function scanTerminalForWealthCoupling() {
+	const errors = [];
+
+	for (const root of TERMINAL_ISOLATION_DIRS) {
+		if (!existsSync(root)) continue;
+		for (const absFile of walkFiles(root)) {
 		const ext = extname(absFile);
-		if (!SCAN_EXTENSIONS.has(ext) && ext !== ".js") continue;
+		if (!SCAN_EXTENSIONS.has(ext) && ext !== ".js" && ext !== ".cjs" && ext !== ".mjs") continue;
 		const rel = relative(REPO_ROOT, absFile).replaceAll("\\", "/");
 		let text;
 		try {
@@ -835,12 +846,12 @@ function scanTerminalForWealthAlias() {
 			continue;
 		}
 		// Strip comments + <style> blocks: legacy prose that mentions
-		// $wealth/* is allowed, only live import statements fail.
+		// historical aliases is allowed, only live import statements fail.
 		const decommented = stripCommentary(text, ext);
 		const scanText =
 			ext === ".svelte" ? stripStyleBlocks(decommented) : decommented;
 
-		for (const rule of WEALTH_ALIAS_PATTERNS) {
+		for (const rule of WEALTH_IMPORT_PATTERNS) {
 			rule.re.lastIndex = 0;
 			let m;
 			while ((m = rule.re.exec(scanText)) !== null) {
@@ -850,9 +861,25 @@ function scanTerminalForWealthAlias() {
 				}
 				const line = offsetToLine(scanText, m.index);
 				errors.push(
-					`H. ${rel}:${line} forbidden ${rule.label}: ${m[0].trim()} — import from @investintell/ii-terminal-core/* instead`,
+					`H. ${rel}:${line} forbidden ${rule.label}: ${m[0].trim()} — import from @investintell/ii-terminal-core/* or @investintell/ui instead`,
 				);
 			}
+		}
+
+		for (const rule of WEALTH_PATH_PATTERNS) {
+			rule.re.lastIndex = 0;
+			let m;
+			while ((m = rule.re.exec(text)) !== null) {
+				if (m[0] === "") {
+					rule.re.lastIndex++;
+					continue;
+				}
+				const line = offsetToLine(text, m.index);
+				errors.push(
+					`H. ${rel}:${line} forbidden ${rule.label}: ${m[0].trim()} — terminal must not configure or reference wealth frontend paths`,
+				);
+			}
+		}
 		}
 	}
 	return errors;

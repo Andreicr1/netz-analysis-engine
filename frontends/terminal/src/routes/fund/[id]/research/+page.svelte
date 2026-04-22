@@ -4,8 +4,8 @@
 	import { page } from "$app/state";
 	import { PageHeader } from "@investintell/ui";
 	import { createClientApiClient } from "@investintell/ii-terminal-core/api/client";
-	import MarketSensitivitiesBar from "$lib/components/research/MarketSensitivitiesBar.svelte";
-	import StyleBiasRadar from "$lib/components/research/StyleBiasRadar.svelte";
+	import MarketSensitivitiesBar from "@investintell/ii-terminal-core/components/research/MarketSensitivitiesBar.svelte";
+	import StyleBiasRadar from "@investintell/ii-terminal-core/components/research/StyleBiasRadar.svelte";
 
 	interface InstrumentRead {
 		instrument_id: string;

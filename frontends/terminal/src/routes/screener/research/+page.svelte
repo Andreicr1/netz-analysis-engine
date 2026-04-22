@@ -3,8 +3,8 @@
 	import { getContext, onDestroy } from "svelte";
 	import { PageHeader } from "@investintell/ui";
 	import { createClientApiClient } from "@investintell/ii-terminal-core/api/client";
-	import CorrelationHeatmap from "$lib/components/research/CorrelationHeatmap.svelte";
-	import RiskReturnScatter from "$lib/components/research/RiskReturnScatter.svelte";
+	import CorrelationHeatmap from "@investintell/ii-terminal-core/components/research/CorrelationHeatmap.svelte";
+	import RiskReturnScatter from "@investintell/ii-terminal-core/components/research/RiskReturnScatter.svelte";
 
 	interface ScatterResponse {
 		instrument_ids: string[];

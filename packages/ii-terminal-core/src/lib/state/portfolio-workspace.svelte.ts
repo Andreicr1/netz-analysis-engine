@@ -1588,8 +1588,8 @@ export class PortfolioWorkspaceState {
 	 *   around only so the Phase 4 test harness keeps compiling until
 	 *   the legacy backend route ``/model-portfolios/{id}/construct`` is
 	 *   removed in PR-A7. No production call site should reach this
-	 *   method; grep ``frontends/wealth/src`` for ``runConstructJob`` —
-	 *   expect zero non-test hits (see Section E.3 audit).
+	 *   method; search app sources for ``runConstructJob`` and expect
+	 *   zero non-test hits (see Section E.3 audit).
 	 *
 	 * Flow (preserved verbatim for test compatibility):
 	 *   1. POST /model-portfolios/{id}/construct → 202 ConstructRunAccepted

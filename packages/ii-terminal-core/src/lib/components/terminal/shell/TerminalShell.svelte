@@ -86,9 +86,8 @@
 	}: TerminalShellProps = $props();
 
 	// ─── Build metadata ─────────────────────────────────────────
-	// Exposed via vite `define` in frontends/wealth/vite.config.ts
-	// (commit 8). String literal fallbacks let the shell render
-	// cleanly before the config edit lands.
+	// Exposed via vite `define`. String literal fallbacks let the shell render
+	// cleanly when build metadata is absent.
 	const buildShaRaw =
 		(import.meta.env.VITE_BUILD_SHA as string | undefined) ?? "local";
 	const buildSha = buildShaRaw.length > 7 ? buildShaRaw.slice(0, 7) : buildShaRaw;

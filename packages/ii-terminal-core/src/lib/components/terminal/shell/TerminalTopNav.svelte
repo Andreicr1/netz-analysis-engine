@@ -19,14 +19,9 @@
 
 	Fixed 32px top chrome strip.
 
-	Shared across wealth and terminal during X2–X6. Wealth adds minimal
-	redirect shims for /live and /screener/research so the resolve()
-	typecheck passes in both apps: see
-	frontends/wealth/src/routes/(terminal)/live (redirects to
-	/portfolio/live) and frontends/wealth/src/routes/(app)/screener/
-	research (redirects to /research). The /screener F-key resolves to
-	wealth's existing (app)/screener page — legacy wealth-app screener —
-	during transition; canonical /screener lives on the terminal app.
+	Shared terminal navigation chrome. The standalone terminal app owns
+	the canonical /live, /screener, /screener/research, /macro,
+	/allocation, /dd, and /alerts routes.
 
 	This component has no keyboard handling of its own. Global shortcuts
 	(Cmd+K, rail [ / ], g-prefix go-to) live inside TerminalShell's
