@@ -8,6 +8,7 @@ Phase 3A: GET /bis, GET /imf, GET /treasury, GET /ofr — raw hypertable data
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
@@ -31,6 +32,10 @@ from app.domains.wealth.schemas.allocation import GlobalRegimeRead
 from app.domains.wealth.schemas.macro import (
     BisDataResponse,
     BisTimePoint,
+    CbCalendarResponse,
+    CbEvent,
+    CrossAssetPoint,
+    CrossAssetResponse,
     DataFreshnessRead,
     DimensionScoreRead,
     FredDataResponse,
@@ -45,6 +50,8 @@ from app.domains.wealth.schemas.macro import (
     MacroSnapshotResponse,
     OfrDataResponse,
     OfrTimePoint,
+    RegimeTrailPoint,
+    RegimeTrailResponse,
     RegionalScoreRead,
     TreasuryDataResponse,
     TreasuryTimePoint,
@@ -899,6 +906,302 @@ _FRED_ALLOWLIST: set[str] = {
     # Regime signal sparklines
     "CFNAI", "ICSA", "TOTBKCR",
 }
+
+_FRED_ALLOWLIST.update({"DEXUSEU", "DEXJPUS", "DEXBZUS", "IRLTLT01DEM156N"})
+
+
+# ---------------------------------------------------------------------------
+#  Cross-asset batch endpoint
+# ---------------------------------------------------------------------------
+
+_CROSS_ASSET_CATALOG: list[dict[str, str]] = [
+    {"symbol": "DGS2", "name": "US 2Y", "sector": "RATES", "unit": "%", "source": "fred"},
+    {"symbol": "DGS10", "name": "US 10Y", "sector": "RATES", "unit": "%", "source": "fred"},
+    {"symbol": "DGS30", "name": "US 30Y", "sector": "RATES", "unit": "%", "source": "fred"},
+    {
+        "symbol": "IRLTLT01DEM156N",
+        "name": "DE 10Y",
+        "sector": "RATES",
+        "unit": "%",
+        "source": "fred",
+    },
+    {"symbol": "DTWEXBGS", "name": "DXY", "sector": "FX", "unit": "idx", "source": "fred"},
+    {"symbol": "DEXUSEU", "name": "EUR/USD", "sector": "FX", "unit": "", "source": "fred"},
+    {"symbol": "DEXJPUS", "name": "USD/JPY", "sector": "FX", "unit": "", "source": "fred"},
+    {"symbol": "DEXBZUS", "name": "USD/BRL", "sector": "FX", "unit": "", "source": "fred"},
+    {"symbol": "SPY", "name": "SPX", "sector": "EQUITY", "unit": "idx", "source": "nav"},
+    {"symbol": "QQQ", "name": "NDX", "sector": "EQUITY", "unit": "idx", "source": "nav"},
+    {"symbol": "IWM", "name": "RUT", "sector": "EQUITY", "unit": "idx", "source": "nav"},
+    {"symbol": "EEM", "name": "EM", "sector": "EQUITY", "unit": "idx", "source": "nav"},
+    {
+        "symbol": "DCOILWTICO",
+        "name": "WTI",
+        "sector": "COMMODITY",
+        "unit": "USD",
+        "source": "fred",
+    },
+    {
+        "symbol": "GOLDAMGBD228NLBM",
+        "name": "Gold",
+        "sector": "COMMODITY",
+        "unit": "USD",
+        "source": "fred",
+    },
+    {
+        "symbol": "PCOPPUSDM",
+        "name": "Copper",
+        "sector": "COMMODITY",
+        "unit": "USD",
+        "source": "fred",
+    },
+    {
+        "symbol": "DHHNGSP",
+        "name": "NatGas",
+        "sector": "COMMODITY",
+        "unit": "USD",
+        "source": "fred",
+    },
+    {"symbol": "BAA10Y", "name": "IG Spread", "sector": "CREDIT", "unit": "%", "source": "fred"},
+    {
+        "symbol": "BAMLH0A0HYM2",
+        "name": "HY Spread",
+        "sector": "CREDIT",
+        "unit": "%",
+        "source": "fred",
+    },
+    {
+        "symbol": "BAMLEMCBPIOAS",
+        "name": "EM Spread",
+        "sector": "CREDIT",
+        "unit": "bps",
+        "source": "fred",
+    },
+    {
+        "symbol": "BAMLHE00EHYIEY",
+        "name": "EU HY",
+        "sector": "CREDIT",
+        "unit": "%",
+        "source": "fred",
+    },
+]
+
+_CROSS_ASSET_LOOKBACK = 60
+_CROSS_ASSET_SPARKLINE_N = 30
+
+
+async def _fetch_fred_series_batch(
+    series_ids: list[str],
+    cutoff: date,
+) -> dict[str, list[tuple[date, float]]]:
+    """Fetch multiple FRED series in one DB query."""
+    stmt = (
+        select(MacroData.series_id, MacroData.obs_date, MacroData.value)
+        .where(MacroData.series_id.in_(series_ids), MacroData.obs_date >= cutoff)
+        .order_by(MacroData.series_id, MacroData.obs_date)
+    )
+    async with async_session_factory() as db:
+        result = await db.execute(stmt)
+
+    out: dict[str, list[tuple[date, float]]] = {}
+    for row in result.all():
+        if row.value is not None:
+            out.setdefault(row.series_id, []).append((row.obs_date, float(row.value)))
+    return out
+
+
+async def _fetch_equity_nav_batch(
+    tickers: list[str],
+    cutoff: date,
+) -> dict[str, list[tuple[date, float]]]:
+    """Fetch nav_timeseries for equity proxy tickers."""
+    from app.domains.wealth.models.instrument import Instrument
+    from app.domains.wealth.models.nav import NavTimeseries
+
+    stmt = (
+        select(Instrument.ticker, NavTimeseries.nav_date, NavTimeseries.nav)
+        .join(NavTimeseries, NavTimeseries.instrument_id == Instrument.instrument_id)
+        .where(Instrument.ticker.in_(tickers), NavTimeseries.nav_date >= cutoff)
+        .order_by(Instrument.ticker, NavTimeseries.nav_date)
+    )
+    async with async_session_factory() as db:
+        result = await db.execute(stmt)
+
+    out: dict[str, list[tuple[date, float]]] = {}
+    for row in result.all():
+        if row.nav is not None and row.ticker is not None:
+            out.setdefault(row.ticker, []).append((row.nav_date, float(row.nav)))
+    return out
+
+
+def _compute_cross_asset_point(
+    item: dict[str, str],
+    series_data: list[tuple[date, float]],
+) -> CrossAssetPoint:
+    """Convert raw time series into a terminal cross-asset row."""
+    if not series_data:
+        return CrossAssetPoint(
+            symbol=item["symbol"],
+            name=item["name"],
+            sector=item["sector"],  # type: ignore[arg-type]
+            unit=item["unit"],
+        )
+
+    values = [v for _, v in series_data]
+    last_value = values[-1]
+    prev_value = values[-2] if len(values) >= 2 else None
+    change_pct = None
+    if prev_value is not None and prev_value != 0:
+        change_pct = (last_value - prev_value) / abs(prev_value) * 100
+
+    return CrossAssetPoint(
+        symbol=item["symbol"],
+        name=item["name"],
+        sector=item["sector"],  # type: ignore[arg-type]
+        unit=item["unit"],
+        last_value=last_value,
+        change_pct=change_pct,
+        sparkline=values[-_CROSS_ASSET_SPARKLINE_N:],
+    )
+
+
+@router.get(
+    "/cross-asset",
+    response_model=CrossAssetResponse,
+    summary="Cross-asset panel data",
+    tags=["macro"],
+)
+@route_cache(ttl=300, key_prefix="macro:cross_asset")
+async def get_cross_asset(
+    user: CurrentUser = Depends(get_current_user),
+) -> CrossAssetResponse:
+    """Batch cross-asset data for the macro terminal left panel."""
+    cutoff = date.today() - timedelta(days=_CROSS_ASSET_LOOKBACK)
+    fred_symbols = [i["symbol"] for i in _CROSS_ASSET_CATALOG if i["source"] == "fred"]
+    nav_symbols = [i["symbol"] for i in _CROSS_ASSET_CATALOG if i["source"] == "nav"]
+
+    fred_data, nav_data = await asyncio.gather(
+        _fetch_fred_series_batch(fred_symbols, cutoff),
+        _fetch_equity_nav_batch(nav_symbols, cutoff),
+    )
+    combined = {**fred_data, **nav_data}
+    assets = [
+        _compute_cross_asset_point(item, combined.get(item["symbol"], []))
+        for item in _CROSS_ASSET_CATALOG
+    ]
+    as_of = max((d for pts in combined.values() for d, _ in pts), default=None)
+
+    return CrossAssetResponse(as_of_date=as_of, assets=assets)
+
+
+# ---------------------------------------------------------------------------
+#  Regime trail — 18-month history for SVG polyline
+# ---------------------------------------------------------------------------
+
+_TRAIL_MONTHS = 18
+
+
+def _score_to_gi(score: float | None) -> float:
+    """Map percentile score 0-100 to growth/inflation coordinate [-1, +1]."""
+    if score is None:
+        return 0.0
+    return (float(score) / 100.0) * 2.0 - 1.0
+
+
+@router.get(
+    "/regime/trail",
+    response_model=RegimeTrailResponse,
+    summary="18-month regime trail coordinates",
+    tags=["macro"],
+)
+@route_cache(ttl=3600, key_prefix="macro:regime_trail")
+async def get_regime_trail(
+    region: str = Query(default="US", description="Region key, e.g. US, EUROPE, ASIA, EM"),
+    user: CurrentUser = Depends(get_current_user),
+) -> RegimeTrailResponse:
+    """Return 18 months of growth/inflation coordinates from regional snapshots."""
+    cutoff = date.today() - timedelta(days=_TRAIL_MONTHS * 31)
+    stmt = (
+        select(MacroRegionalSnapshot.as_of_date, MacroRegionalSnapshot.data_json)
+        .where(MacroRegionalSnapshot.as_of_date >= cutoff)
+        .order_by(MacroRegionalSnapshot.as_of_date)
+    )
+    async with async_session_factory() as db:
+        result = await db.execute(stmt)
+
+    points: list[RegimeTrailPoint] = []
+    for row in result.all():
+        snapshot_data = row.data_json if isinstance(row.data_json, dict) else {}
+        regions_data = snapshot_data.get("regions", {})
+        region_data = regions_data.get(region, {})
+        dimensions = region_data.get("dimensions", {})
+        growth_score = dimensions.get("growth", {}).get("score")
+        inflation_score = dimensions.get("inflation", {}).get("score")
+        if growth_score is None and inflation_score is None:
+            continue
+        points.append(
+            RegimeTrailPoint(
+                as_of_date=row.as_of_date,
+                g=_score_to_gi(growth_score),
+                i=_score_to_gi(inflation_score),
+                stress=region_data.get("stress_score"),
+            ),
+        )
+
+    return RegimeTrailResponse(points=points, region=region)
+
+
+# ---------------------------------------------------------------------------
+#  CB Calendar — static seed fixture, updated by operator quarterly
+# ---------------------------------------------------------------------------
+
+_CB_CALENDAR_SEED: list[dict[str, str | float | int]] = [
+    {"central_bank": "Fed", "meeting_date": "2026-05-07", "current_rate_pct": 4.50, "expected_change_bps": 0},
+    {"central_bank": "Fed", "meeting_date": "2026-06-18", "current_rate_pct": 4.50, "expected_change_bps": -25},
+    {"central_bank": "Fed", "meeting_date": "2026-07-30", "current_rate_pct": 4.25, "expected_change_bps": 0},
+    {"central_bank": "Fed", "meeting_date": "2026-09-17", "current_rate_pct": 4.25, "expected_change_bps": -25},
+    {"central_bank": "Fed", "meeting_date": "2026-11-05", "current_rate_pct": 4.00, "expected_change_bps": 0},
+    {"central_bank": "Fed", "meeting_date": "2026-12-17", "current_rate_pct": 4.00, "expected_change_bps": -25},
+    {"central_bank": "ECB", "meeting_date": "2026-04-30", "current_rate_pct": 2.50, "expected_change_bps": 0},
+    {"central_bank": "ECB", "meeting_date": "2026-06-11", "current_rate_pct": 2.50, "expected_change_bps": -25},
+    {"central_bank": "ECB", "meeting_date": "2026-07-23", "current_rate_pct": 2.25, "expected_change_bps": 0},
+    {"central_bank": "ECB", "meeting_date": "2026-09-10", "current_rate_pct": 2.25, "expected_change_bps": -25},
+    {"central_bank": "BoJ", "meeting_date": "2026-04-28", "current_rate_pct": 0.50, "expected_change_bps": 0},
+    {"central_bank": "BoJ", "meeting_date": "2026-06-17", "current_rate_pct": 0.50, "expected_change_bps": 25},
+    {"central_bank": "BoJ", "meeting_date": "2026-07-30", "current_rate_pct": 0.75, "expected_change_bps": 0},
+    {"central_bank": "BoE", "meeting_date": "2026-05-08", "current_rate_pct": 4.50, "expected_change_bps": -25},
+    {"central_bank": "BoE", "meeting_date": "2026-06-19", "current_rate_pct": 4.25, "expected_change_bps": 0},
+    {"central_bank": "BoE", "meeting_date": "2026-08-06", "current_rate_pct": 4.25, "expected_change_bps": -25},
+    {"central_bank": "BCB", "meeting_date": "2026-05-07", "current_rate_pct": 13.75, "expected_change_bps": 0},
+    {"central_bank": "BCB", "meeting_date": "2026-06-18", "current_rate_pct": 13.75, "expected_change_bps": -50},
+    {"central_bank": "Banxico", "meeting_date": "2026-05-14", "current_rate_pct": 9.00, "expected_change_bps": -25},
+    {"central_bank": "Banxico", "meeting_date": "2026-06-25", "current_rate_pct": 8.75, "expected_change_bps": 0},
+]
+
+
+@router.get(
+    "/cb-calendar",
+    response_model=CbCalendarResponse,
+    summary="Upcoming central bank meeting calendar",
+    tags=["macro"],
+)
+async def get_cb_calendar(
+    n: int = Query(default=8, ge=1, le=24, description="Number of upcoming events"),
+    user: CurrentUser = Depends(get_current_user),
+) -> CbCalendarResponse:
+    """Return upcoming central bank meetings from the seed calendar."""
+    today = date.today()
+    upcoming = [
+        CbEvent(
+            central_bank=str(e["central_bank"]),
+            meeting_date=date.fromisoformat(str(e["meeting_date"])),
+            current_rate_pct=float(e["current_rate_pct"]),
+            expected_change_bps=int(e["expected_change_bps"]),
+        )
+        for e in _CB_CALENDAR_SEED
+        if date.fromisoformat(str(e["meeting_date"])) >= today
+    ]
+    upcoming.sort(key=lambda event: event.meeting_date)
+    return CbCalendarResponse(events=upcoming[:n], as_of_date=today)
 
 
 @router.get(
