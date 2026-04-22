@@ -25,6 +25,9 @@ export { default as LiveMarquee } from "./components/terminal/shell/LiveMarquee.
 export { default as MarketFeedList } from "./components/terminal/shell/MarketFeedList.svelte";
 export { default as CommandPalette } from "./components/terminal/shell/CommandPalette.svelte";
 
+// Terminal primitives
+export * from "./components/terminal/primitives";
+
 // Focus mode
 export { default as FundFocusMode } from "./components/terminal/focus-mode/fund/FundFocusMode.svelte";
 
