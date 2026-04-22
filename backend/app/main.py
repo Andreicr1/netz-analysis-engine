@@ -105,6 +105,7 @@ from app.domains.wealth.routes.analytics import router as wealth_analytics_route
 from app.domains.wealth.routes.attribution import router as wealth_attribution_router
 from app.domains.wealth.routes.blended_benchmark import router as wealth_blended_benchmark_router
 from app.domains.wealth.routes.content import router as wealth_content_router
+from app.domains.wealth.routes.correlation import router as wealth_correlation_router
 from app.domains.wealth.routes.correlation_regime import router as wealth_correlation_regime_router
 from app.domains.wealth.routes.dd_reports import router as wealth_dd_reports_router
 from app.domains.wealth.routes.discovery_analysis import (
@@ -137,6 +138,7 @@ from app.domains.wealth.routes.portfolio_views import router as wealth_portfolio
 from app.domains.wealth.routes.portfolios import router as wealth_portfolios_router
 from app.domains.wealth.routes.portfolios.builder import router as wealth_portfolios_builder_router
 from app.domains.wealth.routes.rebalancing import router as wealth_rebalancing_router
+from app.domains.wealth.routes.research import router as wealth_research_router
 from app.domains.wealth.routes.risk import router as wealth_risk_router
 from app.domains.wealth.routes.risk_timeseries import router as wealth_risk_timeseries_router
 from app.domains.wealth.routes.screener import router as wealth_screener_router
@@ -566,6 +568,8 @@ api_v1.include_router(wealth_fact_sheets_router)
 api_v1.include_router(wealth_long_form_reports_router)
 api_v1.include_router(wealth_monthly_report_router)
 api_v1.include_router(wealth_content_router)
+api_v1.include_router(wealth_correlation_router)
+api_v1.include_router(wealth_research_router)
 api_v1.include_router(wealth_screener_router)
 api_v1.include_router(wealth_manager_screener_router)
 api_v1.include_router(wealth_strategy_drift_router)
