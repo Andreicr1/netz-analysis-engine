@@ -8,8 +8,10 @@ import { defineConfig } from "vite";
 const BUILD_SHA = process.env.GIT_SHA ?? "local-dev";
 const BUILD_ENV = process.env.NODE_ENV === "production" ? "prod" : "dev";
 
+const isSvelteCheck = process.argv.some(arg => arg.includes('svelte-check')) || process.env.npm_lifecycle_script?.includes('svelte-check');
+
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit()],
+	plugins: [!isSvelteCheck && tailwindcss(), sveltekit()],
 	define: {
 		"import.meta.env.VITE_BUILD_SHA": JSON.stringify(BUILD_SHA),
 		"import.meta.env.VITE_ENV": JSON.stringify(BUILD_ENV),

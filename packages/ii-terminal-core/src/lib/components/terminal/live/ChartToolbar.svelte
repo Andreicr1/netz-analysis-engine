@@ -11,8 +11,8 @@
 	import type { MarketDataStore, PriceTick } from "../../../stores/market-data.svelte";
 	import { TERMINAL_MARKET_DATA_KEY } from "../../../components/portfolio/live/workbench-state";
 	import { createClientApiClient } from "../../../api/client";
+	import type { Timeframe } from "../../../components/portfolio/live/charts/TerminalPriceChart.svelte";
 
-	type Timeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "5Y" | "MAX";
 	export type ChartMode = "candle" | "line";
 
 	interface Props {
