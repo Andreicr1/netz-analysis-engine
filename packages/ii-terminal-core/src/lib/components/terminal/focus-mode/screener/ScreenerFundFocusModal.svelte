@@ -190,6 +190,21 @@
 		return Math.abs(value) > 1 ? value / 100 : value;
 	}
 
+	function peerSubjectLeft(
+		value: number | null,
+		p25: number | null,
+		p75: number | null,
+		fallbackP25: number,
+		fallbackP75: number,
+	): string {
+		if (value == null) return "0%";
+		const low = p25 ?? fallbackP25;
+		const high = p75 ?? fallbackP75;
+		const range = high - low || Math.abs(fallbackP75 - fallbackP25) || 1;
+		const pct = Math.max(0, Math.min(100, ((value - low) / range) * 100));
+		return `${pct}%`;
+	}
+
 	const axisScores = $derived.by((): number[] => {
 		if (!detail) return Array(N).fill(50);
 		const returnDecimal = asDecimalPercent(detail.avg_annual_return_1y);
@@ -220,6 +235,88 @@
 		return { high: Math.max(...values), low: Math.min(...values) };
 	});
 
+	interface PeerMetricsResponse {
+		strategy_label: string | null;
+		peer_count: number;
+		subject_sharpe: number | null;
+		subject_drawdown: number | null;
+		peer_sharpe_p25: number | null;
+		peer_sharpe_p50: number | null;
+		peer_sharpe_p75: number | null;
+		peer_drawdown_p25: number | null;
+		peer_drawdown_p50: number | null;
+		peer_drawdown_p75: number | null;
+		top_peers: Array<{
+			ticker: string;
+			name: string;
+			sharpe_ratio: number | null;
+			max_drawdown: number | null;
+		}>;
+	}
+
+	interface DDReportSummary {
+		id: string;
+		version: number;
+		status: string;
+		confidence_score: number | null;
+		decision_anchor: string | null;
+		is_current: boolean;
+		created_at: string;
+	}
+
+	let peerMetrics = $state<PeerMetricsResponse | null>(null);
+	let loadingPeer = $state(false);
+	let ddReports = $state<DDReportSummary[]>([]);
+	let loadingDD = $state(false);
+	let rightTab = $state<"profile" | "analysis">("profile");
+
+	$effect(() => {
+		const id = fundId;
+		if (!id) return;
+		let cancelled = false;
+		loadingPeer = true;
+		api
+			.get<PeerMetricsResponse>(`/screener/peer-metrics/${encodeURIComponent(id)}`)
+			.then((res) => {
+				if (cancelled) return;
+				peerMetrics = res;
+				loadingPeer = false;
+			})
+			.catch(() => {
+				if (cancelled) return;
+				peerMetrics = null;
+				loadingPeer = false;
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	$effect(() => {
+		const iid = instrumentId;
+		if (!iid) {
+			ddReports = [];
+			return;
+		}
+		let cancelled = false;
+		loadingDD = true;
+		api
+			.get<DDReportSummary[]>(`/dd-reports/funds/${encodeURIComponent(iid)}`)
+			.then((res) => {
+				if (cancelled) return;
+				ddReports = res ?? [];
+				loadingDD = false;
+			})
+			.catch(() => {
+				if (cancelled) return;
+				ddReports = [];
+				loadingDD = false;
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
+
 	function percentText(value: number | null | undefined, decimals = 2): string {
 		const decimal = asDecimalPercent(value);
 		return decimal == null ? "\u2014" : formatPercent(decimal, decimals);
@@ -240,6 +337,7 @@
 <div class="sfm-overlay" onclick={onClose} role="dialog" aria-modal="true" aria-label={fundLabel} tabindex="-1">
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div class="sfm-modal" onclick={(event) => event.stopPropagation()} role="document">
 		<div class="sfm-hero">
 			<div>
@@ -323,43 +421,141 @@
 				{/if}
 			</div>
 
-			<div class="sfm-section">
-				<h3 class="sfm-sh">COMPOSITE PROFILE</h3>
-				<div class="sfm-radar-wrap">
-					<svg viewBox="0 0 {RADAR_W} {RADAR_H}" width={RADAR_W} height={RADAR_H}>
-						{#each [0.25, 0.5, 0.75, 1.0] as pct}
-							{@const pts = Array.from({ length: N }, (_, index) => {
-								const p = radarPt(index, pct * R);
-								return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
-							})}
-							<polygon points={pts.join(" ")} fill="none" stroke="var(--ii-border-subtle,#1A2458)" stroke-width="1" />
-						{/each}
-						{#each Array.from({ length: N }, (_, index) => index) as index (index)}
-							{@const endpoint = radarPt(index, R)}
-							<line x1={CX} y1={CY} x2={endpoint.x} y2={endpoint.y} stroke="var(--ii-border,#1A2458)" stroke-width="1" />
-						{/each}
-						<path d={radarPath} fill="var(--ii-brand-primary,#FF965A)" fill-opacity="0.18" stroke="var(--ii-brand-primary,#FF965A)" stroke-width="1.5" />
-						{#each AXES as label, index (label)}
-							{@const labelPoint = radarPt(index, R + 14)}
-							<text x={labelPoint.x} y={labelPoint.y} text-anchor="middle" dominant-baseline="middle" font-family="var(--ii-font-mono)" font-size="7" fill="var(--ii-text-muted,#6D7DA6)">
-								{label}
-							</text>
-						{/each}
-					</svg>
+			<div class="sfm-section sfm-section--right">
+				<div class="sfm-rtabs" role="tablist" aria-label="Fund detail panel">
+					<button
+						type="button"
+						class="sfm-rtab"
+						class:sfm-rtab--active={rightTab === "profile"}
+						role="tab"
+						aria-selected={rightTab === "profile"}
+						onclick={() => (rightTab = "profile")}
+					>
+						COMPOSITE PROFILE
+					</button>
+					<button
+						type="button"
+						class="sfm-rtab"
+						class:sfm-rtab--active={rightTab === "analysis"}
+						role="tab"
+						aria-selected={rightTab === "analysis"}
+						onclick={() => (rightTab = "analysis")}
+					>
+						DD ANALYSIS
+					</button>
 				</div>
 
-				<div class="sfm-axis-bars">
-					{#each AXES as label, index (label)}
-						{@const score = axisScores[index] ?? 0}
-						<div class="sfm-axis-row">
-							<span class="sfm-axis-lbl">{label}</span>
-							<span class="sfm-axis-bar-wrap">
-								<span class="sfm-axis-bar" style:width="{score}%"></span>
-							</span>
-							<span class="sfm-axis-val">{formatNumber(score, 0)}</span>
+				{#if rightTab === "profile"}
+					<div class="sfm-radar-wrap">
+						<svg viewBox="0 0 {RADAR_W} {RADAR_H}" width={RADAR_W} height={RADAR_H}>
+							{#each [0.25, 0.5, 0.75, 1.0] as pct}
+								{@const pts = Array.from({ length: N }, (_, index) => {
+									const p = radarPt(index, pct * R);
+									return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+								})}
+								<polygon points={pts.join(" ")} fill="none" stroke="var(--ii-border-subtle,#1A2458)" stroke-width="1" />
+							{/each}
+							{#each Array.from({ length: N }, (_, index) => index) as index (index)}
+								{@const endpoint = radarPt(index, R)}
+								<line x1={CX} y1={CY} x2={endpoint.x} y2={endpoint.y} stroke="var(--ii-border,#1A2458)" stroke-width="1" />
+							{/each}
+							<path d={radarPath} fill="var(--ii-brand-primary,#FF965A)" fill-opacity="0.18" stroke="var(--ii-brand-primary,#FF965A)" stroke-width="1.5" />
+							{#each AXES as label, index (label)}
+								{@const labelPoint = radarPt(index, R + 14)}
+								<text x={labelPoint.x} y={labelPoint.y} text-anchor="middle" dominant-baseline="middle" font-family="var(--ii-font-mono)" font-size="7" fill="var(--ii-text-muted,#6D7DA6)">
+									{label}
+								</text>
+							{/each}
+						</svg>
+					</div>
+
+					<div class="sfm-axis-bars">
+						{#each AXES as label, index (label)}
+							{@const score = axisScores[index] ?? 0}
+							<div class="sfm-axis-row">
+								<span class="sfm-axis-lbl">{label}</span>
+								<span class="sfm-axis-bar-wrap">
+									<span class="sfm-axis-bar" style:width="{score}%"></span>
+								</span>
+								<span class="sfm-axis-val">{formatNumber(score, 0)}</span>
+							</div>
+						{/each}
+					</div>
+				{:else}
+					{#if peerMetrics && peerMetrics.peer_count > 0}
+						<div class="sfm-peer-section">
+							<h4 class="sfm-peer-hd">
+								PEER GROUP
+								{#if peerMetrics.strategy_label}
+									<span class="sfm-peer-label">{peerMetrics.strategy_label}</span>
+								{/if}
+								<span class="sfm-peer-count">n={peerMetrics.peer_count}</span>
+							</h4>
+
+							<div class="sfm-peer-metric">
+								<span class="sfm-peer-metric-name">SHARPE</span>
+								<div class="sfm-peer-bar-wrap">
+									<div class="sfm-peer-range" style:left="0%" style:width="100%"></div>
+									{#if peerMetrics.subject_sharpe !== null}
+										<div
+											class="sfm-peer-subject"
+											style:left={peerSubjectLeft(peerMetrics.subject_sharpe, peerMetrics.peer_sharpe_p25, peerMetrics.peer_sharpe_p75, 0, 1)}
+										></div>
+									{/if}
+								</div>
+								<div class="sfm-peer-vals">
+									<span>p25: {peerMetrics.peer_sharpe_p25 != null ? formatNumber(peerMetrics.peer_sharpe_p25, 2) : "\u2014"}</span>
+									<span>med: {peerMetrics.peer_sharpe_p50 != null ? formatNumber(peerMetrics.peer_sharpe_p50, 2) : "\u2014"}</span>
+									<span class:sfm-peer-val-up={(peerMetrics.subject_sharpe ?? 0) >= (peerMetrics.peer_sharpe_p50 ?? 0)}>
+										you: {peerMetrics.subject_sharpe != null ? formatNumber(peerMetrics.subject_sharpe, 2) : "\u2014"}
+									</span>
+								</div>
+							</div>
+
+							<div class="sfm-peer-metric">
+								<span class="sfm-peer-metric-name">MAX DD</span>
+								<div class="sfm-peer-bar-wrap">
+									<div class="sfm-peer-range" style:left="0%" style:width="100%"></div>
+									{#if peerMetrics.subject_drawdown !== null}
+										<div
+											class="sfm-peer-subject sfm-peer-subject--down"
+											style:left={peerSubjectLeft(peerMetrics.subject_drawdown, peerMetrics.peer_drawdown_p25, peerMetrics.peer_drawdown_p75, -0.3, 0)}
+										></div>
+									{/if}
+								</div>
+								<div class="sfm-peer-vals">
+									<span>p25: {percentText(peerMetrics.peer_drawdown_p25, 1)}</span>
+									<span>med: {percentText(peerMetrics.peer_drawdown_p50, 1)}</span>
+									<span class:sfm-peer-val-up={(peerMetrics.subject_drawdown ?? -1) >= (peerMetrics.peer_drawdown_p50 ?? -1)}>
+										you: {percentText(peerMetrics.subject_drawdown, 1)}
+									</span>
+								</div>
+							</div>
 						</div>
-					{/each}
-				</div>
+					{:else if loadingPeer}
+						<div class="sfm-analysis-empty">Loading peer data...</div>
+					{:else}
+						<div class="sfm-analysis-empty">No peer group data available.</div>
+					{/if}
+
+					<div class="sfm-dd-section">
+						<h4 class="sfm-peer-hd">DD REPORTS</h4>
+						{#if loadingDD}
+							<div class="sfm-analysis-empty">Loading...</div>
+						{:else if ddReports.length === 0}
+							<div class="sfm-analysis-empty">No DD reports generated yet.</div>
+						{:else}
+							{#each ddReports as report (report.id)}
+								<div class="sfm-dd-row">
+									<span class="sfm-dd-status sfm-dd-status--{report.status.toLowerCase()}">{report.status}</span>
+									<span class="sfm-dd-ver">v{report.version}</span>
+									<span class="sfm-dd-score">{report.confidence_score != null ? formatNumber(Number(report.confidence_score), 0) : "\u2014"}</span>
+									<span class="sfm-dd-anchor">{report.decision_anchor ?? ""}</span>
+								</div>
+							{/each}
+						{/if}
+					</div>
+				{/if}
 			</div>
 		</div>
 
@@ -636,5 +832,191 @@
 	.sfm-close:hover {
 		border-color: var(--ii-brand-primary, var(--terminal-accent-amber));
 		color: var(--ii-brand-primary, var(--terminal-accent-amber));
+	}
+
+	.sfm-section--right {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	.sfm-rtabs {
+		display: flex;
+		flex-shrink: 0;
+		gap: 1px;
+		margin-bottom: 12px;
+		background: var(--ii-border-subtle, var(--terminal-fg-muted));
+	}
+
+	.sfm-rtab {
+		flex: 1;
+		padding: 6px 0;
+		border: none;
+		background: var(--ii-surface-alt, var(--terminal-bg-panel-sunken));
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		font-family: var(--ii-font-mono, var(--terminal-font-mono));
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		cursor: pointer;
+	}
+
+	.sfm-rtab--active {
+		background: var(--ii-surface, var(--terminal-bg-panel));
+		color: var(--ii-brand-primary, var(--terminal-accent-amber));
+	}
+
+	.sfm-peer-section {
+		margin-bottom: 14px;
+	}
+
+	.sfm-peer-hd {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 0 0 8px;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.sfm-peer-label {
+		overflow: hidden;
+		color: var(--ii-brand-primary, var(--terminal-accent-amber));
+		font-weight: 600;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.sfm-peer-count {
+		margin-left: auto;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+	}
+
+	.sfm-peer-metric {
+		margin-bottom: 10px;
+	}
+
+	.sfm-peer-metric-name {
+		display: block;
+		margin-bottom: 4px;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		font-size: 9px;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+	}
+
+	.sfm-peer-bar-wrap {
+		position: relative;
+		height: 10px;
+		margin-bottom: 4px;
+		overflow: hidden;
+		border: 1px solid var(--ii-border-subtle, var(--terminal-fg-muted));
+		background: var(--ii-surface-alt, var(--terminal-bg-panel-sunken));
+	}
+
+	.sfm-peer-range {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		background: var(--ii-border-subtle, rgba(102, 137, 188, 0.26));
+	}
+
+	.sfm-peer-subject {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 2px;
+		background: var(--ii-brand-primary, var(--terminal-accent-amber));
+	}
+
+	.sfm-peer-subject--down {
+		background: var(--ii-danger, var(--terminal-status-error));
+	}
+
+	.sfm-peer-vals {
+		display: flex;
+		gap: 10px;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		font-size: 9px;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.sfm-peer-val-up {
+		color: var(--ii-success, var(--terminal-status-success));
+		font-weight: 700;
+	}
+
+	.sfm-dd-section {
+		padding-top: 10px;
+		border-top: 1px solid var(--ii-border-subtle, var(--terminal-fg-muted));
+	}
+
+	.sfm-dd-row {
+		display: grid;
+		grid-template-columns: 88px 28px 36px minmax(0, 1fr);
+		gap: 8px;
+		align-items: center;
+		padding: 3px 0;
+		border-bottom: 1px solid var(--ii-terminal-hair, rgba(102, 137, 188, 0.14));
+		font-family: var(--ii-font-mono, var(--terminal-font-mono));
+		font-size: 10px;
+	}
+
+	.sfm-dd-status {
+		overflow: hidden;
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-overflow: ellipsis;
+		text-transform: uppercase;
+		white-space: nowrap;
+	}
+
+	.sfm-dd-status--approved {
+		color: var(--ii-success, var(--terminal-status-success));
+	}
+
+	.sfm-dd-status--pending,
+	.sfm-dd-status--pending_approval {
+		color: var(--ii-warning, var(--terminal-status-warn));
+	}
+
+	.sfm-dd-status--rejected,
+	.sfm-dd-status--failed {
+		color: var(--ii-danger, var(--terminal-status-error));
+	}
+
+	.sfm-dd-status--generating {
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+	}
+
+	.sfm-dd-ver {
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		font-size: 9px;
+	}
+
+	.sfm-dd-score {
+		color: var(--ii-text-primary, var(--terminal-fg-primary));
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.sfm-dd-anchor {
+		overflow: hidden;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		font-size: 9px;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.sfm-analysis-empty {
+		padding: 12px 0;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		font-family: var(--ii-font-mono, var(--terminal-font-mono));
+		font-size: 10px;
 	}
 </style>
