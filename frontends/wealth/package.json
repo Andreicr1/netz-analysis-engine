@@ -18,6 +18,7 @@
     "@codemirror/merge": "^6.12.0",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.40.0",
+    "@investintell/ii-terminal-core": "workspace:*",
     "@investintell/ui": "workspace:*",
     "@tanstack/svelte-table": "9.0.0-alpha.10",
     "@tanstack/svelte-virtual": "^3.0.0",

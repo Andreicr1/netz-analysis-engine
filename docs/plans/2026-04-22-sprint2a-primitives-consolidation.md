@@ -2,7 +2,7 @@
 
 **Data**: 2026-04-22
 **Dono**: Andrei
-**Status**: em execução — PR-2a.1 CONCLUÍDO, PR-2a.2 próximo
+**Status**: em execução — PR-2a.1 ✅ PR-2a.2 ✅, PR-2a.3 próximo
 **Predecessor**: `docs/plans/2026-04-19-ii-terminal-extraction.md` (X1–X5b concluídos, PRs #240–#247)
 
 ---

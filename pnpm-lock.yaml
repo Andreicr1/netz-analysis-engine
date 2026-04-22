@@ -238,6 +238,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.40.0
         version: 6.40.0
+      '@investintell/ii-terminal-core':
+        specifier: workspace:*
+        version: link:../../packages/ii-terminal-core
       '@investintell/ui':
         specifier: workspace:*
         version: link:../../packages/investintell-ui

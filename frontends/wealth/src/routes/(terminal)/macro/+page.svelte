@@ -19,7 +19,8 @@
   import { getContext } from "svelte";
   import { createClientApiClient } from "$lib/api/client";
   import { pinnedRegime } from "$lib/state/pinned-regime.svelte";
-  import { TerminalDrawer, TerminalKbd } from "@investintell/ui";
+  import { TerminalDrawer } from "@investintell/ii-terminal-core";
+  import { TerminalKbd } from "@investintell/ui";
   import Panel from "$lib/components/terminal/layout/Panel.svelte";
   import PanelHeader from "$lib/components/terminal/layout/PanelHeader.svelte";
   import StressHero from "$lib/components/terminal/macro/StressHero.svelte";
