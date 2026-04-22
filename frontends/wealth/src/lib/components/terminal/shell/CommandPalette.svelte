@@ -1,141 +1,266 @@
-<!--
-	CommandPalette.svelte — Cmd+K launcher overlay.
-	===============================================
-
-	Source of truth: docs/plans/2026-04-11-terminal-unification-master-plan.md
-		§1.4 TerminalShell, Appendix B navigation flow.
-
-	WAI-ARIA combobox overlay with listbox results. Seeded with 8 go-to
-	navigation commands (3 active, 5 pending) matching the TerminalTopNav
-	tab catalog. Pending commands stay visible so users see the full
-	terminal vision.
-
-	Full-viewport backdrop (var(--terminal-bg-scrim)), centered 640px
-	frame, brutalist chrome, auto-focus on open, focus restore on close,
-	body scroll lock, ESC/Enter/↑/↓ keyboard handling, simple substring
-	filter on label + hint.
-
-	Navigation uses `const target = resolve("/..."); await goto(target);`
-	per the svelte/no-navigation-without-resolve rule — the AST matcher
-	only accepts a plain Identifier passed to goto.
-
-	Z-index var(--terminal-z-palette) = 70, above FocusMode (60) so the
-	palette can open inside an active focus mode.
--->
 <script lang="ts">
+	import { getContext } from "svelte";
 	import { fade, fly } from "svelte/transition";
-	import { svelteTransitionFor } from "@investintell/ui";
 	import { goto } from "$app/navigation";
-	import { resolve } from "$app/paths";
+	import { svelteTransitionFor } from "@investintell/ui";
+	import { createClientApiClient } from "$wealth/api/client";
+	import {
+		closePalette,
+		palette,
+		setPaletteQuery,
+		setPaletteSelectedIndex,
+	} from "$lib/stores/palette.svelte";
 
-	interface CommandPaletteProps {
-		/** Bindable. TerminalShell toggles this from Cmd+K. */
-		open: boolean;
+	interface FundSearchResult {
+		instrument_id: string;
+		name: string;
+		ticker: string | null;
+		strategy_label: string | null;
+		asset_class: string | null;
 	}
 
-	let { open = $bindable() }: CommandPaletteProps = $props();
+	interface SearchResponse {
+		results: FundSearchResult[];
+		latency_ms: number;
+		cached: boolean;
+	}
 
-	type CommandStatus = "active" | "pending";
+	type CommandType = "route" | "fund";
 
-	interface Command {
+	interface CommandItemBase {
 		id: string;
-		label: string;
-		hint: string;
-		status: CommandStatus;
-		action: () => void | Promise<void>;
+		type: CommandType;
+		title: string;
+		subtitle?: string;
+		keywords: string[];
+		onSelect: () => void | Promise<void>;
 	}
 
-	// ─────────────────────────────────────────────────────────────
-	// Active command actions — extracted-const resolve() pattern.
-	// ─────────────────────────────────────────────────────────────
-
-	async function gotoScreener() {
-		const target = resolve("/screener");
-		await goto(target);
+	interface RouteCommandItem extends CommandItemBase {
+		type: "route";
+		path: string;
+		shortcut: string;
+		badge: "ROUTE";
 	}
 
-	async function gotoLive() {
-		const target = resolve("/live");
-		await goto(target);
+	interface FundCommandItem extends CommandItemBase {
+		type: "fund";
+		instrumentId: string;
+		ticker: string | null;
+		strategyLabel: string | null;
+		assetClass: string | null;
+		badge: "FUND";
 	}
 
-	async function gotoResearch() {
-		const target = resolve("/screener/research");
-		await goto(target);
-	}
+	type CommandItem = RouteCommandItem | FundCommandItem;
 
-	// Pending actions are intentional no-ops. Triggering a pending
-	// command plays a shake animation on its row and keeps the palette
-	// open so the user sees the "not yet wired" signal.
-	function pendingAction() {
-		/* no-op — see handleEnter for UX feedback */
-	}
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const api = createClientApiClient(getToken);
 
-	const COMMANDS: ReadonlyArray<Command> = [
-		{ id: "nav.screener", label: "Go to Screener",        hint: "g s", status: "active",  action: gotoScreener },
-		{ id: "nav.live",     label: "Go to Live Workbench",  hint: "g l", status: "active",  action: gotoLive },
-		{ id: "nav.research", label: "Go to Research",        hint: "g r", status: "active",  action: gotoResearch },
-		{ id: "nav.macro",    label: "Go to Macro Desk",      hint: "g m", status: "pending", action: pendingAction },
-		{ id: "nav.alloc",    label: "Go to Allocation",      hint: "g a", status: "pending", action: pendingAction },
-		{ id: "nav.builder",  label: "Go to Portfolio Builder", hint: "g p", status: "pending", action: pendingAction },
-		{ id: "nav.alerts",   label: "Go to Alerts",          hint: "g n", status: "pending", action: pendingAction },
-		{ id: "nav.dd",       label: "Go to DD Queue",        hint: "g d", status: "pending", action: pendingAction },
-	];
-
-	let query = $state("");
-	let highlightedIndex = $state(0);
 	let inputEl: HTMLInputElement | undefined = $state();
 	let frameEl: HTMLDivElement | undefined = $state();
-	let shakeKey = $state(0);
+	let debouncedQuery = $state("");
+	let remoteItems = $state<FundCommandItem[]>([]);
+	let loading = $state(false);
+	let fetchError = $state<string | null>(null);
+	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+	let activeFetchController: AbortController | null = null;
 
-	const filtered = $derived.by<Command[]>(() => {
-		const q = query.trim().toLowerCase();
-		if (q.length === 0) return [...COMMANDS];
-		return COMMANDS.filter(
-			(c) =>
-				c.label.toLowerCase().includes(q) ||
-				c.hint.toLowerCase().includes(q),
+	async function gotoRoute(path: string) {
+		await goto(path);
+	}
+
+	async function gotoFundDetail(instrumentId: string) {
+		await goto(`/screener/fund/${instrumentId}`);
+	}
+
+	const STATIC_COMMANDS: ReadonlyArray<RouteCommandItem> = [
+		{
+			id: "route.screener",
+			type: "route",
+			title: "Open Screener",
+			subtitle: "/screener",
+			path: "/screener",
+			shortcut: "G S",
+			badge: "ROUTE",
+			keywords: ["screener", "screen", "funds", "/screener"],
+			onSelect: () => gotoRoute("/screener"),
+		},
+		{
+			id: "route.allocation",
+			type: "route",
+			title: "Open Allocation",
+			subtitle: "/allocation",
+			path: "/allocation",
+			shortcut: "G A",
+			badge: "ROUTE",
+			keywords: ["allocation", "ips", "portfolio", "/allocation"],
+			onSelect: () => gotoRoute("/allocation"),
+		},
+		{
+			id: "route.live",
+			type: "route",
+			title: "Open Live Workbench",
+			subtitle: "/live",
+			path: "/live",
+			shortcut: "G L",
+			badge: "ROUTE",
+			keywords: ["live", "watchlist", "trading", "/live"],
+			onSelect: () => gotoRoute("/live"),
+		},
+	];
+
+	const localItems = $derived.by<RouteCommandItem[]>(() => {
+		const normalized = palette.query.trim().toLowerCase();
+		if (!normalized) {
+			return [...STATIC_COMMANDS];
+		}
+		return STATIC_COMMANDS.filter((item) =>
+			[item.title, item.subtitle ?? "", item.shortcut, ...item.keywords]
+				.join(" ")
+				.toLowerCase()
+				.includes(normalized),
 		);
 	});
 
+	const items = $derived.by<CommandItem[]>(() => [...localItems, ...remoteItems]);
+
 	$effect(() => {
-		// Clamp the highlighted index whenever the filtered list shrinks.
-		if (filtered.length === 0) {
-			highlightedIndex = 0;
+		if (!palette.isOpen) {
+			if (debounceTimer) clearTimeout(debounceTimer);
+			activeFetchController?.abort();
+			debouncedQuery = "";
+			remoteItems = [];
+			loading = false;
+			fetchError = null;
 			return;
 		}
-		if (highlightedIndex >= filtered.length) {
-			highlightedIndex = filtered.length - 1;
+
+		const nextQuery = palette.query.trim();
+		if (debounceTimer) clearTimeout(debounceTimer);
+
+		if (nextQuery.length < 2) {
+			debouncedQuery = nextQuery;
+			activeFetchController?.abort();
+			remoteItems = [];
+			loading = false;
+			fetchError = null;
+			return;
 		}
+
+		debounceTimer = setTimeout(() => {
+			debouncedQuery = nextQuery;
+		}, 180);
+
+		return () => {
+			if (debounceTimer) clearTimeout(debounceTimer);
+		};
 	});
 
-	// Focus lifecycle — mirror FocusMode's pattern: restore focus on
-	// close, body scroll lock while open.
 	$effect(() => {
-		if (!open) return;
-		if (typeof document === "undefined") return;
-		const previousOverflow = document.body.style.overflow;
-		document.body.style.overflow = "hidden";
-		const previouslyFocused = document.activeElement as HTMLElement | null;
-		query = "";
-		highlightedIndex = 0;
-		queueMicrotask(() => {
-			inputEl?.focus({ preventScroll: true });
-		});
+		if (!palette.isOpen) return;
+		const q = debouncedQuery;
+		if (q.length < 2) return;
+
+		activeFetchController?.abort();
+		const controller = new AbortController();
+		activeFetchController = controller;
+		loading = true;
+		fetchError = null;
+
+		void loadRemoteItems(q, controller);
+
 		return () => {
-			document.body.style.overflow = previousOverflow;
-			if (
-				previouslyFocused &&
-				typeof previouslyFocused.focus === "function"
-			) {
-				previouslyFocused.focus({ preventScroll: true });
+			controller.abort();
+			if (activeFetchController === controller) {
+				activeFetchController = null;
 			}
 		};
 	});
 
+	$effect(() => {
+		if (!palette.isOpen) return;
+		if (typeof document === "undefined") return;
+
+		const previousOverflow = document.body.style.overflow;
+		const previousFocused = document.activeElement as HTMLElement | null;
+		document.body.style.overflow = "hidden";
+
+		queueMicrotask(() => {
+			inputEl?.focus({ preventScroll: true });
+			inputEl?.select();
+		});
+
+		return () => {
+			document.body.style.overflow = previousOverflow;
+			previousFocused?.focus?.({ preventScroll: true });
+		};
+	});
+
+	$effect(() => {
+		if (items.length === 0) {
+			setPaletteSelectedIndex(0);
+			return;
+		}
+		if (palette.selectedIndex >= items.length) {
+			setPaletteSelectedIndex(items.length - 1);
+		}
+	});
+
+	$effect(() => {
+		if (!palette.isOpen || items.length === 0) return;
+		const activeItem = items[palette.selectedIndex];
+		if (!activeItem) return;
+		queueMicrotask(() => {
+			document.getElementById(optionIdFor(activeItem.id))?.scrollIntoView({
+				block: "nearest",
+			});
+		});
+	});
+
+	async function loadRemoteItems(q: string, controller: AbortController) {
+		try {
+			const response = await api.get<SearchResponse>(
+				"/search",
+				{ q, limit: 8 },
+				{ signal: controller.signal },
+			);
+			if (controller.signal.aborted) return;
+			remoteItems = response.results.map((item) => ({
+				id: `fund.${item.instrument_id}`,
+				type: "fund",
+				title: item.name,
+				subtitle: [item.ticker, item.strategy_label, item.asset_class]
+					.filter(Boolean)
+					.join(" · "),
+				instrumentId: item.instrument_id,
+				ticker: item.ticker,
+				strategyLabel: item.strategy_label,
+				assetClass: item.asset_class,
+				badge: "FUND",
+				keywords: [
+					item.name,
+					item.ticker ?? "",
+					item.strategy_label ?? "",
+					item.asset_class ?? "",
+				],
+				onSelect: () => gotoFundDetail(item.instrument_id),
+			}));
+		} catch (error: unknown) {
+			if (error instanceof DOMException && error.name === "AbortError") return;
+			remoteItems = [];
+			fetchError = error instanceof Error ? error.message : "Search failed.";
+		} finally {
+			if (activeFetchController === controller) {
+				loading = false;
+				activeFetchController = null;
+			}
+		}
+	}
+
 	function handleBackdropClick(event: MouseEvent) {
 		if (event.target === event.currentTarget) {
-			open = false;
+			closePalette();
 		}
 	}
 
@@ -143,69 +268,77 @@
 		event.stopPropagation();
 	}
 
+	function handleInput(event: Event) {
+		setPaletteQuery((event.currentTarget as HTMLInputElement).value);
+	}
+
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === "Escape") {
 			event.preventDefault();
-			open = false;
+			closePalette();
 			return;
 		}
+
+		if (event.key === "Tab") {
+			event.preventDefault();
+			inputEl?.focus({ preventScroll: true });
+			return;
+		}
+
 		if (event.key === "ArrowDown") {
 			event.preventDefault();
-			if (filtered.length === 0) return;
-			highlightedIndex = (highlightedIndex + 1) % filtered.length;
+			if (items.length === 0) return;
+			setPaletteSelectedIndex((palette.selectedIndex + 1) % items.length);
 			return;
 		}
+
 		if (event.key === "ArrowUp") {
 			event.preventDefault();
-			if (filtered.length === 0) return;
-			highlightedIndex =
-				(highlightedIndex - 1 + filtered.length) % filtered.length;
+			if (items.length === 0) return;
+			setPaletteSelectedIndex((palette.selectedIndex - 1 + items.length) % items.length);
 			return;
 		}
+
 		if (event.key === "Enter") {
 			event.preventDefault();
-			handleEnter();
-			return;
+			void selectItem(items[palette.selectedIndex]);
 		}
 	}
 
-	function handleEnter() {
-		const command = filtered[highlightedIndex];
-		if (!command) return;
-		if (command.status === "pending") {
-			// Visual shake feedback — increment key so the row remounts
-			// its animation.
-			shakeKey += 1;
-			return;
-		}
-		const result = command.action();
-		if (result && typeof (result as Promise<void>).then === "function") {
-			(result as Promise<void>).then(
-				() => {
-					open = false;
-				},
-				() => {
-					/* swallow navigation errors — palette stays open so
-					   the user can retry */
-				},
-			);
-		} else {
-			open = false;
+	async function selectItem(item: CommandItem | undefined) {
+		if (!item) return;
+		try {
+			await item.onSelect();
+			closePalette();
+		} catch {
+			// Keep the palette open if navigation fails so the user can retry.
 		}
 	}
 
 	function handleOptionClick(index: number) {
-		highlightedIndex = index;
-		handleEnter();
+		setPaletteSelectedIndex(index);
+		void selectItem(items[index]);
 	}
 
-	const optionIdFor = (id: string) => `cp-option-${id}`;
+	function handleOptionMouseEnter(index: number) {
+		setPaletteSelectedIndex(index);
+	}
+
+	function optionIdFor(id: string) {
+		return `terminal-command-palette-option-${id}`;
+	}
 
 	const listboxId = "terminal-command-palette-listbox";
 	const inputId = "terminal-command-palette-input";
+	const helperId = "terminal-command-palette-helper";
+	const activeDescendantId = $derived(
+		items[palette.selectedIndex]?.id
+			? optionIdFor(items[palette.selectedIndex]!.id)
+			: undefined,
+	);
 </script>
 
-{#if open}
+{#if palette.isOpen}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="cp-backdrop"
@@ -221,65 +354,76 @@
 			aria-label="Command palette"
 			tabindex="-1"
 			onclick={handleFrameClick}
+			onkeydown={handleKeydown}
 			in:fly={{ y: -12, ...svelteTransitionFor("chrome", { duration: "tick" }) }}
 		>
 			<header class="cp-header">
 				<span class="cp-prompt">⌘</span>
 				<input
 					bind:this={inputEl}
-					bind:value={query}
 					id={inputId}
 					class="cp-input"
 					type="text"
-					placeholder="Type a command or search..."
+					value={palette.query}
+					placeholder="Search funds or jump to a route..."
 					autocomplete="off"
 					autocorrect="off"
 					autocapitalize="off"
 					spellcheck="false"
 					role="combobox"
+					aria-autocomplete="list"
 					aria-expanded="true"
 					aria-controls={listboxId}
-					aria-activedescendant={(() => {
-						const current = filtered[highlightedIndex];
-						return current ? optionIdFor(current.id) : undefined;
-					})()}
-					onkeydown={handleKeydown}
+					aria-describedby={helperId}
+					aria-activedescendant={activeDescendantId}
+					oninput={handleInput}
 				/>
 			</header>
 
-			<ul id={listboxId} class="cp-list" role="listbox">
-				{#each filtered as cmd, i (cmd.id)}
-					{@const isHighlighted = i === highlightedIndex}
-					{@const shouldShake =
-						isHighlighted && cmd.status === "pending" && shakeKey > 0}
+			<ul id={listboxId} class="cp-list" role="listbox" aria-busy={loading}>
+				{#each items as item, index (item.id)}
+					{@const isSelected = index === palette.selectedIndex}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<li
-						id={optionIdFor(cmd.id)}
+						id={optionIdFor(item.id)}
 						class="cp-option"
-						class:cp-option--highlighted={isHighlighted}
-						class:cp-option--pending={cmd.status === "pending"}
-						class:cp-option--shake={shouldShake}
+						class:cp-option--highlighted={isSelected}
 						role="option"
-						aria-selected={isHighlighted}
-						onclick={() => handleOptionClick(i)}
-						onmouseenter={() => (highlightedIndex = i)}
+						aria-selected={isSelected}
+						onclick={() => handleOptionClick(index)}
+						onmouseenter={() => handleOptionMouseEnter(index)}
 					>
-						<span class="cp-option-label">{cmd.label}</span>
-						<span class="cp-option-right">
-							{#if cmd.status === "pending"}
-								<span class="cp-option-badge">PENDING</span>
+						<div class="cp-option-copy">
+							<span class="cp-option-label">{item.title}</span>
+							{#if item.subtitle}
+								<span class="cp-option-subtitle">{item.subtitle}</span>
 							{/if}
-							<span class="cp-option-hint">{cmd.hint}</span>
-						</span>
+						</div>
+						<div class="cp-option-meta">
+							<span class="cp-option-badge">{item.badge}</span>
+							{#if item.type === "route"}
+								<span class="cp-option-hint">{item.shortcut}</span>
+							{/if}
+						</div>
 					</li>
 				{:else}
-					<li class="cp-empty">NO MATCHES</li>
+					<li class="cp-empty">
+						{#if loading}
+							Searching funds…
+						{:else if fetchError}
+							{fetchError}
+						{:else if palette.query.trim().length >= 2}
+							No matches for "{palette.query.trim()}"
+						{:else}
+							Type 2+ characters to search funds. Route shortcuts appear instantly.
+						{/if}
+					</li>
 				{/each}
 			</ul>
 
-			<footer class="cp-footer">
-				<span class="cp-footer-count">{filtered.length} results</span>
-				<span class="cp-footer-keys">↑↓ navigate · ⏎ select · ESC close</span>
+			<footer id={helperId} class="cp-footer">
+				<span class="cp-footer-count">{items.length} results</span>
+				<span class="cp-footer-keys">↑↓ navigate · Enter select · Esc close</span>
 			</footer>
 		</div>
 	</div>
@@ -290,36 +434,36 @@
 		position: fixed;
 		inset: 0;
 		z-index: var(--terminal-z-palette);
-		background: var(--terminal-bg-scrim);
-		backdrop-filter: blur(3px);
-		-webkit-backdrop-filter: blur(3px);
 		display: grid;
 		place-items: start center;
-		padding-top: 14vh;
-		font-family: var(--terminal-font-mono);
+		padding: 12vh var(--terminal-space-4) 0;
+		background: var(--terminal-bg-scrim);
+		backdrop-filter: blur(6px);
+		-webkit-backdrop-filter: blur(6px);
 		color: var(--terminal-fg-primary);
+		font-family: var(--terminal-font-mono);
 	}
 
 	.cp-frame {
-		width: 640px;
-		max-width: calc(100vw - var(--terminal-space-8));
-		max-height: 60vh;
-		background: var(--terminal-bg-void);
-		border: var(--terminal-border-hairline);
-		border-radius: var(--terminal-radius-none);
+		width: min(720px, 100%);
+		max-height: min(68vh, 640px);
 		display: grid;
 		grid-template-rows: auto 1fr auto;
 		overflow: hidden;
-		box-shadow: 0 0 0 1px var(--terminal-fg-muted);
+		background:
+			linear-gradient(180deg, color-mix(in srgb, var(--terminal-accent-cyan) 10%, transparent), transparent 24%),
+			var(--terminal-bg-void);
+		border: var(--terminal-border-hairline);
+		box-shadow: 0 24px 90px rgba(0, 0, 0, 0.45);
 	}
 
 	.cp-header {
 		display: flex;
 		align-items: center;
 		gap: var(--terminal-space-3);
-		padding: var(--terminal-space-3) var(--terminal-space-4);
+		padding: var(--terminal-space-4);
 		border-bottom: var(--terminal-border-hairline);
-		background: var(--terminal-bg-panel);
+		background: color-mix(in srgb, var(--terminal-bg-panel) 92%, black);
 	}
 
 	.cp-prompt {
@@ -330,13 +474,12 @@
 
 	.cp-input {
 		flex: 1;
-		background: transparent;
 		border: none;
 		outline: none;
+		background: transparent;
 		color: var(--terminal-fg-primary);
 		font-family: inherit;
 		font-size: var(--terminal-text-14);
-		letter-spacing: 0;
 	}
 
 	.cp-input::placeholder {
@@ -344,11 +487,11 @@
 	}
 
 	.cp-list {
-		list-style: none;
-		margin: 0;
-		padding: var(--terminal-space-1) 0;
-		overflow-y: auto;
 		min-height: 0;
+		margin: 0;
+		padding: var(--terminal-space-2) 0;
+		list-style: none;
+		overflow-y: auto;
 	}
 
 	.cp-option {
@@ -356,90 +499,93 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--terminal-space-4);
-		padding: var(--terminal-space-2) var(--terminal-space-4);
-		font-size: var(--terminal-text-11);
-		letter-spacing: var(--terminal-tracking-caps);
-		text-transform: uppercase;
-		color: var(--terminal-fg-secondary);
+		padding: var(--terminal-space-3) var(--terminal-space-4);
 		cursor: pointer;
 		border-left: 2px solid transparent;
 	}
 
 	.cp-option--highlighted {
 		background: var(--terminal-bg-panel-raised);
-		color: var(--terminal-fg-primary);
-		border-left-color: var(--terminal-accent-amber);
+		border-left-color: var(--terminal-accent-cyan);
 	}
 
-	.cp-option--pending {
-		color: var(--terminal-fg-muted);
-	}
-
-	.cp-option--pending.cp-option--highlighted {
-		color: var(--terminal-fg-tertiary);
-		border-left-color: var(--terminal-status-warn);
-	}
-
-	.cp-option--shake {
-		animation: cp-shake 240ms ease-in-out;
+	.cp-option-copy {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		gap: 4px;
 	}
 
 	.cp-option-label {
-		font-weight: 600;
+		font-size: var(--terminal-text-11);
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--terminal-fg-primary);
 	}
 
-	.cp-option-right {
+	.cp-option-subtitle {
+		font-size: var(--terminal-text-10);
+		letter-spacing: 0.04em;
+		color: var(--terminal-fg-tertiary);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.cp-option-meta {
 		display: inline-flex;
 		align-items: center;
 		gap: var(--terminal-space-2);
+		flex-shrink: 0;
 	}
 
-	.cp-option-badge {
-		padding: 1px 4px;
+	.cp-option-badge,
+	.cp-option-hint {
+		padding: 2px 6px;
 		font-size: var(--terminal-text-10);
 		letter-spacing: 0.08em;
 		color: var(--terminal-fg-tertiary);
 		border: 1px solid var(--terminal-fg-muted);
 	}
 
-	.cp-option-hint {
-		font-family: var(--terminal-font-mono);
-		font-size: var(--terminal-text-10);
-		color: var(--terminal-fg-tertiary);
-		letter-spacing: 0.06em;
-	}
-
 	.cp-empty {
-		padding: var(--terminal-space-6) var(--terminal-space-4);
+		padding: var(--terminal-space-7) var(--terminal-space-4);
 		text-align: center;
 		font-size: var(--terminal-text-11);
 		color: var(--terminal-fg-muted);
-		letter-spacing: var(--terminal-tracking-caps);
+		letter-spacing: 0.05em;
 	}
 
 	.cp-footer {
 		display: flex;
-		justify-content: space-between;
 		align-items: center;
-		padding: var(--terminal-space-2) var(--terminal-space-4);
+		justify-content: space-between;
+		gap: var(--terminal-space-4);
+		padding: var(--terminal-space-3) var(--terminal-space-4);
 		border-top: var(--terminal-border-hairline);
-		background: var(--terminal-bg-panel);
+		background: color-mix(in srgb, var(--terminal-bg-panel) 92%, black);
 		font-size: var(--terminal-text-10);
 		color: var(--terminal-fg-tertiary);
-		letter-spacing: var(--terminal-tracking-caps);
+		letter-spacing: 0.08em;
 	}
 
-	@keyframes cp-shake {
-		0%, 100% { transform: translateX(0); }
-		20% { transform: translateX(-4px); }
-		40% { transform: translateX(4px); }
-		60% { transform: translateX(-3px); }
-		80% { transform: translateX(3px); }
-	}
+	@media (max-width: 640px) {
+		.cp-backdrop {
+			padding-top: 8vh;
+		}
 
-	@media (prefers-reduced-motion: reduce) {
-		.cp-option--shake {
-			animation: none;
+		.cp-frame {
+			max-height: 78vh;
+		}
+
+		.cp-option {
+			padding-inline: var(--terminal-space-3);
+		}
+
+		.cp-footer {
+			flex-direction: column;
+			align-items: flex-start;
 		}
 	}
 </style>

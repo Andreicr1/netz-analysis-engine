@@ -1,29 +1,34 @@
-"""Unified global search — aggregator for funds, managers, and documents.
+"""Search routes for the wealth surface.
 
-GET /search?q=&categories=funds,managers,documents
+``GET /search`` is the low-latency command palette endpoint backed by
+``mv_unified_funds`` and Redis.
 
-Fan-out to existing SQL queries (catalog, manager_screener, wealth_documents).
-Returns grouped results by category with a small page_size for speed.
-
-Refactored to use mv_unified_assets for high-performance global instrument search.
+``GET /search/global`` preserves the legacy grouped search used by the
+wealth application shell.
 """
 
 from __future__ import annotations
 
 import asyncio
+import time
+from collections import defaultdict
 
+import redis.asyncio as aioredis
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from sqlalchemy import Column, MetaData, Table, Text, func, or_, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel, Field
+from sqlalchemy import Column, MetaData, Table, Text, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config.config_service import ConfigService
+from app.core.jobs.tracker import get_redis_pool
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.document import WealthDocument
 from app.domains.wealth.queries.manager_screener_sql import (
     ScreenerFilters,
     build_screener_queries,
 )
+from app.domains.wealth.queries.catalog_sql import mv_unified_funds
 
 logger = structlog.get_logger()
 
@@ -31,6 +36,12 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 VALID_CATEGORIES = {"funds", "managers", "documents"}
 MAX_PER_CATEGORY = 6
+DEFAULT_COMMAND_PALETTE_LIMIT = 8
+MAX_COMMAND_PALETTE_LIMIT = 20
+DEFAULT_CACHE_TTL_S = 600
+MIN_CACHE_TTL_S = 300
+MAX_CACHE_TTL_S = 900
+_search_singleflight: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 # ── Reflected Materialized View ──────────────────────────────
 
@@ -48,6 +59,20 @@ mv_unified_assets = Table(
 )
 
 # ── Response schemas ────────────────────────────────────────
+
+
+class FundSearchResult(BaseModel):
+    instrument_id: str = Field(..., description="Stable mv_unified_funds external_id")
+    name: str = Field(..., description="Fund display name")
+    ticker: str | None = Field(None, description="Ticker when available")
+    strategy_label: str | None = Field(None, description="Normalized strategy classification")
+    asset_class: str | None = Field(None, description="Fund type / asset class")
+
+
+class SearchResponse(BaseModel):
+    results: list[FundSearchResult]
+    latency_ms: float = Field(..., description="Backend latency in milliseconds")
+    cached: bool = Field(False, description="True when served from Redis")
 
 
 class SearchResultItem(BaseModel):
@@ -80,14 +105,83 @@ from app.domains.wealth.schemas.holdings import HoldingHolder, ReverseLookupResp
 
 @router.get(
     "",
+    response_model=SearchResponse,
+    summary="Command palette fund search",
+)
+async def command_palette_search(
+    response: Response,
+    q: str = Query(..., min_length=2, max_length=200),
+    limit: int = Query(DEFAULT_COMMAND_PALETTE_LIMIT, ge=1, le=MAX_COMMAND_PALETTE_LIMIT),
+    db: AsyncSession = Depends(get_db_with_rls),
+    _user: CurrentUser = Depends(get_current_user),
+) -> SearchResponse:
+    """Low-latency fund search for the terminal command palette."""
+    normalized_query = q.strip()
+    config_service = ConfigService(db)
+    ttl_s = await _resolve_palette_cache_ttl(config_service)
+    cache_key = _palette_cache_key(normalized_query, limit)
+    cache_control = f"private, max-age={ttl_s}, stale-while-revalidate=60"
+    response.headers["Cache-Control"] = cache_control
+
+    redis: aioredis.Redis | None = None
+    try:
+        redis = aioredis.Redis(connection_pool=get_redis_pool())
+        cached = await redis.get(cache_key)
+        if cached is not None:
+            payload = SearchResponse.model_validate_json(
+                cached.decode() if isinstance(cached, bytes) else str(cached),
+            )
+            payload.cached = True
+            return payload
+    except Exception as exc:  # noqa: BLE001 - fail open on Redis outage
+        logger.warning("palette_search_cache_get_failed", key=cache_key, error=str(exc))
+        redis = None
+
+    try:
+        started_at = time.perf_counter()
+        lock = _search_singleflight[cache_key]
+        async with lock:
+            if redis is not None:
+                try:
+                    cached = await redis.get(cache_key)
+                    if cached is not None:
+                        payload = SearchResponse.model_validate_json(
+                            cached.decode() if isinstance(cached, bytes) else str(cached),
+                        )
+                        payload.cached = True
+                        return payload
+                except Exception as exc:  # noqa: BLE001 - fail open on Redis outage
+                    logger.warning("palette_search_cache_recheck_failed", key=cache_key, error=str(exc))
+
+            payload = await _run_palette_search(db, normalized_query, limit, started_at=started_at)
+            if redis is not None:
+                try:
+                    await redis.setex(
+                        cache_key,
+                        ttl_s,
+                        payload.model_dump_json(),
+                    )
+                except Exception as exc:  # noqa: BLE001 - fail open on Redis outage
+                    logger.warning("palette_search_cache_set_failed", key=cache_key, error=str(exc))
+            return payload
+    finally:
+        if redis is not None:
+            try:
+                await redis.aclose()
+            except Exception:  # noqa: BLE001 - best effort
+                pass
+
+
+@router.get(
+    "/global",
     response_model=GlobalSearchResponse,
-    summary="Global search across funds, managers, and documents",
+    summary="Legacy global search across funds, managers, and documents",
 )
 async def global_search(
     q: str = Query(..., min_length=2, max_length=200),
     categories: str = Query("funds,managers,documents", description="Comma-separated categories"),
     db: AsyncSession = Depends(get_db_with_rls),
-    user: CurrentUser = Depends(get_current_user),
+    _user: CurrentUser = Depends(get_current_user),
     org_id: str = Depends(get_org_id),
 ) -> GlobalSearchResponse:
     """Fan-out search across funds, managers, and documents."""
@@ -336,3 +430,75 @@ async def _search_documents(db: AsyncSession, q: str) -> SearchCategoryGroup:
         )
 
     return SearchCategoryGroup(category="documents", label="Documents", items=items, total=total)
+
+
+async def _resolve_palette_cache_ttl(config_service: ConfigService) -> int:
+    """Read optional cache tuning from ConfigService, with safe bounds."""
+    try:
+        config = await config_service.get("wealth", "command_palette")
+        raw_ttl = config.value.get("search_cache_ttl_seconds")
+        if isinstance(raw_ttl, int):
+            return max(MIN_CACHE_TTL_S, min(MAX_CACHE_TTL_S, raw_ttl))
+    except Exception as exc:  # noqa: BLE001 - optional config, fail to default
+        logger.warning("palette_search_config_fallback", error=str(exc))
+    return DEFAULT_CACHE_TTL_S
+
+
+def _palette_cache_key(q: str, limit: int) -> str:
+    return f"search:palette:v1:{q.lower()}:{limit}"
+
+
+async def _run_palette_search(
+    db: AsyncSession,
+    q: str,
+    limit: int,
+    *,
+    started_at: float,
+) -> SearchResponse:
+    pattern = f"%{q}%"
+    lower_q = q.lower()
+    rank_expr = case(
+        (func.lower(func.coalesce(mv_unified_funds.c.ticker, "")) == lower_q, 0),
+        (func.lower(mv_unified_funds.c.name).like(f"{lower_q}%"), 1),
+        (func.lower(func.coalesce(mv_unified_funds.c.ticker, "")).like(f"{lower_q}%"), 2),
+        else_=3,
+    )
+    stmt = (
+        select(
+            mv_unified_funds.c.external_id,
+            mv_unified_funds.c.name,
+            mv_unified_funds.c.ticker,
+            mv_unified_funds.c.strategy_label,
+            mv_unified_funds.c.fund_type,
+            rank_expr.label("_rank"),
+        )
+        .where(
+            mv_unified_funds.c.is_institutional.is_(True),
+            or_(
+                mv_unified_funds.c.name.ilike(pattern),
+                mv_unified_funds.c.ticker.ilike(pattern),
+            ),
+        )
+        .order_by(
+            rank_expr.asc(),
+            mv_unified_funds.c.aum_usd.desc().nullslast(),
+            mv_unified_funds.c.name.asc(),
+        )
+        .limit(limit)
+    )
+
+    rows = (await db.execute(stmt)).mappings().all()
+    elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
+    return SearchResponse(
+        results=[
+            FundSearchResult(
+                instrument_id=str(row["external_id"]),
+                name=str(row["name"]),
+                ticker=row["ticker"],
+                strategy_label=row["strategy_label"],
+                asset_class=row["fund_type"],
+            )
+            for row in rows
+        ],
+        latency_ms=elapsed_ms,
+    )

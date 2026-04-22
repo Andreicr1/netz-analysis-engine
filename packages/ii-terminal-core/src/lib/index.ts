@@ -41,6 +41,15 @@ export {
 	TERMINAL_TWEAKS_KEY,
 	type TerminalTweaks,
 } from "./stores/terminal-tweaks.svelte";
+export {
+	palette,
+	PaletteState,
+	openPalette,
+	closePalette,
+	togglePalette,
+	setPaletteQuery,
+	setPaletteSelectedIndex,
+} from "./stores/palette.svelte";
 
 // State
 export {

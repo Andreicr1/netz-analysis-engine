@@ -95,7 +95,7 @@
 		abortController = new AbortController();
 		loading = true;
 		try {
-			const res = await api.get<GlobalSearchResponse>("/search", { q });
+			const res = await api.get<GlobalSearchResponse>("/search/global", { q });
 			groups = res.groups;
 		} catch (err) {
 			if (err instanceof DOMException && err.name === "AbortError") return;

@@ -59,6 +59,10 @@
 	import CommandPalette from "./CommandPalette.svelte";
 	import AlertTicker from "./AlertTicker.svelte";
 	import LayoutCage from "./LayoutCage.svelte";
+	import {
+		openPalette as openPaletteStore,
+		togglePalette,
+	} from "../../../stores/palette.svelte";
 
 	interface TerminalShellProps {
 		children: Snippet;
@@ -165,8 +169,6 @@
 
 	// ─── Ephemeral shell state ──────────────────────────────────
 	let railCollapsed = $state(false);
-	let paletteOpen = $state(false);
-
 	// Go-to navigation catalog (mirrors the CommandPalette action
 	// dispatch surface). `active` entries invoke goto via resolve();
 	// `pending` entries open the palette so the user sees the
@@ -204,7 +206,7 @@
 	}
 
 	function openPalette() {
-		paletteOpen = true;
+		openPaletteStore();
 	}
 
 	type GoToHandler = () => void | Promise<void>;
@@ -253,7 +255,7 @@
 				(event.key === "k" || event.key === "K");
 			if (isPaletteShortcut) {
 				event.preventDefault();
-				paletteOpen = !paletteOpen;
+				togglePalette();
 				goPrefixTimestamp = null;
 				return;
 			}
@@ -369,7 +371,7 @@
 	</div>
 </div>
 
-<CommandPalette bind:open={paletteOpen} />
+<CommandPalette />
 <TerminalTweaksPanel />
 
 <style>
