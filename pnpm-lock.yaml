@@ -238,6 +238,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.40.0
         version: 6.40.0
+      '@investintell/ii-terminal-core':
+        specifier: workspace:*
+        version: link:../../packages/ii-terminal-core
       '@investintell/ui':
         specifier: workspace:*
         version: link:../../packages/investintell-ui
@@ -369,6 +372,12 @@ importers:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^5.0.0
         version: 5.1.1(svelte@5.53.12)(vite@6.4.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(yaml@2.8.2))
+      '@testing-library/svelte':
+        specifier: ^5.3.1
+        version: 5.3.1(svelte@5.53.12)(vite@6.4.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(yaml@2.8.2))(vitest@3.2.4(@types/node@25.5.0)(happy-dom@20.8.4(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jiti@2.6.1)(jsdom@25.0.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))(lightningcss@1.31.1)(terser@5.46.1)(yaml@2.8.2))
+      '@types/uuid':
+        specifier: ^10.0.0
+        version: 10.0.0
       svelte:
         specifier: ^5.0.0
         version: 5.53.12
@@ -378,6 +387,9 @@ importers:
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@25.5.0)(happy-dom@20.8.4(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jiti@2.6.1)(jsdom@25.0.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))(lightningcss@1.31.1)(terser@5.46.1)(yaml@2.8.2)
 
   packages/investintell-ui:
     dependencies:

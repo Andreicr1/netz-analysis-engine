@@ -12,10 +12,8 @@
 -->
 <script lang="ts">
 	import { getContext, onDestroy } from "svelte";
-	import {
-		TerminalMiniSparkline,
-		formatNumber,
-	} from "@investintell/ui";
+	import { TerminalMiniSparkline } from "@investintell/ii-terminal-core";
+	import { formatNumber } from "@investintell/ui";
 	import type { MarketDataStore } from "$wealth/stores/market-data.svelte";
 	import { TERMINAL_MARKET_DATA_KEY } from "$wealth/components/portfolio/live/workbench-state";
 	import {

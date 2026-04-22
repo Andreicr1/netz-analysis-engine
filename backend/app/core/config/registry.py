@@ -134,6 +134,14 @@ _REGISTRY: tuple[ConfigDomain, ...] = (
         description="Wealth construction-engine optimizer tunables (reserved for future per-tenant overrides)",
         required=False,
     ),
+    ConfigDomain(
+        vertical="wealth",
+        config_type="command_palette",
+        ownership="config_service",
+        client_visible=False,
+        description="Terminal command palette search/cache tunables",
+        required=False,
+    ),
 )
 
 

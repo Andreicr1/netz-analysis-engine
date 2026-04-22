@@ -13,10 +13,10 @@
 -->
 <script lang="ts">
 	import {
-		TerminalPill,
 		formatPercent,
 		formatRelativeDate,
 	} from "@investintell/ui";
+	import { TerminalPill } from "../terminal/primitives";
 	import type { AllocationProfile } from "../../types/allocation-page";
 
 	interface Props {

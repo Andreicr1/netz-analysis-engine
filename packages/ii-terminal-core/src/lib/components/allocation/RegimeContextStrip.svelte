@@ -15,7 +15,8 @@
   Source: docs/plans/2026-04-19-netz-terminal-parity-builder-macro-screener.md §B.8.
 -->
 <script lang="ts">
-	import { TerminalPill, formatPercent } from "@investintell/ui";
+	import { formatPercent } from "@investintell/ui";
+	import { TerminalPill } from "../terminal/primitives";
 
 	interface RegimeContextStripData {
 		regime: string | null;

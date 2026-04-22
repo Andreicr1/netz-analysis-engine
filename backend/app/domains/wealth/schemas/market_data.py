@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -80,6 +80,15 @@ class WsServerMessage(BaseModel):
     type: Literal["price", "snapshot", "pong", "error", "subscribed"]
     data: dict | list | None = None
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+
+
+class MarketEventPayload(BaseModel):
+    """Low-frequency market event delivered over SSE."""
+
+    type: Literal["regime_change", "drift_alert", "price_staleness", "heartbeat"]
+    data: dict[str, Any]
+    tags: list[str]
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
 # ── REST schemas (dashboard SSR) ────────────────────────────

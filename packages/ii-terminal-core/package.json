@@ -6,7 +6,10 @@
   "description": "InvestIntell Terminal — shared components, stores, state, types, and utilities promoted from wealth for reuse by frontends/terminal.",
   "svelte": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -64,6 +67,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.json"
   },
   "peerDependencies": {
+    "@investintell/ui": "workspace:*",
     "@sveltejs/kit": "^2.0.0",
     "@tanstack/svelte-virtual": "^3.0.0",
     "dompurify": "^3.3.3",
@@ -72,8 +76,7 @@
     "lucide-svelte": "^0.469.0",
     "marked": "^17.0.5",
     "svelte": "^5.0.0",
-    "uuid": "^10.0.0",
-    "@investintell/ui": "workspace:*"
+    "uuid": "^10.0.0"
   },
   "dependencies": {
     "@investintell/ui": "workspace:*"
@@ -81,8 +84,11 @@
   "devDependencies": {
     "@sveltejs/package": "^2.0.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@testing-library/svelte": "^5.3.1",
+    "@types/uuid": "^10.0.0",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^3.2.4"
   }
 }

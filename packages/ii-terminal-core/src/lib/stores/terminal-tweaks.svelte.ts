@@ -16,7 +16,7 @@
  * PR-1 activate via attribute selectors.
  */
 
-import type { Accent, Density, TerminalTheme } from "@investintell/ui";
+import type { Accent, Density, TerminalTheme } from "../components/terminal/primitives";
 
 export const TERMINAL_TWEAKS_KEY = Symbol("netz:terminal-tweaks");
 

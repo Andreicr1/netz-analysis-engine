@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { resolve } from "$app/paths";
+  import { base } from "$app/paths";
   import { formatNumber, formatPercent, createTerminalChartOptions } from "@investintell/ui";
   import TerminalChart from "../../../components/terminal/charts/TerminalChart.svelte";
 
@@ -97,7 +97,7 @@
   });
 
   function handleBuilderNav() {
-    goto(resolve("/portfolio/builder") + "?alloc=default");
+    goto(`${base}/portfolio/builder?alloc=default`);
   }
 </script>
 

@@ -33,22 +33,21 @@
 	window keydown listener.
 -->
 <script lang="ts">
-	import { resolve } from "$app/paths";
+	import { base } from "$app/paths";
 	import { goto } from "$app/navigation";
-	import { getContext, onDestroy } from "svelte";
-	import { createClientApiClient } from "../../../api/client";
+	import { getContext } from "svelte";
 
 	// Resolved hrefs for the 6 F-key tabs. The lint rule
 	// `svelte/no-navigation-without-resolve` rejects any href that is
 	// not the direct return value of a plain Identifier argument to
 	// `resolve(...)`; hardcoding one identifier per route is the only
 	// pattern its AST matcher accepts.
-	const HREF_LIVE = resolve("/live");
-	const HREF_SCREENER = resolve("/screener");
-	const HREF_MACRO = resolve("/macro");
-	const HREF_BUILDER = resolve("/allocation");
-	const HREF_DD = resolve("/dd");
-	const HREF_ALERTS = resolve("/alerts");
+	const HREF_LIVE = `${base}/live`;
+	const HREF_SCREENER = `${base}/screener`;
+	const HREF_MACRO = `${base}/macro`;
+	const HREF_BUILDER = `${base}/allocation`;
+	const HREF_DD = `${base}/dd`;
+	const HREF_ALERTS = `${base}/alerts`;
 
 	interface PrimaryTab {
 		id: string;
@@ -100,18 +99,11 @@
 		orgName,
 	}: TerminalTopNavProps = $props();
 
-	// ─── Live regime from /allocation/regime ───────────────────
+	// ─── Live regime from market-data SSE ──────────────────────
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
-	const regimeApi = createClientApiClient(getToken);
-
-	interface GlobalRegimeRead {
-		regime: string;
-		confidence: number;
-		as_of_date: string | null;
-	}
+	const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 	let regimeLabel = $state("STANDBY");
-	let regimeLoaded = $state(false);
 
 	const REGIME_DISPLAY: Record<string, string> = {
 		REGIME_NORMAL: "Normal",
@@ -138,20 +130,69 @@
 		}
 	});
 
-	async function fetchRegime() {
-		try {
-			const res = await regimeApi.get<GlobalRegimeRead>("/allocation/regime");
-			regimeLabel = sanitizeRegime(res.regime);
-			regimeLoaded = true;
-		} catch {
-			// Keep current label on failure
-		}
-	}
-
 	$effect(() => {
-		fetchRegime();
-		const timer = setInterval(fetchRegime, 5 * 60 * 1000);
-		return () => clearInterval(timer);
+		const controller = new AbortController();
+		let frameBuffer = "";
+
+		function handleFrame(frame: string) {
+			const dataLines = frame
+				.split(/\r?\n/)
+				.filter((line) => line.startsWith("data:"))
+				.map((line) => line.slice(5).trimStart());
+			if (dataLines.length === 0) return;
+			try {
+				const event = JSON.parse(dataLines.join("\n")) as {
+					type?: string;
+					data?: { regime?: string; label?: string };
+				};
+				if (event.type !== "regime_change") return;
+				const nextRegime = event.data?.regime ?? event.data?.label;
+				if (nextRegime) regimeLabel = sanitizeRegime(nextRegime);
+			} catch {
+				// Ignore malformed SSE frames and keep the current regime.
+			}
+		}
+
+		function drainFrames(buffer: string): string {
+			let remaining = buffer;
+			while (true) {
+				const idx = remaining.indexOf("\n\n");
+				if (idx === -1) return remaining;
+				handleFrame(remaining.slice(0, idx));
+				remaining = remaining.slice(idx + 2);
+			}
+		}
+
+		async function connectRegimeStream() {
+			try {
+				const token = await getToken();
+				const response = await fetch(`${API_BASE}/market-data/events?tags=regime`, {
+					method: "GET",
+					headers: {
+						Accept: "text/event-stream",
+						Authorization: `Bearer ${token}`,
+					},
+					credentials: "include",
+					signal: controller.signal,
+				});
+				if (!response.ok || !response.body) return;
+				const reader = response.body.getReader();
+				const decoder = new TextDecoder("utf-8");
+				while (true) {
+					const { value, done } = await reader.read();
+					if (done) break;
+					frameBuffer += decoder.decode(value, { stream: true });
+					frameBuffer = drainFrames(frameBuffer);
+				}
+			} catch (err) {
+				if ((err as { name?: string })?.name !== "AbortError") {
+					// SSE is opportunistic; keep the last visible label.
+				}
+			}
+		}
+
+		void connectRegimeStream();
+		return () => controller.abort();
 	});
 
 	const PRIMARY_TABS: ReadonlyArray<PrimaryTab> = [

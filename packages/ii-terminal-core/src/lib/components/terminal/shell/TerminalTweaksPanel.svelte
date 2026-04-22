@@ -17,10 +17,10 @@
 	import {
 		TerminalAccentPicker,
 		TerminalDensityToggle,
+		TerminalKbd,
 		TerminalPill,
 		TerminalThemeToggle,
-		TerminalKbd,
-	} from "@investintell/ui";
+	} from "../primitives";
 	import {
 		TERMINAL_TWEAKS_KEY,
 		type TerminalTweaks,

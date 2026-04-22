@@ -105,6 +105,7 @@ from app.domains.wealth.routes.analytics import router as wealth_analytics_route
 from app.domains.wealth.routes.attribution import router as wealth_attribution_router
 from app.domains.wealth.routes.blended_benchmark import router as wealth_blended_benchmark_router
 from app.domains.wealth.routes.content import router as wealth_content_router
+from app.domains.wealth.routes.correlation import router as wealth_correlation_router
 from app.domains.wealth.routes.correlation_regime import router as wealth_correlation_regime_router
 from app.domains.wealth.routes.dd_reports import router as wealth_dd_reports_router
 from app.domains.wealth.routes.discovery_analysis import (
@@ -113,7 +114,9 @@ from app.domains.wealth.routes.discovery_analysis import (
 from app.domains.wealth.routes.discovery_fcl import router as wealth_discovery_fcl_router
 from app.domains.wealth.routes.documents import router as wealth_documents_router
 from app.domains.wealth.routes.entity_analytics import router as wealth_entity_analytics_router
-from app.domains.wealth.routes.entity_analytics import wealth_alias_router as wealth_entity_analytics_alias_router
+from app.domains.wealth.routes.entity_analytics import (
+    wealth_alias_router as wealth_entity_analytics_alias_router,
+)
 from app.domains.wealth.routes.exposure import router as wealth_exposure_router
 from app.domains.wealth.routes.fact_sheets import router as wealth_fact_sheets_router
 
@@ -137,6 +140,7 @@ from app.domains.wealth.routes.portfolio_views import router as wealth_portfolio
 from app.domains.wealth.routes.portfolios import router as wealth_portfolios_router
 from app.domains.wealth.routes.portfolios.builder import router as wealth_portfolios_builder_router
 from app.domains.wealth.routes.rebalancing import router as wealth_rebalancing_router
+from app.domains.wealth.routes.research import router as wealth_research_router
 from app.domains.wealth.routes.risk import router as wealth_risk_router
 from app.domains.wealth.routes.risk_timeseries import router as wealth_risk_timeseries_router
 from app.domains.wealth.routes.screener import router as wealth_screener_router
@@ -253,7 +257,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # ``subscribe_approved_universe`` boot pre-subscription was removed
     # by Stability Guardrails Phase 2 (§4.1 B1.2) — it kept the
     # firehose hot for nobody and made restarts expensive.
-    tiingo_bridge = TiingoStreamBridge()
+    tiingo_db_pool = None
+    if settings.database_url:
+        try:
+            import asyncpg
+
+            raw_dsn = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
+            tiingo_db_pool = await asyncpg.create_pool(
+                raw_dsn,
+                min_size=1,
+                max_size=2,
+                command_timeout=5,
+            )
+            app.state.tiingo_db_pool = tiingo_db_pool
+        except Exception:
+            logger.warning("tiingo_tick_persistence_pool_unavailable", exc_info=True)
+
+    tiingo_bridge = TiingoStreamBridge(db_pool=tiingo_db_pool)
     app.state.tiingo_bridge = tiingo_bridge
 
     # Start PgNotifier for config cache invalidation
@@ -291,6 +311,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         pass
     if pg_notifier:
         await pg_notifier.stop()
+    if tiingo_db_pool:
+        await tiingo_db_pool.close()
     await engine.dispose()
     await close_redis_pool()
     logger.info("Netz Analysis Engine shutdown complete")
@@ -566,6 +588,8 @@ api_v1.include_router(wealth_fact_sheets_router)
 api_v1.include_router(wealth_long_form_reports_router)
 api_v1.include_router(wealth_monthly_report_router)
 api_v1.include_router(wealth_content_router)
+api_v1.include_router(wealth_correlation_router)
+api_v1.include_router(wealth_research_router)
 api_v1.include_router(wealth_screener_router)
 api_v1.include_router(wealth_manager_screener_router)
 api_v1.include_router(wealth_strategy_drift_router)

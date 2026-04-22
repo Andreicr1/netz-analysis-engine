@@ -20,7 +20,7 @@
   import { getContext } from "svelte";
   import { createClientApiClient } from "@investintell/ii-terminal-core/api/client";
   import { pinnedRegime } from "@investintell/ii-terminal-core/state/pinned-regime.svelte";
-  import { TerminalDrawer, TerminalKbd } from "@investintell/ui";
+  import { TerminalDrawer, TerminalKbd } from "@investintell/ii-terminal-core";
   import Panel from "@investintell/ii-terminal-core/components/terminal/layout/Panel.svelte";
   import PanelHeader from "@investintell/ii-terminal-core/components/terminal/layout/PanelHeader.svelte";
   import StressHero from "@investintell/ii-terminal-core/components/terminal/macro/StressHero.svelte";

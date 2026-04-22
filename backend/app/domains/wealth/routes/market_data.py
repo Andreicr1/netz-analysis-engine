@@ -20,13 +20,24 @@ import asyncio
 import logging
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 import orjson
+import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, Path, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 from sqlalchemy import case as sa_case
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.jobs.tracker import get_redis_pool
+from app.core.runtime.broadcaster import (
+    BroadcasterConfig,
+    ConnectionId,
+    RateLimitedBroadcaster,
+    make_connection_id,
+)
+from app.core.runtime.outbound_channel import ChannelConfig, DropPolicy
 from app.core.security.clerk_auth import Actor, get_actor
 from app.core.tenancy.middleware import get_db_with_rls
 from app.core.ws.auth import authenticate_ws
@@ -35,6 +46,7 @@ from app.core.ws.tiingo_bridge import TiingoStreamBridge
 from app.domains.wealth.schemas.market_data import (
     DashboardSnapshot,
     HistoricalResponse,
+    MarketEventPayload,
     NewsItem,
     NewsResponse,
     OHLCVBar,
@@ -50,6 +62,37 @@ from app.services.providers.tiingo_provider import get_tiingo_provider
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/market-data", tags=["market-data"])
+MARKET_EVENTS_CHANNEL = "market:events"
+SSE_HEARTBEAT_INTERVAL_S = 30.0
+
+
+class _SSEQueueClient:
+    """Adapter so RateLimitedBroadcaster can isolate SSE clients."""
+
+    def __init__(self) -> None:
+        self.queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=256)
+
+    async def send_bytes(self, data: bytes) -> None:
+        await self.queue.put(data)
+
+
+def _parse_tags(tags: str) -> set[str]:
+    return {tag.strip().lower() for tag in tags.split(",") if tag.strip()}
+
+
+def _event_matches(event: dict[str, Any], requested_tags: set[str]) -> bool:
+    if not requested_tags:
+        return True
+    event_tags = event.get("tags")
+    if not isinstance(event_tags, list):
+        return False
+    return bool(requested_tags & {str(tag).lower() for tag in event_tags})
+
+
+def _sse_frame(payload: dict[str, Any]) -> bytes:
+    event_type = str(payload.get("type") or "message")
+    data = orjson.dumps(payload).decode()
+    return f"event: {event_type}\ndata: {data}\n\n".encode()
 
 
 def _get_manager(request_or_ws: Request | WebSocket) -> ConnectionManager:
@@ -60,6 +103,108 @@ def _get_manager(request_or_ws: Request | WebSocket) -> ConnectionManager:
 def _get_bridge(ws: WebSocket) -> TiingoStreamBridge:
     """Retrieve the TiingoStreamBridge from app state."""
     return ws.app.state.tiingo_bridge
+
+
+@router.get(
+    "/events",
+    summary="Low-frequency market events stream (SSE)",
+)
+async def market_events(
+    request: Request,
+    tags: str = Query("", description="Comma-separated tags, e.g. regime,alert"),
+    actor: Actor = Depends(get_actor),
+) -> StreamingResponse:
+    """Stream low-frequency market events from Redis over SSE.
+
+    Uses fetch-compatible SSE framing so the browser can send Clerk
+    credentials in headers. Price ticks stay on `/live/ws`.
+    """
+    requested_tags = _parse_tags(tags)
+
+    async def stream():
+        client = _SSEQueueClient()
+        conn_id: ConnectionId = make_connection_id()
+        broadcaster = RateLimitedBroadcaster(
+            channel_cfg=ChannelConfig(
+                max_queued=128,
+                send_timeout_s=1.0,
+                drop_policy=DropPolicy.DROP_OLDEST,
+                eviction_threshold=3,
+            ),
+            cfg=BroadcasterConfig(max_connections=1),
+        )
+        await broadcaster.start()
+        await broadcaster.attach(conn_id, client)
+
+        async def redis_listener() -> None:
+            pool = get_redis_pool()
+            redis = aioredis.Redis(connection_pool=pool)
+            pubsub = redis.pubsub()
+            try:
+                await pubsub.subscribe(MARKET_EVENTS_CHANNEL)
+                async for raw_message in pubsub.listen():
+                    if raw_message["type"] != "message":
+                        continue
+                    try:
+                        event = orjson.loads(raw_message["data"])
+                    except (orjson.JSONDecodeError, TypeError):
+                        logger.warning("market_event_parse_error")
+                        continue
+                    if not isinstance(event, dict) or not _event_matches(event, requested_tags):
+                        continue
+                    broadcaster.fanout(_sse_frame(event), [conn_id])
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("market_events_redis_listener_error actor=%s", actor.actor_id)
+            finally:
+                try:
+                    await pubsub.unsubscribe(MARKET_EVENTS_CHANNEL)
+                    await pubsub.aclose()
+                    await redis.aclose()
+                except Exception:
+                    pass
+
+        listener_task = asyncio.create_task(redis_listener(), name="market_events_redis_listener")
+        try:
+            yield b": connected\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(
+                        client.queue.get(),
+                        timeout=SSE_HEARTBEAT_INTERVAL_S,
+                    )
+                    yield payload
+                except asyncio.TimeoutError:
+                    heartbeat = MarketEventPayload(
+                        type="heartbeat",
+                        data={},
+                        tags=["heartbeat"],
+                    )
+                    if _event_matches(heartbeat.model_dump(mode="json"), requested_tags):
+                        yield _sse_frame(heartbeat.model_dump(mode="json"))
+                    else:
+                        yield b": heartbeat\n\n"
+        finally:
+            listener_task.cancel()
+            try:
+                await listener_task
+            except asyncio.CancelledError:
+                pass
+            await broadcaster.detach(conn_id, drain=False)
+            await broadcaster.close()
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ── WebSocket Endpoint ──────────────────────────────────────

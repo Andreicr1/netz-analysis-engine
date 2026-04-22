@@ -39,7 +39,7 @@
 	import { getContext } from "svelte";
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
-	import { resolve } from "$app/paths";
+	import { base } from "$app/paths";
 	import { createClientApiClient } from "../../../api/client";
 	import TerminalTopNav from "./TerminalTopNav.svelte";
 	import TerminalBreadcrumb from "./TerminalBreadcrumb.svelte";
@@ -59,6 +59,10 @@
 	import CommandPalette from "./CommandPalette.svelte";
 	import AlertTicker from "./AlertTicker.svelte";
 	import LayoutCage from "./LayoutCage.svelte";
+	import {
+		openPalette as openPaletteStore,
+		togglePalette,
+	} from "../../../stores/palette.svelte";
 
 	interface TerminalShellProps {
 		children: Snippet;
@@ -165,46 +169,44 @@
 
 	// ─── Ephemeral shell state ──────────────────────────────────
 	let railCollapsed = $state(false);
-	let paletteOpen = $state(false);
-
 	// Go-to navigation catalog (mirrors the CommandPalette action
 	// dispatch surface). `active` entries invoke goto via resolve();
 	// `pending` entries open the palette so the user sees the
 	// pending badge for that route.
 	async function navMacro() {
-		await goto(resolve("/macro"));
+		await goto(`${base}/macro`);
 	}
 
 	async function navAlloc() {
-		await goto(resolve("/allocation"));
+		await goto(`${base}/allocation`);
 	}
 
 	async function navScreener() {
-		await goto(resolve("/screener"));
+		await goto(`${base}/screener`);
 	}
 
 	async function navDD() {
-		await goto(resolve("/dd"));
+		await goto(`${base}/dd`);
 	}
 
 	async function navBuilder() {
-		await goto(resolve("/portfolio/builder"));
+		await goto(`${base}/portfolio/builder`);
 	}
 
 	async function navLive() {
-		await goto(resolve("/live"));
+		await goto(`${base}/live`);
 	}
 
 	async function navResearch() {
-		await goto(resolve("/screener/research"));
+		await goto(`${base}/screener/research`);
 	}
 
 	async function navAlerts() {
-		await goto(resolve("/alerts"));
+		await goto(`${base}/alerts`);
 	}
 
 	function openPalette() {
-		paletteOpen = true;
+		openPaletteStore();
 	}
 
 	type GoToHandler = () => void | Promise<void>;
@@ -253,7 +255,7 @@
 				(event.key === "k" || event.key === "K");
 			if (isPaletteShortcut) {
 				event.preventDefault();
-				paletteOpen = !paletteOpen;
+				togglePalette();
 				goPrefixTimestamp = null;
 				return;
 			}
@@ -369,7 +371,7 @@
 	</div>
 </div>
 
-<CommandPalette bind:open={paletteOpen} />
+<CommandPalette />
 <TerminalTweaksPanel />
 
 <style>

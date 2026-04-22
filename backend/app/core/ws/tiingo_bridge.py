@@ -35,6 +35,7 @@ import orjson
 from app.core.config.settings import settings
 from app.core.runtime.idle_bridge import IdleBridgeConfig, IdleBridgePolicy
 from app.core.runtime.single_flight import SingleFlightLock
+from app.core.ws._tick_persist import persist_ticks_batch
 from app.core.ws.manager import publish_price_ticks_batch
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ class TiingoStreamBridge(IdleBridgePolicy):
         - ``_on_shutdown``: terminal cleanup from the lifespan only.
     """
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(self, api_key: str | None = None, db_pool: Any | None = None) -> None:
         super().__init__(
             cfg=IdleBridgeConfig(
                 name="tiingo_bridge",
@@ -90,6 +91,7 @@ class TiingoStreamBridge(IdleBridgePolicy):
             ),
         )
         self._api_key = api_key or settings.tiingo_api_key
+        self._db_pool = db_pool
         # ``websockets.WebSocketClientProtocol`` — typed as ``Any`` to
         # avoid coupling the bridge to the optional ``websockets``
         # dependency at type-check time.
@@ -282,6 +284,15 @@ class TiingoStreamBridge(IdleBridgePolicy):
             await publish_price_ticks_batch(batch)
         except Exception:
             logger.exception("tiingo_bridge_publish_error count=%d", len(batch))
+
+        try:
+            await persist_ticks_batch(self._db_pool, batch)
+        except Exception:
+            logger.warning(
+                "tiingo_bridge_persist_error count=%d",
+                len(batch),
+                exc_info=True,
+            )
 
     # ── WebSocket loop ───────────────────────────────────────
 

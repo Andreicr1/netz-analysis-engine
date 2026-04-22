@@ -41,7 +41,8 @@
 
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { formatNumber, readTerminalTokens, TerminalMiniSparkline } from "@investintell/ui";
+	import { TerminalMiniSparkline } from "@investintell/ii-terminal-core";
+	import { formatNumber, readTerminalTokens } from "@investintell/ui";
 	import { focusTrigger } from "$wealth/components/terminal/focus-mode/focus-trigger";
 	import { createClientApiClient } from "$wealth/api/client";
 
