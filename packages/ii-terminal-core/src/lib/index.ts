@@ -21,6 +21,8 @@ export { default as TerminalContextRail } from "./components/terminal/shell/Term
 export { default as TerminalTweaksPanel } from "./components/terminal/shell/TerminalTweaksPanel.svelte";
 export { default as LayoutCage } from "./components/terminal/shell/LayoutCage.svelte";
 export { default as AlertTicker } from "./components/terminal/shell/AlertTicker.svelte";
+export { default as LiveMarquee } from "./components/terminal/shell/LiveMarquee.svelte";
+export { default as MarketFeedList } from "./components/terminal/shell/MarketFeedList.svelte";
 export { default as CommandPalette } from "./components/terminal/shell/CommandPalette.svelte";
 
 // Focus mode

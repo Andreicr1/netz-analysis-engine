@@ -12,7 +12,7 @@ import json
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import numpy as np
 import redis.asyncio as aioredis
@@ -1286,6 +1286,18 @@ def _score_metrics(
 
 
 REGIME_DETECTION_LOCK_ID = 900_130
+MARKET_EVENTS_CHANNEL = "market:events"
+
+
+async def _publish_market_event(event: dict) -> None:
+    pool = get_redis_pool()
+    redis = aioredis.Redis(connection_pool=pool)
+    try:
+        await redis.publish(MARKET_EVENTS_CHANNEL, json.dumps(event, default=str))
+    except Exception:
+        logger.warning("market_event_publish_failed", channel=MARKET_EVENTS_CHANNEL, exc_info=True)
+    finally:
+        await redis.aclose()
 
 
 async def run_global_regime_detection(eval_date: date | None = None) -> None:
@@ -1339,6 +1351,18 @@ async def run_global_regime_detection(eval_date: date | None = None) -> None:
             await db.execute(upsert_stmt)
             await db.commit()
             logger.info("global_regime_snapshot_persisted", as_of_date=str(target_date))
+            await _publish_market_event({
+                "type": "regime_change",
+                "data": {
+                    "regime": regime,
+                    "stress_score": stress_score,
+                    "as_of_date": target_date.isoformat(),
+                    "signal_details": reasons,
+                    "signal_breakdown": structured_signals,
+                },
+                "tags": ["regime"],
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+            })
         finally:
             await db.execute(text(f"SELECT pg_advisory_unlock({REGIME_DETECTION_LOCK_ID})"))
 

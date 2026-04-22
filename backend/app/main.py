@@ -114,7 +114,9 @@ from app.domains.wealth.routes.discovery_analysis import (
 from app.domains.wealth.routes.discovery_fcl import router as wealth_discovery_fcl_router
 from app.domains.wealth.routes.documents import router as wealth_documents_router
 from app.domains.wealth.routes.entity_analytics import router as wealth_entity_analytics_router
-from app.domains.wealth.routes.entity_analytics import wealth_alias_router as wealth_entity_analytics_alias_router
+from app.domains.wealth.routes.entity_analytics import (
+    wealth_alias_router as wealth_entity_analytics_alias_router,
+)
 from app.domains.wealth.routes.exposure import router as wealth_exposure_router
 from app.domains.wealth.routes.fact_sheets import router as wealth_fact_sheets_router
 
@@ -255,7 +257,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # ``subscribe_approved_universe`` boot pre-subscription was removed
     # by Stability Guardrails Phase 2 (§4.1 B1.2) — it kept the
     # firehose hot for nobody and made restarts expensive.
-    tiingo_bridge = TiingoStreamBridge()
+    tiingo_db_pool = None
+    if settings.database_url:
+        try:
+            import asyncpg
+
+            raw_dsn = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
+            tiingo_db_pool = await asyncpg.create_pool(
+                raw_dsn,
+                min_size=1,
+                max_size=2,
+                command_timeout=5,
+            )
+            app.state.tiingo_db_pool = tiingo_db_pool
+        except Exception:
+            logger.warning("tiingo_tick_persistence_pool_unavailable", exc_info=True)
+
+    tiingo_bridge = TiingoStreamBridge(db_pool=tiingo_db_pool)
     app.state.tiingo_bridge = tiingo_bridge
 
     # Start PgNotifier for config cache invalidation
@@ -293,6 +311,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         pass
     if pg_notifier:
         await pg_notifier.stop()
+    if tiingo_db_pool:
+        await tiingo_db_pool.close()
     await engine.dispose()
     await close_redis_pool()
     logger.info("Netz Analysis Engine shutdown complete")
