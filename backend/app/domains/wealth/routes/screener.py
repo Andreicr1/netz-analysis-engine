@@ -2181,7 +2181,11 @@ async def get_catalog_facets(
 
 class FundDetailOut(UnifiedFundItem):
     """Extended fund detail (superset of UnifiedFundItem)."""
-    pass
+
+    # Extra metrics from risk MV for frontend focus/modal
+    sharpe_ratio: float | None = None
+    max_drawdown: float | None = None
+    volatility: float | None = None
 
 
 @router.get(
@@ -2239,11 +2243,22 @@ async def get_catalog_fund_detail(
         investor_count=r.investor_count,
         vintage_year=getattr(r, "vintage_year", None),
         expense_ratio_pct=float(r.expense_ratio_pct) if getattr(r, "expense_ratio_pct", None) is not None else None,
-        avg_annual_return_1y=float(r.avg_annual_return_1y) if getattr(r, "avg_annual_return_1y", None) is not None else None,
+        avg_annual_return_1y=(
+            float(r.return_1y) if getattr(r, "return_1y", None) is not None
+            else float(r.avg_annual_return_1y) if getattr(r, "avg_annual_return_1y", None) is not None
+            else None
+        ),
         avg_annual_return_10y=float(r.avg_annual_return_10y) if getattr(r, "avg_annual_return_10y", None) is not None else None,
         is_index=bool(r.is_index) if getattr(r, "is_index", None) is not None else None,
         is_target_date=bool(r.is_target_date) if getattr(r, "is_target_date", None) is not None else None,
         is_fund_of_fund=bool(r.is_fund_of_fund) if getattr(r, "is_fund_of_fund", None) is not None else None,
+        elite_flag=bool(r.elite_flag) if getattr(r, "elite_flag", None) is not None else None,
+        elite_rank_within_strategy=getattr(r, "elite_rank_within_strategy", None),
+        manager_score=float(r.manager_score) if getattr(r, "manager_score", None) is not None else None,
+        blended_momentum_score=float(r.blended_momentum_score) if getattr(r, "blended_momentum_score", None) is not None else None,
+        sharpe_ratio=float(r.sharpe_1y) if getattr(r, "sharpe_1y", None) is not None else None,
+        max_drawdown=float(r.max_drawdown_1y) if getattr(r, "max_drawdown_1y", None) is not None else None,
+        volatility=float(r.volatility_1y) if getattr(r, "volatility_1y", None) is not None else None,
         disclosure=_build_disclosure(
             universe=r.universe,
             has_holdings=bool(r.has_holdings),

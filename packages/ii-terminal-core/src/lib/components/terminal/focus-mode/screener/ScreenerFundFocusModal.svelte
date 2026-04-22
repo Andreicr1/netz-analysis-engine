@@ -37,10 +37,6 @@
 		volatility: number | null;
 	}
 
-	interface CatalogPage {
-		items: FundCatalogItem[];
-	}
-
 	interface NavBar {
 		date: string;
 		value: number;
@@ -56,15 +52,10 @@
 		let cancelled = false;
 		loadingDetail = true;
 		api
-			.get<CatalogPage>("/screener/catalog", {
-				page: 1,
-				page_size: 1,
-				external_id: id,
-				in_universe: true,
-			})
+			.get<FundCatalogItem>(`/screener/catalog/detail/${encodeURIComponent(id)}`)
 			.then((res) => {
 				if (cancelled) return;
-				detail = res.items?.[0] ?? null;
+				detail = res ?? null;
 				loadingDetail = false;
 			})
 			.catch(() => {
