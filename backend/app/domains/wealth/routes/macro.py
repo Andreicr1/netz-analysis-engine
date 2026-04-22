@@ -52,6 +52,8 @@ from app.domains.wealth.schemas.macro import (
     OfrTimePoint,
     RegimeTrailPoint,
     RegimeTrailResponse,
+    RegionalRegimeResponse,
+    RegionalRegimeRow,
     RegionalScoreRead,
     TreasuryDataResponse,
     TreasuryTimePoint,
@@ -1202,6 +1204,134 @@ async def get_cb_calendar(
     ]
     upcoming.sort(key=lambda event: event.meeting_date)
     return CbCalendarResponse(events=upcoming[:n], as_of_date=today)
+
+
+# ---------------------------------------------------------------------------
+#  Regional regime — 4-region dense table for Live Workbench
+# ---------------------------------------------------------------------------
+
+_REGIONAL_REGIME_CODES = ["US", "EU", "EM", "BR"]
+_REGIONAL_SNAPSHOT_KEYS: dict[str, tuple[str, ...]] = {
+    "US": ("US", "United States"),
+    "EU": ("EU", "EUROPE", "Europe"),
+    "EM": ("EM", "Emerging Markets"),
+    "BR": ("BR", "Brazil"),
+}
+
+
+def _quadrant_label(growth: float, inflation: float) -> str:
+    if growth >= 50 and inflation < 50:
+        return "GOLDILOCKS"
+    if growth >= 50 and inflation >= 50:
+        return "OVERHEATING"
+    if growth < 50 and inflation >= 50:
+        return "STAGFLATION"
+    return "REFLATION"
+
+
+def _stress_level(growth: float, inflation: float) -> Literal["LOW", "MED", "HIGH"]:
+    distance = ((growth - 50) ** 2 + (inflation - 50) ** 2) ** 0.5
+    if distance >= 30:
+        return "HIGH"
+    if distance >= 15:
+        return "MED"
+    return "LOW"
+
+
+def _region_payload(snapshot_data: dict[str, Any], code: str) -> dict[str, Any]:
+    regions = snapshot_data.get("regions", {})
+    if not isinstance(regions, dict):
+        return {}
+    for key in _REGIONAL_SNAPSHOT_KEYS[code]:
+        payload = regions.get(key)
+        if isinstance(payload, dict):
+            return payload
+    return {}
+
+
+def _dimension_score(region_data: dict[str, Any], dimension: str) -> float | None:
+    dimensions = region_data.get("dimensions", {})
+    if not isinstance(dimensions, dict):
+        return None
+    payload = dimensions.get(dimension, {})
+    if not isinstance(payload, dict):
+        return None
+    score = payload.get("score")
+    return float(score) if score is not None else None
+
+
+@router.get(
+    "/regional-regime",
+    response_model=RegionalRegimeResponse,
+    summary="Current regime quadrant per tracked region",
+    tags=["macro"],
+)
+@route_cache(ttl=900, key_prefix="macro:regional_regime")
+async def get_regional_regime(
+    user: CurrentUser = Depends(get_current_user),
+) -> RegionalRegimeResponse:
+    """Return US/EU/EM/BR regime labels for the Live Workbench panel."""
+    stmt = (
+        select(MacroRegionalSnapshot.as_of_date, MacroRegionalSnapshot.data_json)
+        .order_by(MacroRegionalSnapshot.as_of_date.desc())
+        .limit(2)
+    )
+    async with async_session_factory() as db:
+        result = await db.execute(stmt)
+
+    rows = result.all()
+    if not rows:
+        return RegionalRegimeResponse(
+            as_of_date=None,
+            regions=[
+                RegionalRegimeRow(
+                    region_code=code,
+                    regime_label="GOLDILOCKS",
+                    stress_level="LOW",
+                    trend_up=True,
+                )
+                for code in _REGIONAL_REGIME_CODES
+            ],
+        )
+
+    latest = rows[0]
+    previous = rows[1] if len(rows) > 1 else None
+    latest_data = latest.data_json if isinstance(latest.data_json, dict) else {}
+    previous_data = (
+        previous.data_json
+        if previous is not None and isinstance(previous.data_json, dict)
+        else {}
+    )
+
+    regions: list[RegionalRegimeRow] = []
+    for code in _REGIONAL_REGIME_CODES:
+        current_region = _region_payload(latest_data, code)
+        previous_region = _region_payload(previous_data, code)
+        growth_score = _dimension_score(current_region, "growth")
+        inflation_score = _dimension_score(current_region, "inflation")
+        growth = growth_score if growth_score is not None else 50.0
+        inflation = inflation_score if inflation_score is not None else 50.0
+        previous_growth = _dimension_score(previous_region, "growth")
+        trend_up = (
+            previous_growth <= growth
+            if previous_growth is not None
+            else growth >= 50.0
+        )
+
+        regions.append(
+            RegionalRegimeRow(
+                region_code=code,
+                regime_label=_quadrant_label(growth, inflation),
+                stress_level=_stress_level(growth, inflation),
+                trend_up=trend_up,
+                growth_score=round(growth_score, 1) if growth_score is not None else None,
+                inflation_score=round(inflation_score, 1)
+                if inflation_score is not None
+                else None,
+            ),
+        )
+
+    return RegionalRegimeResponse(as_of_date=latest.as_of_date, regions=regions)
 
 
 @router.get(

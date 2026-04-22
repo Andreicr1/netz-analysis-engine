@@ -14,6 +14,8 @@ from app.domains.wealth.schemas.macro import (
     CrossAssetResponse,
     RegimeTrailPoint,
     RegimeTrailResponse,
+    RegionalRegimeResponse,
+    RegionalRegimeRow,
 )
 
 
@@ -81,3 +83,41 @@ def test_cb_event_schema() -> None:
 def test_cb_calendar_response_empty() -> None:
     r = CbCalendarResponse()
     assert r.events == []
+
+
+def test_regional_regime_row_schema() -> None:
+    row = RegionalRegimeRow(
+        region_code="US",
+        regime_label="GOLDILOCKS",
+        stress_level="LOW",
+        trend_up=True,
+        growth_score=62.5,
+        inflation_score=38.2,
+    )
+    assert row.regime_label == "GOLDILOCKS"
+    assert row.stress_level == "LOW"
+    assert row.trend_up is True
+
+
+def test_regional_regime_response_empty() -> None:
+    resp = RegionalRegimeResponse()
+    assert resp.regions == []
+    assert resp.as_of_date is None
+
+
+def test_quadrant_label_logic() -> None:
+    """Growth/inflation quadrant mapping used by /macro/regional-regime."""
+
+    def _label(growth: float, inflation: float) -> str:
+        if growth >= 50 and inflation < 50:
+            return "GOLDILOCKS"
+        if growth >= 50 and inflation >= 50:
+            return "OVERHEATING"
+        if growth < 50 and inflation >= 50:
+            return "STAGFLATION"
+        return "REFLATION"
+
+    assert _label(62, 35) == "GOLDILOCKS"
+    assert _label(75, 70) == "OVERHEATING"
+    assert _label(30, 68) == "STAGFLATION"
+    assert _label(28, 40) == "REFLATION"

@@ -14,7 +14,7 @@
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
 	import TerminalScreenerShell from "@investintell/ii-terminal-core/components/screener-terminal/TerminalScreenerShell.svelte";
-	import FundFocusMode from "@investintell/ii-terminal-core/components/terminal/focus-mode/fund/FundFocusMode.svelte";
+	import ScreenerFundFocusModal from "@investintell/ii-terminal-core/components/terminal/focus-mode/screener/ScreenerFundFocusModal.svelte";
 	import type { FocusTriggerOptions } from "@investintell/ii-terminal-core/components/terminal/focus-mode/focus-trigger";
 	import { DEFAULT_FILTERS, type FilterState } from "@investintell/ii-terminal-core/components/screener-terminal/TerminalScreenerFilters.svelte";
 
@@ -108,9 +108,11 @@
 </div>
 
 {#if focusEntity}
-	<FundFocusMode
+	<ScreenerFundFocusModal
 		fundId={focusEntity.entityId}
 		fundLabel={focusEntity.entityLabel ?? ""}
+		ticker={focusEntity.ticker ?? null}
+		instrumentId={focusEntity.instrumentId ?? null}
 		onClose={closeFocusMode}
 	/>
 {/if}

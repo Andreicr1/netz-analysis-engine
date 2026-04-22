@@ -1,136 +1,88 @@
 <!--
-  MacroRegimePanel -- key macro indicators from FRED via macro_data.
+  MacroRegimePanel -- 4-region dense regime table for Live Workbench.
 
-  Fetches latest values for VIX, CPI, DXY, 10Y, IG/HY spreads,
-  Fed Funds, Unemployment from GET /macro/fred?series_id={id}.
-  Shows value + directional change arrow.
+  Data source: GET /macro/regional-regime.
+  Renders US / EU / EM / BR rows with quadrant label, stress badge,
+  and directional growth trend.
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { formatPercent, formatNumber, formatBps } from "@investintell/ui";
 	import { createClientApiClient } from "../../../api/client";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
 
-	interface Indicator {
-		label: string;
-		seriesId: string;
-		suffix: string;
-		/** true = rising is danger (VIX, spreads), false = rising is positive */
-		riseIsWarning: boolean;
+	interface RegionalRegimeRow {
+		region_code: string;
+		regime_label: string;
+		stress_level: "LOW" | "MED" | "HIGH";
+		trend_up: boolean;
+		growth_score: number | null;
+		inflation_score: number | null;
 	}
 
-	const INDICATORS: Indicator[] = [
-		{ label: "VIX", seriesId: "VIXCLS", suffix: "", riseIsWarning: true },
-		{ label: "CPI (YoY)", seriesId: "CPI_YOY", suffix: "%", riseIsWarning: true },
-		{ label: "DXY", seriesId: "DTWEXBGS", suffix: "", riseIsWarning: false },
-		{ label: "10Y YIELD", seriesId: "DGS10", suffix: "%", riseIsWarning: false },
-		{ label: "IG SPREAD", seriesId: "BAA10Y", suffix: "bp", riseIsWarning: true },
-		{ label: "HY SPREAD", seriesId: "BAMLH0A0HYM2", suffix: "bp", riseIsWarning: true },
-		{ label: "FED FUNDS", seriesId: "DFF", suffix: "%", riseIsWarning: false },
-		{ label: "UNEMPLOYMENT", seriesId: "UNRATE", suffix: "%", riseIsWarning: true },
-	];
-
-	interface IndicatorValue {
-		value: number | null;
-		change: number | null;
-	}
-
-	let values = $state<Map<string, IndicatorValue>>(new Map());
+	let regions = $state<RegionalRegimeRow[]>([]);
 	let loading = $state(true);
 
 	$effect(() => {
 		let cancelled = false;
 		loading = true;
-
-		const fetches = INDICATORS.map(async (ind) => {
-			try {
-				const res = await api.get<{
-					series_id: string;
-					data: Array<{ obs_date: string; value: number }>;
-				}>(`/macro/fred?series_id=${encodeURIComponent(ind.seriesId)}`);
-
+		api
+			.get<{ regions: RegionalRegimeRow[] }>("/macro/regional-regime")
+			.then((res) => {
 				if (cancelled) return;
-
-				const data = res.data;
-				if (data.length === 0) {
-					values.set(ind.seriesId, { value: null, change: null });
-					return;
-				}
-
-				const latestPoint = data[data.length - 1];
-				const prevPoint = data.length >= 2 ? data[data.length - 2] : undefined;
-				const latest = latestPoint?.value ?? null;
-				const prev = prevPoint?.value ?? null;
-				const change = latest != null && prev != null ? latest - prev : null;
-
-				values = new Map(values).set(ind.seriesId, { value: latest, change });
-			} catch {
-				if (!cancelled) {
-					values = new Map(values).set(ind.seriesId, { value: null, change: null });
-				}
-			}
-		});
-
-		Promise.all(fetches).then(() => {
-			if (!cancelled) loading = false;
-		});
-
-		return () => { cancelled = true; };
+				regions = res.regions ?? [];
+				loading = false;
+			})
+			.catch(() => {
+				if (cancelled) return;
+				regions = [];
+				loading = false;
+			});
+		return () => {
+			cancelled = true;
+		};
 	});
 
-	function formatVal(v: number | null, suffix: string): string {
-		if (v == null) return "\u2014";
-		if (suffix === "%") return formatPercent(v / 100, 1);
-		if (suffix === "bp") return formatBps(v / 100);
-		return formatNumber(v, 1);
-	}
-
-	function changeArrow(change: number | null): string {
-		if (change == null || Math.abs(change) < 0.001) return "\u2500";
-		return change > 0 ? "\u25B2" : "\u25BC";
-	}
-
-	function changeClass(change: number | null, riseIsWarning: boolean): string {
-		if (change == null || Math.abs(change) < 0.001) return "mr-neutral";
-		if (change > 0) return riseIsWarning ? "mr-warn" : "mr-good";
-		return riseIsWarning ? "mr-good" : "mr-warn";
-	}
-
-	function formatChange(change: number | null, suffix: string): string {
-		if (change == null) return "";
-		if (suffix === "bp") return `${change > 0 ? "+" : ""}${Math.round(change * 100)}`;
-		if (suffix === "%") return `${change > 0 ? "+" : ""}${formatNumber(Math.abs(change), 1)}`;
-		return `${change > 0 ? "+" : ""}${formatNumber(Math.abs(change), 1)}`;
+	function regimeToneClass(label: string): string {
+		const normalized = label.toUpperCase();
+		if (normalized === "GOLDILOCKS") return "mrg-goldilocks";
+		if (normalized === "OVERHEATING") return "mrg-overheating";
+		if (normalized === "STAGFLATION") return "mrg-stagflation";
+		if (normalized === "REFLATION") return "mrg-reflation";
+		return "";
 	}
 </script>
 
-<div class="mr-root">
-	<div class="mr-header">
-		<span class="mr-label">MARKET CONDITIONS</span>
+<div class="mrg-root">
+	<div class="mrg-header">
+		<span class="mrg-title">MACRO REGIME</span>
+		{#if loading}<span class="mrg-loading">...</span>{/if}
 	</div>
 
-	<div class="mr-body">
-		{#each INDICATORS as ind (ind.seriesId)}
-			{@const v = values.get(ind.seriesId)}
-			{@const val = v?.value ?? null}
-			{@const chg = v?.change ?? null}
-			<div class="mr-row">
-				<span class="mr-key">{ind.label}</span>
-				<span class="mr-val">
-					{formatVal(val, ind.suffix)}
+	<div class="mrg-table">
+		{#each regions as region (region.region_code)}
+			<div class="mrg-row">
+				<span class="mrg-code">{region.region_code}</span>
+				<span class="mrg-label {regimeToneClass(region.regime_label)}">
+					{region.regime_label}
 				</span>
-				<span class="mr-change {changeClass(chg, ind.riseIsWarning)}">
-					{changeArrow(chg)} {formatChange(chg, ind.suffix)}
+				<span class="mrg-stress mrg-stress-{region.stress_level.toLowerCase()}">
+					{region.stress_level}
+				</span>
+				<span class="mrg-trend" class:up={region.trend_up} class:down={!region.trend_up}>
+					{region.trend_up ? "↑" : "↓"}
 				</span>
 			</div>
 		{/each}
+		{#if !loading && regions.length === 0}
+			<div class="mrg-empty">No regime data</div>
+		{/if}
 	</div>
 </div>
 
 <style>
-	.mr-root {
+	.mrg-root {
 		display: flex;
 		flex-direction: column;
 		width: 100%;
@@ -141,16 +93,18 @@
 		font-family: var(--terminal-font-mono);
 	}
 
-	.mr-header {
+	.mrg-header {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		flex-shrink: 0;
 		height: 28px;
 		padding: 0 var(--terminal-space-2);
 		border-bottom: var(--terminal-border-hairline);
 	}
 
-	.mr-label {
+	.mrg-title,
+	.mrg-loading {
 		font-size: var(--terminal-text-10);
 		font-weight: 700;
 		letter-spacing: var(--terminal-tracking-caps);
@@ -158,58 +112,75 @@
 		text-transform: uppercase;
 	}
 
-	.mr-body {
+	.mrg-loading {
+		color: var(--terminal-fg-muted);
+	}
+
+	.mrg-table {
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
 		padding: var(--terminal-space-1) 0;
 	}
 
-	.mr-row {
+	.mrg-row {
 		display: grid;
-		grid-template-columns: 1fr auto auto;
+		grid-template-columns: 36px 1fr auto auto;
 		align-items: center;
-		gap: var(--terminal-space-2);
-		padding: 3px var(--terminal-space-2);
-		height: 24px;
+		gap: 8px;
+		height: 22px;
+		padding: 0 var(--terminal-space-2);
+		border-bottom: 1px solid var(--ii-terminal-hair, rgba(102, 137, 188, 0.14));
+		font-size: var(--terminal-text-10);
 	}
 
-	.mr-key {
-		font-size: var(--terminal-text-10);
-		color: var(--terminal-fg-tertiary);
-		letter-spacing: var(--terminal-tracking-caps);
+	.mrg-code {
+		color: var(--terminal-fg-secondary);
+		font-weight: 700;
+		letter-spacing: 0.06em;
+	}
+
+	.mrg-label {
+		overflow: hidden;
+		font-size: 9px;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-overflow: ellipsis;
 		text-transform: uppercase;
 		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
 
-	.mr-val {
-		font-size: var(--terminal-text-11);
+	.mrg-goldilocks { color: var(--terminal-status-success); }
+	.mrg-overheating { color: var(--terminal-status-warn, var(--terminal-accent-amber)); }
+	.mrg-stagflation { color: var(--terminal-status-error); }
+	.mrg-reflation { color: var(--terminal-accent-cyan); }
+
+	.mrg-stress {
+		border: 1px solid currentColor;
+		border-radius: 2px;
+		padding: 1px 5px;
+		font-size: 9px;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+	}
+
+	.mrg-stress-low { color: var(--terminal-status-success); }
+	.mrg-stress-med { color: var(--terminal-status-warn, var(--terminal-accent-amber)); }
+	.mrg-stress-high { color: var(--terminal-status-error); }
+
+	.mrg-trend {
+		font-size: 12px;
 		font-weight: 700;
-		color: var(--terminal-fg-primary);
-		font-variant-numeric: tabular-nums;
-		text-align: right;
-		white-space: nowrap;
+		line-height: 1;
 	}
 
-	.mr-change {
-		font-size: var(--terminal-text-10);
-		font-variant-numeric: tabular-nums;
-		text-align: right;
-		min-width: 48px;
-		white-space: nowrap;
-	}
+	.mrg-trend.up { color: var(--terminal-status-success); }
+	.mrg-trend.down { color: var(--terminal-status-error); }
 
-	.mr-good {
-		color: var(--terminal-status-success);
-	}
-
-	.mr-warn {
-		color: var(--terminal-status-error);
-	}
-
-	.mr-neutral {
+	.mrg-empty {
+		padding: 24px 12px;
 		color: var(--terminal-fg-muted);
+		font-size: var(--terminal-text-10);
+		text-align: center;
 	}
 </style>
