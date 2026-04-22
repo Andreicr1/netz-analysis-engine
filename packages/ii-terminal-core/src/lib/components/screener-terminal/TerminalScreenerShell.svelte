@@ -21,7 +21,7 @@
 	import { getContext } from "svelte";
 	import { SvelteMap } from "svelte/reactivity";
 	import { goto } from "$app/navigation";
-	import { resolve } from "$app/paths";
+	import { base } from "$app/paths";
 	import { createClientApiClient } from "../../api/client";
 	import TerminalScreenerFilters, {
 		type FilterState,
@@ -32,7 +32,7 @@
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
 
-	const HREF_BUILDER = resolve("/portfolio/builder");
+	const HREF_BUILDER = `${base}/portfolio/builder`;
 
 	interface Props {
 		filters: FilterState;

@@ -39,7 +39,7 @@
 	import { getContext } from "svelte";
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
-	import { resolve } from "$app/paths";
+	import { base } from "$app/paths";
 	import { createClientApiClient } from "../../../api/client";
 	import TerminalTopNav from "./TerminalTopNav.svelte";
 	import TerminalBreadcrumb from "./TerminalBreadcrumb.svelte";
@@ -174,35 +174,35 @@
 	// `pending` entries open the palette so the user sees the
 	// pending badge for that route.
 	async function navMacro() {
-		await goto(resolve("/macro"));
+		await goto(`${base}/macro`);
 	}
 
 	async function navAlloc() {
-		await goto(resolve("/allocation"));
+		await goto(`${base}/allocation`);
 	}
 
 	async function navScreener() {
-		await goto(resolve("/screener"));
+		await goto(`${base}/screener`);
 	}
 
 	async function navDD() {
-		await goto(resolve("/dd"));
+		await goto(`${base}/dd`);
 	}
 
 	async function navBuilder() {
-		await goto(resolve("/portfolio/builder"));
+		await goto(`${base}/portfolio/builder`);
 	}
 
 	async function navLive() {
-		await goto(resolve("/live"));
+		await goto(`${base}/live`);
 	}
 
 	async function navResearch() {
-		await goto(resolve("/screener/research"));
+		await goto(`${base}/screener/research`);
 	}
 
 	async function navAlerts() {
-		await goto(resolve("/alerts"));
+		await goto(`${base}/alerts`);
 	}
 
 	function openPalette() {

@@ -79,6 +79,7 @@
     "@investintell/ui": "workspace:*"
   },
   "devDependencies": {
+    "@types/uuid": "^10.0.0",
     "@sveltejs/package": "^2.0.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "svelte": "^5.0.0",

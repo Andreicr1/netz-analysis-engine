@@ -33,7 +33,7 @@
 	window keydown listener.
 -->
 <script lang="ts">
-	import { resolve } from "$app/paths";
+	import { base } from "$app/paths";
 	import { goto } from "$app/navigation";
 	import { getContext } from "svelte";
 
@@ -42,12 +42,12 @@
 	// not the direct return value of a plain Identifier argument to
 	// `resolve(...)`; hardcoding one identifier per route is the only
 	// pattern its AST matcher accepts.
-	const HREF_LIVE = resolve("/live");
-	const HREF_SCREENER = resolve("/screener");
-	const HREF_MACRO = resolve("/macro");
-	const HREF_BUILDER = resolve("/allocation");
-	const HREF_DD = resolve("/dd");
-	const HREF_ALERTS = resolve("/alerts");
+	const HREF_LIVE = `${base}/live`;
+	const HREF_SCREENER = `${base}/screener`;
+	const HREF_MACRO = `${base}/macro`;
+	const HREF_BUILDER = `${base}/allocation`;
+	const HREF_DD = `${base}/dd`;
+	const HREF_ALERTS = `${base}/alerts`;
 
 	interface PrimaryTab {
 		id: string;

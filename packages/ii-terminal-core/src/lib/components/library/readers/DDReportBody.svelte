@@ -97,13 +97,13 @@
 
 	// ── Chapter state ────────────────────────────────────────────────
 	let chapters = $derived(
-		((report?.chapters ?? []) as DDChapter[]).toSorted(
-			(a, b) => a.chapter_order - b.chapter_order,
+		[...((report?.chapters ?? []) as DDChapter[])].sort(
+			(a: DDChapter, b: DDChapter) => a.chapter_order - b.chapter_order,
 		),
 	);
 	let activeChapterTag = $state<string | null>(null);
 	let activeChapter = $derived(
-		chapters.find((c) => c.chapter_tag === activeChapterTag) ??
+		chapters.find((c: DDChapter) => c.chapter_tag === activeChapterTag) ??
 			chapters[0] ??
 			null,
 	);
