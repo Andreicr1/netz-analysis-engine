@@ -142,6 +142,14 @@ _REGISTRY: tuple[ConfigDomain, ...] = (
         description="Terminal command palette search/cache tunables",
         required=False,
     ),
+    ConfigDomain(
+        vertical="wealth",
+        config_type="approval_policy",
+        ownership="config_service",
+        client_visible=False,
+        description="Model portfolio lifecycle approval-policy overrides",
+        required=False,
+    ),
 )
 
 

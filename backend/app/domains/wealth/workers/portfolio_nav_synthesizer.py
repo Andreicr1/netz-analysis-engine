@@ -117,6 +117,8 @@ async def _fetch_fund_returns(
 async def synthesize_portfolio_nav(
     db: AsyncSession,
     portfolio: ModelPortfolio,
+    *,
+    commit: bool = True,
 ) -> dict[str, Any]:
     """Synthesize NAV series for a single model portfolio.
 
@@ -217,7 +219,10 @@ async def synthesize_portfolio_nav(
         )
         await db.execute(stmt)
 
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
 
     logger.info(
         "portfolio_nav_synthesized",

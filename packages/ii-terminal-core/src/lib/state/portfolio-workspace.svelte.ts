@@ -485,6 +485,7 @@ export class PortfolioWorkspaceState {
 	isLoadingBacktest = $state(false);
 	monteCarloData = $state.raw<MonteCarloPortfolioResult | null>(null);
 	isLoadingMonteCarlo = $state(false);
+	monteCarloErrorPortfolioId = $state<string | null>(null);
 	/** Diff data for WeightsTab ghost columns. */
 	runDiff = $state.raw<ConstructionRunDiff | null>(null);
 	isLoadingDiff = $state(false);
@@ -638,6 +639,7 @@ export class PortfolioWorkspaceState {
 		// Session 3 — reset backtest + monte carlo + diff state
 		this.backtestData = null;
 		this.monteCarloData = null;
+		this.monteCarloErrorPortfolioId = null;
 		this.runDiff = null;
 		// TAA Sprint 4 — reset regime visualization state
 		this.regimeBands = null;
@@ -1699,6 +1701,8 @@ export class PortfolioWorkspaceState {
 			// ── 3. Fetch the persisted run ──
 			const runId = terminal.run_id ?? accepted.run_id;
 			await this.loadConstructionRun(runId);
+			this.portfolio = await api.get<ModelPortfolio>(`/model-portfolios/${this.portfolioId}`);
+			this.monteCarloErrorPortfolioId = null;
 			this.runPhase = "done";
 			// ── 4. Refresh TAA data (construction may update regime state) ──
 			const profile = this.portfolio?.profile;
@@ -1912,6 +1916,8 @@ export class PortfolioWorkspaceState {
 			if (terminal.run_id) {
 				await this.loadConstructionRun(terminal.run_id);
 			}
+			this.portfolio = await api.get<ModelPortfolio>(`/model-portfolios/${this.portfolioId}`);
+			this.monteCarloErrorPortfolioId = null;
 			this.runPhase = "done";
 			const profile = this.portfolio?.profile;
 			if (profile) {
@@ -2115,6 +2121,16 @@ export class PortfolioWorkspaceState {
 
 	async fetchMonteCarlo() {
 		if (!this._getToken || !this.portfolioId) return;
+		if (!this.portfolio?.fund_selection_schema?.funds?.length) {
+			this.monteCarloErrorPortfolioId = this.portfolioId;
+			this.lastError = {
+				action: "monte-carlo",
+				message: "Run construction before Monte Carlo simulation",
+				timestamp: Date.now(),
+			};
+			return;
+		}
+		if (this.monteCarloErrorPortfolioId === this.portfolioId) return;
 		const gen = this._generation;
 		this.isLoadingMonteCarlo = true;
 
@@ -2127,8 +2143,10 @@ export class PortfolioWorkspaceState {
 			);
 			if (gen !== this._generation) return;
 			this.monteCarloData = result;
+			this.monteCarloErrorPortfolioId = null;
 		} catch (err) {
 			if (gen !== this._generation) return;
+			this.monteCarloErrorPortfolioId = this.portfolioId;
 			this.lastError = {
 				action: "monte-carlo",
 				message: err instanceof Error ? err.message : "Failed to run Monte Carlo simulation",

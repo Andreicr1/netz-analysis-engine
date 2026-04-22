@@ -95,6 +95,17 @@ class TestRegistryLookup:
         assert domain.client_visible is False, "optimizer internals are IP-protected"
         assert domain.ownership == "config_service"
 
+    def test_wealth_approval_policy_registered_as_optional(self):
+        """Approval policy is an optional tenant override. When no DB/YAML
+        config exists, model-portfolio routes fall back to conservative
+        lifecycle defaults instead of treating the lookup as a hard miss.
+        """
+        domain = ConfigRegistry.get("wealth", "approval_policy")
+        assert domain is not None, "wealth/approval_policy must be registered"
+        assert domain.required is False, "must be optional — route has defaults"
+        assert domain.client_visible is False, "approval internals are server-side"
+        assert domain.ownership == "config_service"
+
     def test_config_service_domains_excludes_prompt_service(self):
         for d in ConfigRegistry.config_service_domains():
             assert d.ownership == "config_service"
