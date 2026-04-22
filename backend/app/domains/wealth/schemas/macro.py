@@ -10,7 +10,7 @@ in `sanitized.py` for governance details.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -233,3 +233,43 @@ class FredDataResponse(BaseModel):
 
     series_id: str
     data: list[FredTimePoint]
+
+
+class CrossAssetPoint(BaseModel):
+    symbol: str
+    name: str
+    sector: Literal["RATES", "FX", "EQUITY", "COMMODITY", "CREDIT"]
+    last_value: float | None = None
+    change_pct: float | None = None
+    unit: str = ""
+    sparkline: list[float] = Field(default_factory=list)
+
+
+class CrossAssetResponse(BaseModel):
+    as_of_date: date | None = None
+    assets: list[CrossAssetPoint] = Field(default_factory=list)
+
+
+class RegimeTrailPoint(BaseModel):
+    as_of_date: date
+    g: float
+    i: float
+    stress: float | None = None
+
+
+class RegimeTrailResponse(BaseModel):
+    points: list[RegimeTrailPoint] = Field(default_factory=list)
+    region: str = "US"
+
+
+class CbEvent(BaseModel):
+    central_bank: str
+    meeting_date: date
+    current_rate_pct: float
+    expected_change_bps: int
+    importance: Literal["HIGH", "MEDIUM"] = "HIGH"
+
+
+class CbCalendarResponse(BaseModel):
+    events: list[CbEvent] = Field(default_factory=list)
+    as_of_date: date | None = None
