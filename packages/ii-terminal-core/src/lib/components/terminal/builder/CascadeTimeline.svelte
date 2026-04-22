@@ -22,6 +22,8 @@
 		pipelinePhase?: BuildPhase | "IDLE";
 		/** PR-A5 B.2 — whether the pipeline phase has entered a terminal error state. */
 		pipelineErrored?: boolean;
+		/** Collapse the timeline when the builder is idle. */
+		collapsed?: boolean;
 	}
 
 	let {
@@ -30,6 +32,7 @@
 		showProgress = false,
 		pipelinePhase = "IDLE",
 		pipelineErrored = false,
+		collapsed = false,
 	}: Props = $props();
 
 	// PR-A5 B.2 — pipeline strip: 5 chips mapping each top-level phase.
@@ -84,7 +87,7 @@
 	);
 </script>
 
-<div class="ct-root" role="group" aria-label="Construction phase timeline">
+<div class="ct-root" class:ct-root--collapsed={collapsed} role="group" aria-label="Construction phase timeline">
 	<!-- PR-A5 B.2 — pipeline phase strip (coarse top-level). -->
 	<div class="ct-strip" aria-label="Pipeline phases">
 		{#each PIPELINE_STRIP as chip, i (chip.key)}
@@ -151,6 +154,8 @@
 	.ct-root {
 		position: relative;
 		min-height: 160px;
+		max-height: 160px;
+		overflow: hidden;
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
@@ -158,6 +163,18 @@
 		border-bottom: var(--terminal-border-hairline);
 		font-family: var(--terminal-font-mono);
 		box-sizing: border-box;
+		transition:
+			max-height 200ms ease,
+			min-height 200ms ease,
+			padding-top 200ms ease,
+			padding-bottom 200ms ease;
+	}
+
+	.ct-root--collapsed {
+		min-height: 0;
+		max-height: 0;
+		padding-top: 0;
+		padding-bottom: 0;
 	}
 
 	/* ── Connector rail ──────────────────────────────── */

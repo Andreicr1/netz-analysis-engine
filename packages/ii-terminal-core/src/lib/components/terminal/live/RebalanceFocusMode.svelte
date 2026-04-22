@@ -238,6 +238,28 @@
 					<button type="button" class="rfm-retry" onclick={onClose}>CLOSE</button>
 				</div>
 			{:else if preview}
+				<div class="rfm-kpi-ribbon">
+					<div class="rfm-kpi">
+						<span class="rfm-kpi-label">TOTAL AUM</span>
+						<span class="rfm-kpi-value">{totalAum > 0 ? formatCurrency(totalAum) : "\u2014"}</span>
+					</div>
+					<div class="rfm-kpi">
+						<span class="rfm-kpi-label">INSTRUMENTS</span>
+						<span class="rfm-kpi-value">{holdings.length}</span>
+					</div>
+					<div class="rfm-kpi">
+						<span class="rfm-kpi-label">TRADES</span>
+						<span class="rfm-kpi-value rfm-kpi-accent">
+							{preview.trades.filter((trade) => trade.action !== "HOLD").length}
+						</span>
+					</div>
+					<div class="rfm-kpi">
+						<span class="rfm-kpi-label">IMPACT AUM</span>
+						<span class="rfm-kpi-value">
+							{formatCurrency(preview.trades.reduce((sum, trade) => sum + Math.abs(trade.trade_value), 0))}
+						</span>
+					</div>
+				</div>
 				<div class="rfm-grid">
 					<!-- Left: Proposed Trades -->
 					<div class="rfm-trades-panel">
@@ -479,6 +501,44 @@
 		flex: 1;
 		min-height: 0;
 		background: var(--terminal-fg-muted);
+	}
+
+	.rfm-kpi-ribbon {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 1px;
+		flex-shrink: 0;
+		padding: 1px;
+		background: var(--ii-border-subtle, var(--terminal-bg-panel-sunken));
+	}
+
+	.rfm-kpi {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 10px 14px;
+		background: var(--ii-surface, var(--terminal-bg-panel));
+	}
+
+	.rfm-kpi-label {
+		font-family: var(--ii-font-mono, var(--terminal-font-mono));
+		font-size: 9px;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		text-transform: uppercase;
+	}
+
+	.rfm-kpi-value {
+		font-family: var(--ii-font-mono, var(--terminal-font-mono));
+		font-size: 18px;
+		font-weight: 600;
+		color: var(--ii-text-primary, var(--terminal-fg-primary));
+		font-variant-numeric: tabular-nums;
+	}
+
+	.rfm-kpi-accent {
+		color: var(--ii-brand-primary, var(--terminal-accent-amber));
 	}
 
 	/* Panel headers */

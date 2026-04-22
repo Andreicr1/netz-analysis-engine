@@ -99,7 +99,13 @@
 
 	let activeTab = $state<TabId>("REGIME");
 	let userSwitchedTab = $state(false);
-	let visitedTabs = $state<Set<TabId>>(new Set());
+	let visitedTabs = $state(new SvelteSet<TabId>());
+
+	const isBuilding = $derived(
+		workspace.runPhase !== "idle" &&
+			workspace.runPhase !== "done" &&
+			workspace.runPhase !== "error",
+	);
 
 	$effect(() => {
 		visitedTabs.add(activeTab);
@@ -109,18 +115,14 @@
 	const allTabsVisited = $derived(visitedTabs.size === TABS.length);
 
 	function setActiveTab(t: TabId) {
+		visitedTabs.add(t);
 		activeTab = t;
 		userSwitchedTab = true;
 	}
 
 	// Cascade / pipeline phase mirroring the workspace run state.
 	const cascadePhases = $derived(workspace.optimizerPhases);
-	const showCascade = $derived(workspace.runPhase !== "idle");
-	const showProgress = $derived(
-		workspace.runPhase !== "idle" &&
-			workspace.runPhase !== "done" &&
-			workspace.runPhase !== "error",
-	);
+	const showProgress = $derived(isBuilding);
 	const runProgress = $derived(workspace.runProgress);
 
 	const pipelinePhase = $derived.by<
@@ -179,7 +181,7 @@
 		}
 	});
 	$effect(() => {
-		if (workspace.runPhase === "running") {
+		if (isBuilding) {
 			userSwitchedTab = false;
 		}
 	});
@@ -227,6 +229,8 @@
 					role="tab"
 					class="builder-tab"
 					class:builder-tab--active={activeTab === tab}
+					class:pulsing={isBuilding && activeTab !== tab}
+					class:visited={visitedTabs.has(tab)}
 					aria-selected={activeTab === tab}
 					onclick={() => setActiveTab(tab)}
 				>
@@ -241,19 +245,18 @@
 			{/each}
 		</div>
 
-		{#if showCascade}
-			<div
-				in:fly={{ y: -8, ...svelteTransitionFor("primary", { duration: "update" }) }}
-			>
-				<CascadeTimeline
-					phases={cascadePhases}
-					{runProgress}
-					{showProgress}
-					{pipelinePhase}
-					{pipelineErrored}
-				/>
-			</div>
-		{/if}
+		<div
+			in:fly={{ y: -8, ...svelteTransitionFor("primary", { duration: "update" }) }}
+		>
+			<CascadeTimeline
+				phases={cascadePhases}
+				{runProgress}
+				{showProgress}
+				{pipelinePhase}
+				{pipelineErrored}
+				collapsed={!isBuilding && workspace.runPhase !== "done"}
+			/>
+		</div>
 
 		<div class="builder-tab-content" role="tabpanel">
 			{#key activeTab}
@@ -386,6 +389,20 @@
 		color: var(--terminal-accent-amber);
 		border-bottom-color: var(--terminal-accent-amber);
 	}
+	.builder-tab.pulsing {
+		animation: tabPulse 1s ease-in-out infinite;
+	}
+	.builder-tab.visited::after {
+		position: absolute;
+		top: 4px;
+		right: 4px;
+		width: 4px;
+		height: 4px;
+		border-radius: 50%;
+		background: var(--ii-success, var(--terminal-status-success));
+		content: "";
+		pointer-events: none;
+	}
 	.builder-tab:focus-visible {
 		outline: var(--terminal-border-focus);
 		outline-offset: -2px;
@@ -413,6 +430,15 @@
 		}
 		50% {
 			opacity: 0.4;
+		}
+	}
+	@keyframes tabPulse {
+		0%,
+		100% {
+			background: transparent;
+		}
+		50% {
+			background: rgba(242, 201, 76, 0.16);
 		}
 	}
 </style>

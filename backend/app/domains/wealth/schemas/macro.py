@@ -273,3 +273,17 @@ class CbEvent(BaseModel):
 class CbCalendarResponse(BaseModel):
     events: list[CbEvent] = Field(default_factory=list)
     as_of_date: date | None = None
+
+
+class RegionalRegimeRow(BaseModel):
+    region_code: str
+    regime_label: str
+    stress_level: Literal["LOW", "MED", "HIGH"]
+    trend_up: bool
+    growth_score: float | None = None
+    inflation_score: float | None = None
+
+
+class RegionalRegimeResponse(BaseModel):
+    as_of_date: date | None = None
+    regions: list[RegionalRegimeRow] = Field(default_factory=list)

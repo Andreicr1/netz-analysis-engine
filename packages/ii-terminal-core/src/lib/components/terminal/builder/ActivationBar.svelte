@@ -2,7 +2,7 @@
   ActivationBar — Zone F fixed footer in the Builder right column.
 
   Appears ONLY when: runPhase === "done" AND allTabsVisited === true.
-  Two buttons: Save as Draft + Activate Portfolio (opens ConsequenceDialog).
+  Two buttons: Save as Draft + Send to Compliance (opens ConsequenceDialog).
 -->
 <script lang="ts">
 	import { fly } from "svelte/transition";
@@ -46,8 +46,8 @@
 		<button type="button" class="ab-btn ab-btn--secondary" onclick={handleSaveDraft}>
 			Save as Draft
 		</button>
-		<button type="button" class="ab-btn ab-btn--primary" onclick={handleActivateClick}>
-			Activate Portfolio
+		<button type="button" class="ab-btn ab-btn--activate" onclick={handleActivateClick}>
+			SEND TO COMPLIANCE ▸
 		</button>
 	</div>
 {/if}
@@ -104,14 +104,17 @@
 		border-color: var(--terminal-fg-secondary);
 	}
 
-	.ab-btn--primary {
-		background: var(--terminal-accent-amber);
-		border: 1px solid var(--terminal-accent-amber);
-		color: var(--terminal-bg-void);
+	.ab-btn--activate {
+		border: 1px solid var(--ii-success, var(--terminal-status-success));
+		background: var(--ii-success, var(--terminal-status-success));
+		color: var(--ii-bg, var(--terminal-bg-void));
+		font-family: var(--ii-font-mono, var(--terminal-font-mono));
+		font-weight: 700;
+		letter-spacing: 0.06em;
 	}
 
-	.ab-btn--primary:hover {
-		opacity: 0.9;
+	.ab-btn--activate:hover {
+		filter: brightness(1.1);
 	}
 
 	.ab-btn:focus-visible {

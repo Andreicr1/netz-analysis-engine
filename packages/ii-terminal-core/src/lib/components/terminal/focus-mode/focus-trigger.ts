@@ -4,6 +4,8 @@ export interface FocusTriggerOptions {
 	entityKind: FocusModeEntityKind;
 	entityId: string;
 	entityLabel?: string;
+	ticker?: string | null;
+	instrumentId?: string | null;
 }
 
 /**

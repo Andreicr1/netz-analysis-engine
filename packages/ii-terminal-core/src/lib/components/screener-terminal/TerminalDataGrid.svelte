@@ -412,7 +412,13 @@
 						aria-rowindex={globalIndex + 2}
 						aria-selected={selectedId === asset.id}
 						style="height: {ROW_HEIGHT}px;"
-						use:focusTrigger={{ entityKind: "fund", entityId: asset.id, entityLabel: asset.name }}
+						use:focusTrigger={{
+							entityKind: "fund",
+							entityId: asset.id,
+							entityLabel: asset.name,
+							ticker: asset.ticker,
+							instrumentId: asset.instrumentId,
+						}}
 						onclick={() => onSelect(asset)}
 					>
 						<span class="dg-td dg-col-ticker dg-ticker" title={asset.ticker ?? asset.isin ?? ""}>
