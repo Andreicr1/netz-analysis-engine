@@ -5,21 +5,23 @@
 -->
 <script lang="ts">
 	import { getContext, onMount } from "svelte";
-	import { goto } from "$app/navigation";
-	import { base } from "$app/paths";
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { formatCurrency, formatNumber, formatPercent } from "@investintell/ui";
 	import { createClientApiClient } from "../../../../api/client";
+
+	type FocusTab = "performance" | "profile" | "analysis" | "holdings" | "sectors";
 
 	interface Props {
 		fundId: string;
 		fundLabel: string;
 		ticker: string | null;
 		instrumentId: string | null;
+		initialTab?: FocusTab;
 		onClose: () => void;
 	}
 
-	let { fundId, fundLabel, ticker, instrumentId, onClose }: Props = $props();
+	let { fundId, fundLabel, ticker, instrumentId, initialTab = "performance", onClose }: Props =
+		$props();
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
@@ -358,7 +360,7 @@
 	let loadingPeer = $state(false);
 	let ddReports = $state<DDReportSummary[]>([]);
 	let loadingDD = $state(false);
-	let focusTab = $state<"performance" | "profile" | "analysis" | "holdings" | "sectors">("performance");
+	let focusTab = $state<FocusTab>("performance");
 	let selectedSector = $state<string | null>(null);
 	let selectedHolding = $state<string | null>(null);
 	let sectorTreemapChart = $state<any>();
@@ -539,6 +541,12 @@
 		return formatPercent(decimal, 2);
 	}
 
+	function ownershipShareText(value: number | null | undefined): string {
+		if (value == null) return "\u2014";
+		const decimal = Math.abs(value) > 1 ? value / 100 : value;
+		return formatPercent(decimal, 1);
+	}
+
 	function pctValue(value: number | null | undefined): number {
 		if (value == null) return 0;
 		return Math.abs(value) > 1 ? Math.max(0, value) : Math.max(0, value * 100);
@@ -556,13 +564,12 @@
 		if (event.key === "Escape") onClose();
 	}
 
-	function openResearch(mode: "fund" | "holdings" = "fund") {
-		const params = new URLSearchParams({
-			fund: fundId,
-			mode,
-		});
-		onClose();
-		goto(`${base}/screener/research?${params.toString()}`);
+	$effect(() => {
+		focusTab = initialTab;
+	});
+
+	function openFocusTab(tab: FocusTab) {
+		focusTab = tab;
 	}
 
 	onMount(() => {
@@ -1094,8 +1101,8 @@
 				</div>
 			{/if}
 			<div class="sfm-hero-actions">
-				<button type="button" class="sfm-link-btn" onclick={() => openResearch("fund")}>
-					[ OPEN RESEARCH ]
+				<button type="button" class="sfm-link-btn" onclick={() => openFocusTab("analysis")}>
+					[ OPEN ANALYSIS ]
 				</button>
 				<button type="button" class="sfm-close" onclick={onClose} aria-label="Close">
 					[ ESC - CLOSE ]
@@ -1410,8 +1417,8 @@
 												</div>
 											</div>
 											<div class="sfm-holding-focus-actions">
-												<button type="button" class="sfm-inline-btn" onclick={() => openResearch("holdings")}>
-													[ OPEN RESEARCH ]
+												<button type="button" class="sfm-inline-btn" onclick={() => openFocusTab("analysis")}>
+													[ OPEN ANALYSIS ]
 												</button>
 												<button
 													type="button"
@@ -1436,13 +1443,13 @@
 												<span class="sfm-holdings-stat-value">{moneyText(selectedHoldingData.market_value)}</span>
 											</div>
 											<div class="sfm-sector-focus-stat">
-												<span class="sfm-holdings-stat-label">INSTITUTIONAL HOLDERS</span>
+												<span class="sfm-holdings-stat-label">TRACKED HOLDERS</span>
 												<span class="sfm-holdings-stat-value">
 													{loadingReverseLookup ? "…" : formatNumber(reverseLookup?.total_holders ?? 0, 0)}
 												</span>
 											</div>
 											<div class="sfm-sector-focus-stat">
-												<span class="sfm-holdings-stat-label">TOP HOLDER</span>
+												<span class="sfm-holdings-stat-label">LEAD HOLDER</span>
 												<span class="sfm-holding-focus-inline">
 													{#if loadingReverseLookup}
 														Loading...
@@ -1454,7 +1461,7 @@
 												</span>
 											</div>
 											<div class="sfm-sector-focus-list">
-												<span class="sfm-holdings-stat-label">TOP HOLDERS</span>
+												<span class="sfm-holdings-stat-label">TRACKED HOLDER SHARE</span>
 												{#if loadingReverseLookup}
 													<div class="sfm-analysis-empty">Loading reverse lookup...</div>
 												{:else if reverseLookup?.holders?.length}
@@ -1462,7 +1469,7 @@
 														<div class="sfm-sector-focus-row">
 															<span class="sfm-holding-name">{holder.firm_name}</span>
 															<span class="sfm-num">
-																{holder.pct_of_total != null ? formatPercent(holder.pct_of_total, 1) : moneyText(holder.market_value)}
+																{holder.pct_of_total != null ? ownershipShareText(holder.pct_of_total) : moneyText(holder.market_value)}
 															</span>
 														</div>
 													{/each}
@@ -1494,9 +1501,9 @@
 
 											<div class="sfm-holding-deep-panel">
 												<div class="sfm-subhead sfm-subhead--tight">
-													<span>HOLDER MAP</span>
+													<span>TRACKED HOLDER MAP</span>
 													{#if reverseLookup?.total_holders != null}
-														<span>{formatNumber(reverseLookup.total_holders, 0)} HOLDERS</span>
+														<span>{formatNumber(reverseLookup.total_holders, 0)} TRACKED HOLDERS</span>
 													{/if}
 												</div>
 												{#if loadingReverseLookup}
@@ -1512,7 +1519,7 @@
 															>
 																<span class="sfm-holding-name">{holder.firm_name}</span>
 																<span class="sfm-holder-meta">
-																	{holder.pct_of_total != null ? formatPercent(holder.pct_of_total, 1) : "—"}
+																	{holder.pct_of_total != null ? ownershipShareText(holder.pct_of_total) : "—"}
 																</span>
 															</button>
 														{/each}
