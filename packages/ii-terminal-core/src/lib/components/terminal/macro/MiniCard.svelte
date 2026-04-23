@@ -73,22 +73,24 @@
 		display: grid;
 		grid-template-columns: 1fr 80px 100px;
 		align-items: center;
-		gap: 0;
+		gap: 10px;
 		width: 100%;
-		padding: 3px var(--terminal-space-2);
-		background: transparent;
-		border: none;
+		min-height: 44px;
+		padding: 6px 12px;
+		background: var(--ii-surface);
+		border: 0;
+		border-bottom: 1px solid var(--ii-terminal-hair);
 		color: inherit;
-		font-family: var(--terminal-font-mono);
+		font-family: var(--ii-font-mono);
 		text-align: left;
 		cursor: pointer;
-		transition: background var(--terminal-motion-tick) var(--terminal-motion-easing-out);
+		transition: background 80ms var(--ii-terminal-ease);
 	}
 	.mc-root:hover {
-		background: var(--terminal-bg-panel-raised);
+		background: var(--ii-surface-alt);
 	}
 	.mc-root:focus-visible {
-		outline: var(--terminal-border-focus);
+		outline: 1px solid var(--ii-brand-primary);
 		outline-offset: -1px;
 	}
 	.mc-head,
@@ -100,18 +102,18 @@
 	}
 	.mc-symbol {
 		overflow: hidden;
-		color: var(--terminal-fg-primary);
-		font-size: var(--terminal-text-11);
-		font-weight: 600;
-		letter-spacing: var(--terminal-tracking-caps);
+		color: var(--ii-brand-primary);
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 	.mc-name {
 		overflow: hidden;
-		color: var(--terminal-fg-tertiary);
-		font-size: var(--terminal-text-10);
-		letter-spacing: var(--terminal-tracking-caps);
+		color: var(--ii-text-muted);
+		font-size: 9px;
+		letter-spacing: var(--ii-terminal-tr-caps);
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
@@ -127,20 +129,20 @@
 		align-items: flex-end;
 	}
 	.mc-value {
-		color: var(--terminal-fg-primary);
-		font-size: var(--terminal-text-11);
+		color: var(--ii-text-primary);
+		font-size: 14px;
 		font-variant-numeric: tabular-nums;
-		font-weight: 500;
+		font-weight: 600;
 	}
 	.mc-change {
-		color: var(--terminal-fg-tertiary);
-		font-size: var(--terminal-text-10);
+		color: var(--ii-text-muted);
+		font-size: 10px;
 		font-variant-numeric: tabular-nums;
 	}
 	.mc-change--up {
-		color: var(--terminal-accent-green, #4adf86);
+		color: var(--ii-success);
 	}
 	.mc-change--dn {
-		color: var(--terminal-accent-red, #f87171);
+		color: var(--ii-danger);
 	}
 </style>

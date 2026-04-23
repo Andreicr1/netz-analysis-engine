@@ -12,25 +12,20 @@ import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "@investintell/ii-terminal-core/api/client";
 import type { ModelPortfolio } from "@investintell/ii-terminal-core/types/model-portfolio";
 
-export const load: PageServerLoad = async ({ parent, url }) => {
+export const load: PageServerLoad = async ({ parent }) => {
 	const { token } = await parent();
 	if (!token) {
-		return { portfolios: [] as ModelPortfolio[], selectedPortfolioData: null };
+		return { portfolios: [] as ModelPortfolio[] };
 	}
 
 	const api = createServerApiClient(token);
-	const portfolios = await api
-		.get<ModelPortfolio[]>("/model-portfolios")
-		.catch(() => [] as ModelPortfolio[]);
-
-	// Pre-load selected portfolio data if ID in query params
-	const selectedId = url.searchParams.get("portfolio");
-	let selectedPortfolioData: ModelPortfolio | null = null;
-	if (selectedId) {
-		selectedPortfolioData = await api
-			.get<ModelPortfolio>(`/model-portfolios/${selectedId}`)
-			.catch(() => null);
+	let portfolios: ModelPortfolio[] = [];
+	
+	try {
+		portfolios = await api.get<ModelPortfolio[]>("/model-portfolios");
+	} catch (e) {
+		console.error("Failed to load model portfolios in live workbench:", e);
 	}
 
-	return { portfolios, selectedPortfolioData };
+	return { portfolios };
 };
