@@ -5,6 +5,8 @@
 -->
 <script lang="ts">
 	import { getContext, onMount } from "svelte";
+	import { goto } from "$app/navigation";
+	import { base } from "$app/paths";
 	import { formatCurrency, formatNumber, formatPercent } from "@investintell/ui";
 	import { createClientApiClient } from "../../../../api/client";
 
@@ -42,10 +44,35 @@
 		value: number;
 	}
 
+	interface Holding {
+		issuer_name: string;
+		sector: string | null;
+		weight: number | null;
+		market_value: number | null;
+	}
+
+	interface SectorInfo {
+		name: string;
+		weight: number | null;
+		holdings_count: number | null;
+	}
+
+	interface HoldingsData {
+		top_holdings: Holding[];
+		sector_breakdown: SectorInfo[];
+		as_of?: string | null;
+		disclosure?: {
+			has_holdings?: boolean;
+			message?: string | null;
+		} | null;
+	}
+
 	let detail = $state<FundCatalogItem | null>(null);
 	let navBars = $state<NavBar[]>([]);
+	let holdingsData = $state<HoldingsData | null>(null);
 	let loadingDetail = $state(true);
 	let loadingNav = $state(false);
+	let loadingHoldings = $state(false);
 
 	$effect(() => {
 		const id = fundId;
@@ -99,6 +126,31 @@
 				if (cancelled) return;
 				navBars = [];
 				loadingNav = false;
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	$effect(() => {
+		const id = fundId;
+		if (!id) {
+			holdingsData = null;
+			return;
+		}
+		let cancelled = false;
+		loadingHoldings = true;
+		api
+			.get<HoldingsData>(`/wealth/discovery/funds/${encodeURIComponent(id)}/analysis/holdings/top`)
+			.then((res) => {
+				if (cancelled) return;
+				holdingsData = res ?? null;
+				loadingHoldings = false;
+			})
+			.catch(() => {
+				if (cancelled) return;
+				holdingsData = null;
+				loadingHoldings = false;
 			});
 		return () => {
 			cancelled = true;
@@ -259,7 +311,12 @@
 	let loadingPeer = $state(false);
 	let ddReports = $state<DDReportSummary[]>([]);
 	let loadingDD = $state(false);
-	let rightTab = $state<"profile" | "analysis">("profile");
+	let rightTab = $state<"profile" | "analysis" | "holdings" | "sectors">("profile");
+
+	const topHoldings = $derived(holdingsData?.top_holdings ?? []);
+	const sectorBreakdown = $derived.by(() =>
+		[...(holdingsData?.sector_breakdown ?? [])].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0)),
+	);
 
 	$effect(() => {
 		const id = fundId;
@@ -313,8 +370,37 @@
 		return decimal == null ? "\u2014" : formatPercent(decimal, decimals);
 	}
 
+	function holdingWeightText(value: number | null | undefined): string {
+		if (value == null) return "\u2014";
+		const decimal = Math.abs(value) > 1 ? value / 100 : value;
+		return formatPercent(decimal, 2);
+	}
+
+	function sectorBarWidth(value: number | null | undefined): string {
+		if (value == null) return "0%";
+		const pct = Math.abs(value) > 1 ? value : value * 100;
+		return `${Math.min(100, Math.max(0, pct)).toFixed(2)}%`;
+	}
+
+	function moneyText(value: number | null | undefined): string {
+		if (value == null) return "\u2014";
+		const abs = Math.abs(value);
+		if (abs >= 1_000_000_000) return `$${formatNumber(value / 1_000_000_000, 2)}B`;
+		if (abs >= 1_000_000) return `$${formatNumber(value / 1_000_000, 1)}M`;
+		return formatCurrency(value);
+	}
+
 	function closeOnEscape(event: KeyboardEvent) {
 		if (event.key === "Escape") onClose();
+	}
+
+	function openResearch(mode: "fund" | "holdings" = "fund") {
+		const params = new URLSearchParams({
+			fund: fundId,
+			mode,
+		});
+		onClose();
+		goto(`${base}/screener/research?${params.toString()}`);
 	}
 
 	onMount(() => {
@@ -347,6 +433,14 @@
 					<span class="sfm-aum-label">AUM</span>
 				</div>
 			{/if}
+			<div class="sfm-hero-actions">
+				<button type="button" class="sfm-link-btn" onclick={() => openResearch("fund")}>
+					[ OPEN RESEARCH ]
+				</button>
+				<button type="button" class="sfm-close" onclick={onClose} aria-label="Close">
+					[ ESC - CLOSE ]
+				</button>
+			</div>
 		</div>
 
 		<div class="sfm-kpi-grid">
@@ -432,7 +526,27 @@
 						aria-selected={rightTab === "analysis"}
 						onclick={() => (rightTab = "analysis")}
 					>
-						DD ANALYSIS
+						DD
+					</button>
+					<button
+						type="button"
+						class="sfm-rtab"
+						class:sfm-rtab--active={rightTab === "holdings"}
+						role="tab"
+						aria-selected={rightTab === "holdings"}
+						onclick={() => (rightTab = "holdings")}
+					>
+						HOLDINGS
+					</button>
+					<button
+						type="button"
+						class="sfm-rtab"
+						class:sfm-rtab--active={rightTab === "sectors"}
+						role="tab"
+						aria-selected={rightTab === "sectors"}
+						onclick={() => (rightTab = "sectors")}
+					>
+						SECTORS
 					</button>
 				</div>
 
@@ -472,7 +586,7 @@
 							</div>
 						{/each}
 					</div>
-				{:else}
+				{:else if rightTab === "analysis"}
 					{#if peerMetrics && peerMetrics.peer_count > 0}
 						<div class="sfm-peer-section">
 							<h4 class="sfm-peer-hd">
@@ -546,13 +660,77 @@
 							{/each}
 						{/if}
 					</div>
+				{:else if rightTab === "holdings"}
+					<div class="sfm-holdings-panel">
+						<div class="sfm-subhead">
+							<span>TOP HOLDINGS</span>
+							{#if holdingsData?.as_of}
+								<span>AS OF {holdingsData.as_of}</span>
+							{/if}
+						</div>
+
+						{#if loadingHoldings}
+							<div class="sfm-analysis-empty">Loading holdings...</div>
+						{:else if topHoldings.length === 0}
+							<div class="sfm-analysis-empty">
+								{holdingsData?.disclosure?.message ?? "No holdings disclosure available."}
+							</div>
+						{:else}
+							<div class="sfm-holdings-table">
+								<div class="sfm-holdings-row sfm-holdings-row--head">
+									<span>NAME</span>
+									<span>SECTOR</span>
+									<span>WGT</span>
+									<span>VALUE</span>
+								</div>
+								{#each topHoldings.slice(0, 12) as holding, index (`${holding.issuer_name}-${index}`)}
+									<div class="sfm-holdings-row">
+										<span class="sfm-holding-name">{holding.issuer_name}</span>
+										<span>{holding.sector ?? "\u2014"}</span>
+										<span class="sfm-num">{holdingWeightText(holding.weight)}</span>
+										<span class="sfm-num">{moneyText(holding.market_value)}</span>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{:else}
+					<div class="sfm-sector-panel">
+						<div class="sfm-subhead">
+							<span>SECTOR ANALYSIS</span>
+							{#if sectorBreakdown.length > 0}
+								<span>{sectorBreakdown.length} GROUPS</span>
+							{/if}
+						</div>
+
+						{#if loadingHoldings}
+							<div class="sfm-analysis-empty">Loading sectors...</div>
+						{:else if sectorBreakdown.length === 0}
+							<div class="sfm-analysis-empty">
+								{holdingsData?.disclosure?.message ?? "No sector breakdown available."}
+							</div>
+						{:else}
+							<div class="sfm-sector-list">
+								{#each sectorBreakdown as sector (sector.name)}
+									<div class="sfm-sector-row">
+										<div class="sfm-sector-top">
+											<span class="sfm-sector-name">{sector.name}</span>
+											<span class="sfm-sector-meta">
+												{sector.holdings_count ?? 0} HOLDINGS
+												<strong>{holdingWeightText(sector.weight)}</strong>
+											</span>
+										</div>
+										<div class="sfm-sector-track">
+											<span class="sfm-sector-bar" style:width={sectorBarWidth(sector.weight)}></span>
+										</div>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
 				{/if}
 			</div>
 		</div>
-
-		<button type="button" class="sfm-close" onclick={onClose} aria-label="Close">
-			[ ESC - CLOSE ]
-		</button>
 	</div>
 </div>
 
@@ -583,9 +761,10 @@
 
 	.sfm-hero {
 		display: grid;
-		grid-template-columns: 1fr auto;
+		grid-template-columns: minmax(0, 1fr) auto auto;
+		align-items: start;
 		flex-shrink: 0;
-		gap: 24px;
+		gap: 18px;
 		padding: 18px 20px;
 		border-bottom: 1px solid var(--ii-border-subtle, var(--terminal-fg-muted));
 		background: var(--ii-surface-alt, var(--terminal-bg-panel-sunken));
@@ -616,7 +795,34 @@
 	}
 
 	.sfm-aum {
+		min-width: 120px;
 		text-align: right;
+	}
+
+	.sfm-hero-actions {
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+	}
+
+	.sfm-link-btn,
+	.sfm-close {
+		align-self: start;
+		min-width: 112px;
+		padding: 5px 10px;
+		border: 1px solid var(--ii-border-subtle, var(--terminal-fg-muted));
+		background: transparent;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		font-family: var(--ii-font-mono, var(--terminal-font-mono));
+		font-size: 10px;
+		letter-spacing: 0.08em;
+		cursor: pointer;
+	}
+
+	.sfm-link-btn {
+		min-width: 132px;
+		color: var(--ii-brand-primary, var(--terminal-accent-amber));
+		border-color: color-mix(in srgb, var(--ii-brand-primary, var(--terminal-accent-amber)) 55%, transparent);
 	}
 
 	.sfm-aum-val {
@@ -806,20 +1012,7 @@
 		text-align: right;
 	}
 
-	.sfm-close {
-		position: absolute;
-		top: 12px;
-		right: 12px;
-		padding: 4px 10px;
-		border: 1px solid var(--ii-border-subtle, var(--terminal-fg-muted));
-		background: transparent;
-		color: var(--ii-text-muted, var(--terminal-fg-muted));
-		font-family: var(--ii-font-mono, var(--terminal-font-mono));
-		font-size: 10px;
-		letter-spacing: 0.08em;
-		cursor: pointer;
-	}
-
+	.sfm-link-btn:hover,
 	.sfm-close:hover {
 		border-color: var(--ii-brand-primary, var(--terminal-accent-amber));
 		color: var(--ii-brand-primary, var(--terminal-accent-amber));
@@ -832,7 +1025,8 @@
 	}
 
 	.sfm-rtabs {
-		display: flex;
+		display: grid;
+		grid-template-columns: 1.35fr 0.55fr 0.9fr 0.8fr;
 		flex-shrink: 0;
 		gap: 1px;
 		margin-bottom: 12px;
@@ -840,8 +1034,8 @@
 	}
 
 	.sfm-rtab {
-		flex: 1;
-		padding: 6px 0;
+		min-width: 0;
+		padding: 6px 4px;
 		border: none;
 		background: var(--ii-surface-alt, var(--terminal-bg-panel-sunken));
 		color: var(--ii-text-muted, var(--terminal-fg-muted));
@@ -850,6 +1044,9 @@
 		font-weight: 700;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		cursor: pointer;
 	}
 
@@ -1009,5 +1206,106 @@
 		color: var(--ii-text-muted, var(--terminal-fg-muted));
 		font-family: var(--ii-font-mono, var(--terminal-font-mono));
 		font-size: 10px;
+	}
+
+	.sfm-subhead {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		margin-bottom: 10px;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.sfm-holdings-table {
+		border-top: 1px solid var(--ii-terminal-hair, rgba(102, 137, 188, 0.14));
+	}
+
+	.sfm-holdings-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1.5fr) minmax(74px, 0.65fr) 58px 74px;
+		gap: 8px;
+		align-items: center;
+		min-height: 26px;
+		border-bottom: 1px solid var(--ii-terminal-hair, rgba(102, 137, 188, 0.14));
+		color: var(--ii-text-secondary, var(--terminal-fg-secondary));
+		font-size: 10px;
+	}
+
+	.sfm-holdings-row--head {
+		min-height: 22px;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		font-size: 8px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.sfm-holding-name,
+	.sfm-sector-name {
+		overflow: hidden;
+		color: var(--ii-text-primary, var(--terminal-fg-primary));
+		font-weight: 600;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.sfm-num {
+		color: var(--ii-text-primary, var(--terminal-fg-primary));
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+	}
+
+	.sfm-sector-list {
+		display: flex;
+		flex-direction: column;
+		gap: 9px;
+	}
+
+	.sfm-sector-row {
+		display: flex;
+		flex-direction: column;
+		gap: 5px;
+	}
+
+	.sfm-sector-top {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 12px;
+		font-size: 10px;
+	}
+
+	.sfm-sector-meta {
+		display: flex;
+		flex-shrink: 0;
+		gap: 10px;
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		font-size: 9px;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.04em;
+	}
+
+	.sfm-sector-meta strong {
+		color: var(--ii-text-primary, var(--terminal-fg-primary));
+		font-size: 10px;
+	}
+
+	.sfm-sector-track {
+		position: relative;
+		height: 8px;
+		overflow: hidden;
+		border: 1px solid var(--ii-border-subtle, var(--terminal-fg-muted));
+		background: var(--ii-surface-alt, var(--terminal-bg-panel-sunken));
+	}
+
+	.sfm-sector-bar {
+		position: absolute;
+		inset: 0 auto 0 0;
+		background: linear-gradient(90deg, var(--ii-brand-primary, #FF965A), var(--ii-success, #3DD39A));
 	}
 </style>

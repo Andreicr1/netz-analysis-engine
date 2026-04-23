@@ -757,6 +757,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/universe/auto-import/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Auto Import
+         * @description Trigger auto-import for a single org synchronously.
+         *
+         *     Runs on a dedicated tenant-scoped session (RLS bound to ``org_id``)
+         *     so ``instruments_org`` writes use the correct policy. The request
+         *     completes after the commit — callers can show the resulting metrics
+         *     immediately without polling.
+         */
+        post: operations["run_auto_import_api_v1_admin_universe_auto_import_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/universe/auto-import/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Status
+         * @description Return per-org coverage snapshot derived from audit_events.
+         *
+         *     One row per org that has ever been imported (or has any rows in
+         *     ``instruments_org``). ``total_rows`` is the live count today; the
+         *     ``last_*`` columns are the most recent run's metrics.
+         */
+        get: operations["get_status_api_v1_admin_universe_auto_import_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/funds": {
         parameters: {
             query?: never;
@@ -1935,6 +1984,86 @@ export interface paths {
          *     Cached in Redis for 1 hour. 2-year lookback by default.
          */
         get: operations["get_ofr_data_api_v1_macro_ofr_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macro/cross-asset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cross-asset panel data
+         * @description Batch cross-asset data for the macro terminal left panel.
+         */
+        get: operations["get_cross_asset_api_v1_macro_cross_asset_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macro/regime/trail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 18-month regime trail coordinates
+         * @description Return 18 months of growth/inflation coordinates from regional snapshots.
+         */
+        get: operations["get_regime_trail_api_v1_macro_regime_trail_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macro/cb-calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Upcoming central bank meeting calendar
+         * @description Return upcoming central bank meetings from the seed calendar.
+         */
+        get: operations["get_cb_calendar_api_v1_macro_cb_calendar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macro/regional-regime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Current regime quadrant per tracked region
+         * @description Return US/EU/EM/BR regime labels for the Live Workbench panel.
+         */
+        get: operations["get_regional_regime_api_v1_macro_regional_regime_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4316,6 +4445,168 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portfolio/profiles/{profile}/propose-allocation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * PR-A26.1 — Run the optimizer in propose mode (CVaR-only constraints, IPS bands ignored)
+         * @description Kick off a propose-mode construction run.
+         *
+         *     The optimizer runs with maximum freedom subject only to the CVaR
+         *     target from ``portfolio_calibration`` and the
+         *     ``excluded_from_portfolio`` flag on ``strategic_allocation``. The
+         *     cascade still fires the template + coverage gates from PR-A25/A22
+         *     so structural failures surface before the solver ever runs.
+         *
+         *     Returns 202 + job_id. Progress events stream from
+         *     ``/api/v1/jobs/{job_id}/stream`` and include ``propose_started``,
+         *     ``optimizer_started``, ``optimizer_phase_complete`` (per phase),
+         *     and a terminal ``propose_ready`` or ``propose_cvar_infeasible``.
+         *     The completed proposal can be fetched via
+         *     ``GET /portfolio/profiles/{profile}/latest-proposal``.
+         */
+        post: operations["propose_allocation_api_v1_portfolio_profiles__profile__propose_allocation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolio/profiles/{profile}/latest-proposal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PR-A26.1 — Fetch the most recent propose-mode allocation for the (org, profile) pair
+         * @description Return the latest ``run_mode='propose'`` run for the profile.
+         *
+         *     404s if no propose run has ever completed for the (org, profile)
+         *     pair. ``proposed_bands`` carries one entry per canonical block
+         *     (excluded blocks emit ``target_weight = 0`` with rationale).
+         */
+        get: operations["latest_proposal_api_v1_portfolio_profiles__profile__latest_proposal_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolio/profiles/{profile}/approve-proposal/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * PR-A26.2 - Atomically snapshot a propose-mode run's bands onto strategic_allocation; becomes the Strategic IPS anchor
+         * @description Approve a propose run for the given profile.
+         *
+         *     Atomic transaction - the 18 strategic_allocation rows are updated,
+         *     the prior active allocation_approvals row (if any) is superseded,
+         *     and the new audit row is inserted, all in one commit.
+         *
+         *     Rejects proposal_cvar_infeasible runs unless the operator sets
+         *     ``confirm_cvar_infeasible=true`` on the body - avoids a silent
+         *     accept of an IPS that cannot meet the configured CVaR target.
+         */
+        post: operations["approve_proposal_api_v1_portfolio_profiles__profile__approve_proposal__run_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolio/profiles/{profile}/set-override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * PR-A26.2 - Write override_min/override_max on a single strategic_allocation row; affects next propose run only
+         * @description Set or clear override_min/override_max on one block.
+         *
+         *     The override applies to the next propose-mode run only; realize
+         *     mode reads the approved drift band instead. Either bound may be
+         *     ``None`` to clear just one side; pass both as ``None`` to reset
+         *     the override entirely.
+         */
+        post: operations["set_override_api_v1_portfolio_profiles__profile__set_override_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolio/profiles/{profile}/strategic-allocation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PR-A26.3 - Read the 18 canonical Strategic allocation rows for (org, profile) with current approval metadata
+         * @description Return every canonical ``strategic_allocation`` row for the profile.
+         *
+         *     Rows emerge in the stable ``CANONICAL_BLOCK_ORDER`` regardless of
+         *     insertion order so the frontend donut + diff UI can align bars /
+         *     slices deterministically. ``cvar_limit`` is resolved from the
+         *     active (live/paused) model portfolio's calibration row; when no
+         *     portfolio exists yet we fall back to the institutional default
+         *     per-profile so the KPI card can still render a meaningful value.
+         */
+        get: operations["get_strategic_allocation_api_v1_portfolio_profiles__profile__strategic_allocation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolio/profiles/{profile}/approval-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PR-A26.3 - Paginated approval history for a profile, newest first
+         * @description List ``allocation_approvals`` rows for (org, profile).
+         *
+         *     Ordered newest-first on ``approved_at``. ``is_active`` is computed
+         *     per-row from ``superseded_at IS NULL`` so the frontend can render
+         *     the Active badge without a second query. ``total`` reflects the
+         *     full count regardless of pagination.
+         */
+        get: operations["get_approval_history_api_v1_portfolio_profiles__profile__approval_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/model-portfolios/{portfolio_id}/views": {
         parameters: {
             query?: never;
@@ -4370,6 +4661,29 @@ export interface paths {
          *     ``verify_job_owner`` (B.1).
          */
         post: operations["build_portfolio_api_v1_portfolios__id__build_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{id}/preview-cvar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview achievable band for a proposed CVaR limit
+         * @description Return the achievable return band + min CVaR at a probed limit.
+         *
+         *     Synchronous: no ``job_id``, no SSE, no DB writes. Redis-cached at
+         *     ``(org_id, portfolio_id, cvar_limit_q4)`` with 5-minute TTL.
+         */
+        post: operations["preview_cvar_api_v1_portfolios__id__preview_cvar_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4776,6 +5090,80 @@ export interface paths {
          * @description SSE stream for content generation progress.
          */
         get: operations["stream_content_generation_api_v1_content__content_id__stream__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/correlation/matrix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Structural and historical correlation matrices */
+        post: operations["post_correlation_matrix_api_v1_research_correlation_matrix_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/funds/{instrument_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Single-fund research surface */
+        get: operations["get_single_fund_research_api_v1_research_funds__instrument_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/scatter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Multi-fund research scatter surface */
+        get: operations["get_research_scatter_api_v1_research_scatter_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/screener/peer-metrics/{fund_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sharpe/drawdown peer distribution for a fund by strategy_label
+         * @description Return subject Sharpe/drawdown alongside same-strategy peer distribution.
+         *
+         *     Reads global fund catalog/risk tables. The route accepts a discovery
+         *     external_id, ticker, or instrument_id string as ``fund_id``.
+         */
+        get: operations["get_peer_metrics_api_v1_screener_peer_metrics__fund_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5903,10 +6291,30 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Global search across funds, managers, and documents
+         * Command palette fund search
+         * @description Low-latency fund search for the terminal command palette.
+         */
+        get: operations["command_palette_search_api_v1_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search/global": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Legacy global search across funds, managers, and documents
          * @description Fan-out search across funds, managers, and documents.
          */
-        get: operations["global_search_api_v1_search_get"];
+        get: operations["global_search_api_v1_search_global_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6148,6 +6556,29 @@ export interface paths {
         };
         /** Prospectus fee table + annual return history (SEC RR1) */
         get: operations["get_fund_prospectus_api_v1_sec_funds__cik__prospectus_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/market-data/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Low-frequency market events stream (SSE)
+         * @description Stream low-frequency market events from Redis over SSE.
+         *
+         *     Uses fetch-compatible SSE framing so the browser can send Clerk
+         *     credentials in headers. Price ticks stay on `/live/ws`.
+         */
+        get: operations["market_events_api_v1_market_data_events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9515,6 +9946,123 @@ export interface components {
             annual_return_pct?: number | null;
         };
         /**
+         * ApprovalHistoryEntry
+         * @description One row of the approval history table (Section G).
+         *
+         *     ``is_active`` mirrors ``superseded_at IS NULL`` — useful on the
+         *     frontend so the Active badge can be computed without re-checking
+         *     the superseded timestamp.
+         */
+        ApprovalHistoryEntry: {
+            /**
+             * Approval Id
+             * Format: uuid
+             */
+            approval_id: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Approved By */
+            approved_by: string;
+            /**
+             * Approved At
+             * Format: date-time
+             */
+            approved_at: string;
+            /** Superseded At */
+            superseded_at?: string | null;
+            /** Cvar At Approval */
+            cvar_at_approval?: number | null;
+            /** Expected Return At Approval */
+            expected_return_at_approval?: number | null;
+            /** Cvar Feasible At Approval */
+            cvar_feasible_at_approval: boolean;
+            /** Operator Message */
+            operator_message?: string | null;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /**
+         * ApprovalHistoryResponse
+         * @description Response for ``GET /portfolio/profiles/{profile}/approval-history``.
+         *
+         *     Pagination is offset-based; ``total`` reflects the full count for
+         *     the (org, profile) pair regardless of limit/offset.
+         */
+        ApprovalHistoryResponse: {
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Profile */
+            profile: string;
+            /** Total */
+            total: number;
+            /** Entries */
+            entries: components["schemas"]["ApprovalHistoryEntry"][];
+        };
+        /**
+         * ApprovalResponse
+         * @description Response for ``POST /portfolio/profiles/{profile}/approve-proposal/{run_id}``.
+         *
+         *     ``strategic_snapshot`` carries one entry per canonical block — the
+         *     post-approval state of the 18 ``strategic_allocation`` rows that
+         *     make up the Strategic IPS anchor. The frontend renders this as
+         *     confirmation before wiring up the realize-mode CTA.
+         */
+        ApprovalResponse: {
+            /**
+             * Approval Id
+             * Format: uuid
+             */
+            approval_id: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Profile */
+            profile: string;
+            /**
+             * Approved At
+             * Format: date-time
+             */
+            approved_at: string;
+            /** Approved By */
+            approved_by: string;
+            /** Cvar Feasible At Approval */
+            cvar_feasible_at_approval: boolean;
+            /** Strategic Snapshot */
+            strategic_snapshot: components["schemas"]["StrategicAllocationRow"][];
+        };
+        /**
+         * ApproveProposalRequest
+         * @description Body for ``POST /portfolio/profiles/{profile}/approve-proposal/{run_id}``.
+         *
+         *     ``confirm_cvar_infeasible=True`` is required when approving a run
+         *     that completed with ``winner_signal = 'proposal_cvar_infeasible'``
+         *     — the operator is explicitly accepting a Strategic IPS whose bands
+         *     cannot meet the configured CVaR target. ``operator_message`` lands
+         *     on ``allocation_approvals.operator_message`` for audit.
+         */
+        ApproveProposalRequest: {
+            /**
+             * Confirm Cvar Infeasible
+             * @default false
+             */
+            confirm_cvar_infeasible: boolean;
+            /** Operator Message */
+            operator_message?: string | null;
+        };
+        /**
          * AssetType
          * @enum {string}
          */
@@ -10327,6 +10875,32 @@ export interface components {
              */
             benchmark_label: string;
         };
+        /**
+         * CascadePhaseAttempt
+         * @description One phase of the PR-A12 RU LP cascade.
+         *
+         *     Surfaces the subset of ``cascade_telemetry.phase_attempts[i]`` that
+         *     the frontend CascadeTimeline renders. Persisted in full on
+         *     ``portfolio_construction_runs.cascade_telemetry`` by the executor;
+         *     this schema is a read-only view.
+         */
+        CascadePhaseAttempt: {
+            /** Phase */
+            phase: string;
+            /** Status */
+            status: string;
+            /** Solver */
+            solver?: string | null;
+            /**
+             * Wall Ms
+             * @default 0
+             */
+            wall_ms: number;
+            /** Objective Value */
+            objective_value?: number | null;
+            /** Cvar Within Limit */
+            cvar_within_limit?: boolean | null;
+        };
         /** CashflowEventItem */
         CashflowEventItem: {
             /** Id */
@@ -10423,6 +10997,33 @@ export interface components {
              * @default 0
              */
             total: number;
+        };
+        /** CbCalendarResponse */
+        CbCalendarResponse: {
+            /** Events */
+            events?: components["schemas"]["CbEvent"][];
+            /** As Of Date */
+            as_of_date?: string | null;
+        };
+        /** CbEvent */
+        CbEvent: {
+            /** Central Bank */
+            central_bank: string;
+            /**
+             * Meeting Date
+             * Format: date
+             */
+            meeting_date: string;
+            /** Current Rate Pct */
+            current_rate_pct: number;
+            /** Expected Change Bps */
+            expected_change_bps: number;
+            /**
+             * Importance
+             * @default HIGH
+             * @enum {string}
+             */
+            importance: "HIGH" | "MEDIUM";
         };
         /** ChatMessage */
         ChatMessage: {
@@ -10801,6 +11402,60 @@ export interface components {
             /** As Of Date */
             as_of_date?: string | null;
         };
+        /** CorrelationMatrixAccepted */
+        CorrelationMatrixAccepted: {
+            /** Job Id */
+            job_id: string;
+            /** Stream Url */
+            stream_url: string;
+            /**
+             * Status
+             * @default accepted
+             * @constant
+             */
+            status: "accepted";
+            /** Cache Key */
+            cache_key: string;
+        };
+        /** CorrelationMatrixPayload */
+        CorrelationMatrixPayload: {
+            /** Instrument Ids */
+            instrument_ids: string[];
+            /** Labels */
+            labels: string[];
+            /** Historical Matrix */
+            historical_matrix: number[][];
+            /** Structural Matrix */
+            structural_matrix: number[][];
+            /** Regime State At Calc */
+            regime_state_at_calc?: string | null;
+            /** Effective Window Days */
+            effective_window_days: number;
+            /** As Of Date */
+            as_of_date?: string | null;
+            /** Cache Key */
+            cache_key: string;
+            /**
+             * Psd Enforced
+             * @default true
+             */
+            psd_enforced: boolean;
+            /**
+             * Diagonal Normalized
+             * @default true
+             */
+            diagonal_normalized: boolean;
+        };
+        /** CorrelationMatrixRequest */
+        CorrelationMatrixRequest: {
+            /** Instrument Ids */
+            instrument_ids: string[];
+            /**
+             * Window Days
+             * @default 252
+             */
+            window_days: number;
+        };
         /** CorrelationRegimeRead */
         CorrelationRegimeRead: {
             /** Profile */
@@ -10858,6 +11513,29 @@ export interface components {
             block_gaps: components["schemas"]["BlockGapRead"][];
         };
         /**
+         * CoverageSummary
+         * @description Universe coverage summary from PR-A14.
+         *
+         *     Mirrors the JSONB block persisted by the construction executor.
+         *     ``pct_covered`` is 0..1; ``hard_fail`` is True when the coverage gate
+         *     aborted the cascade.
+         */
+        CoverageSummary: {
+            /** Pct Covered */
+            pct_covered?: number | null;
+            /**
+             * Hard Fail
+             * @default false
+             */
+            hard_fail: boolean;
+            /** N Total Blocks */
+            n_total_blocks?: number | null;
+            /** N Covered Blocks */
+            n_covered_blocks?: number | null;
+            /** Missing Blocks */
+            missing_blocks?: string[];
+        };
+        /**
          * CriticalGapItem
          * @description A single approval-blocking data gap flagged during IC Memo generation.
          */
@@ -10901,6 +11579,36 @@ export interface components {
             artifactVersion?: number | null;
             /** Generatedat */
             generatedAt?: string | null;
+        };
+        /** CrossAssetPoint */
+        CrossAssetPoint: {
+            /** Symbol */
+            symbol: string;
+            /** Name */
+            name: string;
+            /**
+             * Sector
+             * @enum {string}
+             */
+            sector: "RATES" | "FX" | "EQUITY" | "COMMODITY" | "CREDIT";
+            /** Last Value */
+            last_value?: number | null;
+            /** Change Pct */
+            change_pct?: number | null;
+            /**
+             * Unit
+             * @default
+             */
+            unit: string;
+            /** Sparkline */
+            sparkline?: number[];
+        };
+        /** CrossAssetResponse */
+        CrossAssetResponse: {
+            /** As Of Date */
+            as_of_date?: string | null;
+            /** Assets */
+            assets?: components["schemas"]["CrossAssetPoint"][];
         };
         /** CusipExposureRead */
         CusipExposureRead: {
@@ -12915,13 +13623,27 @@ export interface components {
         FactorAnalysisResponse: {
             /** Profile */
             profile: string;
-            /** Systematic Risk Pct */
+            /**
+             * Data Available
+             * @default true
+             */
+            data_available: boolean;
+            /**
+             * Systematic Risk Pct
+             * @default 0
+             */
             systematic_risk_pct: number;
-            /** Specific Risk Pct */
+            /**
+             * Specific Risk Pct
+             * @default 0
+             */
             specific_risk_pct: number;
             /** Factor Contributions */
             factor_contributions?: components["schemas"]["FactorContribution"][];
-            /** R Squared */
+            /**
+             * R Squared
+             * @default 0
+             */
             r_squared: number;
             /** Portfolio Factor Exposures */
             portfolio_factor_exposures?: {
@@ -13186,6 +13908,8 @@ export interface components {
             elite_rank_within_strategy?: number | null;
             /** Manager Score */
             manager_score?: number | null;
+            /** Blended Momentum Score */
+            blended_momentum_score?: number | null;
             /**
              * In Universe
              * @default false
@@ -13545,6 +14269,34 @@ export interface components {
             avg_annual_return_1y?: number | null;
             /** Avg Annual Return 10Y */
             avg_annual_return_10y?: number | null;
+        };
+        /** FundSearchResult */
+        FundSearchResult: {
+            /**
+             * Instrument Id
+             * @description Stable mv_unified_funds external_id
+             */
+            instrument_id: string;
+            /**
+             * Name
+             * @description Fund display name
+             */
+            name: string;
+            /**
+             * Ticker
+             * @description Ticker when available
+             */
+            ticker?: string | null;
+            /**
+             * Strategy Label
+             * @description Normalized strategy classification
+             */
+            strategy_label?: string | null;
+            /**
+             * Asset Class
+             * @description Fund type / asset class
+             */
+            asset_class?: string | null;
         };
         /**
          * FundStyleInfo
@@ -14396,6 +15148,21 @@ export interface components {
             /** Created At */
             created_at?: string | null;
         };
+        /**
+         * JobCreatedResponse
+         * @description Generic 202 response for async propose-mode dispatch.
+         */
+        JobCreatedResponse: {
+            /** Job Id */
+            job_id: string;
+            /** Sse Url */
+            sse_url: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+        };
         /** KnowledgeAnchorOut */
         KnowledgeAnchorOut: {
             /** Anchortype */
@@ -14406,6 +15173,34 @@ export interface components {
             sourceSnippet: string | null;
             /** Pagereference */
             pageReference: string | null;
+        };
+        /**
+         * LatestProposalResponse
+         * @description Response for ``GET /portfolio/profiles/{profile}/latest-proposal``.
+         *
+         *     PR-4a — additive ``phase_attempts`` and ``coverage`` surface the
+         *     existing ``cascade_telemetry`` JSONB fields already persisted by the
+         *     construction executor; no backend behavior changes.
+         */
+        LatestProposalResponse: {
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Winner Signal */
+            winner_signal: string;
+            /** Proposed Bands */
+            proposed_bands: components["schemas"]["ProposedBand"][];
+            proposal_metrics: components["schemas"]["ProposalMetrics"];
+            /** Phase Attempts */
+            phase_attempts?: components["schemas"]["CascadePhaseAttempt"][];
+            coverage?: components["schemas"]["CoverageSummary"] | null;
         };
         /** LayerAggregateScore */
         LayerAggregateScore: {
@@ -15308,6 +16103,17 @@ export interface components {
             /** Total Estimate */
             total_estimate?: number | null;
         };
+        /** MarketSensitivitiesPayload */
+        MarketSensitivitiesPayload: {
+            /** Exposures */
+            exposures?: components["schemas"]["ResearchMetricPoint"][];
+            /** R Squared */
+            r_squared?: number | null;
+            /** Systematic Risk Pct */
+            systematic_risk_pct?: number | null;
+            /** As Of Date */
+            as_of_date?: string | null;
+        };
         /** MarketingPresentationPdfResponse */
         MarketingPresentationPdfResponse: {
             /** Signedpdfurl */
@@ -16106,6 +16912,26 @@ export interface components {
             /** Sharpe Ratio */
             sharpe_ratio?: number | null;
         };
+        /** OrgCoverageRow */
+        OrgCoverageRow: {
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Last Run At */
+            last_run_at: string | null;
+            /** Last Added */
+            last_added: number;
+            /** Last Updated */
+            last_updated: number;
+            /** Last Skipped */
+            last_skipped: number;
+            /** Last Duration Ms */
+            last_duration_ms: number;
+            /** Total Rows */
+            total_rows: number;
+        };
         /** OverlapResultRead */
         OverlapResultRead: {
             /** Portfolio Id */
@@ -16324,6 +17150,44 @@ export interface components {
             cik_b: string;
             /** Overlap Pct */
             overlap_pct: number;
+        };
+        /** PeerMetricRow */
+        PeerMetricRow: {
+            /** Ticker */
+            ticker: string;
+            /** Name */
+            name: string;
+            /** Sharpe Ratio */
+            sharpe_ratio: number | null;
+            /** Max Drawdown */
+            max_drawdown: number | null;
+        };
+        /** PeerMetricsResponse */
+        PeerMetricsResponse: {
+            /** Fund Id */
+            fund_id: string;
+            /** Strategy Label */
+            strategy_label: string | null;
+            /** Peer Count */
+            peer_count: number;
+            /** Subject Sharpe */
+            subject_sharpe: number | null;
+            /** Subject Drawdown */
+            subject_drawdown: number | null;
+            /** Peer Sharpe P25 */
+            peer_sharpe_p25: number | null;
+            /** Peer Sharpe P50 */
+            peer_sharpe_p50: number | null;
+            /** Peer Sharpe P75 */
+            peer_sharpe_p75: number | null;
+            /** Peer Drawdown P25 */
+            peer_drawdown_p25: number | null;
+            /** Peer Drawdown P50 */
+            peer_drawdown_p50: number | null;
+            /** Peer Drawdown P75 */
+            peer_drawdown_p75: number | null;
+            /** Top Peers */
+            top_peers?: components["schemas"]["PeerMetricRow"][];
         };
         /** PeerRankingRead */
         PeerRankingRead: {
@@ -17710,6 +18574,48 @@ export interface components {
             has_more: boolean;
         };
         /**
+         * ProposalMetrics
+         * @description Headline ex-ante metrics for the propose-mode allocation.
+         *
+         *     ``cvar_feasible`` is False when the cascade fell through to the
+         *     Phase 3 min-CVaR fallback (universe floor exceeds the operator's
+         *     target); the bands are still returned so the operator can decide
+         *     whether to raise the limit or expand the universe.
+         */
+        ProposalMetrics: {
+            /** Expected Return */
+            expected_return?: number | null;
+            /** Expected Cvar */
+            expected_cvar?: number | null;
+            /** Expected Sharpe */
+            expected_sharpe?: number | null;
+            /** Target Cvar */
+            target_cvar?: number | null;
+            /** Cvar Feasible */
+            cvar_feasible: boolean;
+        };
+        /**
+         * ProposedBand
+         * @description One block's proposed strategic anchor + drift band.
+         *
+         *     Emitted by the propose-mode optimizer for every block in the
+         *     canonical template (excluded blocks have ``target_weight = 0`` and
+         *     ``drift_min = drift_max = 0``). Drift band is the hybrid
+         *     ``max(0.02, 0.15 * target)`` derivation per A26.1 spec.
+         */
+        ProposedBand: {
+            /** Block Id */
+            block_id: string;
+            /** Target Weight */
+            target_weight: number;
+            /** Drift Min */
+            drift_min: number;
+            /** Drift Max */
+            drift_max: number;
+            /** Rationale */
+            rationale?: string | null;
+        };
+        /**
          * ProspectusDataResponse
          * @description SEC prospectus data: fee table + annual return history.
          */
@@ -18112,6 +19018,55 @@ export interface components {
             /** Fred Series */
             fred_series?: string | null;
         };
+        /** RegimeTrailPoint */
+        RegimeTrailPoint: {
+            /**
+             * As Of Date
+             * Format: date
+             */
+            as_of_date: string;
+            /** G */
+            g: number;
+            /** I */
+            i: number;
+            /** Stress */
+            stress?: number | null;
+        };
+        /** RegimeTrailResponse */
+        RegimeTrailResponse: {
+            /** Points */
+            points?: components["schemas"]["RegimeTrailPoint"][];
+            /**
+             * Region
+             * @default US
+             */
+            region: string;
+        };
+        /** RegionalRegimeResponse */
+        RegionalRegimeResponse: {
+            /** As Of Date */
+            as_of_date?: string | null;
+            /** Regions */
+            regions?: components["schemas"]["RegionalRegimeRow"][];
+        };
+        /** RegionalRegimeRow */
+        RegionalRegimeRow: {
+            /** Region Code */
+            region_code: string;
+            /** Regime Label */
+            regime_label: string;
+            /**
+             * Stress Level
+             * @enum {string}
+             */
+            stress_level: "LOW" | "MED" | "HIGH";
+            /** Trend Up */
+            trend_up: boolean;
+            /** Growth Score */
+            growth_score?: number | null;
+            /** Inflation Score */
+            inflation_score?: number | null;
+        };
         /**
          * RegionalScoreRead
          * @description Complete macro scoring for a single region.
@@ -18246,6 +19201,42 @@ export interface components {
          * @enum {string}
          */
         ReportingFrequency: "MONTHLY" | "QUARTERLY" | "SEMI_ANNUAL" | "ANNUAL";
+        /** ResearchMetricPoint */
+        ResearchMetricPoint: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: number;
+            /**
+             * Significance
+             * @default none
+             * @enum {string}
+             */
+            significance: "high" | "medium" | "low" | "none";
+        };
+        /** ResearchScatterResponse */
+        ResearchScatterResponse: {
+            /** Instrument Ids */
+            instrument_ids: string[];
+            /** Names */
+            names: string[];
+            /** Tickers */
+            tickers: (string | null)[];
+            /** Expected Returns */
+            expected_returns: (number | null)[];
+            /** Tail Risks */
+            tail_risks: (number | null)[];
+            /** Volatilities */
+            volatilities: (number | null)[];
+            /** Strategies */
+            strategies: string[];
+            /** Strategy Map */
+            strategy_map: {
+                [key: string]: string;
+            };
+            /** As Of Dates */
+            as_of_dates: (string | null)[];
+        };
         /** ReturnDistribution */
         ReturnDistribution: {
             /** Bin Edges */
@@ -18867,6 +19858,45 @@ export interface components {
             /** Values */
             values: number[];
         };
+        /** RunRequest */
+        RunRequest: {
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /**
+             * Reason
+             * @description Free-form label persisted to audit_events.after_state.reason. Use short snake_case tags (e.g. 'org_provisioning', 'manual_reimport_after_rejection_reversal').
+             */
+            reason: string;
+        };
+        /** RunResponse */
+        RunResponse: {
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Evaluated */
+            evaluated: number;
+            /** Added */
+            added: number;
+            /** Updated */
+            updated: number;
+            /** Skipped */
+            skipped: number;
+            /** Skipped By Reason */
+            skipped_by_reason: {
+                [key: string]: number;
+            };
+            /** Duration Ms */
+            duration_ms: number;
+            /** Aum Floor Usd */
+            aum_floor_usd: number;
+            /** Nav Coverage Min */
+            nav_coverage_min: number;
+        };
         /** ScheduleCreate */
         ScheduleCreate: {
             /** Name */
@@ -19152,6 +20182,22 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** SearchResponse */
+        SearchResponse: {
+            /** Results */
+            results: components["schemas"]["FundSearchResult"][];
+            /**
+             * Latency Ms
+             * @description Backend latency in milliseconds
+             */
+            latency_ms: number;
+            /**
+             * Cached
+             * @description True when served from Redis
+             * @default false
+             */
+            cached: boolean;
+        };
         /** SearchResultItem */
         SearchResultItem: {
             /** Id */
@@ -19403,6 +20449,23 @@ export interface components {
             checked_at: string;
         };
         /**
+         * SetOverrideRequest
+         * @description Body for ``POST /portfolio/profiles/{profile}/set-override``.
+         *
+         *     Either bound may be ``None`` — set just one side (e.g. only
+         *     ``override_max``) or both, or clear both by passing ``None``.
+         */
+        SetOverrideRequest: {
+            /** Block Id */
+            block_id: string;
+            /** Override Min */
+            override_min?: number | null;
+            /** Override Max */
+            override_max?: number | null;
+            /** Rationale */
+            rationale?: string | null;
+        };
+        /**
          * ShareClassItem
          * @description Single share class within a registered fund.
          */
@@ -19452,6 +20515,20 @@ export interface components {
              * Format: date-time
              */
             computed_at: string;
+        };
+        /** SingleFundResearchResponse */
+        SingleFundResearchResponse: {
+            /**
+             * Instrument Id
+             * Format: uuid
+             */
+            instrument_id: string;
+            /** Instrument Name */
+            instrument_name: string;
+            /** Ticker */
+            ticker?: string | null;
+            market_sensitivities: components["schemas"]["MarketSensitivitiesPayload"];
+            style_bias: components["schemas"]["StyleBiasPayload"];
         };
         /**
          * SparklinePoint
@@ -19506,6 +20583,51 @@ export interface components {
             /** Embedding Model */
             embedding_model: string;
         };
+        /** StatusResponse */
+        StatusResponse: {
+            /** Aum Floor Usd */
+            aum_floor_usd: number;
+            /** Nav Coverage Min */
+            nav_coverage_min: number;
+            /** Per Org */
+            per_org: components["schemas"]["OrgCoverageRow"][];
+        };
+        /**
+         * StrategicAllocationBlock
+         * @description One canonical block row on the allocation page (Section A / C).
+         *
+         *     Extends :class:`StrategicAllocationRow` with ``block_name`` for the
+         *     frontend (humanized label) plus ``approved_from_run_id`` for
+         *     provenance tracing. ``target_weight`` / ``drift_*`` / ``approved_*``
+         *     are ``None`` when the block has never been approved.
+         */
+        StrategicAllocationBlock: {
+            /** Block Id */
+            block_id: string;
+            /** Block Name */
+            block_name: string;
+            /** Target Weight */
+            target_weight?: number | null;
+            /** Drift Min */
+            drift_min?: number | null;
+            /** Drift Max */
+            drift_max?: number | null;
+            /** Override Min */
+            override_min?: number | null;
+            /** Override Max */
+            override_max?: number | null;
+            /**
+             * Excluded From Portfolio
+             * @default false
+             */
+            excluded_from_portfolio: boolean;
+            /** Approved From Run Id */
+            approved_from_run_id?: string | null;
+            /** Approved At */
+            approved_at?: string | null;
+            /** Approved By */
+            approved_by?: string | null;
+        };
         /** StrategicAllocationItem */
         StrategicAllocationItem: {
             /** Block Id */
@@ -19533,11 +20655,11 @@ export interface components {
             /** Block Id */
             block_id: string;
             /** Target Weight */
-            target_weight: string;
+            target_weight?: string | null;
             /** Min Weight */
-            min_weight: string;
+            min_weight?: string | null;
             /** Max Weight */
-            max_weight: string;
+            max_weight?: string | null;
             /** Risk Budget */
             risk_budget?: string | null;
             /** Rationale */
@@ -19556,6 +20678,63 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * StrategicAllocationResponse
+         * @description Response for ``GET /portfolio/profiles/{profile}/strategic-allocation``.
+         *
+         *     ``cvar_limit`` is resolved from the active ``portfolio_calibration``
+         *     row for the profile's live/paused model portfolio; it falls back to
+         *     the institutional default (per-profile) when no portfolio exists
+         *     yet. ``has_active_approval`` is True iff at least one block row
+         *     carries a non-NULL ``approved_at`` — i.e. the Strategic IPS has
+         *     been snapshotted at least once for this (org, profile) pair.
+         */
+        StrategicAllocationResponse: {
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Profile */
+            profile: string;
+            /** Cvar Limit */
+            cvar_limit: number;
+            /** Has Active Approval */
+            has_active_approval: boolean;
+            /** Last Approved At */
+            last_approved_at?: string | null;
+            /** Last Approved By */
+            last_approved_by?: string | null;
+            /** Blocks */
+            blocks: components["schemas"]["StrategicAllocationBlock"][];
+        };
+        /**
+         * StrategicAllocationRow
+         * @description Single strategic_allocation row after approval (Section C).
+         */
+        StrategicAllocationRow: {
+            /** Block Id */
+            block_id: string;
+            /** Target Weight */
+            target_weight?: number | null;
+            /** Drift Min */
+            drift_min?: number | null;
+            /** Drift Max */
+            drift_max?: number | null;
+            /** Override Min */
+            override_min?: number | null;
+            /** Override Max */
+            override_max?: number | null;
+            /** Approved At */
+            approved_at?: string | null;
+            /** Approved By */
+            approved_by?: string | null;
+            /**
+             * Excluded From Portfolio
+             * @default false
+             */
+            excluded_from_portfolio: boolean;
         };
         /** StrategicAllocationUpdate */
         StrategicAllocationUpdate: {
@@ -19686,6 +20865,13 @@ export interface components {
             worst_block?: string | null;
             /** Best Block */
             best_block?: string | null;
+        };
+        /** StyleBiasPayload */
+        StyleBiasPayload: {
+            /** Exposures */
+            exposures?: components["schemas"]["ResearchMetricPoint"][];
+            /** As Of Date */
+            as_of_date?: string | null;
         };
         /**
          * StyleHistoryResponse
@@ -20288,6 +21474,8 @@ export interface components {
             elite_rank_within_strategy?: number | null;
             /** Manager Score */
             manager_score?: number | null;
+            /** Blended Momentum Score */
+            blended_momentum_score?: number | null;
             /**
              * In Universe
              * @default false
@@ -22444,6 +23632,59 @@ export interface operations {
             };
         };
     };
+    run_auto_import_api_v1_admin_universe_auto_import_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_status_api_v1_admin_universe_auto_import_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusResponse"];
+                };
+            };
+        };
+    };
     list_funds_api_v1_funds_get: {
         parameters: {
             query?: {
@@ -24418,6 +25659,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_cross_asset_api_v1_macro_cross_asset_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrossAssetResponse"];
+                };
+            };
+        };
+    };
+    get_regime_trail_api_v1_macro_regime_trail_get: {
+        parameters: {
+            query?: {
+                /** @description Region key, e.g. US, EUROPE, ASIA, EM */
+                region?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegimeTrailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_cb_calendar_api_v1_macro_cb_calendar_get: {
+        parameters: {
+            query?: {
+                /** @description Number of upcoming events */
+                n?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CbCalendarResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_regional_regime_api_v1_macro_regional_regime_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionalRegimeResponse"];
                 };
             };
         };
@@ -27620,6 +28965,204 @@ export interface operations {
             };
         };
     };
+    propose_allocation_api_v1_portfolio_profiles__profile__propose_allocation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobCreatedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    latest_proposal_api_v1_portfolio_profiles__profile__latest_proposal_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LatestProposalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_proposal_api_v1_portfolio_profiles__profile__approve_proposal__run_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_override_api_v1_portfolio_profiles__profile__set_override_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetOverrideRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategicAllocationRow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_strategic_allocation_api_v1_portfolio_profiles__profile__strategic_allocation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategicAllocationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_approval_history_api_v1_portfolio_profiles__profile__approval_history_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                profile: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_views_api_v1_model_portfolios__portfolio_id__views_get: {
         parameters: {
             query?: never;
@@ -27736,6 +29279,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_cvar_api_v1_portfolios__id__preview_cvar_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -28465,6 +30039,133 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_correlation_matrix_api_v1_research_correlation_matrix_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorrelationMatrixRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorrelationMatrixPayload"] | components["schemas"]["CorrelationMatrixAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_single_fund_research_api_v1_research_funds__instrument_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instrument_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SingleFundResearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_research_scatter_api_v1_research_scatter_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                approved_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchScatterResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_peer_metrics_api_v1_screener_peer_metrics__fund_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fund_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerMetricsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -30398,7 +32099,39 @@ export interface operations {
             };
         };
     };
-    global_search_api_v1_search_get: {
+    command_palette_search_api_v1_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    global_search_api_v1_search_global_get: {
         parameters: {
             query: {
                 q: string;
@@ -30871,6 +32604,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProspectusDataResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    market_events_api_v1_market_data_events_get: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated tags, e.g. regime,alert */
+                tags?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

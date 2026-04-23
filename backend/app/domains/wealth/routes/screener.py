@@ -1900,6 +1900,13 @@ async def get_catalog(
                 elite_flag=bool(r.elite_flag) if getattr(r, "elite_flag", None) is not None else None,
                 elite_rank_within_strategy=getattr(r, "elite_rank_within_strategy", None),
                 manager_score=float(r.manager_score) if getattr(r, "manager_score", None) is not None else None,
+                sharpe_1y=float(r.sharpe_1y) if getattr(r, "sharpe_1y", None) is not None else None,
+                max_drawdown_1y=(
+                    float(r.max_drawdown_1y)
+                    if getattr(r, "max_drawdown_1y", None) is not None
+                    else None
+                ),
+                volatility_1y=float(r.volatility_1y) if getattr(r, "volatility_1y", None) is not None else None,
                 blended_momentum_score=(
                     float(r.blended_momentum_score)
                     if getattr(r, "blended_momentum_score", None) is not None
