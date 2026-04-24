@@ -140,6 +140,20 @@ async def test_fast_approve_empty_list(client: AsyncClient):
 
 async def test_keyset_pagination_no_overlap(client: AsyncClient):
     """Fetch 3 pages via cursor chaining — no row overlap, final cursor null."""
+    # Runtime self-gate — need ≥ page_size * 2 funds (at least 6 rows for
+    # page_size=3) to meaningfully test pagination across multiple pages.
+    # Fresh DBs return 0.
+    preflight = await client.get(
+        "/api/v1/screener/catalog",
+        params={"page_size": 100, "has_nav": True},
+        headers=DEV_ACTOR_HEADER,
+    )
+    if preflight.status_code == 200 and len(preflight.json().get("items", [])) < 6:
+        pytest.skip(
+            "requires ≥6 funds in mv_fund_risk_latest for keyset pagination "
+            "across 3 pages. Run scripts/dev_seed_local.py to enable."
+        )
+
     page_size = 3
     seen_ids: set[str] = set()
     cursor = None
