@@ -6,7 +6,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 SignificanceLevel = Literal["high", "medium", "low", "none"]
 
 

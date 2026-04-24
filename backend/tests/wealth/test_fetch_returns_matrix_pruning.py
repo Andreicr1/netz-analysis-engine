@@ -18,13 +18,10 @@ Fix: exclude approval_status='rejected' instruments from the io_stmt query.
 from __future__ import annotations
 
 from app.domains.wealth.services.quant_queries import (
-    MIN_OBSERVATIONS,
     _FFILL_LIMIT,
+    MIN_OBSERVATIONS,
     _align_returns_with_ffill,
 )
-import numpy as np
-import pytest
-
 
 # ── Unit: pruning logic (no DB) ────────────────────────────────────────────
 

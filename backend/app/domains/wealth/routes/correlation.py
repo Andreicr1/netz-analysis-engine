@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any
 
 import numpy as np

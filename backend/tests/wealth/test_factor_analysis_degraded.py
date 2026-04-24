@@ -9,8 +9,6 @@ so the UI degrades gracefully (empty chart) instead of throwing.
 """
 from __future__ import annotations
 
-import uuid
-from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -69,7 +67,6 @@ async def test_factor_analysis_returns_200_when_nav_data_insufficient() -> None:
         "app.domains.wealth.routes.analytics._validate_profile",
         return_value=None,
     ):
-        import numpy as np
         db = AsyncMock()
 
         result = await get_factor_analysis(

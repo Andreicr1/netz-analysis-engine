@@ -10,8 +10,8 @@ attribution still runs with real fund NAV data even without a live portfolio.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import date
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
