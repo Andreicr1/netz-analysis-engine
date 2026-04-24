@@ -94,8 +94,12 @@ export type WinnerSignal =
 	| "robustness_fallback"
 	| "degraded_other"
 	| "pre_solve_failure"
-	// PR-A22 — block coverage gate aborted the run before the optimizer.
-	| "block_coverage_insufficient";
+	| "block_coverage_insufficient"
+	| "template_incomplete"
+	| "proposal_ready"
+	| "proposal_cvar_infeasible"
+	| "no_approved_allocation"
+	| "instrument_concentration_breach";
 
 /**
  * PR-A22 — per-block gap in the profile's StrategicAllocation. Surfaced
