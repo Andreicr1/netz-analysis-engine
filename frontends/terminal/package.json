@@ -8,7 +8,9 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"check": "svelte-check --tsconfig ./tsconfig.json",
-		"lint": "eslint src/"
+		"lint": "eslint src/",
+		"test:e2e": "playwright test",
+		"test:e2e:ui": "playwright test --ui"
 	},
 	"dependencies": {
 		"@clerk/clerk-js": "^6.3.2",
@@ -18,8 +20,8 @@
 		"@codemirror/merge": "^6.12.0",
 		"@codemirror/state": "^6.6.0",
 		"@codemirror/view": "^6.40.0",
-		"@fontsource/ibm-plex-sans": "^5.0.0",
 		"@fontsource/ibm-plex-mono": "^5.0.0",
+		"@fontsource/ibm-plex-sans": "^5.0.0",
 		"@fontsource/montserrat": "^5.0.0",
 		"@investintell/ii-terminal-core": "workspace:*",
 		"@investintell/ui": "workspace:*",
@@ -36,6 +38,7 @@
 		"uuid": "^10.0.0"
 	},
 	"devDependencies": {
+		"@playwright/test": "^1.58.2",
 		"@sveltejs/adapter-node": "^5.5.4",
 		"@sveltejs/kit": "^2.0.0",
 		"@sveltejs/vite-plugin-svelte": "^5.0.0",
