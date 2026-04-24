@@ -42,6 +42,14 @@ from app.domains.wealth.routes.model_portfolios import (
 
 pytestmark = pytest.mark.asyncio
 
+_CANONICAL_BLOCKS = (
+    "na_equity_large", "na_equity_growth", "na_equity_value", "na_equity_small",
+    "dm_europe_equity", "dm_asia_equity", "em_equity",
+    "fi_us_aggregate", "fi_us_treasury", "fi_us_short_term",
+    "fi_us_high_yield", "fi_us_tips", "fi_ig_corporate", "fi_em_debt",
+    "alt_real_estate", "alt_gold", "alt_commodities", "cash",
+)
+
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -492,6 +500,26 @@ async def test_executor_marks_heuristic_fallback_runs_as_degraded() -> None:
             )
             await db.flush()
 
+            # Seed ONE strategic_allocation row; the AFTER INSERT trigger
+            # (trg_enforce_allocation_template_sa) auto-creates the other
+            # 17 canonical blocks. Then UPDATE all to:
+            # - target_weight=NULL so the coverage gate (PR-A22) skips them
+            #   (query filters target_weight > 0)
+            # - approved_at=now() so the realize-mode gate (PR-A26.2) passes
+            await _seed_strategic_allocation(
+                db, org_id=org_id, profile="moderate",
+                block_id=_CANONICAL_BLOCKS[0],
+            )
+            await db.execute(
+                text(
+                    "UPDATE strategic_allocation "
+                    "SET approved_at = now(), target_weight = NULL "
+                    "WHERE organization_id = :org AND profile = 'moderate'"
+                ),
+                {"org": org_id},
+            )
+            await db.flush()
+
             with mock_patch(
                 "app.domains.wealth.routes.model_portfolios._run_construction_async",
                 new=_fake,
@@ -574,6 +602,26 @@ async def test_executor_marks_real_solver_runs_as_succeeded() -> None:
                     state_changed_by="test",
                     created_by="test",
                 ),
+            )
+            await db.flush()
+
+            # Seed ONE strategic_allocation row; the AFTER INSERT trigger
+            # (trg_enforce_allocation_template_sa) auto-creates the other
+            # 17 canonical blocks. Then UPDATE all to:
+            # - target_weight=NULL so the coverage gate (PR-A22) skips them
+            #   (query filters target_weight > 0)
+            # - approved_at=now() so the realize-mode gate (PR-A26.2) passes
+            await _seed_strategic_allocation(
+                db, org_id=org_id, profile="moderate",
+                block_id=_CANONICAL_BLOCKS[0],
+            )
+            await db.execute(
+                text(
+                    "UPDATE strategic_allocation "
+                    "SET approved_at = now(), target_weight = NULL "
+                    "WHERE organization_id = :org AND profile = 'moderate'"
+                ),
+                {"org": org_id},
             )
             await db.flush()
 

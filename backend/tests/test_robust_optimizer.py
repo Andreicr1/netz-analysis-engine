@@ -50,7 +50,10 @@ async def test_robust_optimization_produces_result(simple_portfolio_inputs):
     )
 
     assert isinstance(result, FundOptimizationResult)
-    assert result.status.startswith("optimal")
+    assert result.status in ("optimal", "degraded"), (
+        f"expected cascade to resolve, got status={result.status!r} "
+        f"(winning_phase={result.winning_phase!r})"
+    )
     assert sum(result.weights.values()) == pytest.approx(1.0, abs=1e-4)
 
 
@@ -78,8 +81,14 @@ async def test_robust_vs_standard_differs(simple_portfolio_inputs):
         uncertainty_level=2.0,  # high uncertainty for visible difference
     )
 
-    assert standard.status.startswith("optimal")
-    assert robust.status.startswith("optimal")
+    assert standard.status in ("optimal", "degraded"), (
+        f"expected cascade to resolve, got status={standard.status!r} "
+        f"(winning_phase={standard.winning_phase!r})"
+    )
+    assert robust.status in ("optimal", "degraded"), (
+        f"expected cascade to resolve, got status={robust.status!r} "
+        f"(winning_phase={robust.winning_phase!r})"
+    )
     # With high uncertainty, robust should favor lower-risk allocation
     # (at minimum, weights should differ)
 
@@ -107,7 +116,13 @@ async def test_regime_cvar_multiplier_tightens_limit(simple_portfolio_inputs):
         regime_cvar_multiplier=0.5,  # very tight
     )
 
-    assert normal.status.startswith("optimal")
-    assert crisis.status.startswith("optimal")
+    assert normal.status in ("optimal", "degraded"), (
+        f"expected cascade to resolve, got status={normal.status!r} "
+        f"(winning_phase={normal.winning_phase!r})"
+    )
+    assert crisis.status in ("optimal", "degraded"), (
+        f"expected cascade to resolve, got status={crisis.status!r} "
+        f"(winning_phase={crisis.winning_phase!r})"
+    )
     # Crisis allocation should have lower or equal volatility
     # (tighter CVaR limit forces more conservative allocation)

@@ -39,6 +39,14 @@ from app.core.config import settings
 
 ORG_ID = "00000000-0000-0000-0000-000000000001"
 
+_CANONICAL_BLOCKS = (
+    "na_equity_large", "na_equity_growth", "na_equity_value", "na_equity_small",
+    "dm_europe_equity", "dm_asia_equity", "em_equity",
+    "fi_us_aggregate", "fi_us_treasury", "fi_us_short_term",
+    "fi_us_high_yield", "fi_us_tips", "fi_ig_corporate", "fi_em_debt",
+    "alt_real_estate", "alt_gold", "alt_commodities", "cash",
+)
+
 DEV_ACTOR_HEADER = {
     "X-DEV-ACTOR": json.dumps(
         {
@@ -143,9 +151,16 @@ _CONCENTRATED_OPTIMIZER_OUTPUT = {
 
 @pytest.fixture
 async def seeded_portfolio():
-    """Insert a ``model_portfolios`` row for the test org and yield its ID.
+    """Insert a ``model_portfolios`` row + 18 strategic_allocation rows
+    (one per canonical block, NULL weights) for the test org.
 
-    Cleans up the portfolio + its construction runs at teardown.
+    PR-A25's template-completeness gate (migration 0153) requires
+    strategic_allocation rows for every (org, profile, canonical_block)
+    tuple — without them the construction executor short-circuits to
+    'failed' with reason 'template_incomplete' before the optimizer runs.
+
+    Cleans up the portfolio + strategic_allocation + construction runs
+    at teardown.
     """
     portfolio_id = uuid.uuid4()
     conn = await asyncpg.connect(_asyncpg_dsn())
@@ -160,6 +175,39 @@ async def seeded_portfolio():
             """,
             portfolio_id, ORG_ID,
         )
+
+        # Clean up any stale strategic_allocation rows for this org+profile
+        # (e.g. from a prior interrupted test run).
+        await conn.execute(
+            "DELETE FROM strategic_allocation "
+            "WHERE organization_id = $1::uuid AND profile = 'moderate'",
+            ORG_ID,
+        )
+
+        # Insert ONE strategic_allocation row. The AFTER INSERT trigger
+        # (trg_enforce_allocation_template_sa) auto-creates the remaining
+        # 17 canonical blocks. Then UPDATE all 18 to set approved_at
+        # (PR-A26.2 realize-mode gate requires it).
+        await conn.execute(
+            """
+            INSERT INTO strategic_allocation (
+                allocation_id, organization_id, profile, block_id,
+                target_weight, effective_from,
+                excluded_from_portfolio, actor_source, created_at
+            ) VALUES (
+                gen_random_uuid(), $1::uuid, 'moderate', $2,
+                NULL, CURRENT_DATE,
+                false, 'test_fixture_seed', now()
+            )
+            """,
+            ORG_ID, _CANONICAL_BLOCKS[0],
+        )
+        await conn.execute(
+            "UPDATE strategic_allocation SET approved_at = now() "
+            "WHERE organization_id = $1::uuid AND profile = 'moderate'",
+            ORG_ID,
+        )
+
         yield portfolio_id
     finally:
         try:
@@ -174,6 +222,12 @@ async def seeded_portfolio():
             await conn.execute(
                 "DELETE FROM model_portfolios WHERE id = $1",
                 portfolio_id,
+            )
+            # Clean up ALL strategic_allocation rows (ours + trigger-created)
+            await conn.execute(
+                "DELETE FROM strategic_allocation "
+                "WHERE organization_id = $1::uuid AND profile = 'moderate'",
+                ORG_ID,
             )
         finally:
             await conn.close()
