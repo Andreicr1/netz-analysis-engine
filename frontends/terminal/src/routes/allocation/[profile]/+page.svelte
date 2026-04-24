@@ -48,6 +48,8 @@
 	import PortfolioTabContent from "../../../lib/components/builder/PortfolioTabContent.svelte";
 	import StressTabContent from "../../../lib/components/builder/StressTabContent.svelte";
 	import RegimeContextStrip from "@investintell/ii-terminal-core/components/allocation/RegimeContextStrip.svelte";
+	import StrategicApprovalBanner from "@investintell/ii-terminal-core/components/allocation/StrategicApprovalBanner.svelte";
+	import { approval } from "@investintell/ii-terminal-core/state/workspace-approval.svelte";
 
 	import type { PageData } from "./$types";
 
@@ -117,6 +119,14 @@
 			: {},
 	);
 
+	// Wire approval state refresh when profile changes.
+	$effect(() => {
+		if (profile) {
+			approval.setGetToken(getToken);
+			approval.refresh(profile);
+		}
+	});
+
 	// Resolve the selected portfolio's display name for the breadcrumb
 	// badge — only relevant on PORTFOLIO / STRESS tabs where a portfolio
 	// is actually in play.
@@ -162,6 +172,9 @@
 						{apiPost}
 						{getToken}
 						{apiBase}
+					/>
+					<StrategicApprovalBanner
+						onNavigate={(to) => { if (to === "portfolio") setTab("portfolio"); }}
 					/>
 				</div>
 			{:else if activeTab === "portfolio"}

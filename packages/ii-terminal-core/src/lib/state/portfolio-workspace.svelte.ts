@@ -1832,6 +1832,14 @@ export class PortfolioWorkspaceState {
 	async runBuildJob(): Promise<ConstructionRunPayload | null> {
 		if (!this._getToken || !this.portfolioId) return null;
 
+		// Gate: strategic allocation must be approved before building.
+		const { approval } = await import("./workspace-approval.svelte");
+		if (!approval.canBuild) {
+			this.runError = "Strategic allocation not approved. Approve the IPS before building.";
+			this.runPhase = "error";
+			return null;
+		}
+
 		// Cancel any in-flight BUILD stream if the user re-presses.
 		this._activeBuildAbort?.abort();
 		const abort = new AbortController();
