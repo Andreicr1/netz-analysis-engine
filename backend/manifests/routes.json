@@ -146,6 +146,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/admin/universe/auto-import/status",
+    "name": "get_status"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/ai/activity",
     "name": "activity"
   },
@@ -866,6 +871,16 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/macro/cb-calendar",
+    "name": "get_cb_calendar"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/macro/cross-asset",
+    "name": "get_cross_asset"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/macro/fred",
     "name": "get_fred_data"
   },
@@ -883,6 +898,16 @@
     "method": "GET",
     "path": "/api/v1/macro/regime",
     "name": "get_regime"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/macro/regime/trail",
+    "name": "get_regime_trail"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/macro/regional-regime",
+    "name": "get_regional_regime"
   },
   {
     "method": "GET",
@@ -968,6 +993,11 @@
     "method": "GET",
     "path": "/api/v1/market-data/dashboard-snapshot",
     "name": "dashboard_snapshot"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/market-data/events",
+    "name": "market_events"
   },
   {
     "method": "GET",
@@ -1111,6 +1141,21 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/portfolio/profiles/{profile}/approval-history",
+    "name": "get_approval_history"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/portfolio/profiles/{profile}/latest-proposal",
+    "name": "latest_proposal"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/portfolio/profiles/{profile}/strategic-allocation",
+    "name": "get_strategic_allocation"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/portfolio/regime/current",
     "name": "get_current_regime_endpoint"
   },
@@ -1191,6 +1236,16 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/research/funds/{instrument_id}",
+    "name": "get_single_fund_research"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/research/scatter",
+    "name": "get_research_scatter"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/risk/macro",
     "name": "get_macro"
   },
@@ -1236,6 +1291,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/screener/catalog/detail/{external_id}",
+    "name": "get_catalog_fund_detail_alias"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/screener/catalog/elite",
     "name": "get_elite_catalog"
   },
@@ -1276,6 +1336,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/screener/peer-metrics/{fund_id}",
+    "name": "get_peer_metrics"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/screener/results",
     "name": "list_results"
   },
@@ -1312,6 +1377,11 @@
   {
     "method": "GET",
     "path": "/api/v1/search",
+    "name": "command_palette_search"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/search/global",
     "name": "global_search"
   },
   {
@@ -1458,6 +1528,11 @@
     "method": "GET",
     "path": "/api/v1/wealth/documents/{document_id}/preview-url",
     "name": "get_preview_url"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/wealth/entity-analytics/{entity_id}",
+    "name": "get_entity_analytics_alias"
   },
   {
     "method": "GET",
@@ -1628,6 +1703,11 @@
     "method": "POST",
     "path": "/api/v1/admin/tenants/{org_id}/seed",
     "name": "seed_tenant"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/universe/auto-import/run",
+    "name": "run_auto_import"
   },
   {
     "method": "POST",
@@ -2141,6 +2221,31 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/portfolio/profiles/{profile}/approve-proposal/{run_id}",
+    "name": "approve_proposal"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/portfolio/profiles/{profile}/propose-allocation",
+    "name": "propose_allocation"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/portfolio/profiles/{profile}/set-override",
+    "name": "set_override"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/portfolios/{id}/build",
+    "name": "build_portfolio"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/portfolios/{id}/preview-cvar",
+    "name": "preview_cvar"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/portfolios/{profile}/rebalance",
     "name": "trigger_rebalance"
   },
@@ -2168,6 +2273,11 @@
     "method": "POST",
     "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/monthly-report",
     "name": "generate_monthly_report"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/research/correlation/matrix",
+    "name": "post_correlation_matrix"
   },
   {
     "method": "POST",
@@ -2398,6 +2508,11 @@
     "method": "POST",
     "path": "/api/v1/workers/run-sec-refresh",
     "name": "trigger_run_sec_refresh"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-tiingo-enrichment",
+    "name": "trigger_run_tiingo_enrichment"
   },
   {
     "method": "POST",

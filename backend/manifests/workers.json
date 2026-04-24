@@ -146,6 +146,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-tiingo-enrichment",
+    "name": "trigger_run_tiingo_enrichment"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-treasury-ingestion",
     "name": "trigger_run_treasury_ingestion"
   },

@@ -29,16 +29,19 @@ async def test_sec_managers_aum_crd_index_exists():
 
 
 @pytest.mark.asyncio
-async def test_mv_unified_funds_mgr_aum_index_exists():
+async def test_mv_unified_funds_aum_index_exists():
+    # Originally idx_mv_unified_funds_mgr_aum (composite on manager_id, aum_usd)
+    # created by migration 0096. Subsequent matview rebuilds (latest: 0135)
+    # DROP CASCADE the view and recreate with idx_mv_unified_funds_aum (aum_usd only).
     conn = await asyncpg.connect(_asyncpg_dsn())
     try:
         row = await conn.fetchval(
             """
             SELECT indexname FROM pg_indexes
             WHERE tablename = 'mv_unified_funds'
-              AND indexname = 'idx_mv_unified_funds_mgr_aum'
+              AND indexname = 'idx_mv_unified_funds_aum'
             """
         )
     finally:
         await conn.close()
-    assert row == "idx_mv_unified_funds_mgr_aum"
+    assert row == "idx_mv_unified_funds_aum"
