@@ -299,11 +299,13 @@ class TestFundLevelOptimizer:
             constraints=constraints,
         )
 
-        # Should have re-optimized (Phase 2 or 3)
-        assert result.status in (
-            "optimal:cvar_constrained",
-            "optimal:min_variance_fallback",
-            "optimal:cvar_violated",  # worst case if all phases exhausted
+        # Post-A12 vocab: Phase 2 → "optimal", Phase 3 → "degraded".
+        # Check winning_phase for phase detail.
+        assert result.status in ("optimal", "degraded"), (
+            f"expected re-optimization, got status={result.status!r}"
+        )
+        assert result.winning_phase in ("phase_2_variance_capped", "phase_3_min_cvar"), (
+            f"expected Phase 2 or 3 to win, got {result.winning_phase!r}"
         )
         assert result.cvar_95 is not None
         # The re-optimized solution should have lower volatility than unconstrained

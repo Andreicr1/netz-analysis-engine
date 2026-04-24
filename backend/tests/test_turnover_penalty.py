@@ -57,7 +57,9 @@ class TestTurnoverPenalty:
             current_weights=None,
             turnover_cost=0.001,
         )
-        assert result.status.startswith("optimal")
+        assert result.status in ("optimal", "degraded"), (
+            f"expected cascade to resolve, got status={result.status!r}"
+        )
         assert sum(result.weights.values()) == pytest.approx(1.0, abs=0.01)
 
     @pytest.mark.asyncio
@@ -88,8 +90,12 @@ class TestTurnoverPenalty:
             turnover_cost=0.01,  # significant penalty
         )
 
-        assert result_no_penalty.status.startswith("optimal")
-        assert result_with_penalty.status.startswith("optimal")
+        assert result_no_penalty.status in ("optimal", "degraded"), (
+            f"expected cascade to resolve, got status={result_no_penalty.status!r}"
+        )
+        assert result_with_penalty.status in ("optimal", "degraded"), (
+            f"expected cascade to resolve, got status={result_with_penalty.status!r}"
+        )
 
         # Compute turnover for both
         w_no = np.array([result_no_penalty.weights[f] for f in fund_ids])
@@ -116,7 +122,9 @@ class TestTurnoverPenalty:
             current_weights=current,
             turnover_cost=0.0,
         )
-        assert result.status.startswith("optimal")
+        assert result.status in ("optimal", "degraded"), (
+            f"expected cascade to resolve, got status={result.status!r}"
+        )
 
 
 class TestDeadBand:
