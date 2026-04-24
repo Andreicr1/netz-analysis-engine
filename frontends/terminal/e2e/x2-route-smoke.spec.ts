@@ -25,7 +25,6 @@ const TEST_ORG_ID =
 const X2_ROUTES: ReadonlyArray<string> = [
 	"/live",
 	"/screener",
-	"/screener/research",
 	"/macro",
 	"/allocation",
 	"/portfolio/builder",

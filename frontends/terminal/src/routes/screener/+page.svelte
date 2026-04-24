@@ -115,6 +115,7 @@
 		fundLabel={focusEntity.entityLabel ?? ""}
 		ticker={focusEntity.ticker ?? null}
 		instrumentId={focusEntity.instrumentId ?? null}
+		initialTab={focusEntity.initialTab ?? "performance"}
 		onClose={closeFocusMode}
 	/>
 {/if}

@@ -121,7 +121,7 @@ async def fetch_top_holdings(
                 "issuer_name": r["issuer_name"],
                 "cusip": r["cusip"],
                 "sector": r["sector"],
-                "weight": float(r["pct_of_nav"]) if r["pct_of_nav"] is not None else None,
+                "weight": float(r["pct_of_nav"]) / 100.0 if r["pct_of_nav"] is not None else None,
                 "market_value": int(r["market_value"]) if r["market_value"] is not None else None,
             }
             for r in top_rows
@@ -129,7 +129,7 @@ async def fetch_top_holdings(
         "sector_breakdown": [
             {
                 "name": r["sector"],
-                "weight": float(r["weight"]) if r["weight"] is not None else None,
+                "weight": float(r["weight"]) / 100.0 if r["weight"] is not None else None,
                 "holdings_count": int(r["holdings_count"]),
             }
             for r in sector_rows

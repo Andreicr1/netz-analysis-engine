@@ -28,12 +28,12 @@
 	} from "./TerminalScreenerFilters.svelte";
 	import TerminalDataGrid, { type ScreenerAsset } from "./TerminalDataGrid.svelte";
 	import FilterChipRow from "./FilterChipRow.svelte";
+	import type { FocusTriggerInitialTab } from "../terminal/focus-mode/focus-trigger";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
 
 	const HREF_BUILDER = `${base}/portfolio/builder`;
-	const HREF_RESEARCH = `${base}/screener/research`;
 
 	interface Props {
 		filters: FilterState;
@@ -357,17 +357,22 @@
 		highlightedIndex = index;
 	}
 
-	function buildResearchHref(asset?: ScreenerAsset | null, mode: "universe" | "fund" | "holdings" = "fund"): string {
-		if (!asset) return `${HREF_RESEARCH}?mode=universe`;
-		const params = new URLSearchParams({
-			mode,
-			fund: asset.id,
-		});
-		return `${HREF_RESEARCH}?${params.toString()}`;
-	}
-
-	function openResearch(asset?: ScreenerAsset | null, mode: "universe" | "fund" | "holdings" = "fund") {
-		goto(buildResearchHref(asset, mode));
+	function openFocus(asset?: ScreenerAsset | null, initialTab: FocusTriggerInitialTab = "performance") {
+		if (!asset) return;
+		selectedId = asset.id;
+		rootEl?.dispatchEvent(
+			new CustomEvent("focustrigger", {
+				bubbles: true,
+				detail: {
+					entityKind: "fund",
+					entityId: asset.id,
+					entityLabel: asset.name,
+					ticker: asset.ticker,
+					instrumentId: asset.instrumentId,
+					initialTab,
+				},
+			}),
+		);
 	}
 
 	// ── Action handlers (approve / DD queue) ────────────
@@ -448,14 +453,7 @@
 				if (highlightedIndex >= 0 && highlightedIndex < assets.length) {
 					const asset = assets[highlightedIndex];
 					if (asset) {
-						selectedId = asset.id;
-						// Dispatch focustrigger event for FocusMode (bubbles to page)
-						rootEl?.dispatchEvent(
-							new CustomEvent("focustrigger", {
-								bubbles: true,
-								detail: { entityKind: "fund", entityId: asset.id, entityLabel: asset.name },
-							}),
-						);
+						openFocus(asset);
 					}
 				}
 				break;
@@ -497,7 +495,7 @@
 			case "r": {
 				e.preventDefault();
 				const asset = highlightedIndex >= 0 && highlightedIndex < assets.length ? assets[highlightedIndex] : null;
-				openResearch(asset, asset ? "fund" : "universe");
+				openFocus(asset, "analysis");
 				break;
 			}
 		}
@@ -566,16 +564,10 @@
 				<button
 					type="button"
 					class="ts-tool-btn"
-					onclick={() => openResearch(selectedId ? assets.find((asset) => asset.id === selectedId) ?? null : null, "fund")}
+					disabled={!selectedId}
+					onclick={() => openFocus(selectedId ? assets.find((asset) => asset.id === selectedId) ?? null : null, "analysis")}
 				>
-					RESEARCH
-				</button>
-				<button
-					type="button"
-					class="ts-tool-btn ts-tool-btn--primary"
-					onclick={() => openResearch(null, "universe")}
-				>
-					+ COMPARE
+					ANALYZE
 				</button>
 			</div>
 			<FilterChipRow {filters} {onFiltersChange} />

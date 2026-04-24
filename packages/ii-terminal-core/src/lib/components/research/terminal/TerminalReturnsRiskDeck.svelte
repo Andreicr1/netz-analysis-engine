@@ -187,8 +187,26 @@
 			.join(" ");
 	}
 
+	function buildAreaPath(values: number[], width: number, height: number): string {
+		const polyline = buildPolyline(values, width, height);
+		if (!polyline) return "";
+		const first = polyline.split(" ")[0];
+		const last = polyline.split(" ").at(-1);
+		if (!first || !last) return "";
+		return `M ${first} L ${polyline
+			.split(" ")
+			.slice(1)
+			.join(" L ")} L ${last.split(",")[0]},${height} L ${first.split(",")[0]},${height} Z`;
+	}
+
 	const growthPolyline = $derived(buildPolyline(normalizedSeries.map((point) => point.growth), 820, 250));
 	const drawdownPolyline = $derived(buildPolyline(normalizedSeries.map((point) => point.drawdown), 820, 92));
+	const growthAreaPath = $derived(buildAreaPath(normalizedSeries.map((point) => point.growth), 820, 250));
+	const drawdownAreaPath = $derived(buildAreaPath(normalizedSeries.map((point) => point.drawdown), 820, 92));
+	const latestGrowth = $derived.by(() => normalizedSeries[normalizedSeries.length - 1]?.growth ?? null);
+	const worstDrawdown = $derived.by(() =>
+		normalizedSeries.length > 0 ? Math.min(...normalizedSeries.map((point) => point.drawdown)) : null,
+	);
 
 	const recentMonthly = $derived.by(() =>
 		[...(data?.monthly_returns ?? [])]
@@ -269,14 +287,36 @@
 				</div>
 				<div class="rr-hero-chart">
 					<svg viewBox="0 0 820 360" preserveAspectRatio="none" role="img" aria-label="Compound return and drawdown">
+						<defs>
+							<linearGradient id="rr-growth-fill" x1="0" y1="0" x2="0" y2="1">
+								<stop offset="0%" stop-color="var(--terminal-accent-cyan)" stop-opacity="0.28"></stop>
+								<stop offset="100%" stop-color="var(--terminal-accent-cyan)" stop-opacity="0"></stop>
+							</linearGradient>
+							<linearGradient id="rr-dd-fill" x1="0" y1="0" x2="0" y2="1">
+								<stop offset="0%" stop-color="var(--terminal-status-error)" stop-opacity="0.18"></stop>
+								<stop offset="100%" stop-color="var(--terminal-status-error)" stop-opacity="0"></stop>
+							</linearGradient>
+						</defs>
+						<rect class="rr-zone rr-zone--growth" x="0" y="22" width="820" height="228"></rect>
+						<rect class="rr-zone rr-zone--drawdown" x="0" y="268" width="820" height="72"></rect>
 						<g class="rr-gridline">
 							<line x1="0" x2="820" y1="64" y2="64"></line>
 							<line x1="0" x2="820" y1="132" y2="132"></line>
 							<line x1="0" x2="820" y1="200" y2="200"></line>
 							<line x1="0" x2="820" y1="292" y2="292"></line>
 						</g>
+						{#if growthAreaPath}
+							<path class="rr-growth-area" d={growthAreaPath}></path>
+						{/if}
 						<polyline class="rr-growth" points={growthPolyline}></polyline>
-						<polyline class="rr-drawdown" points={drawdownPolyline} transform="translate(0, 268)"></polyline>
+						<g transform="translate(0, 268)">
+							{#if drawdownAreaPath}
+								<path class="rr-drawdown-area" d={drawdownAreaPath}></path>
+							{/if}
+							<polyline class="rr-drawdown" points={drawdownPolyline}></polyline>
+						</g>
+						<text class="rr-axis-copy" x="8" y="18">Growth</text>
+						<text class="rr-axis-copy" x="8" y="262">Drawdown</text>
 					</svg>
 				</div>
 				<div class="rr-hero-footer">
@@ -287,6 +327,14 @@
 					<div class="rr-range">
 						<span>LATEST</span>
 						<strong>{normalizedSeries[normalizedSeries.length - 1]?.date ?? "—"}</strong>
+					</div>
+					<div class="rr-range">
+						<span>COMPOUND</span>
+						<strong class={valueClass(latestGrowth)}>{percent(latestGrowth, 1)}</strong>
+					</div>
+					<div class="rr-range">
+						<span>WORST DD</span>
+						<strong class="neg">{percent(worstDrawdown, 1)}</strong>
 					</div>
 				</div>
 			</section>
@@ -447,8 +495,8 @@
 		flex: 1;
 		min-height: 0;
 		display: grid;
-		grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
-		grid-template-rows: minmax(0, 1.15fr) minmax(240px, 0.85fr);
+		grid-template-columns: minmax(0, 1.8fr) minmax(340px, 0.92fr);
+		grid-template-rows: minmax(0, 1.2fr) minmax(260px, 0.85fr);
 		gap: 1px;
 		background: var(--terminal-fg-disabled);
 	}
@@ -474,7 +522,7 @@
 	.rr-hero-chart {
 		flex: 1;
 		min-height: 0;
-		padding: 12px 14px 8px;
+		padding: 14px 16px 10px;
 	}
 
 	.rr-hero-chart svg {
@@ -485,6 +533,25 @@
 	.rr-gridline line {
 		stroke: var(--terminal-fg-disabled);
 		stroke-dasharray: 3 6;
+	}
+
+	.rr-zone {
+		fill: color-mix(in srgb, var(--terminal-bg-panel-raised) 34%, transparent);
+		stroke: var(--terminal-fg-disabled);
+		stroke-width: 1;
+	}
+
+	.rr-growth-area,
+	.rr-drawdown-area {
+		stroke: none;
+	}
+
+	.rr-growth-area {
+		fill: url(#rr-growth-fill);
+	}
+
+	.rr-drawdown-area {
+		fill: url(#rr-dd-fill);
 	}
 
 	.rr-growth,
@@ -504,11 +571,19 @@
 		stroke-width: 2;
 	}
 
+	.rr-axis-copy {
+		fill: var(--terminal-fg-muted);
+		font-size: 9px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
 	.rr-hero-footer {
 		display: flex;
 		justify-content: space-between;
+		flex-wrap: wrap;
 		gap: 16px;
-		padding: 0 14px 10px;
+		padding: 0 16px 12px;
 	}
 
 	.rr-range {
@@ -528,7 +603,7 @@
 
 	.rr-summary-grid {
 		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 1px;
 		background: var(--terminal-fg-disabled);
 		border-bottom: var(--terminal-border-hairline);
@@ -563,7 +638,7 @@
 
 	.rr-month-grid {
 		display: grid;
-		grid-template-columns: repeat(4, minmax(0, 1fr));
+		grid-template-columns: repeat(6, minmax(0, 1fr));
 		gap: 1px;
 		padding: 1px;
 		background: var(--terminal-fg-disabled);
@@ -595,7 +670,7 @@
 	}
 
 	.rr-dist-track {
-		height: 10px;
+		height: 12px;
 		background: var(--terminal-bg-panel-raised);
 		border: 1px solid var(--terminal-fg-disabled);
 	}
@@ -621,6 +696,14 @@
 		.rr-grid {
 			grid-template-columns: 1fr;
 			grid-template-rows: minmax(420px, 1.1fr) minmax(280px, 0.8fr) minmax(260px, 0.8fr) minmax(260px, 0.8fr);
+		}
+
+		.rr-summary-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.rr-month-grid {
+			grid-template-columns: repeat(4, minmax(0, 1fr));
 		}
 	}
 </style>

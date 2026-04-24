@@ -8,8 +8,21 @@
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { formatCurrency, formatNumber, formatPercent } from "@investintell/ui";
 	import { createClientApiClient } from "../../../../api/client";
+	import DDReportBody from "../../../library/readers/DDReportBody.svelte";
+	import TerminalHoldingsNetwork from "../../../research/terminal/TerminalHoldingsNetwork.svelte";
+	import TerminalPeerAnalysisPanel from "../../../research/terminal/TerminalPeerAnalysisPanel.svelte";
+	import TerminalReturnsRiskDeck from "../../../research/terminal/TerminalReturnsRiskDeck.svelte";
+	import MarketSensitivitiesBar from "../../../research/MarketSensitivitiesBar.svelte";
+	import StyleBiasRadar from "../../../research/StyleBiasRadar.svelte";
 
-	type FocusTab = "performance" | "profile" | "analysis" | "holdings" | "sectors";
+	type FocusTab =
+		| "performance"
+		| "profile"
+		| "peers"
+		| "analysis"
+		| "holdings"
+		| "sectors"
+		| "network";
 
 	interface Props {
 		fundId: string;
@@ -77,6 +90,25 @@
 	let loadingDetail = $state(true);
 	let loadingNav = $state(false);
 	let loadingHoldings = $state(false);
+
+	interface SingleFundResearchResponse {
+		instrument_id: string;
+		instrument_name: string;
+		ticker: string | null;
+		market_sensitivities: {
+			exposures: Array<{ label: string; value: number; significance: "high" | "medium" | "low" | "none" }>;
+			r_squared: number | null;
+			systematic_risk_pct: number | null;
+		};
+		style_bias: {
+			exposures: Array<{ label: string; value: number; significance: "high" | "medium" | "low" | "none" }>;
+		};
+	}
+
+	let research = $state<SingleFundResearchResponse | null>(null);
+	let loadingResearch = $state(false);
+	let errorResearch = $state<string | null>(null);
+	let researchController: AbortController | null = null;
 
 	$effect(() => {
 		const id = fundId;
@@ -360,6 +392,9 @@
 	let loadingPeer = $state(false);
 	let ddReports = $state<DDReportSummary[]>([]);
 	let loadingDD = $state(false);
+	let ddActionBusy = $state(false);
+	let ddActionMessage = $state<string | null>(null);
+	let selectedDDReportId = $state<string | null>(null);
 	let focusTab = $state<FocusTab>("performance");
 	let selectedSector = $state<string | null>(null);
 	let selectedHolding = $state<string | null>(null);
@@ -373,6 +408,33 @@
 	let activeHolderCik = $state<string | null>(null);
 	let activeHolderManager = $state<ManagerDetailResponse | null>(null);
 	let loadingActiveHolderManager = $state(false);
+
+	$effect(() => {
+		if (focusTab !== "analysis" || !instrumentId) return;
+		researchController?.abort();
+		const ctrl = new AbortController();
+		researchController = ctrl;
+		loadingResearch = true;
+		errorResearch = null;
+		api
+			.get<SingleFundResearchResponse>(
+				`/research/funds/${encodeURIComponent(instrumentId)}`,
+				undefined,
+				{ signal: ctrl.signal },
+			)
+			.then((res) => {
+				if (ctrl.signal.aborted) return;
+				research = res;
+			})
+			.catch((err: unknown) => {
+				if (err instanceof DOMException && err.name === "AbortError") return;
+				errorResearch = err instanceof Error ? err.message : "Failed to load factor analysis.";
+			})
+			.finally(() => {
+				if (!ctrl.signal.aborted) loadingResearch = false;
+			});
+		return () => ctrl.abort();
+	});
 
 	const topHoldings = $derived(holdingsData?.top_holdings ?? []);
 	const displayedHoldings = $derived.by(() =>
@@ -505,29 +567,54 @@
 		};
 	});
 
-	$effect(() => {
-		const iid = instrumentId;
-		if (!iid) {
-			ddReports = [];
+	let ddRequestSeq = 0;
+
+	function syncSelectedDDReport(reports: DDReportSummary[]) {
+		const preferred = reports.find((report) => report.is_current) ?? reports[0] ?? null;
+		if (!preferred) {
+			selectedDDReportId = null;
 			return;
 		}
-		let cancelled = false;
+		if (!selectedDDReportId || !reports.some((report) => String(report.id) === selectedDDReportId)) {
+			selectedDDReportId = String(preferred.id);
+		}
+	}
+
+	async function refreshDDReports(targetInstrumentId: string | null = instrumentId) {
+		if (!targetInstrumentId) {
+			ddReports = [];
+			selectedDDReportId = null;
+			loadingDD = false;
+			return;
+		}
+		const requestSeq = ++ddRequestSeq;
 		loadingDD = true;
-		api
-			.get<DDReportSummary[]>(`/dd-reports/funds/${encodeURIComponent(iid)}`)
-			.then((res) => {
-				if (cancelled) return;
-				ddReports = res ?? [];
-				loadingDD = false;
-			})
-			.catch(() => {
-				if (cancelled) return;
-				ddReports = [];
-				loadingDD = false;
-			});
-		return () => {
-			cancelled = true;
-		};
+		try {
+			const reports = await api.get<DDReportSummary[]>(
+				`/dd-reports/funds/${encodeURIComponent(targetInstrumentId)}`,
+			);
+			if (requestSeq !== ddRequestSeq) return;
+			ddReports = reports ?? [];
+			syncSelectedDDReport(ddReports);
+		} catch {
+			if (requestSeq !== ddRequestSeq) return;
+			ddReports = [];
+			selectedDDReportId = null;
+		} finally {
+			if (requestSeq === ddRequestSeq) loadingDD = false;
+		}
+	}
+
+	$effect(() => {
+		void refreshDDReports(instrumentId);
+	});
+
+	$effect(() => {
+		if (!ddReports.some((report) => report.status === "generating")) return;
+		const timer = window.setInterval(() => {
+			void refreshDDReports(instrumentId);
+		}, 5000);
+		return () => window.clearInterval(timer);
 	});
 
 	function percentText(value: number | null | undefined, decimals = 2): string {
@@ -570,6 +657,91 @@
 
 	function openFocusTab(tab: FocusTab) {
 		focusTab = tab;
+	}
+
+	function ddStatusLabel(status: string | null | undefined): string {
+		switch (status) {
+			case "generating":
+				return "Generating";
+			case "pending_approval":
+				return "Pending Review";
+			case "approved":
+				return "Approved";
+			case "failed":
+				return "Failed";
+			case "rejected":
+				return "Rejected";
+			case "draft":
+				return "Draft";
+			default:
+				return status ? status.replaceAll("_", " ") : "—";
+		}
+	}
+
+	function ddStatusTone(status: string | null | undefined): "live" | "ok" | "warn" | "bad" | "" {
+		switch (status) {
+			case "generating":
+				return "live";
+			case "pending_approval":
+				return "warn";
+			case "approved":
+				return "ok";
+			case "failed":
+			case "rejected":
+				return "bad";
+			default:
+				return "";
+		}
+	}
+
+	function ddTimestampText(value: string | null | undefined): string {
+		if (!value) return "—";
+		return value.slice(0, 16).replace("T", " ");
+	}
+
+	const currentDDReport = $derived.by(() => ddReports.find((report) => report.is_current) ?? ddReports[0] ?? null);
+	const selectedDDReport = $derived.by(
+		() => ddReports.find((report) => String(report.id) === selectedDDReportId) ?? currentDDReport,
+	);
+
+	async function triggerDDReview() {
+		if (!instrumentId || ddActionBusy) return;
+		ddActionBusy = true;
+		ddActionMessage = null;
+		try {
+			const report = await api.post<DDReportSummary>(
+				`/dd-reports/funds/${encodeURIComponent(instrumentId)}`,
+				{},
+			);
+			selectedDDReportId = String(report.id);
+			ddActionMessage = "DD review queued.";
+			await refreshDDReports(instrumentId);
+		} catch (error) {
+			ddActionMessage =
+				error instanceof Error ? error.message : "Failed to queue DD review.";
+		} finally {
+			ddActionBusy = false;
+		}
+	}
+
+	async function regenerateDDReview() {
+		if (!selectedDDReport || ddActionBusy) return;
+		ddActionBusy = true;
+		ddActionMessage = null;
+		try {
+			const report = await api.post<DDReportSummary>(
+				`/dd-reports/${encodeURIComponent(String(selectedDDReport.id))}/regenerate`,
+				{},
+			);
+			selectedDDReportId = String(report.id);
+			ddActionMessage = "DD review regeneration started.";
+			await refreshDDReports(instrumentId);
+		} catch (error) {
+			ddActionMessage =
+				error instanceof Error ? error.message : "Failed to regenerate DD review.";
+		} finally {
+			ddActionBusy = false;
+		}
 	}
 
 	onMount(() => {
@@ -1101,8 +1273,8 @@
 				</div>
 			{/if}
 			<div class="sfm-hero-actions">
-				<button type="button" class="sfm-link-btn" onclick={() => openFocusTab("analysis")}>
-					[ OPEN ANALYSIS ]
+				<button type="button" class="sfm-link-btn" onclick={() => openFocusTab("network")}>
+					[ OPEN NETWORK ]
 				</button>
 				<button type="button" class="sfm-close" onclick={onClose} aria-label="Close">
 					[ ESC - CLOSE ]
@@ -1128,64 +1300,23 @@
 
 		<div class="sfm-body">
 			<div class="sfm-tabs" role="tablist" aria-label="Fund focus views">
-				<button type="button" class="sfm-tab" class:sfm-tab--active={focusTab === "performance"} role="tab" aria-selected={focusTab === "performance"} onclick={() => (focusTab = "performance")}>PERFORMANCE</button>
+				<button type="button" class="sfm-tab" class:sfm-tab--active={focusTab === "performance"} role="tab" aria-selected={focusTab === "performance"} onclick={() => (focusTab = "performance")}>RETURNS / RISK</button>
 				<button type="button" class="sfm-tab" class:sfm-tab--active={focusTab === "profile"} role="tab" aria-selected={focusTab === "profile"} onclick={() => (focusTab = "profile")}>COMPOSITE PROFILE</button>
-				<button type="button" class="sfm-tab" class:sfm-tab--active={focusTab === "analysis"} role="tab" aria-selected={focusTab === "analysis"} onclick={() => (focusTab = "analysis")}>DD</button>
+				<button type="button" class="sfm-tab" class:sfm-tab--active={focusTab === "peers"} role="tab" aria-selected={focusTab === "peers"} onclick={() => (focusTab = "peers")}>PEERS</button>
+				<button type="button" class="sfm-tab" class:sfm-tab--active={focusTab === "analysis"} role="tab" aria-selected={focusTab === "analysis"} onclick={() => (focusTab = "analysis")}>ANALYSIS</button>
 				<button type="button" class="sfm-tab" class:sfm-tab--active={focusTab === "holdings"} role="tab" aria-selected={focusTab === "holdings"} onclick={() => (focusTab = "holdings")}>HOLDINGS</button>
 				<button type="button" class="sfm-tab" class:sfm-tab--active={focusTab === "sectors"} role="tab" aria-selected={focusTab === "sectors"} onclick={() => (focusTab = "sectors")}>SECTORS</button>
+				<button type="button" class="sfm-tab" class:sfm-tab--active={focusTab === "network"} role="tab" aria-selected={focusTab === "network"} onclick={() => (focusTab = "network")}>NETWORK</button>
 			</div>
 
-			<div class="sfm-stage">
+			<div class="sfm-stage" class:sfm-stage--immersive={focusTab === "performance" || focusTab === "network" || focusTab === "peers"}>
 				{#if focusTab === "performance"}
-					<div class="sfm-panel sfm-panel--performance">
-						<div class="sfm-subhead">
-							<span>PERFORMANCE</span>
-							<span>5Y NAV TRAIL</span>
-						</div>
-						<div class="sfm-perf-chart">
-							{#if loadingNav}
-								<div class="sfm-chart-empty">Loading...</div>
-							{:else if perfChart.line}
-								<svg viewBox="0 0 {CHART_W} {CHART_H}" preserveAspectRatio="none" width="100%" height="100%">
-									<defs>
-										<linearGradient id="sfm-g-{fundId}" x1="0" y1="0" x2="0" y2="1">
-											<stop offset="0%" stop-color={perfChart.isUp ? "var(--ii-success,#3DD39A)" : "var(--ii-danger,#FF5C7A)"} stop-opacity="0.35" />
-											<stop offset="100%" stop-color={perfChart.isUp ? "var(--ii-success,#3DD39A)" : "var(--ii-danger,#FF5C7A)"} stop-opacity="0" />
-										</linearGradient>
-									</defs>
-									<path d={perfChart.area} fill="url(#sfm-g-{fundId})" />
-									<path d={perfChart.line} fill="none" stroke={perfChart.isUp ? "var(--ii-success,#3DD39A)" : "var(--ii-danger,#FF5C7A)"} stroke-width="1.5" />
-								</svg>
-							{:else}
-								<div class="sfm-chart-empty">No NAV data</div>
-							{/if}
-						</div>
-
-						<div class="sfm-performance-footer">
-							<div class="sfm-period-grid">
-								{#each periodStats as stat (stat.label)}
-									<div class="sfm-period-row">
-										<span class="sfm-period-lbl">{stat.label}</span>
-										<span
-											class="sfm-period-val"
-											class:up={(stat.returnPct ?? 0) >= 0}
-											class:down={(stat.returnPct ?? 0) < 0}
-										>
-											{stat.returnPct != null ? formatPercent(stat.returnPct, 2, "en-US", true) : "\u2014"}
-										</span>
-									</div>
-								{/each}
-							</div>
-
-							{#if w52}
-								<div class="sfm-52w">
-									<span class="sfm-52w-lbl">52W</span>
-									<span class="sfm-52w-val down">{formatCurrency(w52.low)}</span>
-									<span class="sfm-52w-sep">-</span>
-									<span class="sfm-52w-val up">{formatCurrency(w52.high)}</span>
-								</div>
-							{/if}
-						</div>
+					<div class="sfm-panel sfm-panel--returns">
+						<TerminalReturnsRiskDeck
+							fundId={fundId}
+							ticker={ticker}
+							label={detail?.name ?? fundLabel}
+						/>
 					</div>
 				{:else if focusTab === "profile"}
 					<div class="sfm-panel sfm-panel--profile">
@@ -1231,97 +1362,156 @@
 							</div>
 						</div>
 					</div>
+				{:else if focusTab === "peers"}
+					<div class="sfm-panel sfm-panel--peers">
+						<TerminalPeerAnalysisPanel
+							fundId={fundId}
+							ticker={ticker}
+							label={detail?.name ?? fundLabel}
+						/>
+					</div>
 				{:else if focusTab === "analysis"}
 					<div class="sfm-panel sfm-panel--analysis">
-						<div class="sfm-analysis-grid">
-							<div class="sfm-analysis-card">
-								<div class="sfm-subhead">
-									<span>PEER CONTEXT</span>
-									{#if peerMetrics?.peer_count}
-										<span>n={peerMetrics.peer_count}</span>
-									{/if}
-								</div>
-					{#if peerMetrics && peerMetrics.peer_count > 0}
-						<div class="sfm-peer-section">
-							<h4 class="sfm-peer-hd">
-								PEER GROUP
-								{#if peerMetrics.strategy_label}
-									<span class="sfm-peer-label">{peerMetrics.strategy_label}</span>
+						{#if instrumentId}
+							<div class="sfm-factor-row">
+								{#if loadingResearch}
+									<div class="sfm-analysis-empty">Loading factor analysis...</div>
+								{:else if errorResearch}
+									<div class="sfm-analysis-empty sfm-analysis-empty--warn">{errorResearch}</div>
+								{:else}
+									<div class="sfm-factor-charts">
+										<div class="sfm-factor-panel sfm-factor-panel--sensitivities">
+											<div class="sfm-subhead"><span>MARKET SENSITIVITIES</span></div>
+											<MarketSensitivitiesBar
+												exposures={research?.market_sensitivities.exposures ?? []}
+												loading={loadingResearch}
+												error={errorResearch}
+											/>
+										</div>
+										<div class="sfm-factor-panel sfm-factor-panel--style">
+											<div class="sfm-subhead"><span>STYLE BIAS</span></div>
+											<StyleBiasRadar
+												exposures={research?.style_bias.exposures ?? []}
+												loading={loadingResearch}
+												error={errorResearch}
+											/>
+										</div>
+									</div>
 								{/if}
-								<span class="sfm-peer-count">n={peerMetrics.peer_count}</span>
-							</h4>
-
-							<div class="sfm-peer-metric">
-								<span class="sfm-peer-metric-name">SHARPE</span>
-								<div class="sfm-peer-bar-wrap">
-									<div class="sfm-peer-range" style:left="0%" style:width="100%"></div>
-									{#if peerMetrics.subject_sharpe !== null}
-										<div
-											class="sfm-peer-subject"
-											style:left={peerSubjectLeft(peerMetrics.subject_sharpe, peerMetrics.peer_sharpe_p25, peerMetrics.peer_sharpe_p75, 0, 1)}
-										></div>
-									{/if}
-								</div>
-								<div class="sfm-peer-vals">
-									<span>p25: {peerMetrics.peer_sharpe_p25 != null ? formatNumber(peerMetrics.peer_sharpe_p25, 2) : "\u2014"}</span>
-									<span>med: {peerMetrics.peer_sharpe_p50 != null ? formatNumber(peerMetrics.peer_sharpe_p50, 2) : "\u2014"}</span>
-									<span class:sfm-peer-val-up={(peerMetrics.subject_sharpe ?? 0) >= (peerMetrics.peer_sharpe_p50 ?? 0)}>
-										you: {peerMetrics.subject_sharpe != null ? formatNumber(peerMetrics.subject_sharpe, 2) : "\u2014"}
-									</span>
-								</div>
 							</div>
-
-							<div class="sfm-peer-metric">
-								<span class="sfm-peer-metric-name">MAX DD</span>
-								<div class="sfm-peer-bar-wrap">
-									<div class="sfm-peer-range" style:left="0%" style:width="100%"></div>
-									{#if peerMetrics.subject_drawdown !== null}
-										<div
-											class="sfm-peer-subject sfm-peer-subject--down"
-											style:left={peerSubjectLeft(peerMetrics.subject_drawdown, peerMetrics.peer_drawdown_p25, peerMetrics.peer_drawdown_p75, -0.3, 0)}
-										></div>
-									{/if}
-								</div>
-								<div class="sfm-peer-vals">
-									<span>p25: {percentText(peerMetrics.peer_drawdown_p25, 1)}</span>
-									<span>med: {percentText(peerMetrics.peer_drawdown_p50, 1)}</span>
-									<span class:sfm-peer-val-up={(peerMetrics.subject_drawdown ?? -1) >= (peerMetrics.peer_drawdown_p50 ?? -1)}>
-										you: {percentText(peerMetrics.subject_drawdown, 1)}
-									</span>
-								</div>
-							</div>
-						</div>
-					{:else if loadingPeer}
-						<div class="sfm-analysis-empty">Loading peer data...</div>
-					{:else}
-						<div class="sfm-analysis-empty">No peer group data available.</div>
-					{/if}
-							</div>
-
-							<div class="sfm-analysis-card">
-								<div class="sfm-subhead">
-									<span>DD REPORTS</span>
-									{#if ddReports.length > 0}
-										<span>{ddReports.length} REPORTS</span>
-									{/if}
-								</div>
-					<div class="sfm-dd-section">
-						<h4 class="sfm-peer-hd">DD REPORTS</h4>
-						{#if loadingDD}
-							<div class="sfm-analysis-empty">Loading...</div>
-						{:else if ddReports.length === 0}
-							<div class="sfm-analysis-empty">No DD reports generated yet.</div>
-						{:else}
-							{#each ddReports as report (report.id)}
-								<div class="sfm-dd-row">
-									<span class="sfm-dd-status sfm-dd-status--{report.status.toLowerCase()}">{report.status}</span>
-									<span class="sfm-dd-ver">v{report.version}</span>
-									<span class="sfm-dd-score">{report.confidence_score != null ? formatNumber(Number(report.confidence_score), 0) : "\u2014"}</span>
-									<span class="sfm-dd-anchor">{report.decision_anchor ?? ""}</span>
-								</div>
-							{/each}
 						{/if}
-					</div>
+						<div class="sfm-dd-shell">
+							<div class="sfm-dd-rail">
+								<div class="sfm-subhead">
+									<span>DD REVIEW</span>
+									<span>{ddReports.length} REPORTS</span>
+								</div>
+
+								<div class="sfm-dd-overview">
+									<div class="sfm-dd-stat">
+										<span class="sfm-holdings-stat-label">CURRENT STATUS</span>
+										<span class="sfm-dd-state sfm-dd-state--{ddStatusTone(currentDDReport?.status)}">
+											{ddStatusLabel(currentDDReport?.status)}
+										</span>
+									</div>
+									<div class="sfm-dd-stat">
+										<span class="sfm-holdings-stat-label">CURRENT VERSION</span>
+										<span class="sfm-holdings-stat-value">
+											{currentDDReport ? `v${currentDDReport.version}` : "—"}
+										</span>
+									</div>
+									<div class="sfm-dd-stat">
+										<span class="sfm-holdings-stat-label">CONFIDENCE</span>
+										<span class="sfm-holdings-stat-value">
+											{currentDDReport?.confidence_score != null
+												? formatPercent(Number(currentDDReport.confidence_score) / 100, 1)
+												: "—"}
+										</span>
+									</div>
+									<div class="sfm-dd-stat">
+										<span class="sfm-holdings-stat-label">ANCHOR</span>
+										<span class="sfm-holdings-stat-value">
+											{currentDDReport?.decision_anchor ?? "—"}
+										</span>
+									</div>
+								</div>
+
+								<div class="sfm-dd-actions">
+									<button
+										type="button"
+										class="sfm-inline-btn sfm-inline-btn--primary"
+										onclick={triggerDDReview}
+										disabled={!instrumentId || ddActionBusy}
+									>
+										[{ddActionBusy ? " WORKING... " : " RUN DD REVIEW "}]
+									</button>
+									<button
+										type="button"
+										class="sfm-inline-btn"
+										onclick={regenerateDDReview}
+										disabled={!selectedDDReport || ddActionBusy}
+									>
+										[ REGENERATE ]
+									</button>
+									<button
+										type="button"
+										class="sfm-inline-btn"
+										onclick={() => refreshDDReports(instrumentId)}
+										disabled={!instrumentId || ddActionBusy}
+									>
+										[ REFRESH ]
+									</button>
+								</div>
+
+								{#if ddActionMessage}
+									<div class="sfm-dd-message">{ddActionMessage}</div>
+								{/if}
+
+								<div class="sfm-dd-list">
+									{#if loadingDD}
+										<div class="sfm-analysis-empty">Loading DD reports...</div>
+									{:else if ddReports.length === 0}
+										<div class="sfm-analysis-empty">
+											No DD reports generated yet. Run a review to open the full due diligence workbench here.
+										</div>
+									{:else}
+										{#each ddReports as report (report.id)}
+											<button
+												type="button"
+												class="sfm-dd-list-row"
+												class:sfm-dd-list-row--active={String(report.id) === String(selectedDDReport?.id)}
+												onclick={() => (selectedDDReportId = String(report.id))}
+											>
+												<div class="sfm-dd-list-main">
+													<span class="sfm-dd-status sfm-dd-status--{report.status.toLowerCase()}">
+														{ddStatusLabel(report.status)}
+													</span>
+													<span class="sfm-dd-ver">v{report.version}</span>
+													{#if report.is_current}
+														<span class="sfm-dd-current">CURRENT</span>
+													{/if}
+												</div>
+												<div class="sfm-dd-list-meta">
+													<span>{ddTimestampText(report.created_at)}</span>
+													<span>
+														{report.confidence_score != null
+															? formatPercent(Number(report.confidence_score) / 100, 1)
+															: "—"}
+													</span>
+													<span>{report.decision_anchor ?? "—"}</span>
+												</div>
+											</button>
+										{/each}
+									{/if}
+								</div>
+							</div>
+
+							<div class="sfm-dd-reader">
+								{#if selectedDDReport}
+									<DDReportBody reportId={String(selectedDDReport.id)} />
+								{:else}
+									<div class="sfm-analysis-empty">Select a DD report to inspect the full workbench.</div>
+								{/if}
 							</div>
 						</div>
 					</div>
@@ -1417,8 +1607,8 @@
 												</div>
 											</div>
 											<div class="sfm-holding-focus-actions">
-												<button type="button" class="sfm-inline-btn" onclick={() => openFocusTab("analysis")}>
-													[ OPEN ANALYSIS ]
+												<button type="button" class="sfm-inline-btn" onclick={() => openFocusTab("network")}>
+													[ OPEN NETWORK ]
 												</button>
 												<button
 													type="button"
@@ -1659,7 +1849,7 @@
 							</div>
 						{/if}
 					</div>
-				{:else}
+				{:else if focusTab === "sectors"}
 					<div class="sfm-panel sfm-panel--sectors">
 						<div class="sfm-subhead">
 							<div class="sfm-subhead-main">
@@ -1726,6 +1916,14 @@
 							{/if}
 						{/if}
 					</div>
+				{:else}
+					<div class="sfm-panel sfm-panel--network">
+						<TerminalHoldingsNetwork
+							fundId={fundId}
+							ticker={ticker}
+							label={detail?.name ?? fundLabel}
+						/>
+					</div>
 				{/if}
 			</div>
 		</div>
@@ -1747,10 +1945,10 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		width: 1360px;
-		max-width: 96vw;
-		height: 92vh;
-		max-height: 92vh;
+		width: 1600px;
+		max-width: 98vw;
+		height: 94vh;
+		max-height: 94vh;
 		overflow: hidden;
 		border: 1px solid var(--ii-border, #1A2458);
 		background: var(--ii-surface, #0B1230);
@@ -1893,7 +2091,7 @@
 
 	.sfm-tabs {
 		display: grid;
-		grid-template-columns: 1fr 1fr 0.75fr 0.8fr 0.8fr;
+		grid-template-columns: 1fr 1fr 0.8fr 0.75fr 0.8fr 0.8fr 0.9fr;
 		flex-shrink: 0;
 		gap: 1px;
 		padding: 1px;
@@ -1928,6 +2126,10 @@
 		border-top: 1px solid var(--ii-border-subtle, var(--terminal-fg-muted));
 	}
 
+	.sfm-stage--immersive {
+		padding: 0;
+	}
+
 	.sfm-panel {
 		display: flex;
 		flex-direction: column;
@@ -1939,9 +2141,15 @@
 	}
 
 	.sfm-panel--profile,
+	.sfm-panel--peers,
 	.sfm-panel--holdings,
-	.sfm-panel--sectors {
+	.sfm-panel--sectors,
+	.sfm-panel--network {
 		min-height: 0;
+	}
+
+	.sfm-panel--network {
+		height: 100%;
 	}
 
 	.sfm-profile-stage {
@@ -2240,6 +2448,28 @@
 		font-size: 10px;
 	}
 
+	.sfm-analysis-empty--warn {
+		color: var(--terminal-accent-amber);
+	}
+
+	.sfm-factor-row {
+		padding: 12px 16px 8px;
+		border-bottom: 1px solid var(--terminal-fg-disabled);
+	}
+
+	.sfm-factor-charts {
+		display: grid;
+		grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+		gap: 16px;
+		min-height: 280px;
+	}
+
+	.sfm-factor-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+
 	.sfm-subhead {
 		display: flex;
 		align-items: center;
@@ -2275,11 +2505,155 @@
 		font-size: 9px;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
+		cursor: pointer;
 	}
 
 	.sfm-inline-btn:hover {
 		border-color: var(--ii-brand-primary, var(--terminal-accent-amber));
 		color: var(--ii-brand-primary, var(--terminal-accent-amber));
+	}
+
+	.sfm-inline-btn:disabled {
+		cursor: default;
+		opacity: 0.45;
+	}
+
+	.sfm-inline-btn--primary {
+		border-color: color-mix(in srgb, var(--ii-brand-primary, var(--terminal-accent-amber)) 55%, transparent);
+		color: var(--ii-brand-primary, var(--terminal-accent-amber));
+	}
+
+	.sfm-dd-shell {
+		display: grid;
+		grid-template-columns: minmax(320px, 0.72fr) minmax(0, 1.58fr);
+		gap: 16px;
+		min-height: 100%;
+	}
+
+	.sfm-dd-rail,
+	.sfm-dd-reader {
+		min-height: 0;
+		border: 1px solid var(--ii-border-subtle, var(--terminal-fg-muted));
+		background: color-mix(in srgb, var(--ii-surface-alt, var(--terminal-bg-panel-sunken)) 62%, transparent);
+	}
+
+	.sfm-dd-rail {
+		display: flex;
+		flex-direction: column;
+		padding: 14px 16px;
+		gap: 12px;
+	}
+
+	.sfm-dd-overview {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1px;
+		padding: 1px;
+		background: var(--ii-border-subtle, var(--terminal-fg-muted));
+	}
+
+	.sfm-dd-stat {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 12px 14px;
+		background: var(--ii-surface, var(--terminal-bg-panel));
+	}
+
+	.sfm-dd-state {
+		color: var(--ii-text-primary, var(--terminal-fg-primary));
+		font-size: 16px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+
+	.sfm-dd-state--live {
+		color: var(--ii-brand-primary, var(--terminal-accent-amber));
+	}
+
+	.sfm-dd-state--ok {
+		color: var(--ii-success, var(--terminal-status-success));
+	}
+
+	.sfm-dd-state--warn {
+		color: var(--ii-accent-cyan, var(--terminal-accent-cyan));
+	}
+
+	.sfm-dd-state--bad {
+		color: var(--ii-danger, var(--terminal-status-error));
+	}
+
+	.sfm-dd-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	.sfm-dd-message {
+		padding: 8px 10px;
+		border: 1px solid var(--ii-border-subtle, var(--terminal-fg-muted));
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		font-size: 10px;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+	}
+
+	.sfm-dd-list {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		min-height: 0;
+		overflow: auto;
+	}
+
+	.sfm-dd-list-row {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 10px 12px;
+		border: 1px solid transparent;
+		border-bottom-color: var(--ii-terminal-hair, rgba(102, 137, 188, 0.14));
+		background: transparent;
+		color: inherit;
+		font-family: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.sfm-dd-list-row:hover,
+	.sfm-dd-list-row--active {
+		border-color: color-mix(in srgb, var(--ii-brand-primary, var(--terminal-accent-amber)) 35%, transparent);
+		background: color-mix(in srgb, var(--ii-brand-primary, var(--terminal-accent-amber)) 8%, transparent);
+	}
+
+	.sfm-dd-list-main,
+	.sfm-dd-list-meta {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex-wrap: wrap;
+	}
+
+	.sfm-dd-list-meta {
+		color: var(--ii-text-muted, var(--terminal-fg-muted));
+		font-size: 9px;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+	}
+
+	.sfm-dd-current {
+		padding: 2px 6px;
+		border: 1px solid color-mix(in srgb, var(--ii-accent-cyan, var(--terminal-accent-cyan)) 45%, transparent);
+		color: var(--ii-accent-cyan, var(--terminal-accent-cyan));
+		font-size: 8px;
+		letter-spacing: 0.08em;
+	}
+
+	.sfm-dd-reader {
+		min-width: 0;
+		overflow: auto;
+		padding: 14px;
 	}
 
 	.sfm-sector-treemap {

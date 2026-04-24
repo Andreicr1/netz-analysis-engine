@@ -2,6 +2,7 @@
 	import { getContext } from "svelte";
 	import { fade, fly } from "svelte/transition";
 	import { goto } from "$app/navigation";
+	import { base } from "$app/paths";
 	import { svelteTransitionFor } from "@investintell/ui";
 	import { createClientApiClient } from "../../../api/client";
 	import {
@@ -70,8 +71,9 @@
 		await goto(path);
 	}
 
-	async function gotoFundResearch(instrumentId: string) {
-		await goto(`/fund/${instrumentId}/research`);
+	async function gotoFundResearch(item: { ticker?: string | null; name: string }) {
+		const q = encodeURIComponent(item.ticker ?? item.name);
+		await goto(`${base}/screener?q=${q}`);
 	}
 
 	const STATIC_COMMANDS: ReadonlyArray<RouteCommandItem> = [
@@ -244,7 +246,7 @@
 					item.strategy_label ?? "",
 					item.asset_class ?? "",
 				],
-				onSelect: () => gotoFundResearch(item.instrument_id),
+				onSelect: () => gotoFundResearch({ ticker: item.ticker, name: item.name }),
 			}));
 		} catch (error: unknown) {
 			if (error instanceof DOMException && error.name === "AbortError") return;

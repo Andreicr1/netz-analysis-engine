@@ -7,8 +7,7 @@
 
 	F-key ordering (X2): six canonical tabs in institutional-lifecycle
 	order, Macro context flowing into Builder allocation flowing into
-	DD validation. No RESEARCH tab at top-level — research is scoped
-	under SCREENER (/screener/research).
+	DD validation.
 
 		F1  LIVE      /live
 		F2  SCREENER  /screener
@@ -20,8 +19,8 @@
 	Fixed 32px top chrome strip.
 
 	Shared terminal navigation chrome. The standalone terminal app owns
-	the canonical /live, /screener, /screener/research, /macro,
-	/allocation, /dd, and /alerts routes.
+	the canonical /live, /screener, /macro, /allocation, /dd, and
+	/alerts routes.
 
 	This component has no keyboard handling of its own. Global shortcuts
 	(Cmd+K, rail [ / ], g-prefix go-to) live inside TerminalShell's

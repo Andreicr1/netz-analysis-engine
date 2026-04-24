@@ -16,7 +16,7 @@
 	Owns the global keyboard shortcuts:
 		• Cmd/Ctrl + K      → toggle CommandPalette
 		• `[` / `]`         → collapse / expand TerminalContextRail
-		• `g` + s/l/r/m/a/p/n/d  → go-to navigation (active routes fire
+		• `g` + s/l/m/a/p/n/d    → go-to navigation (active routes fire
 		                       the matching command palette action;
 		                       pending routes toggle the palette open
 		                       so the user sees the pending badge)
@@ -196,10 +196,6 @@
 		await goto(`${base}/live`);
 	}
 
-	async function navResearch() {
-		await goto(`${base}/screener/research`);
-	}
-
 	async function navAlerts() {
 		await goto(`${base}/alerts`);
 	}
@@ -217,7 +213,6 @@
 		d: navDD,
 		p: navBuilder,
 		l: navLive,
-		r: navResearch,
 		n: navAlerts,
 	};
 
