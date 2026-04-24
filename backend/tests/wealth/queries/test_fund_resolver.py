@@ -83,6 +83,19 @@ async def test_resolve_fund_class_id_walks_to_cik() -> None:
     CIK 318478. Stable MV row / stable sec_fund_classes row.
     """
     async with _fresh_session() as db:
+        # Runtime self-gate — these tests hardcode production-seeded SEC identifiers
+        # (class_id=C000000012, CIK=318478) that only exist after SEC ingestion workers
+        # have populated sec_fund_classes. On fresh DB / CI this data is absent.
+        exists = await db.scalar(
+            text("SELECT 1 FROM sec_fund_classes WHERE class_id = :c"),
+            {"c": "C000000012"},
+        )
+        if not exists:
+            pytest.skip(
+                "requires SEC catalog seed (class_id=C000000012 not found). "
+                "Run scripts/dev_seed_local.py or SEC ingestion workers to enable."
+            )
+
         fund = await resolve_fund(db, "C000000012")
         assert fund["universe"] == "registered_us"
         assert fund["cik"] == "318478"
@@ -222,6 +235,17 @@ async def test_resolve_fund_sibling_class_ticker_fallback() -> None:
     instrument_id via D.2 (sec_cik) or D.4 (sibling walk).
     """
     async with _fresh_session() as db:
+        # Runtime self-gate — same seed dependency as test_resolve_fund_class_id_walks_to_cik.
+        exists = await db.scalar(
+            text("SELECT 1 FROM sec_fund_classes WHERE class_id = :c"),
+            {"c": "C000000012"},
+        )
+        if not exists:
+            pytest.skip(
+                "requires SEC catalog seed (class_id=C000000012 not found). "
+                "Run scripts/dev_seed_local.py or SEC ingestion workers to enable."
+            )
+
         fund = await resolve_fund(db, "C000000012")
         assert fund["instrument_id"] is not None
         assert fund["effective_series_id"] == "S000000008"

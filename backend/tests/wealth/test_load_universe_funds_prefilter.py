@@ -223,6 +223,21 @@ async def test_prefilter_reduces_to_target_cardinality() -> None:
     org_id = "403d8392-ebfa-5890-b740-45da49c556eb"
     async with async_session_factory() as db:
         await _set_rls(db, org_id)
+
+        # Runtime self-gate — the expected 200-400 band only holds when the
+        # org has its full production-cloned catalog (≥1000 instruments).
+        # On fresh CI / clean docker compose this is 0; skip rather than fail.
+        # Seed via scripts/dev_seed_local.py to enable.
+        inst_count = await db.scalar(
+            text("SELECT COUNT(*) FROM instruments_org WHERE organization_id = :o"),
+            {"o": org_id},
+        )
+        if inst_count < 1000:
+            pytest.skip(
+                f"requires dev-seeded DB (have {inst_count} instruments, "
+                f"need ≥1000). Run scripts/dev_seed_local.py to enable."
+            )
+
         funds = await _load_universe_funds(
             db, org_id, profile="conservative",
         )

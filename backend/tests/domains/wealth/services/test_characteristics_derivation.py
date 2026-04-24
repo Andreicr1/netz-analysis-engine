@@ -81,8 +81,15 @@ class TestDeriveMomentum12_1:
         assert derive_momentum_12_1(pd.Series(dtype=float), date(2024, 12, 31)) is None
 
     def test_zero_start_returns_none(self):
+        """When the 12-1 momentum window's start value is 0, the function
+        must return None (division by zero / undefined momentum).
+
+        The window is iloc[-13:-1] of the series, so we place the zero at
+        position 1 (index -13 from the tail) — the first element (index 0)
+        is dropped by the slice.
+        """
         dates = pd.date_range("2023-01-31", periods=14, freq="ME")
-        values = [0] + [100] * 13
+        values = [100, 0] + [100] * 12  # zero at position 1 = window start
         series = pd.Series(values, index=dates)
         as_of = dates[-1].date()
         assert derive_momentum_12_1(series, as_of) is None
