@@ -1554,19 +1554,23 @@ export class PortfolioWorkspaceState {
 
 	// ── Portfolio Activation ────────────────────────────────────────────────
 
-	async activatePortfolio() {
+	async activatePortfolio(opts?: { degradedAcknowledged?: boolean }) {
 		if (!this._getToken || !this.portfolioId) return;
 		this.isActivating = true;
 		this.lastError = null;
 
 		try {
 			const api = this.api();
+			const metadata: Record<string, unknown> = {};
+			if (opts?.degradedAcknowledged) {
+				metadata.degraded_acknowledged = true;
+			}
 			const result = await api.post<ModelPortfolio>(
-				`/model-portfolios/${this.portfolioId}/activate`,
-				{},
+				`/model-portfolios/${this.portfolioId}/transitions`,
+				{ action: "activate", metadata },
 			);
 			this.portfolio = result;
-			this.advice = null; // advisor no longer relevant after activation
+			this.advice = null;
 		} catch (err) {
 			this.lastError = {
 				action: "activate",
