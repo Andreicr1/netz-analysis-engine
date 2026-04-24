@@ -160,6 +160,10 @@ ALLOWLISTED_GLOBAL_TABLE_CONSUMERS: dict[str, str] = {
     "data_providers/sec/thirteenf_service.py": "write — upserts Sec13fHolding and Sec13fDiff via async_session_factory (13F-HR ingestion, no RLS)",
     "data_providers/sec/institutional_service.py": "write — reads Sec13fHolding CUSIPs and upserts SecInstitutionalAllocation via async_session_factory (13F reverse lookup, no RLS)",
     "data_providers/sec/seed/populate_seed.py": "write — seed script upserts SecCusipTickerMap via async_session_factory (Phase 6 CUSIP→ticker mapping, no RLS)",
+    # ── Construction worker — reads global allocation template ────────────
+    "app/domains/wealth/workers/construction_run_executor.py": "read — reads AllocationBlock (global canonical template) to validate completeness before portfolio construction runs",
+    # ── Quant factor model — reads global instrument/macro data ───────────
+    "quant_engine/factor_model_service.py": "service — reads instrument/macro global tables for factor model estimation (shared across tenants)",
     # ── Tests ────────────────────────────────────────────────────────────────
     "tests/test_global_table_isolation.py": "test — this file",
     "tests/test_rls_audit.py": "test — imports GLOBAL_TABLES set (strings, not ORM models)",
