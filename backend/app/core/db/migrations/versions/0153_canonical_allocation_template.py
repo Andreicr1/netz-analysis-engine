@@ -4,6 +4,10 @@ Establishes the 18-block canonical template that every `(org, profile)`
 pair must share. Profiles differ only in `(target, min, max, risk_budget)`
 per block and the profile-level CVaR limit — never in the block set.
 
+2026-04-24 patch: Step 4 inline-seeds the 18 canonical blocks with
+ON CONFLICT DO NOTHING so fresh DBs (dev, CI) can run this migration
+without an external seed. No-op in prod (rows already exist).
+
 Ordered steps (all inside one transaction):
 
 1. Add ``allocation_blocks.is_canonical`` and
@@ -13,16 +17,17 @@ Ordered steps (all inside one transaction):
    PR-A26 will own the propose-then-approve flow that fills them.
 3. Rename ``fi_short_term → fi_us_short_term`` across every FK-dependent
    table (same pattern A21 used for ``fi_govt → fi_us_treasury``).
-4. Flip ``is_canonical = true`` on the 18 canonical block IDs; assert
+4. Seed missing canonical blocks (ON CONFLICT DO NOTHING — idempotent).
+5. Flip ``is_canonical = true`` on the 18 canonical block IDs; assert
    the set is complete.
-5. Fix the ``effective_to`` bit-rot that caused the A22 validator to see
+6. Fix the ``effective_to`` bit-rot that caused the A22 validator to see
    empty allocations in dev (12-day-stale seed).
-6. Create the ``allocation_template_audit`` table (global, no RLS).
-7. Backfill missing canonical rows into ``strategic_allocation`` for
+7. Create the ``allocation_template_audit`` table (global, no RLS).
+8. Backfill missing canonical rows into ``strategic_allocation`` for
    every existing ``(organization_id, profile)`` combo — NULL weights,
    ``excluded_from_portfolio = false``, ``actor_source = 'migration_0153'``.
    Matching audit entries written with ``trigger_reason = 'manual_backfill'``.
-8. Install triggers:
+9. Install triggers:
    - ``trg_enforce_allocation_template_sa`` on INSERT to
      ``strategic_allocation`` auto-populates the remaining canonical rows
      whenever a fresh ``(org, profile)`` combo lands.
@@ -48,8 +53,8 @@ depends_on = None
 
 
 # The 18 canonical allocation blocks — single source of truth for this
-# migration. If ``allocation_blocks`` is missing any of these rows the
-# migration aborts; they must be seeded by a prior migration.
+# migration. They are seeded inline at Step 4 below (ON CONFLICT DO
+# NOTHING — idempotent in prod).
 _CANONICAL_BLOCKS: tuple[str, ...] = (
     "na_equity_large",
     "na_equity_growth",
@@ -69,6 +74,31 @@ _CANONICAL_BLOCKS: tuple[str, ...] = (
     "alt_gold",
     "alt_commodities",
     "cash",
+)
+
+# Seed data for the 18 canonical blocks. Used by Step 4 to idempotently
+# populate fresh DBs (dev, CI, rebuild). ON CONFLICT DO NOTHING makes
+# this a no-op in prod where rows already exist.
+# (block_id, geography, asset_class, display_name, benchmark_ticker)
+_CANONICAL_SEED: tuple[tuple[str, str, str, str, str], ...] = (
+    ("na_equity_large",   "north_america",    "equity",       "North America Large Cap Equity",  "SPY"),
+    ("na_equity_growth",  "north_america",    "equity",       "North America Growth Equity",     "QQQ"),
+    ("na_equity_value",   "north_america",    "equity",       "North America Value Equity",      "IWD"),
+    ("na_equity_small",   "north_america",    "equity",       "North America Small Cap Equity",  "IWM"),
+    ("dm_europe_equity",  "dm_europe",        "equity",       "Developed Europe Equity",         "VGK"),
+    ("dm_asia_equity",    "dm_asia",          "equity",       "Developed Asia Pacific Equity",   "EWJ"),
+    ("em_equity",         "emerging_markets", "equity",       "Emerging Markets Equity",         "EEM"),
+    ("fi_us_aggregate",   "north_america",    "fixed_income", "US Aggregate Bond",               "AGG"),
+    ("fi_us_treasury",    "north_america",    "fixed_income", "US Treasury",                     "IEF"),
+    ("fi_us_short_term",  "north_america",    "fixed_income", "US Short Term Treasury",          "SHY"),
+    ("fi_us_high_yield",  "north_america",    "fixed_income", "US High Yield",                   "HYG"),
+    ("fi_us_tips",        "north_america",    "fixed_income", "US TIPS",                         "TIP"),
+    ("fi_ig_corporate",   "north_america",    "fixed_income", "Investment Grade Corporate",      "LQD"),
+    ("fi_em_debt",        "emerging_markets", "fixed_income", "Emerging Markets Debt",           "EMB"),
+    ("alt_real_estate",   "global",           "alternatives", "Global REITs",                    "VNQ"),
+    ("alt_gold",          "global",           "alternatives", "Gold",                            "GLD"),
+    ("alt_commodities",   "global",           "alternatives", "Broad Commodities",               "DBC"),
+    ("cash",              "global",           "cash",         "Cash / Money Market",             "BIL"),
 )
 
 # Tables carrying a FK/logical reference to ``allocation_blocks.block_id``.
@@ -200,7 +230,29 @@ def upgrade() -> None:
         print("[0153] inserted fi_us_short_term (no prior row)", flush=True)
     # else: existing_new and not existing_old — nothing to do.
 
-    # ── Step 4 — mark canonical set ───────────────────────────────
+    # ── Step 4 — seed missing canonical blocks ────────────────────
+    # Inline seed: fresh DBs (dev, CI, clean rebuild) never had a
+    # prior migration that populated the 18 canonical rows — the
+    # original 0153 docstring referenced a "prior migration" that
+    # never existed. Prod already has all 18 (seeded manually pre-
+    # deploy), so ON CONFLICT DO NOTHING makes this a safe no-op
+    # there. Rows beyond the canonical 18 (alt_hedge_fund, etc.) are
+    # left untouched.
+    for block_id, geo, asset_class, display, ticker in _CANONICAL_SEED:
+        conn.execute(
+            sa.text(
+                """
+                INSERT INTO allocation_blocks
+                    (block_id, geography, asset_class, display_name, benchmark_ticker)
+                VALUES
+                    (:block_id, :geo, :asset_class, :display, :ticker)
+                ON CONFLICT (block_id) DO NOTHING
+                """
+            ),
+            {"block_id": block_id, "geo": geo, "asset_class": asset_class, "display": display, "ticker": ticker},
+        )
+
+    # ── Step 5 — mark canonical set ───────────────────────────────
     # Flip is_canonical = true for the 18 IDs. Missing rows at this
     # point mean the catalog is under-seeded; surface loudly rather
     # than silently proceed.
@@ -243,7 +295,7 @@ def upgrade() -> None:
         )
     print(f"[0153] marked {canon_count} canonical blocks", flush=True)
 
-    # ── Step 5 — fix effective_to bit-rot ─────────────────────────
+    # ── Step 6 — fix effective_to bit-rot ─────────────────────────
     bitrot = conn.execute(
         sa.text(
             """
@@ -258,7 +310,7 @@ def upgrade() -> None:
         flush=True,
     )
 
-    # ── Step 6 — create allocation_template_audit ─────────────────
+    # ── Step 7 — create allocation_template_audit ─────────────────
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS allocation_template_audit (
@@ -281,7 +333,7 @@ def upgrade() -> None:
         """
     )
 
-    # ── Step 7 — backfill missing canonical rows ──────────────────
+    # ── Step 8 — backfill missing canonical rows ──────────────────
     backfill = conn.execute(
         sa.text(
             """
@@ -350,7 +402,7 @@ def upgrade() -> None:
             },
         )
 
-    # ── Step 8 — triggers for ongoing template enforcement ────────
+    # ── Step 9 — triggers for ongoing template enforcement ────────
     op.execute(
         r"""
         CREATE OR REPLACE FUNCTION fn_enforce_allocation_template_sa()

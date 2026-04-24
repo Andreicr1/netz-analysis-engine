@@ -24,11 +24,11 @@ from app.core.config.config_service import ConfigService
 from app.core.jobs.tracker import get_redis_pool
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.document import WealthDocument
+from app.domains.wealth.queries.catalog_sql import mv_unified_funds
 from app.domains.wealth.queries.manager_screener_sql import (
     ScreenerFilters,
     build_screener_queries,
 )
-from app.domains.wealth.queries.catalog_sql import mv_unified_funds
 
 logger = structlog.get_logger()
 

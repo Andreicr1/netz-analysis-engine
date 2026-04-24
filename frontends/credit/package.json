@@ -19,6 +19,7 @@
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.40.0",
     "codemirror-json-schema": "^0.8.0",
+    "@investintell/ui": "workspace:*",
     "@netz/ui": "workspace:*",
     "@tanstack/svelte-table": "^8.21.3",
     "svelte-dnd-action": "^0.9.0"
