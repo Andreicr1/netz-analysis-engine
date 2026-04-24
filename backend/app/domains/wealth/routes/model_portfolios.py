@@ -489,6 +489,52 @@ async def apply_portfolio_transition(
     if body.action == ACTION_APPROVE and policy.allow_self_approval:
         metadata.setdefault("self_approved", True)
 
+    # S2-Builder pre-flight 1b: degraded-run gate for activation.
+    # When the latest construction run's winner_signal indicates a
+    # degraded outcome, the operator must explicitly acknowledge via
+    # metadata.degraded_acknowledged=true. Hard-block signals
+    # (pre_solve_failure, block_coverage_insufficient, etc.) cannot
+    # be overridden — the operator must fix the root cause.
+    if body.action == ACTION_ACTIVATE:
+        latest_run = await db.execute(
+            select(PortfolioConstructionRun)
+            .where(PortfolioConstructionRun.portfolio_id == portfolio_id)
+            .order_by(PortfolioConstructionRun.requested_at.desc())
+            .limit(1),
+        )
+        run = latest_run.scalar_one_or_none()
+        if run is not None:
+            ct = run.cascade_telemetry or {}
+            ws = ct.get("winner_signal")
+            hard_block_signals = {
+                "pre_solve_failure",
+                "block_coverage_insufficient",
+                "template_incomplete",
+                "no_approved_allocation",
+                "instrument_concentration_breach",
+            }
+            degraded_signals = {
+                "cvar_infeasible_min_var",
+                "degraded_other",
+                "proposal_cvar_infeasible",
+            }
+            if ws in hard_block_signals:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Cannot activate: construction outcome '{ws}' requires resolution before activation.",
+                )
+            if ws in degraded_signals and not metadata.get("degraded_acknowledged"):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Construction outcome is degraded ('{ws}'). "
+                        "Set metadata.degraded_acknowledged=true to proceed."
+                    ),
+                )
+            if ws in degraded_signals and metadata.get("degraded_acknowledged"):
+                metadata["degraded_acknowledged_signal"] = ws
+                metadata["degraded_acknowledged_by"] = actor.actor_id
+
     try:
         await transition(
             db,
@@ -1739,7 +1785,11 @@ async def activate_portfolio(
     if not opt_meta.get("cvar_within_limit", False):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cannot activate: CVaR exceeds profile limit. Add funds or adjust profile.",
+            detail=(
+                "Cannot activate: CVaR exceeds profile limit. "
+                "Use POST /{portfolio_id}/transitions with action='activate' "
+                "and metadata.degraded_acknowledged=true to override."
+            ),
         )
 
     portfolio.status = "active"
