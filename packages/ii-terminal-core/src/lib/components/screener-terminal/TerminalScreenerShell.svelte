@@ -28,6 +28,7 @@
 	} from "./TerminalScreenerFilters.svelte";
 	import TerminalDataGrid, { type ScreenerAsset } from "./TerminalDataGrid.svelte";
 	import FilterChipRow from "./FilterChipRow.svelte";
+	import type { FocusTriggerInitialTab } from "../terminal/focus-mode/focus-trigger";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
@@ -79,6 +80,9 @@
 		elite_flag: boolean | null;
 		manager_score: number | null;
 		blended_momentum_score: number | null;
+		sharpe_1y: number | null;
+		max_drawdown_1y: number | null;
+		volatility_1y: number | null;
 		in_universe: boolean;
 		approval_status?: string | null;
 		disclosure?: { nav_status?: string | null };
@@ -113,6 +117,9 @@
 			ret10y: raw.avg_annual_return_10y != null ? raw.avg_annual_return_10y * 100 : null,
 			managerScore: raw.manager_score,
 			blendedMomentumScore: raw.blended_momentum_score,
+			sharpe1y: raw.sharpe_1y,
+			maxDrawdown1y: raw.max_drawdown_1y,
+			volatility1y: raw.volatility_1y,
 			inceptionDate: raw.inception_date,
 			isin: raw.isin,
 			navStatus: raw.disclosure?.nav_status ?? null,
@@ -130,6 +137,31 @@
 	let errorMessage = $state<string | null>(null);
 	let selectedId = $state<string | null>(null);
 	let highlightedIndex = $state(-1);
+	const activeFilterCount = $derived(
+		(filters.query.trim() ? 1 : 0) +
+		filters.fundUniverse.size +
+		filters.strategies.size +
+		filters.geographies.size +
+		filters.managerNames.length +
+		(filters.aumMin > 0 ? 1 : 0) +
+		(filters.aumMax > 0 ? 1 : 0) +
+		(filters.returnMin > -999 ? 1 : 0) +
+		(filters.returnMax < 999 ? 1 : 0) +
+		(filters.expenseMax < 10 ? 1 : 0) +
+		(filters.eliteOnly ? 1 : 0) +
+		(filters.sharpeMin ? 1 : 0) +
+		(filters.sharpeMax ? 1 : 0) +
+		(filters.drawdownMinPct ? 1 : 0) +
+		(filters.drawdownMaxPct ? 1 : 0) +
+		(filters.volatilityMax ? 1 : 0) +
+		(filters.return10yMin ? 1 : 0) +
+		(filters.return10yMax ? 1 : 0),
+	);
+	const loadedEliteCount = $derived(assets.filter((asset) => asset.eliteFlag).length);
+	const avgRet1y = $derived.by(() => {
+		const vals = assets.map((asset) => asset.ret1y).filter((value): value is number => value !== null);
+		return vals.length ? vals.reduce((sum, value) => sum + value, 0) / vals.length : null;
+	});
 
 	// ── Infinite scroll state ────────────────────────────
 	let nextCursor = $state<string | null>(null);
@@ -207,6 +239,7 @@
 			sort: "aum_desc",
 			in_universe: "true", // Always filter to NAV-populated funds — non-negotiable data-quality gate
 		};
+		if (f.query.trim()) q.q = f.query.trim();
 		if (f.eliteOnly) q.elite_only = "true";
 		if (f.fundUniverse.size > 0) q.fund_universe = [...f.fundUniverse].join(",");
 		if (f.strategies.size > 0) q.strategy_label = [...f.strategies].join(",");
@@ -324,6 +357,24 @@
 		highlightedIndex = index;
 	}
 
+	function openFocus(asset?: ScreenerAsset | null, initialTab: FocusTriggerInitialTab = "performance") {
+		if (!asset) return;
+		selectedId = asset.id;
+		rootEl?.dispatchEvent(
+			new CustomEvent("focustrigger", {
+				bubbles: true,
+				detail: {
+					entityKind: "fund",
+					entityId: asset.id,
+					entityLabel: asset.name,
+					ticker: asset.ticker,
+					instrumentId: asset.instrumentId,
+					initialTab,
+				},
+			}),
+		);
+	}
+
 	// ── Action handlers (approve / DD queue) ────────────
 	let toastMessage = $state<{ text: string; type: "success" | "warn" | "info" } | null>(null);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -402,14 +453,7 @@
 				if (highlightedIndex >= 0 && highlightedIndex < assets.length) {
 					const asset = assets[highlightedIndex];
 					if (asset) {
-						selectedId = asset.id;
-						// Dispatch focustrigger event for FocusMode (bubbles to page)
-						rootEl?.dispatchEvent(
-							new CustomEvent("focustrigger", {
-								bubbles: true,
-								detail: { entityKind: "fund", entityId: asset.id, entityLabel: asset.name },
-							}),
-						);
+						openFocus(asset);
 					}
 				}
 				break;
@@ -446,6 +490,12 @@
 						showToast("Fund must be approved to universe first", "warn");
 					}
 				}
+				break;
+			}
+			case "r": {
+				e.preventDefault();
+				const asset = highlightedIndex >= 0 && highlightedIndex < assets.length ? assets[highlightedIndex] : null;
+				openFocus(asset, "analysis");
 				break;
 			}
 		}
@@ -492,6 +542,34 @@
 				</div>
 			</div>
 		{:else}
+			<div class="ts-toolbar">
+				<div class="ts-summary">
+					<span class="ts-summary-num">{assets.length}</span> / {total} funds ·
+					<span class="ts-summary-accent"> {loadedEliteCount}</span> elite ·
+					filters <span class="ts-summary-accent">{activeFilterCount}</span> active ·
+					avg 1Y
+					<span class:ts-up={(avgRet1y ?? 0) >= 0} class:ts-down={(avgRet1y ?? 0) < 0}>
+						{avgRet1y === null ? "-" : `${avgRet1y >= 0 ? "+" : ""}${avgRet1y.toFixed(1)}%`}
+					</span>
+				</div>
+				<label class="ts-search" aria-label="Search fund, ticker or manager">
+					<span>⌕</span>
+					<input
+						value={filters.query}
+						placeholder="search fund / ticker / manager"
+						oninput={(e) => onFiltersChange({ ...filters, query: e.currentTarget.value })}
+					/>
+				</label>
+				<button type="button" class="ts-tool-btn">EXPORT CSV</button>
+				<button
+					type="button"
+					class="ts-tool-btn"
+					disabled={!selectedId}
+					onclick={() => openFocus(selectedId ? assets.find((asset) => asset.id === selectedId) ?? null : null, "analysis")}
+				>
+					ANALYZE
+				</button>
+			</div>
 			<FilterChipRow {filters} {onFiltersChange} />
 			<svelte:boundary>
 				<TerminalDataGrid
@@ -541,13 +619,13 @@
 	.ts-root {
 		display: grid;
 		grid-template-areas: "filters datagrid";
-		grid-template-columns: 240px 1fr;
+		grid-template-columns: 286px 1fr;
 		grid-template-rows: 1fr;
-		gap: 2px;
+		gap: 1px;
 		width: 100%;
 		height: 100%;
 		overflow: hidden;
-		background: var(--terminal-bg-void);
+		background: var(--terminal-fg-disabled);
 		font-family: var(--terminal-font-mono);
 	}
 
@@ -569,6 +647,76 @@
 	.ts-datagrid :global(> .dg-root) {
 		flex: 1 1 auto;
 		min-height: 0;
+	}
+
+	.ts-toolbar {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		height: 32px;
+		padding: 0 12px;
+		border-bottom: 1px solid var(--terminal-fg-disabled);
+		background: var(--terminal-bg-panel);
+		font-family: var(--terminal-font-mono);
+	}
+	.ts-summary {
+		min-width: max-content;
+		color: var(--terminal-fg-secondary);
+		font-size: 11px;
+		letter-spacing: 0.04em;
+	}
+	.ts-summary-num,
+	.ts-summary-accent {
+		color: var(--terminal-accent-amber);
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+	.ts-up {
+		color: var(--terminal-status-success);
+		font-weight: 700;
+	}
+	.ts-down {
+		color: var(--terminal-status-error);
+		font-weight: 700;
+	}
+	.ts-search {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		width: min(380px, 35vw);
+		height: 22px;
+		padding: 0 8px;
+		border: 1px solid var(--terminal-fg-disabled);
+		background: var(--terminal-bg-panel-raised);
+		color: var(--terminal-fg-muted);
+	}
+	.ts-search input {
+		flex: 1;
+		min-width: 0;
+		border: 0;
+		outline: 0;
+		background: transparent;
+		color: var(--terminal-fg-primary);
+		font: inherit;
+		font-size: 11px;
+	}
+	.ts-search input::placeholder {
+		color: var(--terminal-fg-muted);
+	}
+	.ts-tool-btn {
+		height: 22px;
+		padding: 0 14px;
+		border: 1px solid var(--terminal-fg-disabled);
+		background: transparent;
+		color: var(--terminal-fg-secondary);
+		cursor: pointer;
+		font: inherit;
+		font-size: 10px;
+		letter-spacing: var(--terminal-tracking-caps);
+	}
+	.ts-tool-btn--primary {
+		border-color: var(--terminal-accent-amber);
+		color: var(--terminal-accent-amber);
 	}
 
 	/* ── Error panel ─────────────────────────────────── */

@@ -35,8 +35,8 @@
 
 <div class="lp-root">
 	<div class="lp-header">
-		<span class="lp-title">LIQUIDITY</span>
-		<span class="lp-sub">NFCI</span>
+		<span class="lp-title">GLOBAL LIQUIDITY · NFCI</span>
+		<span class="lp-sub">24M</span>
 	</div>
 
 	{#if loading}
@@ -44,11 +44,13 @@
 	{:else}
 		<div class="lp-gauge-wrap">
 			<div class="lp-gauge-track">
+				<div class="lp-gauge-fill"></div>
+				<div class="lp-gauge-labels">
+					<span>LOOSE</span>
+					<span>NEUTRAL</span>
+					<span>TIGHT</span>
+				</div>
 				<div class="lp-gauge-needle" style:left={`${gaugeWidth}%`}></div>
-			</div>
-			<div class="lp-gauge-labels">
-				<span>LOOSE</span>
-				<span>TIGHT</span>
 			</div>
 		</div>
 
@@ -71,11 +73,12 @@
 	.lp-root {
 		display: flex;
 		flex-direction: column;
-		gap: var(--terminal-space-2);
-		padding: var(--terminal-space-2) var(--terminal-space-3);
-		background: var(--terminal-bg-panel);
-		border: var(--terminal-border-hairline);
-		font-family: var(--terminal-font-mono);
+		gap: 7px;
+		min-height: 0;
+		padding: 10px 14px;
+		overflow: hidden;
+		background: var(--ii-surface);
+		font-family: var(--ii-font-mono);
 	}
 	.lp-header {
 		display: flex;
@@ -83,35 +86,47 @@
 		gap: var(--terminal-space-2);
 	}
 	.lp-title {
-		color: var(--terminal-fg-primary);
-		font-size: var(--terminal-text-11);
-		font-weight: 600;
-		letter-spacing: var(--terminal-tracking-caps);
+		color: var(--ii-text-muted);
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: var(--ii-terminal-tr-caps);
 	}
 	.lp-sub,
 	.lp-loading,
 	.lp-spark-label {
-		color: var(--terminal-fg-tertiary);
-		font-size: var(--terminal-text-10);
+		color: var(--ii-text-muted);
+		font-size: 10px;
 	}
 	.lp-gauge-wrap {
-		display: flex;
-		flex-direction: column;
-		gap: 3px;
+		display: block;
 	}
 	.lp-gauge-track {
 		position: relative;
-		height: 6px;
+		height: 46px;
+		overflow: hidden;
+		border: 1px solid var(--ii-border-subtle);
 		border-radius: 2px;
-		background: linear-gradient(to right, #4adf86, #f6c90e, #f87171);
+		background: var(--ii-surface-alt);
+	}
+	.lp-gauge-fill {
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(
+			90deg,
+			rgba(61, 211, 154, 0.42) 0%,
+			rgba(61, 211, 154, 0.14) 32%,
+			rgba(255, 255, 255, 0.05) 50%,
+			rgba(255, 92, 122, 0.14) 68%,
+			rgba(255, 92, 122, 0.42) 100%
+		);
 	}
 	.lp-gauge-needle {
 		position: absolute;
-		top: -2px;
-		width: 2px;
-		height: 10px;
-		background: var(--terminal-fg-primary);
-		box-shadow: 0 0 4px var(--terminal-accent-amber);
+		top: 0;
+		bottom: 0;
+		width: 3px;
+		background: var(--ii-brand-primary);
+		box-shadow: 0 0 8px rgba(255, 150, 90, 0.6);
 		transform: translateX(-1px);
 	}
 	.lp-gauge-labels,
@@ -120,22 +135,28 @@
 		justify-content: space-between;
 	}
 	.lp-gauge-labels {
-		color: var(--terminal-fg-tertiary);
+		position: absolute;
+		inset: 0;
+		align-items: center;
+		margin: 0;
+		padding: 0 10px;
+		color: var(--ii-text-muted);
 		font-size: 9px;
-		letter-spacing: 0.04em;
+		letter-spacing: var(--ii-terminal-tr-caps);
+		pointer-events: none;
 	}
 	.lp-value-row {
 		align-items: baseline;
 	}
 	.lp-nfci {
-		font-size: var(--terminal-text-14);
+		font-size: 14px;
 		font-variant-numeric: tabular-nums;
-		font-weight: 600;
+		font-weight: 700;
 	}
 	.lp-label {
-		font-size: var(--terminal-text-11);
+		font-size: 11px;
 		font-weight: 600;
-		letter-spacing: var(--terminal-tracking-caps);
+		letter-spacing: var(--ii-terminal-tr-caps);
 	}
 	.lp-spark {
 		width: 100%;

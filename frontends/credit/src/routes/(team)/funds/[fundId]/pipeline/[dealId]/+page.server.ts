@@ -1,7 +1,7 @@
 /** Deal detail — loads deal, IC memo status, stage timeline. */
 import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
-import { error } from "@sveltejs/kit";
+import { errData } from "@investintell/ui/runtime";
 
 export const load: PageServerLoad = async ({ params, parent }) => {
 	const { token } = await parent();
@@ -17,7 +17,15 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 	]);
 
 	if (deal.status === "rejected") {
-		throw error(404, "Deal not found.");
+		return {
+			deal: {},
+			stageTimeline: null,
+			icMemo: null,
+			votingStatus: null,
+			fundId,
+			dealId,
+			dealRoute: errData("NOT_FOUND", "Deal not found.", false),
+		};
 	}
 
 	return {

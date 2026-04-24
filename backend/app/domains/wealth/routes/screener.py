@@ -72,6 +72,7 @@ from app.domains.wealth.schemas.instrument_search import (
     InstrumentSearchPage,
     ScreenerFacets,
 )
+from app.domains.wealth.schemas.screener_peer import PeerMetricRow, PeerMetricsResponse
 from app.domains.wealth.schemas.screening import (
     ScreeningResultRead,
     ScreeningRunRead,
@@ -134,6 +135,179 @@ def _require_investment_role(actor: Actor) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Investment Team or Admin role required",
         )
+
+
+# ── Peer metrics ────────────────────────────────────────────────────────────
+
+
+def _pct(values: list[float], p: float) -> float | None:
+    if not values:
+        return None
+    sv = sorted(values)
+    idx = (p / 100) * (len(sv) - 1)
+    lo = int(idx)
+    hi = min(lo + 1, len(sv) - 1)
+    return sv[lo] + (sv[hi] - sv[lo]) * (idx - lo)
+
+
+@router.get(
+    "/peer-metrics/{fund_id}",
+    response_model=PeerMetricsResponse,
+    summary="Sharpe/drawdown peer distribution for a fund by strategy_label",
+    tags=["screener"],
+)
+async def get_peer_metrics(
+    fund_id: str,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> PeerMetricsResponse:
+    """Return subject Sharpe/drawdown alongside same-strategy peer distribution.
+
+    Reads global fund catalog/risk tables. The route accepts a discovery
+    external_id, ticker, or instrument_id string as ``fund_id``.
+    """
+    subject_res = await db.execute(
+        text(
+            """
+            SELECT
+                iu.instrument_id::text AS instrument_id,
+                COALESCE(iu.ticker, muf.ticker) AS ticker,
+                COALESCE(iu.name, muf.name) AS name,
+                COALESCE(iu.attributes->>'strategy_label', muf.strategy_label) AS strategy_label
+            FROM instruments_universe iu
+            LEFT JOIN mv_unified_funds muf
+              ON muf.ticker = iu.ticker
+              OR (muf.isin IS NOT NULL AND muf.isin = iu.isin)
+            WHERE iu.instrument_id::text = :fid
+               OR iu.ticker = :fid
+               OR muf.external_id = :fid
+            ORDER BY (muf.external_id = :fid) DESC NULLS LAST
+            LIMIT 1
+            """,
+        ),
+        {"fid": fund_id},
+    )
+    subject_row = subject_res.fetchone()
+    if not subject_row:
+        raise HTTPException(status_code=404, detail="Fund not found in universe")
+
+    subject_instrument_id = str(subject_row.instrument_id)
+    strategy_label: str | None = subject_row.strategy_label
+
+    subject_metrics_res = await db.execute(
+        text(
+            """
+            SELECT sharpe_1y, max_drawdown_1y
+            FROM fund_risk_metrics
+            WHERE instrument_id = CAST(:instrument_id AS uuid)
+              AND organization_id IS NULL
+            ORDER BY calc_date DESC
+            LIMIT 1
+            """,
+        ),
+        {"instrument_id": subject_instrument_id},
+    )
+    subject_metrics = subject_metrics_res.fetchone()
+    subject_sharpe = (
+        float(subject_metrics.sharpe_1y)
+        if subject_metrics and subject_metrics.sharpe_1y is not None
+        else None
+    )
+    subject_drawdown = (
+        float(subject_metrics.max_drawdown_1y)
+        if subject_metrics and subject_metrics.max_drawdown_1y is not None
+        else None
+    )
+
+    if not strategy_label:
+        return PeerMetricsResponse(
+            fund_id=fund_id,
+            strategy_label=None,
+            peer_count=0,
+            subject_sharpe=subject_sharpe,
+            subject_drawdown=subject_drawdown,
+            peer_sharpe_p25=None,
+            peer_sharpe_p50=None,
+            peer_sharpe_p75=None,
+            peer_drawdown_p25=None,
+            peer_drawdown_p50=None,
+            peer_drawdown_p75=None,
+        )
+
+    peers_res = await db.execute(
+        text(
+            """
+            SELECT
+                iu.ticker,
+                iu.name,
+                frm.sharpe_1y,
+                frm.max_drawdown_1y,
+                frm.manager_score
+            FROM instruments_universe iu
+            LEFT JOIN mv_unified_funds muf
+              ON muf.ticker = iu.ticker
+              OR (muf.isin IS NOT NULL AND muf.isin = iu.isin)
+            JOIN LATERAL (
+                SELECT sharpe_1y, max_drawdown_1y, manager_score
+                FROM fund_risk_metrics
+                WHERE instrument_id = iu.instrument_id
+                  AND organization_id IS NULL
+                ORDER BY calc_date DESC
+                LIMIT 1
+            ) frm ON TRUE
+            WHERE COALESCE(iu.attributes->>'strategy_label', muf.strategy_label) = :strategy_label
+              AND iu.instrument_id::text != :subject_instrument_id
+            ORDER BY frm.manager_score DESC NULLS LAST
+            LIMIT 200
+            """,
+        ),
+        {
+            "strategy_label": strategy_label,
+            "subject_instrument_id": subject_instrument_id,
+        },
+    )
+    peers = peers_res.fetchall()
+
+    sharpes = [float(peer.sharpe_1y) for peer in peers if peer.sharpe_1y is not None]
+    drawdowns = [
+        float(peer.max_drawdown_1y)
+        for peer in peers
+        if peer.max_drawdown_1y is not None
+    ]
+    top_peers = sorted(
+        [peer for peer in peers if peer.manager_score is not None],
+        key=lambda peer: float(peer.manager_score),
+        reverse=True,
+    )[:5]
+
+    return PeerMetricsResponse(
+        fund_id=fund_id,
+        strategy_label=strategy_label,
+        peer_count=len(peers),
+        subject_sharpe=subject_sharpe,
+        subject_drawdown=subject_drawdown,
+        peer_sharpe_p25=_pct(sharpes, 25),
+        peer_sharpe_p50=_pct(sharpes, 50),
+        peer_sharpe_p75=_pct(sharpes, 75),
+        peer_drawdown_p25=_pct(drawdowns, 25),
+        peer_drawdown_p50=_pct(drawdowns, 50),
+        peer_drawdown_p75=_pct(drawdowns, 75),
+        top_peers=[
+            PeerMetricRow(
+                ticker=peer.ticker or "",
+                name=peer.name,
+                sharpe_ratio=(
+                    float(peer.sharpe_1y) if peer.sharpe_1y is not None else None
+                ),
+                max_drawdown=(
+                    float(peer.max_drawdown_1y)
+                    if peer.max_drawdown_1y is not None
+                    else None
+                ),
+            )
+            for peer in top_peers
+        ],
+    )
 
 
 # ── Phase 2 Session C commit 6: ELITE fast-path catalog ─────────
@@ -1726,6 +1900,13 @@ async def get_catalog(
                 elite_flag=bool(r.elite_flag) if getattr(r, "elite_flag", None) is not None else None,
                 elite_rank_within_strategy=getattr(r, "elite_rank_within_strategy", None),
                 manager_score=float(r.manager_score) if getattr(r, "manager_score", None) is not None else None,
+                sharpe_1y=float(r.sharpe_1y) if getattr(r, "sharpe_1y", None) is not None else None,
+                max_drawdown_1y=(
+                    float(r.max_drawdown_1y)
+                    if getattr(r, "max_drawdown_1y", None) is not None
+                    else None
+                ),
+                volatility_1y=float(r.volatility_1y) if getattr(r, "volatility_1y", None) is not None else None,
                 blended_momentum_score=(
                     float(r.blended_momentum_score)
                     if getattr(r, "blended_momentum_score", None) is not None
@@ -2007,7 +2188,11 @@ async def get_catalog_facets(
 
 class FundDetailOut(UnifiedFundItem):
     """Extended fund detail (superset of UnifiedFundItem)."""
-    pass
+
+    # Extra metrics from risk MV for frontend focus/modal
+    sharpe_ratio: float | None = None
+    max_drawdown: float | None = None
+    volatility: float | None = None
 
 
 @router.get(
@@ -2065,11 +2250,22 @@ async def get_catalog_fund_detail(
         investor_count=r.investor_count,
         vintage_year=getattr(r, "vintage_year", None),
         expense_ratio_pct=float(r.expense_ratio_pct) if getattr(r, "expense_ratio_pct", None) is not None else None,
-        avg_annual_return_1y=float(r.avg_annual_return_1y) if getattr(r, "avg_annual_return_1y", None) is not None else None,
+        avg_annual_return_1y=(
+            float(r.return_1y) if getattr(r, "return_1y", None) is not None
+            else float(r.avg_annual_return_1y) if getattr(r, "avg_annual_return_1y", None) is not None
+            else None
+        ),
         avg_annual_return_10y=float(r.avg_annual_return_10y) if getattr(r, "avg_annual_return_10y", None) is not None else None,
         is_index=bool(r.is_index) if getattr(r, "is_index", None) is not None else None,
         is_target_date=bool(r.is_target_date) if getattr(r, "is_target_date", None) is not None else None,
         is_fund_of_fund=bool(r.is_fund_of_fund) if getattr(r, "is_fund_of_fund", None) is not None else None,
+        elite_flag=bool(r.elite_flag) if getattr(r, "elite_flag", None) is not None else None,
+        elite_rank_within_strategy=getattr(r, "elite_rank_within_strategy", None),
+        manager_score=float(r.manager_score) if getattr(r, "manager_score", None) is not None else None,
+        blended_momentum_score=float(r.blended_momentum_score) if getattr(r, "blended_momentum_score", None) is not None else None,
+        sharpe_ratio=float(r.sharpe_1y) if getattr(r, "sharpe_1y", None) is not None else None,
+        max_drawdown=float(r.max_drawdown_1y) if getattr(r, "max_drawdown_1y", None) is not None else None,
+        volatility=float(r.volatility_1y) if getattr(r, "volatility_1y", None) is not None else None,
         disclosure=_build_disclosure(
             universe=r.universe,
             has_holdings=bool(r.has_holdings),

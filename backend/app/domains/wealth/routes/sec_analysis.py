@@ -256,7 +256,20 @@ async def reverse_lookup(
     name_result = await db.execute(name_stmt)
     company_name = name_result.scalar_one_or_none()
 
-    # All holders of this CUSIP in the target quarter
+    totals_stmt = (
+        select(
+            func.count().label("holder_count"),
+            func.coalesce(func.sum(Sec13fHolding.market_value), 0).label("total_value"),
+        )
+        .where(Sec13fHolding.cusip == cusip)
+        .where(Sec13fHolding.report_date == target_date)
+    )
+    totals_result = await db.execute(totals_stmt)
+    totals_row = totals_result.mappings().one()
+    total_holders = int(totals_row["holder_count"] or 0)
+    total_value = int(totals_row["total_value"] or 0)
+
+    # Top holders of this CUSIP in the target quarter
     stmt = (
         select(
             Sec13fHolding.cik,
@@ -281,9 +294,6 @@ async def reverse_lookup(
     mgr_result = await db.execute(mgr_stmt)
     cik_to_name: dict[str, str] = {r[0]: r[1] for r in mgr_result.all()}
 
-    # Total value for % calculation
-    total_value = sum(int(r["market_value"] or 0) for r in holding_rows)
-
     holders = [
         ReverseLookupItem(
             cik=r["cik"],
@@ -302,7 +312,7 @@ async def reverse_lookup(
         cusip=cusip,
         company_name=company_name,
         holders=holders,
-        total_holders=len(holders),
+        total_holders=total_holders,
     )
 
 

@@ -1,41 +1,20 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 // Build metadata exposed to the client bundle via import.meta.env.
 // Railway injects GIT_SHA in production deploys; local dev falls back
-// to "local-dev". Mirrors the convention used by frontends/wealth.
+// to "local-dev".
 const BUILD_SHA = process.env.GIT_SHA ?? "local-dev";
 const BUILD_ENV = process.env.NODE_ENV === "production" ? "prod" : "dev";
 
+const isSvelteCheck = process.argv.some(arg => arg.includes('svelte-check')) || process.env.npm_lifecycle_script?.includes('svelte-check');
+
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit()],
+	plugins: [!isSvelteCheck && tailwindcss(), sveltekit()],
 	define: {
 		"import.meta.env.VITE_BUILD_SHA": JSON.stringify(BUILD_SHA),
 		"import.meta.env.VITE_ENV": JSON.stringify(BUILD_ENV),
-	},
-	resolve: {
-		// X2 transitional holdover: $lib still redirects to wealth's
-		// src/lib because copied wealth components may resolve internal
-		// $lib/* imports through this terminal config. $wealth alias
-		// was removed in X5b after migration to
-		// @investintell/ii-terminal-core. Array form required because
-		// the object form merges with SvelteKit's alias injection and
-		// plugin defaults win; array aliases run first in declared order.
-		alias: [
-			{
-				find: /^\$lib\/(.*)$/,
-				replacement: path.resolve(__dirname, "../wealth/src/lib/$1"),
-			},
-			{
-				find: /^\$lib$/,
-				replacement: path.resolve(__dirname, "../wealth/src/lib"),
-			},
-		],
 	},
 	optimizeDeps: {
 		include: [

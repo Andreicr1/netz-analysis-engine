@@ -27,10 +27,11 @@
 
 	interface Props {
 		selectedId: string | null;
+		pinnedNode?: TreeNode | null;
 		onSelect: (node: TreeNode) => void;
 	}
 
-	let { selectedId, onSelect }: Props = $props();
+	let { selectedId, pinnedNode = null, onSelect }: Props = $props();
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
@@ -67,6 +68,11 @@
 
 	let debounceHandle: ReturnType<typeof setTimeout> | null = null;
 	let fetchSeq = 0;
+	const displayNodes = $derived.by(() => {
+		if (!pinnedNode) return nodes;
+		if (nodes.some((node) => node.id === pinnedNode.id)) return nodes;
+		return [pinnedNode, ...nodes];
+	});
 
 	$effect(() => {
 		const q = searchQuery.trim();
@@ -117,7 +123,7 @@
 <div class="at-root">
 	<div class="at-header">
 		<span class="at-title">ASSET BROWSER</span>
-		<span class="at-count">{nodes.length} / {formatNumber(total, 0)}</span>
+		<span class="at-count">{displayNodes.length} / {formatNumber(total, 0)}</span>
 	</div>
 
 	<div class="at-search">
@@ -132,12 +138,12 @@
 	<div class="at-scroll">
 		{#if errorMessage}
 			<div class="at-empty at-err">{errorMessage}</div>
-		{:else if loading && nodes.length === 0}
+		{:else if loading && displayNodes.length === 0}
 			<div class="at-empty">Loading catalog&hellip;</div>
-		{:else if nodes.length === 0}
+		{:else if displayNodes.length === 0}
 			<div class="at-empty">No funds match that search.</div>
 		{:else}
-			{#each nodes as node (node.id)}
+			{#each displayNodes as node (node.id)}
 				<button
 					class="at-row"
 					class:selected={selectedId === node.id}

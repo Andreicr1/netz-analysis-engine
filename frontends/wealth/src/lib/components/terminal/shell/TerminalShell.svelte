@@ -197,10 +197,6 @@
 		await goto(resolve("/live"));
 	}
 
-	async function navResearch() {
-		await goto(resolve("/screener/research"));
-	}
-
 	async function navAlerts() {
 		await goto(resolve("/alerts"));
 	}
@@ -218,7 +214,7 @@
 		d: navDD,
 		p: navBuilder,
 		l: navLive,
-		r: navResearch,
+		r: navScreener,
 		n: navAlerts,
 	};
 

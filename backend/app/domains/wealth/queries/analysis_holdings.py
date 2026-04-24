@@ -121,7 +121,7 @@ async def fetch_top_holdings(
                 "issuer_name": r["issuer_name"],
                 "cusip": r["cusip"],
                 "sector": r["sector"],
-                "weight": float(r["pct_of_nav"]) if r["pct_of_nav"] is not None else None,
+                "weight": float(r["pct_of_nav"]) / 100.0 if r["pct_of_nav"] is not None else None,
                 "market_value": int(r["market_value"]) if r["market_value"] is not None else None,
             }
             for r in top_rows
@@ -129,7 +129,7 @@ async def fetch_top_holdings(
         "sector_breakdown": [
             {
                 "name": r["sector"],
-                "weight": float(r["weight"]) if r["weight"] is not None else None,
+                "weight": float(r["weight"]) / 100.0 if r["weight"] is not None else None,
                 "holdings_count": int(r["holdings_count"]),
             }
             for r in sector_rows
@@ -265,9 +265,13 @@ async def fetch_reverse_lookup(
             c.holder_cik,
             c.position_value,
             c.source,
-            m.firm_name
+            CASE
+                WHEN c.source = 'nport' THEN COALESCE(rf.fund_name, m.firm_name, 'Fund ' || RIGHT(c.holder_cik, 6))
+                ELSE COALESCE(m.firm_name, rf.fund_name, 'Manager ' || RIGHT(c.holder_cik, 6))
+            END AS holder_name
         FROM combined c
         LEFT JOIN sec_managers m ON m.cik = c.holder_cik
+        LEFT JOIN sec_registered_funds rf ON rf.cik = c.holder_cik
         ORDER BY c.position_value DESC NULLS LAST
         LIMIT :limit
         """,
@@ -287,14 +291,14 @@ async def fetch_reverse_lookup(
     edges: list[dict[str, Any]] = []
     for r in holder_rows:
         holder_cik = r["holder_cik"]
-        firm_name = r["firm_name"] or f"CIK {holder_cik}"
+        holder_name = r["holder_name"] or f"Holder {str(holder_cik)[-6:]}"
         position_value = (
             int(r["position_value"]) if r["position_value"] is not None else None
         )
         nodes.append(
             {
                 "id": holder_cik,
-                "name": firm_name,
+                "name": holder_name,
                 "category": "holder",
                 "symbolSize": 16,
                 "value": position_value,

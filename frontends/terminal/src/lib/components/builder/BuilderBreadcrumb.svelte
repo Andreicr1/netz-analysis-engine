@@ -6,7 +6,7 @@
   portfolio-name badge on the right (only when a ?portfolio_id query
   is active, so users know which model portfolio they're editing).
 
-  Pure terminal tokens — no shadcn bleed, no `$lib/*` imports.
+  Pure terminal tokens; no app-local component aliases.
 -->
 <script lang="ts">
 	import { ChevronRight } from "lucide-svelte";

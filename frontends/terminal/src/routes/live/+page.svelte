@@ -42,7 +42,7 @@
 	import AlertStreamPanel from "@investintell/ii-terminal-core/components/terminal/live/AlertStreamPanel.svelte";
 	import RebalanceFocusMode from "@investintell/ii-terminal-core/components/terminal/live/RebalanceFocusMode.svelte";
 	import TerminalPriceChart from "@investintell/ii-terminal-core/components/portfolio/live/charts/TerminalPriceChart.svelte";
-	import type { BarData, LiveTick } from "@investintell/ii-terminal-core/components/portfolio/live/charts/TerminalPriceChart.svelte";
+	import type { BarData, LiveTick, Timeframe } from "@investintell/ii-terminal-core/components/portfolio/live/charts/TerminalPriceChart.svelte";
 
 	let { data }: { data: PageData } = $props();
 
@@ -219,7 +219,7 @@
 		const actualMap = new Map(actual.map((h) => [h.instrument_id, h.weight]));
 
 		return targetFunds
-			.map((f) => {
+			.map((f): HoldingRow | null => {
 				const ticker = resolveTicker(f.instrument_id, "");
 				if (!ticker) return null;
 				return {
@@ -235,8 +235,6 @@
 	});
 
 	// ---- Chart state ----
-
-	type Timeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "5Y" | "MAX";
 
 	// Lookback days per timeframe — passed as start_date to the
 	// historical endpoint so every TF button actually widens the

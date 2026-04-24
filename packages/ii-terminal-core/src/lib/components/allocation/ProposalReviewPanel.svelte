@@ -106,6 +106,7 @@
 	const isInfeasible = $derived(!proposal.proposal_metrics.cvar_feasible);
 
 	async function doApprove(confirmInfeasible: boolean): Promise<void> {
+		if (approving) return;
 		approving = true;
 		errorMsg = null;
 		try {

@@ -50,6 +50,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import time
 import uuid
 import zlib
@@ -113,6 +114,17 @@ LOCK_ID: int = 900_101
 
 #: DL18 P1 — hard wall-clock timeout for a construction run.
 CONSTRUCTION_TIMEOUT_SECONDS: float = 120.0
+
+
+def _jsonb_safe(obj: Any) -> Any:
+    """Return a JSONB-safe copy by replacing NaN/Inf floats with None."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {key: _jsonb_safe(value) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [_jsonb_safe(value) for value in obj]
+    return obj
 
 
 class RunCancelledError(Exception):
@@ -2071,6 +2083,30 @@ async def _execute_inner(
     run.universe_fingerprint = hashlib.sha256(
         json.dumps(sorted(weights_proposed.keys())).encode(),
     ).hexdigest()
+
+    # Materialize the accepted construction onto the portfolio itself.
+    #
+    # The Builder's Backtest/Monte Carlo tabs read from model_portfolio_nav,
+    # which is synthesized from model_portfolios.fund_selection_schema. The
+    # construction run row is an audit artifact; it is not sufficient by
+    # itself for downstream analytics.
+    if not propose_mode and funds:
+        portfolio.fund_selection_schema = _jsonb_safe(base_result)
+        portfolio.status = "backtesting"
+        if portfolio.state in {"draft", "rejected"}:
+            portfolio.state = "constructed"
+            portfolio.state_changed_by = run.requested_by
+            portfolio.state_changed_at = datetime.now(tz=timezone.utc)
+
+        from app.domains.wealth.workers.portfolio_nav_synthesizer import (
+            synthesize_portfolio_nav,
+        )
+
+        nav_summary = await synthesize_portfolio_nav(db, portfolio, commit=False)
+        run.statistical_inputs = {
+            **(run.statistical_inputs or {}),
+            "portfolio_nav_synthesis": nav_summary,
+        }
 
     await db.flush()
 

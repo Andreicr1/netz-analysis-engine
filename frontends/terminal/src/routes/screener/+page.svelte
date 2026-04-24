@@ -27,6 +27,7 @@
 		const managerRaw = params.get("manager");
 
 		return {
+			query: params.get("q") ?? "",
 			fundUniverse: universeRaw ? new Set(universeRaw.split(",")) : new Set(),
 			strategies: strategyRaw ? new Set(strategyRaw.split(",")) : new Set(),
 			geographies: geoRaw ? new Set(geoRaw.split(",")) : new Set(),
@@ -56,10 +57,11 @@
 
 		// Clear all filter params first, then set non-default values
 		// Clear all filter params
-		for (const k of ["universe", "strategy", "geography", "aum_min", "aum_max", "min_return", "max_return", "max_expense", "elite", "manager", "sharpe_min", "sharpe_max", "dd_min", "dd_max", "vol_max", "ret_10y_min", "ret_10y_max"]) {
+		for (const k of ["q", "universe", "strategy", "geography", "aum_min", "aum_max", "min_return", "max_return", "max_expense", "elite", "manager", "sharpe_min", "sharpe_max", "dd_min", "dd_max", "vol_max", "ret_10y_min", "ret_10y_max"]) {
 			p.delete(k);
 		}
 
+		if (next.query.trim()) p.set("q", next.query.trim());
 		if (next.fundUniverse.size > 0) p.set("universe", [...next.fundUniverse].join(","));
 		if (next.strategies.size > 0) p.set("strategy", [...next.strategies].join(","));
 		if (next.geographies.size > 0) p.set("geography", [...next.geographies].join(","));
@@ -113,6 +115,7 @@
 		fundLabel={focusEntity.entityLabel ?? ""}
 		ticker={focusEntity.ticker ?? null}
 		instrumentId={focusEntity.instrumentId ?? null}
+		initialTab={focusEntity.initialTab ?? "performance"}
 		onClose={closeFocusMode}
 	/>
 {/if}
@@ -129,6 +132,6 @@
 	 * The :global targets the cage wrapper rendered by TerminalShell.
 	 */
 	:global(.lc-cage--standard:has([data-screener-root])) {
-		padding: var(--terminal-space-2) !important;
+		padding: 0 !important;
 	}
 </style>

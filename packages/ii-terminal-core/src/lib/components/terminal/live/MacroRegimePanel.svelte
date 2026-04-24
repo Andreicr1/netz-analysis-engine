@@ -24,23 +24,31 @@
 	let regions = $state<RegionalRegimeRow[]>([]);
 	let loading = $state(true);
 
-	$effect(() => {
-		let cancelled = false;
+	async function fetchRegimes(cancelled: () => boolean) {
 		loading = true;
-		api
-			.get<{ regions: RegionalRegimeRow[] }>("/macro/regional-regime")
-			.then((res) => {
-				if (cancelled) return;
+		try {
+			const res = await api.get<{ regions: RegionalRegimeRow[] }>("/macro/regional-regime");
+			if (!cancelled()) {
 				regions = res.regions ?? [];
-				loading = false;
-			})
-			.catch(() => {
-				if (cancelled) return;
+			}
+		} catch {
+			if (!cancelled()) {
 				regions = [];
+			}
+		} finally {
+			if (!cancelled()) {
 				loading = false;
-			});
+			}
+		}
+	}
+
+	$effect(() => {
+		let dead = false;
+		void fetchRegimes(() => dead);
+		const id = setInterval(() => void fetchRegimes(() => dead), 60_000);
 		return () => {
-			cancelled = true;
+			dead = true;
+			clearInterval(id);
 		};
 	});
 

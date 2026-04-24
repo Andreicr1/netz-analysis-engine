@@ -64,45 +64,46 @@
 	.ep-root {
 		display: flex;
 		flex-direction: column;
-		gap: 1px;
-		background: var(--terminal-bg-panel);
-		border: var(--terminal-border-hairline);
-		font-family: var(--terminal-font-mono);
+		min-height: 0;
+		overflow: hidden;
+		background: var(--ii-surface);
+		font-family: var(--ii-font-mono);
 	}
 	.ep-header,
 	.ep-loading,
 	.ep-empty {
-		padding: var(--terminal-space-2) var(--terminal-space-3);
+		padding: 10px 14px 8px;
 	}
 	.ep-title {
-		color: var(--terminal-fg-primary);
-		font-size: var(--terminal-text-11);
-		font-weight: 600;
-		letter-spacing: var(--terminal-tracking-caps);
+		color: var(--ii-text-primary);
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.14em;
 	}
 	.ep-loading,
 	.ep-empty {
-		color: var(--terminal-fg-tertiary);
-		font-size: var(--terminal-text-10);
+		color: var(--ii-text-muted);
+		font-size: 10px;
 	}
 	.ep-table-header,
 	.ep-row {
 		display: grid;
-		grid-template-columns: 1fr 54px 54px 54px 40px;
-		padding: 2px var(--terminal-space-2);
+		grid-template-columns: 1fr 64px 64px 64px 44px;
+		padding: 4px 14px;
 	}
 	.ep-table-header {
-		background: var(--terminal-bg-panel-sunken);
-		color: var(--terminal-fg-tertiary);
+		background: var(--ii-bg);
+		color: var(--ii-text-muted);
 		font-size: 9px;
 		letter-spacing: 0.05em;
 	}
 	.ep-row {
-		color: var(--terminal-fg-secondary);
-		font-size: var(--terminal-text-10);
+		border-top: 1px solid var(--ii-terminal-hair);
+		color: var(--ii-text-secondary);
+		font-size: 10px;
 	}
 	.ep-row:hover {
-		background: var(--terminal-bg-panel-raised);
+		background: var(--ii-surface-alt);
 	}
 	.ep-name {
 		overflow: hidden;
@@ -111,14 +112,14 @@
 	}
 	.ep-period,
 	.ep-consensus {
-		color: var(--terminal-fg-tertiary);
+		color: var(--ii-text-muted);
 	}
 	.ep-actual,
 	.ep-consensus {
 		font-variant-numeric: tabular-nums;
 	}
 	.ep-actual {
-		color: var(--terminal-fg-primary);
+		color: var(--ii-text-primary);
 	}
 	.ep-surprise {
 		font-size: 9px;

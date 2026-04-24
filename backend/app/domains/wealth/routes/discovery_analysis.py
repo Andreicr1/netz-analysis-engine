@@ -132,7 +132,7 @@ async def analysis_holdings_top(
     actor: Actor = Depends(get_actor),  # noqa: ARG001 — auth gate
     db: AsyncSession = Depends(get_db_with_rls),
 ) -> dict[str, Any]:
-    cache_key = f"discovery:analysis:holdings-top:{external_id}"
+    cache_key = f"discovery:analysis:holdings-top:v2:{external_id}"
     redis, cached = await _cache_get(cache_key)
     if cached is not None:
         if redis is not None:

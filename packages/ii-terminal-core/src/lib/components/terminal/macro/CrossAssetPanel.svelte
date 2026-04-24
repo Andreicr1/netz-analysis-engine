@@ -51,7 +51,10 @@
 			{@const group = grouped[sector] ?? []}
 			{#if group.length > 0}
 				<section class="cap-group" aria-label={SECTOR_LABELS[sector]}>
-					<div class="cap-sector-header">{SECTOR_LABELS[sector]}</div>
+					<div class="cap-sector-header">
+						<span>{SECTOR_LABELS[sector]}</span>
+						<span>{group.length}</span>
+					</div>
 					{#each group as asset (asset.symbol)}
 						<MiniCard
 							symbol={asset.symbol}
@@ -73,29 +76,33 @@
 	.cap-root {
 		display: flex;
 		flex-direction: column;
-		gap: 1px;
 		height: 100%;
 		overflow-y: auto;
-		background: var(--terminal-bg-panel);
-		font-family: var(--terminal-font-mono);
+		background: var(--ii-surface);
+		font-family: var(--ii-font-mono);
 	}
 	.cap-loading {
-		padding: var(--terminal-space-3);
-		color: var(--terminal-fg-tertiary);
-		font-size: var(--terminal-text-10);
-		letter-spacing: var(--terminal-tracking-caps);
+		padding: 12px;
+		color: var(--ii-text-muted);
+		font-size: 10px;
+		letter-spacing: var(--ii-terminal-tr-caps);
 	}
 	.cap-group {
 		display: flex;
 		flex-direction: column;
 	}
 	.cap-sector-header {
-		padding: 2px var(--terminal-space-2);
-		border-left: 2px solid var(--terminal-accent-amber);
-		background: var(--terminal-bg-panel-sunken);
-		color: var(--terminal-fg-tertiary);
-		font-size: var(--terminal-text-10);
-		font-weight: 600;
-		letter-spacing: var(--terminal-tracking-caps);
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		display: flex;
+		justify-content: space-between;
+		padding: 4px 12px;
+		border-left: 2px solid var(--ii-brand-primary);
+		background: var(--ii-border-subtle);
+		color: var(--ii-text-muted);
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: var(--ii-terminal-tr-caps);
 	}
 </style>

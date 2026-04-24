@@ -13,7 +13,15 @@
 
 	// Fetch on mount
 	$effect(() => {
-		if (workspace.portfolioId && !workspace.monteCarloData && !workspace.isLoadingMonteCarlo) {
+		const hasConstructedSelection = Boolean(workspace.portfolio?.fund_selection_schema?.funds?.length);
+		const failedForCurrentPortfolio = workspace.monteCarloErrorPortfolioId === workspace.portfolioId;
+		if (
+			workspace.portfolioId &&
+			hasConstructedSelection &&
+			!failedForCurrentPortfolio &&
+			!workspace.monteCarloData &&
+			!workspace.isLoadingMonteCarlo
+		) {
 			workspace.fetchMonteCarlo();
 		}
 	});

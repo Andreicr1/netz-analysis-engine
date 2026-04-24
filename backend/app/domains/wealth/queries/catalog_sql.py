@@ -286,6 +286,7 @@ def _build_base_stmt(f: CatalogFilters, *, include_risk_membership: bool = False
                 mv_fund_risk_latest.c.manager_score,
                 mv_fund_risk_latest.c.sharpe_1y,
                 mv_fund_risk_latest.c.max_drawdown_1y,
+                mv_fund_risk_latest.c.volatility_1y,
                 mv_fund_risk_latest.c.return_1y,
                 mv_fund_risk_latest.c.blended_momentum_score,
                 v_screener_org_membership.c.approval_status.label("org_approval_status"),

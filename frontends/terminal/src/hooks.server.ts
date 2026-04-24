@@ -1,8 +1,8 @@
 /**
  * SvelteKit server hook — Clerk JWT verification for II Terminal.
  *
- * Mirrors `frontends/wealth/src/hooks.server.ts` so that both apps share
- * the same verified-JWT → Actor path via `@investintell/ui` `createClerkHook`.
+ * Uses the shared verified-JWT -> Actor path via `@investintell/ui`
+ * `createClerkHook`.
  *
  * Cookie-domain SSO note: `createClerkHook` does not manage cookie domain
  * itself — that is configured in the Clerk Dashboard (`.investintell.com`

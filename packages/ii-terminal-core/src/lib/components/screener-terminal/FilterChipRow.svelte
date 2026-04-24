@@ -44,6 +44,7 @@
 		return () => {
 			const next: FilterState = {
 				...filters,
+				query: filters.query,
 				fundUniverse: new Set(filters.fundUniverse),
 				strategies: new Set(filters.strategies),
 				geographies: new Set(filters.geographies),
@@ -52,6 +53,9 @@
 			switch (key) {
 				case "fundUniverse":
 					next.fundUniverse.delete(value);
+					break;
+				case "query":
+					next.query = "";
 					break;
 				case "strategy":
 					next.strategies.delete(value);
@@ -108,6 +112,14 @@
 	const chips = $derived.by<DerivedChip[]>(() => {
 		const out: DerivedChip[] = [];
 
+		if (filters.query.trim()) {
+			out.push({
+				key: "query",
+				label: "Search",
+				value: filters.query.trim(),
+				onRemove: remove("query", ""),
+			});
+		}
 		for (const v of filters.fundUniverse) {
 			out.push({
 				key: `fundUniverse:${v}`,
@@ -193,6 +205,7 @@
 
 	function clearAll() {
 		onFiltersChange({
+			query: "",
 			fundUniverse: new Set(),
 			strategies: new Set(),
 			geographies: new Set(),

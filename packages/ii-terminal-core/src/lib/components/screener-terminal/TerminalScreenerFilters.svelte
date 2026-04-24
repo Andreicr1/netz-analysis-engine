@@ -7,6 +7,7 @@
 -->
 <script module lang="ts">
 	export interface FilterState {
+		query: string;                // q: backend text search
 		fundUniverse: Set<string>;   // fund_universe: mutual_fund,etf,closed_end,bdc,money_market,hedge_fund,private_fund,ucits
 		strategies: Set<string>;     // strategy_label
 		geographies: Set<string>;    // investment_geography
@@ -27,6 +28,7 @@
 	}
 
 	export const DEFAULT_FILTERS: FilterState = {
+		query: "",
 		fundUniverse: new Set<string>(),
 		strategies: new Set<string>(),
 		geographies: new Set<string>(),
@@ -109,15 +111,15 @@
 
 	// Universe labels mirror the CatalogFilters backend contract.
 	const FUND_UNIVERSE: { key: string; label: string }[] = [
-		{ key: "mutual_fund",  label: "Mutual Fund" },
+		{ key: "mutual_fund",  label: "MUTUAL" },
 		{ key: "etf",          label: "ETF" },
-		{ key: "closed_end",   label: "Closed-End" },
-		{ key: "interval_fund",label: "Interval" },
+		{ key: "closed_end",   label: "CEF" },
+		{ key: "interval_fund",label: "INTERVAL" },
 		{ key: "bdc",          label: "BDC" },
-		{ key: "money_market", label: "Money Market" },
-		{ key: "hedge_fund",   label: "Hedge Fund" },
-		{ key: "private_fund", label: "Private Fund" },
-		{ key: "ucits",        label: "UCITS (EU)" },
+		{ key: "money_market", label: "MMF" },
+		{ key: "hedge_fund",   label: "HEDGE" },
+		{ key: "private_fund", label: "PRIVATE" },
+		{ key: "ucits",        label: "UCITS" },
 	];
 
 	// Subset of the most common strategy_label values — the full list is
@@ -127,15 +129,13 @@
 		"Equity",
 		"Fixed Income",
 		"Multi-Asset",
-		"Money Market",
-		"Alternatives",
+		"Macro",
+		"Credit",
 		"Real Estate",
 		"Commodities",
-		"Private Credit",
-		"Infrastructure",
+		"Quant",
 		"Long/Short Equity",
-		"Buyout",
-		"Venture Capital",
+		"Alternatives",
 	];
 
 	const GEOGRAPHIES = [
@@ -147,7 +147,7 @@
 		"Latin America",
 	];
 
-	let sectionOpen = $state({ manager: false, universe: false, strategy: false, geography: false, metrics: false });
+	let sectionOpen = $state({ manager: true, universe: true, strategy: true, geography: true, metrics: true });
 
 	// Active filter counts for collapsed section badges
 	const activeManagerCount = $derived(filters.managerNames.length);
@@ -220,6 +220,7 @@
 		managerQuery = "";
 		managerSuggestions = [];
 		onFiltersChange({
+			query: "",
 			fundUniverse: new Set(),
 			strategies: new Set(),
 			geographies: new Set(),
@@ -304,13 +305,15 @@
 						{#if managerSuggestions.length > 0}
 							<ul class="sf-manager-suggestions" role="listbox">
 								{#each managerSuggestions as name (name)}
-									<li
+									<button
+										type="button"
 										role="option"
+										aria-selected="false"
 										class="sf-manager-suggestion"
 										onclick={() => addManager(name)}
 									>
 										{name}
-									</li>
+									</button>
 								{/each}
 							</ul>
 						{/if}
@@ -347,14 +350,7 @@
 				<div class="sf-section-body">
 					<div class="sf-check-grid">
 						{#each FUND_UNIVERSE as u}
-							<label class="sf-check">
-								<input
-									type="checkbox"
-									checked={filters.fundUniverse.has(u.key)}
-									onchange={() => toggleUniverse(u.key)}
-								/>
-								<span class="sf-check-label">{u.label}</span>
-							</label>
+							<button type="button" class="sf-chip" class:sf-chip--on={filters.fundUniverse.has(u.key)} onclick={() => toggleUniverse(u.key)}>{u.label}</button>
 						{/each}
 					</div>
 				</div>
@@ -375,14 +371,7 @@
 				<div class="sf-section-body">
 					<div class="sf-check-grid">
 						{#each STRATEGIES as s}
-							<label class="sf-check">
-								<input
-									type="checkbox"
-									checked={filters.strategies.has(s)}
-									onchange={() => toggleStrategy(s)}
-								/>
-								<span class="sf-check-label">{s}</span>
-							</label>
+							<button type="button" class="sf-chip" class:sf-chip--on={filters.strategies.has(s)} onclick={() => toggleStrategy(s)}>{s}</button>
 						{/each}
 					</div>
 				</div>
@@ -403,14 +392,7 @@
 				<div class="sf-section-body">
 					<div class="sf-check-grid">
 						{#each GEOGRAPHIES as g}
-							<label class="sf-check">
-								<input
-									type="checkbox"
-									checked={filters.geographies.has(g)}
-									onchange={() => toggleGeography(g)}
-								/>
-								<span class="sf-check-label">{g}</span>
-							</label>
+							<button type="button" class="sf-chip" class:sf-chip--on={filters.geographies.has(g)} onclick={() => toggleGeography(g)}>{g}</button>
 						{/each}
 					</div>
 				</div>
@@ -520,6 +502,10 @@
 			{/if}
 		</div>
 	</div>
+	<div class="sf-footer">
+		<button type="button" class="sf-footer-btn" onclick={clearAll}>RESET</button>
+		<button type="button" class="sf-footer-btn sf-footer-btn--primary">SAVE PRESET</button>
+	</div>
 </div>
 
 <style>
@@ -528,7 +514,7 @@
 		flex-direction: column;
 		height: 100%;
 		background: var(--terminal-bg-panel);
-		border-right: 1px solid var(--terminal-fg-muted);
+		border-right: 1px solid var(--terminal-fg-disabled);
 		font-family: var(--terminal-font-mono);
 		font-size: 11px;
 		color: var(--terminal-fg-primary);
@@ -538,8 +524,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 10px 12px 8px;
-		border-bottom: 1px solid var(--terminal-fg-muted);
+		height: 30px;
+		padding: 0 10px;
+		border-bottom: 1px solid var(--terminal-fg-disabled);
 		flex-shrink: 0;
 	}
 
@@ -586,8 +573,8 @@
 	}
 
 	.sf-elite-chip-row {
-		padding: 8px 12px;
-		border-bottom: 1px solid var(--terminal-fg-muted);
+		padding: 8px 10px;
+		border-bottom: 1px solid var(--terminal-fg-disabled);
 		flex-shrink: 0;
 	}
 
@@ -597,7 +584,9 @@
 		font-weight: 700;
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
-		padding: 4px 12px;
+		width: 64px;
+		height: 22px;
+		padding: 0 10px;
 		background: transparent;
 		border: var(--terminal-border-hairline);
 		color: var(--terminal-fg-secondary);
@@ -630,7 +619,7 @@
 		align-items: center;
 		gap: 6px;
 		width: 100%;
-		padding: 8px 12px;
+		padding: 8px 10px 5px;
 		background: none;
 		border: none;
 		color: var(--terminal-fg-secondary);
@@ -662,46 +651,45 @@
 		min-width: 16px;
 		height: 16px;
 		border-radius: var(--terminal-radius-none);
-		background: var(--terminal-accent-cyan);
-		color: var(--terminal-fg-inverted);
+		margin-left: auto;
+		background: transparent;
+		color: var(--terminal-accent-amber);
 		font-family: var(--terminal-font-mono);
 		font-size: 9px;
 		font-weight: 700;
-		margin-left: 4px;
 		padding: 0 3px;
 	}
 
 	.sf-section-body {
-		padding: 0 12px 10px;
+		padding: 0 10px 10px;
 	}
 
 	.sf-check-grid {
 		display: flex;
-		flex-direction: column;
-		gap: 2px;
+		flex-wrap: wrap;
+		gap: 4px;
 	}
 
-	.sf-check {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: 2px 0;
-		cursor: pointer;
-	}
-	.sf-check input[type="checkbox"] {
-		width: 12px;
-		height: 12px;
-		accent-color: var(--terminal-accent-cyan);
-		margin: 0;
-		flex-shrink: 0;
-	}
-
-	.sf-check-label {
-		font-size: 11px;
+	.sf-chip {
+		height: 22px;
+		padding: 0 8px;
+		border: 1px solid var(--terminal-fg-disabled);
+		background: var(--terminal-bg-panel-raised);
 		color: var(--terminal-fg-secondary);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		cursor: pointer;
+		font: inherit;
+		font-size: 10px;
+		letter-spacing: 0.04em;
+	}
+	.sf-chip:hover {
+		border-color: color-mix(in srgb, var(--terminal-accent-amber) 50%, transparent);
+		color: var(--terminal-accent-amber);
+	}
+	.sf-chip--on {
+		border-color: var(--terminal-accent-amber);
+		background: var(--terminal-accent-amber);
+		color: var(--terminal-bg-void);
+		font-weight: 700;
 	}
 
 	/* ── Metric range inputs ─────────────────────────── */
@@ -730,7 +718,7 @@
 		flex: 1;
 		min-width: 0;
 		width: 56px;
-		background: transparent;
+		background: var(--terminal-bg-panel-raised);
 		border: 1px solid var(--terminal-fg-disabled);
 		border-radius: 0;
 		color: var(--terminal-fg-primary);
@@ -741,6 +729,7 @@
 		outline: none;
 		box-sizing: border-box;
 		-moz-appearance: textfield;
+		appearance: textfield;
 	}
 	.sf-metric-input::-webkit-inner-spin-button,
 	.sf-metric-input::-webkit-outer-spin-button {
@@ -768,7 +757,7 @@
 
 	.sf-manager-input {
 		width: 100%;
-		background: transparent;
+		background: var(--terminal-bg-panel-raised);
 		border: 1px solid var(--terminal-fg-disabled);
 		border-radius: 0;
 		color: var(--terminal-fg-primary);
@@ -801,7 +790,13 @@
 	}
 
 	.sf-manager-suggestion {
+		display: block;
+		width: 100%;
 		padding: 5px 8px;
+		border: 0;
+		background: transparent;
+		text-align: left;
+		font-family: inherit;
 		font-size: 11px;
 		color: var(--terminal-fg-secondary);
 		cursor: pointer;
@@ -893,5 +888,30 @@
 		background: var(--terminal-accent-cyan);
 		cursor: pointer;
 		border: none;
+	}
+
+	.sf-footer {
+		display: flex;
+		flex-shrink: 0;
+		gap: 6px;
+		padding: 8px;
+		border-top: 1px solid var(--terminal-fg-disabled);
+	}
+	.sf-footer-btn {
+		flex: 1;
+		height: 30px;
+		border: 1px solid var(--terminal-fg-disabled);
+		background: transparent;
+		color: var(--terminal-fg-secondary);
+		cursor: pointer;
+		font: inherit;
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: var(--terminal-tracking-caps);
+	}
+	.sf-footer-btn--primary {
+		border-color: var(--terminal-accent-amber);
+		background: var(--terminal-accent-amber);
+		color: var(--terminal-bg-void);
 	}
 </style>

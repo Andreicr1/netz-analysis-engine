@@ -4,12 +4,9 @@
 
 	Source of truth: docs/plans/2026-04-11-terminal-unification-master-plan.md §1.2, §1.4, Appendix G
 
-	THE ONLY Svelte component allowed to import ECharts directly
-	inside `frontends/wealth/src/`. Every pattern wrapper
-	(TerminalLineChart, TerminalHeatmap, TerminalTreemap, …)
-	composes `TerminalChart` under the hood; every surface under
-	`(terminal)/` renders through those wrappers. ESLint enforces
-	this — see frontends/eslint.config.js `no-restricted-imports`.
+	The only terminal Svelte component allowed to import ECharts directly.
+	Every pattern wrapper composes `TerminalChart` under the hood. ESLint
+	enforces this via `no-restricted-imports`.
 
 	Responsibilities:
 	  - Lifecycle: `echarts.init` on mount, `dispose` on destroy.

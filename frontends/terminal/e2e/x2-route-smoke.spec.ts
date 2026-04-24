@@ -1,10 +1,9 @@
 /**
  * X2 route-copy smoke — docs/plans/2026-04-19-ii-terminal-extraction.md §X2.
  *
- * This file follows the contractual-skeleton pattern used by wealth's
- * e2e specs (see frontends/wealth/e2e/terminal-parity.spec.ts). Playwright
- * is not yet installed as a runnable devDep in frontends/terminal/. To
- * activate:
+ * This file follows the contractual-skeleton pattern used by parity smoke
+ * specs. Playwright is not yet installed as a runnable devDep in
+ * frontends/terminal/. To activate:
  *
  *   1) cd frontends/terminal && pnpm add -D @playwright/test
  *   2) pnpm exec playwright install chromium
@@ -26,7 +25,6 @@ const TEST_ORG_ID =
 const X2_ROUTES: ReadonlyArray<string> = [
 	"/live",
 	"/screener",
-	"/screener/research",
 	"/macro",
 	"/allocation",
 	"/portfolio/builder",

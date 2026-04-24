@@ -7,8 +7,7 @@
 
 	F-key ordering (X2): six canonical tabs in institutional-lifecycle
 	order, Macro context flowing into Builder allocation flowing into
-	DD validation. No RESEARCH tab at top-level — research is scoped
-	under SCREENER (/screener/research).
+	DD validation.
 
 		F1  LIVE      /live
 		F2  SCREENER  /screener
@@ -19,19 +18,135 @@
 
 	Fixed 32px top chrome strip.
 
-	Shared across wealth and terminal during X2–X6. Wealth adds minimal
-	redirect shims for /live and /screener/research so the resolve()
-	typecheck passes in both apps: see
-	frontends/wealth/src/routes/(terminal)/live (redirects to
-	/portfolio/live) and frontends/wealth/src/routes/(app)/screener/
-	research (redirects to /research). The /screener F-key resolves to
-	wealth's existing (app)/screener page — legacy wealth-app screener —
-	during transition; canonical /screener lives on the terminal app.
+	Shared terminal navigation chrome. The standalone terminal app owns
+	the canonical /live, /screener, /macro, /allocation, /dd, and
+	/alerts routes.
 
 	This component has no keyboard handling of its own. Global shortcuts
 	(Cmd+K, rail [ / ], g-prefix go-to) live inside TerminalShell's
 	window keydown listener.
 -->
+<script module lang="ts">
+	const REGIME_DISPLAY: Record<string, string> = {
+		REGIME_NORMAL: "Normal",
+		normal: "Normal",
+		REGIME_RISK_ON: "Risk On",
+		risk_on: "Risk On",
+		REGIME_RISK_OFF: "Risk Off",
+		risk_off: "Risk Off",
+		REGIME_CRISIS: "Crisis",
+		crisis: "Crisis",
+	};
+
+	let sharedRegimeLabel = "STANDBY";
+	let sharedRegimeController: AbortController | null = null;
+	let sharedRegimeConnecting = false;
+	let sharedRegimeStopTimer: ReturnType<typeof setTimeout> | null = null;
+	const sharedRegimeSubscribers = new Set<(label: string) => void>();
+
+	function sanitizeRegime(raw: string): string {
+		return REGIME_DISPLAY[raw] ?? raw;
+	}
+
+	function publishRegime(label: string): void {
+		sharedRegimeLabel = label;
+		for (const subscriber of sharedRegimeSubscribers) {
+			subscriber(label);
+		}
+	}
+
+	function subscribeRegime(subscriber: (label: string) => void): () => void {
+		sharedRegimeSubscribers.add(subscriber);
+		subscriber(sharedRegimeLabel);
+		if (sharedRegimeStopTimer) {
+			clearTimeout(sharedRegimeStopTimer);
+			sharedRegimeStopTimer = null;
+		}
+
+		return () => {
+			sharedRegimeSubscribers.delete(subscriber);
+			if (sharedRegimeSubscribers.size > 0 || sharedRegimeStopTimer) return;
+			sharedRegimeStopTimer = setTimeout(() => {
+				sharedRegimeStopTimer = null;
+				if (sharedRegimeSubscribers.size === 0) {
+					sharedRegimeController?.abort();
+					sharedRegimeController = null;
+					sharedRegimeConnecting = false;
+				}
+			}, 1000);
+		};
+	}
+
+	function handleRegimeFrame(frame: string): void {
+		const dataLines = frame
+			.split(/\r?\n/)
+			.filter((line) => line.startsWith("data:"))
+			.map((line) => line.slice(5).trimStart());
+		if (dataLines.length === 0) return;
+		try {
+			const event = JSON.parse(dataLines.join("\n")) as {
+				type?: string;
+				data?: { regime?: string; label?: string };
+			};
+			if (event.type !== "regime_change") return;
+			const nextRegime = event.data?.regime ?? event.data?.label;
+			if (nextRegime) publishRegime(sanitizeRegime(nextRegime));
+		} catch {
+			// Ignore malformed SSE frames and keep the current regime.
+		}
+	}
+
+	function drainRegimeFrames(buffer: string): string {
+		let remaining = buffer;
+		while (true) {
+			const idx = remaining.indexOf("\n\n");
+			if (idx === -1) return remaining;
+			handleRegimeFrame(remaining.slice(0, idx));
+			remaining = remaining.slice(idx + 2);
+		}
+	}
+
+	async function ensureRegimeStream(getToken: () => Promise<string>, apiBase: string): Promise<void> {
+		if (sharedRegimeController || sharedRegimeConnecting) return;
+		sharedRegimeConnecting = true;
+		const controller = new AbortController();
+		sharedRegimeController = controller;
+		let frameBuffer = "";
+
+		try {
+			const token = await getToken();
+			if (controller.signal.aborted) return;
+			const response = await fetch(`${apiBase}/market-data/events?tags=regime`, {
+				method: "GET",
+				headers: {
+					Accept: "text/event-stream",
+					Authorization: `Bearer ${token}`,
+				},
+				credentials: "include",
+				signal: controller.signal,
+			});
+			if (!response.ok || !response.body) return;
+			const reader = response.body.getReader();
+			const decoder = new TextDecoder("utf-8");
+			while (true) {
+				const { value, done } = await reader.read();
+				if (done) break;
+				frameBuffer += decoder.decode(value, { stream: true });
+				frameBuffer = drainRegimeFrames(frameBuffer);
+			}
+		} catch (err) {
+			if ((err as { name?: string })?.name !== "AbortError") {
+				// SSE is opportunistic; keep the last visible label.
+			}
+		} finally {
+			if (sharedRegimeController === controller) {
+				sharedRegimeController = null;
+			}
+			sharedRegimeConnecting = false;
+		}
+	}
+</script>
+
 <script lang="ts">
 	import { base } from "$app/paths";
 	import { goto } from "$app/navigation";
@@ -105,21 +220,6 @@
 
 	let regimeLabel = $state("STANDBY");
 
-	const REGIME_DISPLAY: Record<string, string> = {
-		REGIME_NORMAL: "Normal",
-		normal: "Normal",
-		REGIME_RISK_ON: "Risk On",
-		risk_on: "Risk On",
-		REGIME_RISK_OFF: "Risk Off",
-		risk_off: "Risk Off",
-		REGIME_CRISIS: "Crisis",
-		crisis: "Crisis",
-	};
-
-	function sanitizeRegime(raw: string): string {
-		return REGIME_DISPLAY[raw] ?? raw;
-	}
-
 	const regimeColorClass = $derived.by(() => {
 		switch (regimeLabel) {
 			case "Normal": return "tn-regime-value--ok";
@@ -131,68 +231,11 @@
 	});
 
 	$effect(() => {
-		const controller = new AbortController();
-		let frameBuffer = "";
-
-		function handleFrame(frame: string) {
-			const dataLines = frame
-				.split(/\r?\n/)
-				.filter((line) => line.startsWith("data:"))
-				.map((line) => line.slice(5).trimStart());
-			if (dataLines.length === 0) return;
-			try {
-				const event = JSON.parse(dataLines.join("\n")) as {
-					type?: string;
-					data?: { regime?: string; label?: string };
-				};
-				if (event.type !== "regime_change") return;
-				const nextRegime = event.data?.regime ?? event.data?.label;
-				if (nextRegime) regimeLabel = sanitizeRegime(nextRegime);
-			} catch {
-				// Ignore malformed SSE frames and keep the current regime.
-			}
-		}
-
-		function drainFrames(buffer: string): string {
-			let remaining = buffer;
-			while (true) {
-				const idx = remaining.indexOf("\n\n");
-				if (idx === -1) return remaining;
-				handleFrame(remaining.slice(0, idx));
-				remaining = remaining.slice(idx + 2);
-			}
-		}
-
-		async function connectRegimeStream() {
-			try {
-				const token = await getToken();
-				const response = await fetch(`${API_BASE}/market-data/events?tags=regime`, {
-					method: "GET",
-					headers: {
-						Accept: "text/event-stream",
-						Authorization: `Bearer ${token}`,
-					},
-					credentials: "include",
-					signal: controller.signal,
-				});
-				if (!response.ok || !response.body) return;
-				const reader = response.body.getReader();
-				const decoder = new TextDecoder("utf-8");
-				while (true) {
-					const { value, done } = await reader.read();
-					if (done) break;
-					frameBuffer += decoder.decode(value, { stream: true });
-					frameBuffer = drainFrames(frameBuffer);
-				}
-			} catch (err) {
-				if ((err as { name?: string })?.name !== "AbortError") {
-					// SSE is opportunistic; keep the last visible label.
-				}
-			}
-		}
-
-		void connectRegimeStream();
-		return () => controller.abort();
+		const unsubscribe = subscribeRegime((label) => {
+			regimeLabel = label;
+		});
+		void ensureRegimeStream(getToken, API_BASE);
+		return unsubscribe;
 	});
 
 	const PRIMARY_TABS: ReadonlyArray<PrimaryTab> = [

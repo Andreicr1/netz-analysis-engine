@@ -29,6 +29,9 @@
 		ret10y: number | null;           // Already in human % (8.0 = 8%)
 		managerScore: number | null;     // Composite score 0-100
 		blendedMomentumScore: number | null; // Pre-computed 0-100 (RSI + Bollinger + NAV + flow)
+		sharpe1y: number | null;
+		maxDrawdown1y: number | null;
+		volatility1y: number | null;
 		inceptionDate: string | null;
 		isin: string | null;
 		navStatus: string | null;   // available | pending_import | unavailable | null
@@ -40,19 +43,13 @@
 </script>
 
 <script lang="ts">
-	import { getContext } from "svelte";
 	import { formatNumber, readTerminalTokens } from "@investintell/ui";
-	import { TerminalMiniSparkline } from "../terminal/primitives";
 	import { focusTrigger } from "../../components/terminal/focus-mode/focus-trigger";
-	import { createClientApiClient } from "../../api/client";
 
 	const ROW_HEIGHT = 32;
 	const OVERSCAN = 5;
 	const SPARKLINE_W = 48;
 	const SPARKLINE_H = 16;
-
-	const getToken = getContext<() => Promise<string>>("netz:getToken");
-	const api = createClientApiClient(getToken);
 
 	interface Props {
 		assets: ScreenerAsset[];
@@ -139,12 +136,17 @@
 	type SortableColumn =
 		| "ticker"
 		| "name"
+		| "managerName"
+		| "universe"
 		| "fundType"
 		| "strategy"
 		| "geography"
 		| "aum"
 		| "ret1y"
 		| "ret10y"
+		| "sharpe1y"
+		| "volatility1y"
+		| "maxDrawdown1y"
 		| "expenseRatioPct"
 		| "managerScore"
 		| "blendedMomentumScore";
@@ -171,12 +173,17 @@
 	const SORTABLE_COLUMNS: Record<SortableColumn, "numeric" | "text"> = {
 		ticker: "text",
 		name: "text",
+		managerName: "text",
+		universe: "text",
 		fundType: "text",
 		strategy: "text",
 		geography: "text",
 		aum: "numeric",
 		ret1y: "numeric",
 		ret10y: "numeric",
+		sharpe1y: "numeric",
+		volatility1y: "numeric",
+		maxDrawdown1y: "numeric",
 		expenseRatioPct: "numeric",
 		managerScore: "numeric",
 		blendedMomentumScore: "numeric",
@@ -282,6 +289,22 @@
 		return formatNumber(v, decimals) + "%";
 	}
 
+	function fmtRiskPct(v: number | null, decimals: number = 1): string {
+		if (v == null) return "\u2014";
+		const pct = Math.abs(v) <= 1 ? v * 100 : v;
+		return formatNumber(pct, decimals) + "%";
+	}
+
+	function fmtSignedPct(v: number | null, decimals: number = 1): string {
+		if (v == null) return "\u2014";
+		return (v > 0 ? "+" : "") + formatNumber(v, decimals);
+	}
+
+	function fmtRatio(v: number | null, decimals: number = 2): string {
+		if (v == null) return "\u2014";
+		return formatNumber(v, decimals);
+	}
+
 	function fmtNum(v: number | null, decimals: number = 2): string {
 		if (v == null) return "\u2014";
 		return formatNumber(v, decimals);
@@ -293,6 +316,13 @@
 		if (v >= 1e9) return formatNumber(v / 1e9, 1) + "B";
 		if (v >= 1e6) return formatNumber(v / 1e6, 0) + "M";
 		return formatNumber(v, 0);
+	}
+
+	function universeLabel(asset: ScreenerAsset): string {
+		if (asset.eliteFlag) return "NETZ ELITE";
+		if (asset.inUniverse) return "APPROVED";
+		if (asset.approvalStatus === "pending") return "WATCH";
+		return asset.universeLabel.toUpperCase();
 	}
 
 	function retClass(v: number | null): string {
@@ -374,17 +404,19 @@
 	<div class="dg-header" role="row" aria-rowindex={1}>
 		<button class="dg-th dg-th-sort dg-col-ticker" class:dg-th-active={sortColumn === "ticker"} onclick={() => toggleSort("ticker")}>Ticker{sortCaret("ticker")}</button>
 		<button class="dg-th dg-th-sort dg-col-name" class:dg-th-active={sortColumn === "name"} onclick={() => toggleSort("name")}>Name{sortCaret("name")}</button>
-		<button class="dg-th dg-th-sort dg-col-type" class:dg-th-active={sortColumn === "fundType"} onclick={() => toggleSort("fundType")}>Type{sortCaret("fundType")}</button>
+		<button class="dg-th dg-th-sort dg-col-type" class:dg-th-active={sortColumn === "universe"} onclick={() => toggleSort("universe")}>Universe{sortCaret("universe")}</button>
+		<button class="dg-th dg-th-sort dg-col-manager" class:dg-th-active={sortColumn === "managerName"} onclick={() => toggleSort("managerName")}>Manager{sortCaret("managerName")}</button>
 		<button class="dg-th dg-th-sort dg-col-strategy" class:dg-th-active={sortColumn === "strategy"} onclick={() => toggleSort("strategy")}>Strategy{sortCaret("strategy")}</button>
 		<button class="dg-th dg-th-sort dg-col-geo" class:dg-th-active={sortColumn === "geography"} onclick={() => toggleSort("geography")}>Geo{sortCaret("geography")}</button>
 		<button class="dg-th dg-th-sort dg-col-aum dg-right" class:dg-th-active={sortColumn === "aum"} onclick={() => toggleSort("aum")}>AUM{sortCaret("aum")}</button>
-		<button class="dg-th dg-th-sort dg-col-ret dg-right" class:dg-th-active={sortColumn === "ret1y"} onclick={() => toggleSort("ret1y")}>1Y Ret{sortCaret("ret1y")}</button>
-		<button class="dg-th dg-th-sort dg-col-ret dg-right" class:dg-th-active={sortColumn === "ret10y"} onclick={() => toggleSort("ret10y")}>10Y Ret{sortCaret("ret10y")}</button>
-		<button class="dg-th dg-th-sort dg-col-er dg-right" class:dg-th-active={sortColumn === "expenseRatioPct"} onclick={() => toggleSort("expenseRatioPct")}>ER%{sortCaret("expenseRatioPct")}</button>
+		<button class="dg-th dg-th-sort dg-col-ret dg-right" class:dg-th-active={sortColumn === "ret1y"} onclick={() => toggleSort("ret1y")}>1Y%{sortCaret("ret1y")}</button>
+		<button class="dg-th dg-th-sort dg-col-ret dg-right" class:dg-th-active={sortColumn === "ret10y"} onclick={() => toggleSort("ret10y")}>10Y%{sortCaret("ret10y")}</button>
+		<button class="dg-th dg-th-sort dg-col-risk dg-right" class:dg-th-active={sortColumn === "sharpe1y"} onclick={() => toggleSort("sharpe1y")}>Sharpe{sortCaret("sharpe1y")}</button>
+		<button class="dg-th dg-th-sort dg-col-risk dg-right" class:dg-th-active={sortColumn === "volatility1y"} onclick={() => toggleSort("volatility1y")}>Vol%{sortCaret("volatility1y")}</button>
+		<button class="dg-th dg-th-sort dg-col-risk dg-right" class:dg-th-active={sortColumn === "maxDrawdown1y"} onclick={() => toggleSort("maxDrawdown1y")}>Max DD%{sortCaret("maxDrawdown1y")}</button>
+		<button class="dg-th dg-th-sort dg-col-er dg-right" class:dg-th-active={sortColumn === "expenseRatioPct"} onclick={() => toggleSort("expenseRatioPct")}>Exp%{sortCaret("expenseRatioPct")}</button>
 		<button class="dg-th dg-th-sort dg-col-score dg-right" class:dg-th-active={sortColumn === "managerScore"} onclick={() => toggleSort("managerScore")}>Score{sortCaret("managerScore")}</button>
 		<button class="dg-th dg-th-sort dg-col-mom dg-right" class:dg-th-active={sortColumn === "blendedMomentumScore"} onclick={() => toggleSort("blendedMomentumScore")}>Mom{sortCaret("blendedMomentumScore")}</button>
-		<span class="dg-th dg-col-spark dg-center">Trend</span>
-		<span class="dg-th dg-col-action dg-center">Action</span>
 	</div>
 
 	<!-- Virtualized scroll area -->
@@ -426,19 +458,22 @@
 						</span>
 						<span class="dg-td dg-col-name dg-name" title={asset.name}>{asset.name}</span>
 						<span class="dg-td dg-col-type">
-							<span class="dg-type-badges">
-								<span class="dg-type-badge" title={getTypeBadge(asset).title}>{getTypeBadge(asset).label}</span>
-								{#if asset.eliteFlag}<span class="dg-elite-inline" title="ELITE — top in strategy">ELITE</span>{/if}
+							<span class="dg-universe-badge" class:dg-universe-badge--elite={asset.eliteFlag} class:dg-universe-badge--approved={asset.inUniverse}>
+								{universeLabel(asset)}
 							</span>
 						</span>
+						<span class="dg-td dg-col-manager dg-dim" title={asset.managerName ?? ""}>{asset.managerName ?? "\u2014"}</span>
 						<span class="dg-td dg-col-strategy dg-strategy" title={asset.strategy ?? ""}>
 							{asset.strategy ?? "\u2014"}
 						</span>
 						<span class="dg-td dg-col-geo dg-geo">{asset.geography ?? "\u2014"}</span>
 						<span class="dg-td dg-col-aum dg-right dg-num">{fmtAum(asset.aum)}</span>
-						<span class="dg-td dg-col-ret dg-right dg-num {retClass(asset.ret1y)}">{fmtPct(asset.ret1y)}</span>
-						<span class="dg-td dg-col-ret dg-right dg-num {retClass(asset.ret10y)}">{fmtPct(asset.ret10y)}</span>
-						<span class="dg-td dg-col-er dg-right dg-num">{fmtPct(asset.expenseRatioPct)}</span>
+						<span class="dg-td dg-col-ret dg-right dg-num {retClass(asset.ret1y)}">{fmtSignedPct(asset.ret1y)}</span>
+						<span class="dg-td dg-col-ret dg-right dg-num {retClass(asset.ret10y)}">{fmtSignedPct(asset.ret10y)}</span>
+						<span class="dg-td dg-col-risk dg-right dg-num">{fmtRatio(asset.sharpe1y)}</span>
+						<span class="dg-td dg-col-risk dg-right dg-num">{fmtPct(asset.volatility1y, 1)}</span>
+						<span class="dg-td dg-col-risk dg-right dg-num {retClass(asset.maxDrawdown1y)}">{fmtRiskPct(asset.maxDrawdown1y, 1)}</span>
+						<span class="dg-td dg-col-er dg-right dg-num">{fmtPct(asset.expenseRatioPct, 2)}</span>
 						<span class="dg-td dg-col-score dg-right dg-num"
 							class:score-high={asset.managerScore != null && asset.managerScore >= 70}
 							class:score-mid={asset.managerScore != null && asset.managerScore >= 40 && asset.managerScore < 70}
@@ -451,43 +486,6 @@
 							title="Blended momentum (RSI + Bollinger + NAV + flow)"
 						>
 							{asset.blendedMomentumScore != null ? fmtNum(asset.blendedMomentumScore, 0) : "\u2014"}
-						</span>
-						<span class="dg-td dg-col-spark dg-center">
-							<TerminalMiniSparkline
-								data={[...sparklineFor(asset)]}
-								width={60}
-								height={18}
-								ariaLabel="12mo NAV trend"
-							/>
-						</span>
-						<span class="dg-td dg-col-action dg-center">
-							{#if asset.inUniverse}
-								<span class="dg-action-label dg-action-approved">APPROVED</span>
-							{:else if asset.approvalStatus === "pending" || actionPending.has(asset.id)}
-								<span class="dg-action-label dg-action-pending">PENDING</span>
-							{:else if LIQUID_UNIVERSES.has(asset.universe ?? asset.fundType)}
-								<button
-									class="dg-action-btn dg-action-approve"
-									onclick={async (e) => {
-										e.stopPropagation();
-										actionPending = new Set([...actionPending, asset.id]);
-										await onApprove(asset);
-									}}
-								>
-									APPROVE
-								</button>
-							{:else}
-								<button
-									class="dg-action-btn dg-action-dd"
-									onclick={async (e) => {
-										e.stopPropagation();
-										actionPending = new Set([...actionPending, asset.id]);
-										await onQueueDD(asset);
-									}}
-								>
-									+ DD
-								</button>
-							{/if}
 						</span>
 					</div>
 				{/each}
@@ -547,34 +545,38 @@
 	.dg-row {
 		display: grid;
 		grid-template-columns:
-			72px                  /* ticker — fixed, always visible */
-			minmax(100px, 1fr)    /* name — flex absorbs remaining space */
-			90px                  /* type badges (MF/ETF + ELITE) */
-			110px                 /* strategy — fixed */
-			36px                  /* geo — 2-letter code */
-			72px                  /* aum — right-aligned, compact format */
-			60px                  /* 1y ret — right-aligned */
-			60px                  /* 10y ret — right-aligned */
-			48px                  /* er% — right-aligned */
-			56px                  /* score — right-aligned numeral */
-			48px                  /* blended momentum — right-aligned */
-			64px                  /* trend sparkline — center, 60x18 */
-			72px;                 /* action — APPROVE/+DD button */
-		column-gap: 2px;
+			76px
+			minmax(220px, 1.55fr)
+			112px
+			minmax(96px, 0.55fr)
+			minmax(96px, 0.55fr)
+			48px
+			72px
+			58px
+			58px
+			58px
+			58px
+			66px
+			56px
+			56px
+			48px;
+		column-gap: 0;
 		align-items: center;
+		min-width: 1320px;
 	}
 
 	/* ── Header ───────────────────────────────────────── */
 	.dg-header {
 		flex-shrink: 0;
 		z-index: 2;
-		background: var(--terminal-bg-panel-sunken);
+		background: var(--terminal-bg-panel);
 		border-bottom: 1px solid var(--terminal-fg-disabled);
 	}
 
 	.dg-th {
-		padding: 6px 6px;
-		font-size: 10px;
+		padding: 0 8px;
+		height: 22px;
+		font-size: 9px;
 		font-weight: 700;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
@@ -626,12 +628,14 @@
 	.dg-row {
 		cursor: pointer;
 		transition: background 80ms ease;
+		border-bottom: 1px solid var(--terminal-bg-panel-sunken);
 	}
 	.dg-row:hover {
 		background: color-mix(in srgb, var(--terminal-accent-cyan) 6%, transparent);
 	}
 	.dg-row.selected {
-		background: color-mix(in srgb, var(--terminal-accent-cyan) 10%, transparent);
+		background: color-mix(in srgb, var(--terminal-accent-cyan) 12%, transparent);
+		box-shadow: inset 2px 0 0 var(--terminal-accent-amber);
 	}
 	.dg-row.highlighted {
 		background: color-mix(in srgb, var(--terminal-accent-cyan) 14%, transparent);
@@ -639,7 +643,7 @@
 		outline-offset: -1px;
 	}
 	.dg-row.zebra {
-		background: color-mix(in srgb, var(--terminal-fg-primary) 1.2%, transparent);
+		background: color-mix(in srgb, var(--terminal-fg-primary) 1%, transparent);
 	}
 	.dg-row.zebra:hover {
 		background: color-mix(in srgb, var(--terminal-accent-cyan) 6%, transparent);
@@ -653,10 +657,11 @@
 
 	/* ── Cells ────────────────────────────────────────── */
 	.dg-td {
-		padding: 5px 6px;
+		padding: 0 8px;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		font-size: 11px;
 	}
 
 	.dg-right { text-align: right; }
@@ -664,50 +669,48 @@
 
 	.dg-ticker {
 		font-weight: 700;
-		color: var(--terminal-fg-primary);
+		color: var(--terminal-accent-amber);
 	}
 
 	.dg-name {
-		color: var(--terminal-fg-secondary);
+		color: var(--terminal-fg-primary);
 	}
 
 	/* ── Type badges ────────────────────────────────── */
-	.dg-type-badges {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-	}
-
-	.dg-type-badge {
+	.dg-universe-badge {
+		display: inline-block;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
 		font-family: var(--terminal-font-mono);
 		font-size: 9px;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--terminal-fg-tertiary, #5a6577);
-		border: 1px solid rgba(255, 255, 255, 0.08);
-		padding: 1px 4px;
-		white-space: nowrap;
-	}
-
-	.dg-elite-inline {
-		font-family: var(--terminal-font-mono);
-		font-size: 8px;
 		font-weight: 700;
 		letter-spacing: 0.06em;
-		color: var(--terminal-accent-amber, #f59e0b);
-		border: 1px solid rgba(245, 158, 11, 0.35);
-		padding: 1px 4px;
+		color: var(--terminal-fg-secondary);
+		border: 1px solid var(--terminal-fg-disabled);
+		padding: 1px 6px;
 		white-space: nowrap;
+	}
+	.dg-universe-badge--elite {
+		border-color: color-mix(in srgb, var(--terminal-accent-amber) 55%, transparent);
+		color: var(--terminal-accent-amber);
+	}
+	.dg-universe-badge--approved {
+		border-color: color-mix(in srgb, var(--terminal-status-success) 35%, transparent);
+		color: var(--terminal-status-success);
+	}
+
+	.dg-dim,
+	.dg-strategy,
+	.dg-geo {
+		color: var(--terminal-fg-tertiary);
 	}
 
 	.dg-strategy {
-		color: var(--terminal-fg-secondary);
 		font-size: 10px;
 	}
 
 	.dg-geo {
-		color: var(--terminal-fg-tertiary);
 		font-size: 10px;
 	}
 

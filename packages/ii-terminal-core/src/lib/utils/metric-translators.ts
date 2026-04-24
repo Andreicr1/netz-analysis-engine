@@ -322,6 +322,72 @@ export function translateCvar(
 }
 
 /**
+ * ``winner_signal`` (PR-A19.1 / PR-A22 / PR-A25 / PR-A26) — cascade-aware
+ * outcome signal. Drives the Builder's headline chip + ActivationBar gate.
+ */
+export function translateWinnerSignal(value: string): TranslatedMetric {
+	switch (value) {
+		case "optimal":
+			return {
+				label: "Alocação ótima dentro do limite de risco",
+				tone: "success",
+			};
+		case "cvar_infeasible_min_var":
+			return {
+				label: "Limite de perda inatingível — exibindo mínimo risco de cauda",
+				tone: "warning",
+			};
+		case "robustness_fallback":
+			return {
+				label: "Alocação robusta com prêmio de incerteza",
+				tone: "success",
+			};
+		case "degraded_other":
+			return {
+				label: "Alocação degradada — revisar parâmetros",
+				tone: "warning",
+			};
+		case "pre_solve_failure":
+			return {
+				label: "Falha antes da otimização — universo vazio ou dados inválidos",
+				tone: "danger",
+			};
+		case "block_coverage_insufficient":
+			return {
+				label: "Cobertura de blocos insuficiente — importe fundos nos blocos ausentes",
+				tone: "danger",
+			};
+		case "template_incomplete":
+			return {
+				label: "Template de alocação incompleto — contate suporte",
+				tone: "danger",
+			};
+		case "proposal_ready":
+			return {
+				label: "Proposta pronta para revisão",
+				tone: "success",
+			};
+		case "proposal_cvar_infeasible":
+			return {
+				label: "Proposta com risco acima do limite — ajuste o limite ou expanda o universo",
+				tone: "warning",
+			};
+		case "no_approved_allocation":
+			return {
+				label: "Alocação estratégica não aprovada — execute o ciclo de aprovação",
+				tone: "danger",
+			};
+		case "instrument_concentration_breach":
+			return {
+				label: "Concentração por instrumento excede o limite — aprove mais fundos no bloco",
+				tone: "danger",
+			};
+		default:
+			return { label: value, tone: "neutral" };
+	}
+}
+
+/**
  * ``max_drawdown_pct`` — worst historical drawdown observed in the
  * backtest. Same contract as ``translateCvar``: caller formats the raw
  * number; this helper picks the tone.

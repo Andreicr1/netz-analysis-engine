@@ -1,7 +1,7 @@
 /** Document detail — loads document metadata + version history + event timeline. */
 import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
-import { error } from "@sveltejs/kit";
+import { errData } from "@investintell/ui/runtime";
 
 export const load: PageServerLoad = async ({ params, parent }) => {
 	const { token } = await parent();
@@ -15,7 +15,14 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 	]);
 
 	if (document.status === "rejected") {
-		throw error(404, "Document not found.");
+		return {
+			document: {},
+			versions: [],
+			timeline: [],
+			fundId,
+			documentId,
+			documentRoute: errData("NOT_FOUND", "Document not found.", false),
+		};
 	}
 
 	return {

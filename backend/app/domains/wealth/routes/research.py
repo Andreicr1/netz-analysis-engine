@@ -255,8 +255,8 @@ async def _load_style_bias_payload(
     )
 
 
-def _latest_risk_row_stmt(org_id: str):
-    org_uuid = uuid.UUID(org_id)
+def _latest_risk_row_stmt(org_id: uuid.UUID | str | None):
+    org_uuid = org_id if isinstance(org_id, uuid.UUID) else uuid.UUID(str(org_id))
     base = (
         select(
             FundRiskMetrics.instrument_id,

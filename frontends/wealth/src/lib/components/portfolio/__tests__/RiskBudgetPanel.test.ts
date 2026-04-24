@@ -1,18 +1,15 @@
 /**
  * PR-A13.2 — RiskBudgetPanel unit test contract.
  *
- * NOTE: Vitest is not yet installed in `frontends/wealth` (no devDep,
- * no vitest.config, no test runner). This file is the contractual
- * skeleton matching the spec in
+ * NOTE: This file is the contractual skeleton matching the spec in
  * `docs/prompts/2026-04-17-pr-a13-2-live-drag-preview.md`. It mirrors the
  * same "contract skeleton" precedent established by
  * `frontends/wealth/e2e/universe-autoimport.spec.ts` (PR-A6).
  *
- * To activate:
- *   1) cd frontends/wealth && pnpm add -D vitest @testing-library/svelte jsdom
- *   2) add `vitest.config.ts` with svelte + jsdom environment
- *   3) wire `pnpm test` into the package scripts
- *   4) seed `portfolio-workspace.svelte.ts` with a test harness that
+ * To activate as executable component tests:
+ *   1) add `vitest.config.ts` with svelte + jsdom environment
+ *   2) wire `pnpm test` into the package scripts
+ *   3) seed `portfolio-workspace.svelte.ts` with a test harness that
  *      allows injecting a mocked `previewCvar` method.
  *
  * Live smoke is exercised against the running dev server (port 5174)

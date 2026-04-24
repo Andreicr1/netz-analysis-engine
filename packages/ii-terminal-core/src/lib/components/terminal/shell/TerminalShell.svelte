@@ -16,7 +16,7 @@
 	Owns the global keyboard shortcuts:
 		• Cmd/Ctrl + K      → toggle CommandPalette
 		• `[` / `]`         → collapse / expand TerminalContextRail
-		• `g` + s/l/r/m/a/p/n/d  → go-to navigation (active routes fire
+		• `g` + s/l/m/a/p/n/d    → go-to navigation (active routes fire
 		                       the matching command palette action;
 		                       pending routes toggle the palette open
 		                       so the user sees the pending badge)
@@ -86,9 +86,8 @@
 	}: TerminalShellProps = $props();
 
 	// ─── Build metadata ─────────────────────────────────────────
-	// Exposed via vite `define` in frontends/wealth/vite.config.ts
-	// (commit 8). String literal fallbacks let the shell render
-	// cleanly before the config edit lands.
+	// Exposed via vite `define`. String literal fallbacks let the shell render
+	// cleanly when build metadata is absent.
 	const buildShaRaw =
 		(import.meta.env.VITE_BUILD_SHA as string | undefined) ?? "local";
 	const buildSha = buildShaRaw.length > 7 ? buildShaRaw.slice(0, 7) : buildShaRaw;
@@ -197,10 +196,6 @@
 		await goto(`${base}/live`);
 	}
 
-	async function navResearch() {
-		await goto(`${base}/screener/research`);
-	}
-
 	async function navAlerts() {
 		await goto(`${base}/alerts`);
 	}
@@ -218,7 +213,6 @@
 		d: navDD,
 		p: navBuilder,
 		l: navLive,
-		r: navResearch,
 		n: navAlerts,
 	};
 

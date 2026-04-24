@@ -1,11 +1,21 @@
 import type { FocusModeEntityKind } from "./FocusMode.svelte";
 
+export type FocusTriggerInitialTab =
+	| "performance"
+	| "profile"
+	| "peers"
+	| "analysis"
+	| "holdings"
+	| "sectors"
+	| "network";
+
 export interface FocusTriggerOptions {
 	entityKind: FocusModeEntityKind;
 	entityId: string;
 	entityLabel?: string;
 	ticker?: string | null;
 	instrumentId?: string | null;
+	initialTab?: FocusTriggerInitialTab;
 }
 
 /**
