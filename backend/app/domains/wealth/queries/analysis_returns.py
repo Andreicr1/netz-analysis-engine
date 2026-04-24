@@ -45,20 +45,19 @@ async def _nav_series(
 async def _monthly_returns(
     db: AsyncSession, instrument_id: str, window: Window,
 ) -> list[dict[str, Any]]:
-    # nav_monthly_returns_agg real columns (verified against live schema):
-    # instrument_id, month, nav_open, nav_close, trading_days,
-    # avg_daily_return, daily_volatility. Compound return is computed
-    # inline as (nav_close / nav_open) - 1 with a NULLIF guard to avoid
-    # divide-by-zero on stale-NAV instruments. The earlier implementation
-    # referenced columns (``compound_return``, ``compound_log_return``,
-    # ``min_nav``, ``max_nav``) that do not exist — it blew up in
-    # production but was shielded from tests by the pre-existing
-    # ``asyncio.gather`` short-circuit in ``fetch_returns_risk``.
+    # nav_monthly_returns_agg columns (per migrations 0049/0069 — the
+    # canonical schema present in dev, CI, and any DB walked through
+    # alembic upgrade head): instrument_id, month, compound_log_return,
+    # compound_return, trading_days, min_nav, max_nav.
+    # An older comment here claimed the live schema differed (nav_open,
+    # nav_close, avg_daily_return, daily_volatility) — that was historical
+    # drift from a manual matview alteration; the canonical migration
+    # schema is now the authoritative source. Use compound_return directly.
     sql = f"""
         SELECT
             month,
             trading_days,
-            (nav_close / NULLIF(nav_open, 0)) - 1 AS compound_return
+            compound_return
         FROM nav_monthly_returns_agg
         WHERE instrument_id = :id
           AND month >= NOW() - INTERVAL '{WINDOW_INTERVAL[window]}'
