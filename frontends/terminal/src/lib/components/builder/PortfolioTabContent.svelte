@@ -108,9 +108,6 @@
 		visitedTabs.add(activeTab);
 	});
 
-	/** ActivationBar unlocks only once every sub-tab has been visited. */
-	const allTabsVisited = $derived(visitedTabs.size === TABS.length);
-
 	function setActiveTab(t: TabId) {
 		visitedTabs.add(t);
 		activeTab = t;
@@ -269,7 +266,7 @@
 			{/key}
 		</div>
 
-		<ActivationBar {allTabsVisited} />
+		<ActivationBar />
 	</div>
 </div>
 

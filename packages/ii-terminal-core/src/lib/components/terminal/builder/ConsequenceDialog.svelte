@@ -11,9 +11,11 @@
 	interface Props {
 		onclose: () => void;
 		onsuccess: () => void;
+		degradedAcknowledged?: boolean;
+		winnerSignal?: string | null;
 	}
 
-	let { onclose, onsuccess }: Props = $props();
+	let { onclose, onsuccess, degradedAcknowledged = false, winnerSignal = null }: Props = $props();
 
 	let confirmText = $state("");
 	let errorMessage = $state<string | null>(null);
@@ -65,7 +67,9 @@
 		errorMessage = null;
 
 		try {
-			await workspace.activatePortfolio();
+			await workspace.activatePortfolio(
+				degradedAcknowledged ? { degradedAcknowledged: true } : undefined,
+			);
 			onsuccess();
 		} catch (err) {
 			errorMessage = err instanceof Error ? err.message : "Activation failed";
@@ -94,6 +98,13 @@
 			This will move the portfolio to LIVE status. Active portfolios
 			are monitored daily for drift and trigger alerts.
 		</p>
+
+		{#if degradedAcknowledged && winnerSignal}
+			<p class="cd-degraded-notice">
+				This construction run has a degraded outcome. Your acknowledgment
+				will be recorded in the audit trail.
+			</p>
+		{/if}
 
 		<label class="cd-label" for="cd-confirm-input">
 			Type ACTIVATE to confirm
@@ -172,6 +183,15 @@
 		color: var(--terminal-fg-secondary);
 		line-height: 1.6;
 		margin: 0 0 var(--terminal-space-4);
+	}
+
+	.cd-degraded-notice {
+		font-size: var(--terminal-text-11);
+		color: var(--terminal-accent-amber);
+		border: 1px solid var(--terminal-accent-amber);
+		padding: var(--terminal-space-2);
+		margin: 0 0 var(--terminal-space-4);
+		line-height: 1.5;
 	}
 
 	.cd-label {
