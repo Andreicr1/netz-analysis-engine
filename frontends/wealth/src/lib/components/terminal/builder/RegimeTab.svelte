@@ -45,21 +45,30 @@
 	let overlay = $state<RegimeOverlay | null>(null);
 	let loading = $state(true);
 
+	let overlayFetchId = 0;
+	let overlayCtrl: AbortController | null = null;
+
 	async function fetchOverlay() {
+		overlayCtrl?.abort();
+		const ctrl = new AbortController();
+		overlayCtrl = ctrl;
+		const id = ++overlayFetchId;
 		loading = true;
 		try {
-			const res = await api.get(`/allocation/regime-overlay?period=${period}`);
+			const res = await api.get(`/allocation/regime-overlay?period=${period}`, undefined, { signal: ctrl.signal });
+			if (id !== overlayFetchId) return;
 			overlay = res as RegimeOverlay;
 		} catch (e) {
+			if (ctrl.signal.aborted) return;
 			console.error("Failed to fetch regime overlay", e);
+			if (id !== overlayFetchId) return;
 			overlay = null;
 		} finally {
-			loading = false;
+			if (id === overlayFetchId) loading = false;
 		}
 	}
 
 	$effect(() => {
-		// Track period reactively — reads period inside the effect body
 		const _p = period;
 		void fetchOverlay();
 	});
@@ -75,15 +84,26 @@
 
 	let currentRegime = $state<GlobalRegime | null>(null);
 
+	let regimeFetchId = 0;
+	let regimeCtrl: AbortController | null = null;
+
 	$effect(() => {
+		regimeCtrl?.abort();
+		const ctrl = new AbortController();
+		regimeCtrl = ctrl;
+		const id = ++regimeFetchId;
 		(async () => {
 			try {
-				const res = await api.get("/allocation/regime");
+				const res = await api.get("/allocation/regime", undefined, { signal: ctrl.signal });
+				if (id !== regimeFetchId) return;
 				currentRegime = res as GlobalRegime;
 			} catch {
+				if (ctrl.signal.aborted) return;
+				if (id !== regimeFetchId) return;
 				currentRegime = null;
 			}
 		})();
+		return () => ctrl.abort();
 	});
 
 	// ── Chart options ────────────────────────────────────────────

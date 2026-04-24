@@ -415,3 +415,53 @@ export function translateMaxDrawdown(
 		tone: tight ? "warning" : "success",
 	};
 }
+
+/**
+ * ``phase`` key from ``cascade_telemetry.phase_attempts[]`` — the three
+ * RU cascade phases plus legacy keys. Used by CascadeTimelineCore to
+ * render human-readable phase labels.
+ */
+export function translateCascadePhaseName(value: string): string {
+	switch (value) {
+		case "phase_1_ru_max_return":
+			return "Phase 1 · Max Return";
+		case "phase_2_ru_robust":
+			return "Phase 2 · Robust";
+		case "phase_3_min_cvar":
+			return "Phase 3 · Min Tail Risk";
+		case "upstream_heuristic":
+			return "Heuristic Fallback";
+		case "primary":
+			return "Primary";
+		case "robust":
+			return "Robust";
+		case "variance_capped":
+			return "Variance-Capped";
+		case "min_variance":
+			return "Min Variance";
+		default:
+			return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+	}
+}
+
+/**
+ * ``operator_signal.binding`` — maps the binding key from the
+ * construction run's operator signal to a human label + tone.
+ */
+export function translateOperatorSignalBinding(
+	value: string | null | undefined,
+): TranslatedMetric | null {
+	if (!value) return null;
+	switch (value) {
+		case "tail_risk_floor":
+			return { label: "Piso de risco de cauda", tone: "warning" };
+		case "universe_coverage":
+			return { label: "Cobertura do universo", tone: "warning" };
+		case "returns_quality":
+			return { label: "Qualidade dos retornos", tone: "warning" };
+		case "block_bands":
+			return { label: "Bandas por bloco", tone: "danger" };
+		default:
+			return { label: value.replace(/_/g, " "), tone: "neutral" };
+	}
+}
