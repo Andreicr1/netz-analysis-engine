@@ -43,46 +43,43 @@
 	import RegimeTab from "@investintell/ii-terminal-core/components/terminal/builder/RegimeTab.svelte";
 	import ActivationBar from "@investintell/ii-terminal-core/components/terminal/builder/ActivationBar.svelte";
 	import CalibrationPanel from "@investintell/ii-terminal-core/components/portfolio/CalibrationPanel.svelte";
+	import PortfolioPicker from "@investintell/ii-terminal-core/components/portfolio/PortfolioPicker.svelte";
 
 	interface Props {
 		portfolios: ModelPortfolio[];
+		onCreatePortfolio?: () => void;
 	}
 
-	let { portfolios }: Props = $props();
+	let { portfolios, onCreatePortfolio }: Props = $props();
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	// ── Portfolio selection ──────────────────────────────────────
-	let selectedPortfolio = $state<ModelPortfolio | null>(null);
-
-	/** URL wins over auto-select so /portfolio/builder?id=X redirect preserves intent. */
 	const urlPortfolioId = $derived(
 		page.url.searchParams.get("portfolio_id"),
 	);
 
+	const selectedPortfolio = $derived.by<ModelPortfolio | null>(() => {
+		const targetId = urlPortfolioId;
+		if (targetId) {
+			return portfolios.find((p) => p.id === targetId) ?? portfolios[0] ?? null;
+		}
+		return portfolios[0] ?? null;
+	});
+
 	$effect(() => {
 		workspace.setGetToken(getToken);
+	});
 
-		// Prefer the portfolio the URL named — otherwise take the first.
-		const targetId = urlPortfolioId;
-		const target = targetId
-			? (portfolios.find((p) => p.id === targetId) ?? portfolios[0] ?? null)
-			: (portfolios[0] ?? null);
-
-		if (target && target.id !== selectedPortfolio?.id) {
-			selectPortfolio(target);
+	// Side-effect only: sync workspace when selected portfolio changes.
+	$effect(() => {
+		if (selectedPortfolio) {
+			workspace.selectPortfolio(selectedPortfolio);
 		}
 	});
 
 	function selectPortfolio(p: ModelPortfolio) {
-		selectedPortfolio = p;
 		workspace.selectPortfolio(p);
-	}
-
-	function handlePortfolioChange(e: Event) {
-		const select = e.currentTarget as HTMLSelectElement;
-		const p = portfolios.find((x) => x.id === select.value);
-		if (p) selectPortfolio(p);
 	}
 
 	// ── Right-column 7-tab state ─────────────────────────────────
@@ -172,17 +169,14 @@
 	});
 
 	$effect(() => {
-		if (
+		if (isBuilding) {
+			userSwitchedTab = false;
+		} else if (
 			workspace.runPhase === "done" &&
 			!userSwitchedTab &&
 			activeTab === "REGIME"
 		) {
 			activeTab = "WEIGHTS";
-		}
-	});
-	$effect(() => {
-		if (isBuilding) {
-			userSwitchedTab = false;
 		}
 	});
 </script>
@@ -191,20 +185,15 @@
 	<!-- LEFT COLUMN (40%) — Command Panel -->
 	<div class="builder-left">
 		<div class="builder-portfolio-select">
-			<select
-				class="builder-select"
-				value={selectedPortfolio?.id ?? ""}
-				onchange={handlePortfolioChange}
-				aria-label="Select portfolio"
-			>
-				{#if portfolios.length === 0}
-					<option value="" disabled>No portfolios available</option>
-				{:else}
-					{#each portfolios as p (p.id)}
-						<option value={p.id}>{p.display_name}</option>
-					{/each}
-				{/if}
-			</select>
+			<PortfolioPicker
+				{portfolios}
+				selectedId={selectedPortfolio?.id ?? null}
+				onSelect={(id) => {
+					const p = portfolios.find((x) => x.id === id);
+					if (p) selectPortfolio(p);
+				}}
+				onCreate={() => onCreatePortfolio?.()}
+			/>
 		</div>
 
 		<div class="builder-calibration">
@@ -311,23 +300,6 @@
 	.builder-portfolio-select {
 		padding: var(--terminal-space-2);
 		border-bottom: var(--terminal-border-hairline);
-	}
-
-	.builder-select {
-		width: 100%;
-		height: 28px;
-		background: var(--terminal-bg-panel-sunken);
-		color: var(--terminal-fg-primary);
-		border: var(--terminal-border-hairline);
-		border-radius: var(--terminal-radius-none);
-		font-family: var(--terminal-font-mono);
-		font-size: var(--terminal-text-11);
-		padding: 0 var(--terminal-space-2);
-		cursor: pointer;
-	}
-	.builder-select:focus-visible {
-		outline: var(--terminal-border-focus);
-		outline-offset: 2px;
 	}
 
 	.builder-calibration {
