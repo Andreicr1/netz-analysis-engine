@@ -18,7 +18,7 @@
 
 	import RunControls from "$lib/components/terminal/builder/RunControls.svelte";
 	import WeightsTab from "$lib/components/terminal/builder/WeightsTab.svelte";
-	import CascadeTimeline from "$lib/components/terminal/builder/CascadeTimeline.svelte";
+	import ConstructionCascadeTimeline from "@investintell/ii-terminal-core/components/allocation/ConstructionCascadeTimeline.svelte";
 	import StressTab from "$lib/components/terminal/builder/StressTab.svelte";
 	import RiskTab from "$lib/components/terminal/builder/RiskTab.svelte";
 	import AdvisorTab from "$lib/components/terminal/builder/AdvisorTab.svelte";
@@ -83,43 +83,7 @@
 	// Allocation profile from URL (linked from Allocation Editor)
 	const allocProfile = $derived(page.url.searchParams.get("alloc"));
 
-	// Cascade timeline phases from workspace
-	const cascadePhases = $derived(workspace.optimizerPhases);
 	const showCascade = $derived(workspace.runPhase !== "idle");
-	// PR-A5 A.8 — thin progress bar visible only while a build is in-flight.
-	const showProgress = $derived(
-		workspace.runPhase !== "idle" &&
-			workspace.runPhase !== "done" &&
-			workspace.runPhase !== "error",
-	);
-	const runProgress = $derived(workspace.runProgress);
-
-	// ── PR-A5 B.1/B.2 — pipeline phase tracking ───────────────────
-	/** Map the workspace runPhase to the backend BuildPhase used by the strip. */
-	const pipelinePhase = $derived.by<
-		| "IDLE"
-		| "FACTOR_MODELING"
-		| "SHRINKAGE"
-		| "SOCP_OPTIMIZATION"
-		| "BACKTESTING"
-		| "COMPLETED"
-	>(() => {
-		switch (workspace.runPhase) {
-			case "factor_modeling":
-				return "FACTOR_MODELING";
-			case "shrinkage":
-				return "SHRINKAGE";
-			case "optimizer":
-				return "SOCP_OPTIMIZATION";
-			case "stress":
-				return "BACKTESTING";
-			case "done":
-				return "COMPLETED";
-			default:
-				return "IDLE";
-		}
-	});
-	const pipelineErrored = $derived(workspace.runPhase === "error");
 
 	/** PR-A5 B.1 — tabs that should pulse while their upstream phase runs. */
 	const pulsingTabs = $derived.by<SvelteSet<TabId>>(() => {
@@ -237,12 +201,9 @@
 		<!-- Zone D: Cascade Timeline (visible during/after run) -->
 		{#if showCascade}
 			<div in:fly={{ y: -8, ...svelteTransitionFor("primary", { duration: "update" }) }}>
-				<CascadeTimeline
-					phases={cascadePhases}
-					{runProgress}
-					{showProgress}
-					{pipelinePhase}
-					{pipelineErrored}
+				<ConstructionCascadeTimeline
+					telemetry={workspace.constructionRun?.cascade_telemetry ?? null}
+					runPhase={workspace.runPhase}
 				/>
 			</div>
 		{/if}

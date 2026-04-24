@@ -533,6 +533,7 @@ export class PortfolioWorkspaceState {
 	 * preventing stale responses from overwriting current portfolio data.
 	 */
 	private _generation = 0;
+	private _diffFetchId = 0;
 
 	portfolioId = $derived(this.portfolio?.id ?? null);
 	funds = $derived(this.portfolio?.fund_selection_schema?.funds ?? []);
@@ -2164,6 +2165,7 @@ export class PortfolioWorkspaceState {
 	async fetchRunDiff(runId: string) {
 		if (!this._getToken || !this.portfolioId) return;
 		const gen = this._generation;
+		const fetchId = ++this._diffFetchId;
 		this.isLoadingDiff = true;
 
 		try {
@@ -2171,14 +2173,13 @@ export class PortfolioWorkspaceState {
 			const result = await api.get<ConstructionRunDiff>(
 				`/model-portfolios/${this.portfolioId}/construction/runs/${runId}/diff`,
 			);
-			if (gen !== this._generation) return;
+			if (gen !== this._generation || fetchId !== this._diffFetchId) return;
 			this.runDiff = result;
 		} catch {
-			if (gen !== this._generation) return;
-			// Graceful fallback — diff may not exist for first run
+			if (gen !== this._generation || fetchId !== this._diffFetchId) return;
 			this.runDiff = null;
 		} finally {
-			if (gen === this._generation) {
+			if (gen === this._generation && fetchId === this._diffFetchId) {
 				this.isLoadingDiff = false;
 			}
 		}
