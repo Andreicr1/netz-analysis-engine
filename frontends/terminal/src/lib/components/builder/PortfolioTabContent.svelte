@@ -34,7 +34,7 @@
 
 	import RunControls from "@investintell/ii-terminal-core/components/terminal/builder/RunControls.svelte";
 	import WeightsTab from "@investintell/ii-terminal-core/components/terminal/builder/WeightsTab.svelte";
-	import CascadeTimeline from "@investintell/ii-terminal-core/components/terminal/builder/CascadeTimeline.svelte";
+	import ConstructionCascadeTimeline from "@investintell/ii-terminal-core/components/allocation/ConstructionCascadeTimeline.svelte";
 	import StressTab from "@investintell/ii-terminal-core/components/terminal/builder/StressTab.svelte";
 	import RiskTab from "@investintell/ii-terminal-core/components/terminal/builder/RiskTab.svelte";
 	import AdvisorTab from "@investintell/ii-terminal-core/components/terminal/builder/AdvisorTab.svelte";
@@ -114,35 +114,6 @@
 		userSwitchedTab = true;
 	}
 
-	// Cascade / pipeline phase mirroring the workspace run state.
-	const cascadePhases = $derived(workspace.optimizerPhases);
-	const showProgress = $derived(isBuilding);
-	const runProgress = $derived(workspace.runProgress);
-
-	const pipelinePhase = $derived.by<
-		| "IDLE"
-		| "FACTOR_MODELING"
-		| "SHRINKAGE"
-		| "SOCP_OPTIMIZATION"
-		| "BACKTESTING"
-		| "COMPLETED"
-	>(() => {
-		switch (workspace.runPhase) {
-			case "factor_modeling":
-				return "FACTOR_MODELING";
-			case "shrinkage":
-				return "SHRINKAGE";
-			case "optimizer":
-				return "SOCP_OPTIMIZATION";
-			case "stress":
-				return "BACKTESTING";
-			case "done":
-				return "COMPLETED";
-			default:
-				return "IDLE";
-		}
-	});
-	const pipelineErrored = $derived(workspace.runPhase === "error");
 
 	/** Tabs that should pulse while their upstream phase is in flight. */
 	const pulsingTabs = $derived.by<SvelteSet<TabId>>(() => {
@@ -234,13 +205,9 @@
 		<div
 			in:fly={{ y: -8, ...svelteTransitionFor("primary", { duration: "update" }) }}
 		>
-			<CascadeTimeline
-				phases={cascadePhases}
-				{runProgress}
-				{showProgress}
-				{pipelinePhase}
-				{pipelineErrored}
-				collapsed={!isBuilding && workspace.runPhase !== "done"}
+			<ConstructionCascadeTimeline
+				telemetry={workspace.constructionRun?.cascade_telemetry ?? null}
+				runPhase={workspace.runPhase}
 			/>
 		</div>
 
