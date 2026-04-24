@@ -507,11 +507,16 @@ async def get_screener_sparklines(
 ) -> dict[str, list[SparklinePoint]]:
     """Return monthly NAV data for a batch of instruments.
 
-    Reads from ``nav_monthly_returns_agg`` CAGG. Returns at most
-    ``months`` data points per instrument, ordered chronologically.
-    Instruments with no data are omitted from the response dict.
-    Capped at 100 instrument IDs per request (frontend sends visible
-    rows only, ~40 from virtualization).
+    Reads ``compound_return`` from the ``nav_monthly_returns_agg`` CAGG
+    and reconstructs a normalised NAV curve (starting at 100 per instrument,
+    compounding monthly). Absolute NAV values are not historical — the
+    curve's shape is what the frontend plots. See migration 0069 for why
+    nav_close/nav_open were removed from the matview.
+
+    Returns at most ``months`` data points per instrument, ordered
+    chronologically. Instruments with no data are omitted. Capped at 100
+    instrument IDs per request (frontend sends visible rows only, ~40 from
+    virtualization).
     """
     if len(body.instrument_ids) > 100:
         raise HTTPException(
@@ -524,14 +529,18 @@ async def get_screener_sparklines(
     ids = [str(iid) for iid in body.instrument_ids]
     months = min(max(body.months, 1), 120)  # clamp to 1-120
 
+    # Migration 0069 redefined nav_monthly_returns_agg and removed the
+    # nav_close / nav_open columns — only compound_return remains. Reconstruct
+    # a normalised NAV curve server-side (start at 100, compound each month)
+    # so the frontend contract stays stable. Sparklines are decorative — the
+    # curve shape is what matters, not the absolute NAV value.
     result = await db.execute(
         text(
             """
             SELECT
                 instrument_id::text AS instrument_id,
                 month,
-                nav_close,
-                (nav_close / NULLIF(nav_open, 0)) - 1 AS return_1m
+                compound_return
             FROM nav_monthly_returns_agg
             WHERE instrument_id = ANY(:ids)
               AND month >= NOW() - make_interval(months => :months)
@@ -543,12 +552,18 @@ async def get_screener_sparklines(
     rows = result.mappings().all()
 
     out: dict[str, list[SparklinePoint]] = {}
+    cumulative: dict[str, float] = {}  # per-instrument running NAV
     for r in rows:
         iid = str(r["instrument_id"])
+        ret = float(r["compound_return"]) if r["compound_return"] is not None else 0.0
+        # Start each instrument's curve at 100; compound each month.
+        prev = cumulative.get(iid, 100.0)
+        nav_close = prev if iid not in cumulative else prev * (1.0 + ret)
+        cumulative[iid] = nav_close
         point = SparklinePoint(
             month=r["month"].isoformat() if hasattr(r["month"], "isoformat") else str(r["month"]),
-            nav_close=float(r["nav_close"]) if r["nav_close"] is not None else 0.0,
-            return_1m=float(r["return_1m"]) if r["return_1m"] is not None else None,
+            nav_close=nav_close,
+            return_1m=ret if r["compound_return"] is not None else None,
         )
         out.setdefault(iid, []).append(point)
 
