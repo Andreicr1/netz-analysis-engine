@@ -243,7 +243,8 @@ def test_cvar_service_evt_integration():
 
     res = compute_cvar(returns, method="evt_pot", confidence=0.99)
     assert res.method == "evt_pot"
-    assert res.cvar > 0
+    # PR-Q13 Fix 2: compute_cvar now returns return-space (negative = loss).
+    assert res.cvar < 0
     assert res.evt_xi is not None
 
 
@@ -281,8 +282,9 @@ def test_compute_cvar_evt_default_confidence_no_longer_zeroes():
     assert res.method == "evt_pot"
     assert res.confidence == 0.95
     if not res.degraded:
-        assert res.cvar > 0, "EVT 0.95 returned zero — Q14 fix regressed"
-        assert res.var > 0
+        # PR-Q13 Fix 2: compute_cvar now returns return-space (negative = loss).
+        assert res.cvar < 0, "EVT 0.95 returned zero — Q14 fix regressed"
+        assert res.var < 0
 
 
 def test_risk_calc_evt_consumers_unaffected_by_q14():
