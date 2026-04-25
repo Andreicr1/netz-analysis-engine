@@ -5,10 +5,7 @@ DO NOT collapse multiple bug coverages into a single test — independence is th
 """
 from __future__ import annotations
 
-import math
-
 import numpy as np
-import pytest
 
 from quant_engine.regime_service import (
     _amplify_weights,
@@ -19,7 +16,6 @@ from quant_engine.regime_service import (
     classify_regime_multi_signal,
     detect_regime,
 )
-
 
 # ─── Tier 1 ────────────────────────────────────────────────────────────────
 
