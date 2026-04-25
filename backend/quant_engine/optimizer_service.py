@@ -305,7 +305,7 @@ async def optimize_portfolio(
     opt_weights /= total
 
     port_ret = float(mu @ opt_weights)
-    port_vol = float(np.sqrt(opt_weights @ cov_matrix @ opt_weights))
+    port_vol = _safe_volatility(opt_weights, cov_matrix)
     sharpe = (port_ret - risk_free_rate) / port_vol if port_vol > 0 else 0.0
 
     return OptimizationResult(
@@ -573,8 +573,8 @@ async def optimize_fund_portfolio(
         return str(prob.status) if prob.status is not None else None
 
     def _extract_weights(w_var: cp.Variable) -> np.ndarray | None:
-        """Clean and normalize solved weights. Returns None if degenerate."""
-        if w_var.value is None:
+        """Clean and normalize solved weights. Returns None if degenerate or NaN."""
+        if w_var.value is None or not np.all(np.isfinite(w_var.value)):
             return None
         w_arr: np.ndarray = np.maximum(w_var.value, 0)
         total = w_arr.sum()
@@ -582,6 +582,26 @@ async def optimize_fund_portfolio(
             return None
         result: np.ndarray = w_arr / total
         return result
+
+    def _verify_weight_constraints(
+        w: np.ndarray,
+        tol: float = 1e-4,
+    ) -> tuple[bool, str | None]:
+        """Returns (ok, violation_reason). tol is a numerical tolerance for
+        optimal_inaccurate solver tolerance — outside this band the solve is
+        not usable."""
+        if abs(w.sum() - 1.0) > tol:
+            return False, f"sum_violation {w.sum():.6f}"
+        if (w > max_fund_w + tol).any():
+            return False, f"max_fund {w.max():.6f} > {max_fund_w}"
+        for blk_id, indices in block_fund_indices.items():
+            if blk_id not in block_map:
+                continue
+            bc = block_map[blk_id]
+            bs = float(w[indices].sum()) if indices else 0.0
+            if bs < bc.min_weight - tol or bs > bc.max_weight + tol:
+                return False, f"block_{blk_id} {bs:.6f} not in [{bc.min_weight}, {bc.max_weight}]"
+        return True, None
 
     # Resolve moments: use provided arrays or fall back to zeros
     _skew = skewness if skewness is not None else np.zeros(n)
@@ -631,7 +651,7 @@ async def optimize_fund_portfolio(
         diverge silently from the value the LP actually constrained.
         """
         ret = float(mu @ w_arr)
-        vol = float(np.sqrt(w_arr @ cov_matrix @ w_arr))
+        vol = _safe_volatility(w_arr, cov_matrix)
         sharpe = (ret - risk_free_rate) / vol if vol > 0 else 0.0
         # Empirical annualized CVaR magnitude (matches the LP's realized value).
         cvar_emp_annual = realized_cvar_from_weights(w_arr, returns_scenarios, cvar_alpha) * SQRT_252
@@ -811,6 +831,18 @@ async def optimize_fund_portfolio(
     if status1 in ("optimal", "optimal_inaccurate"):
         opt_w1 = _extract_weights(w1)
         if opt_w1 is not None:
+            _ok1, _reason1 = _verify_weight_constraints(opt_w1)
+            if not _ok1:
+                logger.warning("phase1_solver_imprecise", reason=_reason1)
+                attempts.append(PhaseAttempt(
+                    phase="phase_1_ru_max_return", status="solver_imprecise",
+                    solver=prob1.solver_stats.solver_name if prob1.solver_stats else None,
+                    objective_value=None, wall_ms=_wall_p1,
+                    infeasibility_reason=_reason1,
+                    cvar_limit_effective=effective_cvar_limit,
+                ))
+                opt_w1 = None
+        if opt_w1 is not None:
             phase1_weights = opt_w1
             phase1_solver = prob1.solver_stats.solver_name if prob1.solver_stats else "CLARABEL"
             phase1_expected_return = float(mu @ opt_w1)
@@ -928,6 +960,19 @@ async def optimize_fund_portfolio(
             if status2 in ("optimal", "optimal_inaccurate"):
                 opt_w2 = _extract_weights(w2)
                 if opt_w2 is not None:
+                    _ok2, _reason2 = _verify_weight_constraints(opt_w2)
+                    if not _ok2:
+                        logger.warning("phase2_solver_imprecise", reason=_reason2)
+                        attempts.append(PhaseAttempt(
+                            phase="phase_2_ru_robust", status="solver_imprecise",
+                            solver=prob2.solver_stats.solver_name if prob2.solver_stats else None,
+                            objective_value=None, wall_ms=_wall_p2,
+                            infeasibility_reason=_reason2,
+                            kappa_used=round(kappa, 6),
+                            cvar_limit_effective=effective_cvar_limit,
+                        ))
+                        opt_w2 = None
+                if opt_w2 is not None:
                     phase2_weights = opt_w2
                     phase2_solver = prob2.solver_stats.solver_name if prob2.solver_stats else "CLARABEL"
                     phase2_expected_return = float(mu @ opt_w2)
@@ -995,6 +1040,17 @@ async def optimize_fund_portfolio(
     min_achievable_cvar: float | None = None
     if status3 in ("optimal", "optimal_inaccurate"):
         opt_w3 = _extract_weights(w3)
+        if opt_w3 is not None:
+            _ok3, _reason3 = _verify_weight_constraints(opt_w3)
+            if not _ok3:
+                logger.warning("phase3_solver_imprecise", reason=_reason3)
+                attempts.append(PhaseAttempt(
+                    phase="phase_3_min_cvar", status="solver_imprecise",
+                    solver="CLARABEL", objective_value=None, wall_ms=_wall_p3,
+                    infeasibility_reason=_reason3,
+                    cvar_limit_effective=effective_cvar_limit,
+                ))
+                opt_w3 = None
         # PR-A17.1 C.1 — Phase 3 post-solve inspection. Diagnoses the
         # "objective_value=0.0 → upstream_heuristic" regression: logs the
         # extracted weight vector's shape (sum, max, nonzero count) plus
