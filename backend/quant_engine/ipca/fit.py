@@ -28,6 +28,8 @@ class IPCAFit:
     converged: bool
     n_iterations: int
     dates: pd.DatetimeIndex | None = None
+    degraded: bool = False
+    degraded_reason: str | None = None
 
     def factor_returns_for_period(
         self, period_start: date | None, period_end: date | None
