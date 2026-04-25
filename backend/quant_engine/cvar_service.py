@@ -142,38 +142,25 @@ def compute_cvar(
     if method == "evt_pot":
         from quant_engine.evt.pot_gpd import extreme_var_evt
 
-        # Map 0.95 -> (0.95, 0.99, 0.995, 0.999) to reuse the POT function
-        # but we only return the one matching requested confidence
         res = extreme_var_evt(clean_returns, quantiles=(confidence,))
-        
-        # Field mapping for common quantiles
-        mapping = {
-            0.95: ("var_95", "cvar_95"), # Not in default ExtremeVaRResult but added here if needed
-            0.99: ("var_99", "cvar_99"),
-            0.995: ("var_995", "cvar_995"),
-            0.999: ("var_999", "cvar_999"),
-        }
-        
-        # Default fallback if not in common mapping
-        q_key = int(confidence * 1000)
-        var_field, cvar_field = mapping.get(confidence, (f"var_{q_key}", f"cvar_{q_key}"))
-        
-        # Note: ExtremeVaRResult from pot_gpd only has 99, 995, 999 as fixed fields.
-        # But extreme_var_evt also puts requested quantiles into results internally?
-        # Actually res is ExtremeVaRResult.
-        
-        if confidence == 0.99:
-            var, cvar = res.var_99, res.cvar_99
-        elif confidence == 0.995:
-            var, cvar = res.var_995, res.cvar_995
-        elif confidence == 0.999:
-            var, cvar = res.var_999, res.cvar_999
+
+        # PR-Q14: pot_gpd now exposes ``quantile_results`` keyed by the
+        # exact quantile passed in. Earlier versions of this branch
+        # silently mapped non-legacy quantiles (e.g. 0.95) to 99% legacy
+        # fields, which were not populated for that request and returned
+        # 0.0 — making the EVT path useless at the default confidence.
+        if confidence not in res.quantile_results:
+            # Degraded path may return an empty dict; surface that to the
+            # caller instead of silently returning a zeroed result.
+            if not res.degraded:
+                logger.warning(
+                    "evt_quantile_missing_unexpected",
+                    confidence=confidence,
+                    populated=list(res.quantile_results.keys()),
+                )
+            var, cvar = 0.0, 0.0
         else:
-            # For 0.95 or others, we might need to modify pot_gpd.extreme_var_evt
-            # to return a more flexible object or just use the 99% one as proxy 
-            # if 95% is requested but not explicitly handled in ExtremeVaRResult.
-            # But the prompt says compute at 99, 99.5, 99.9.
-            var, cvar = res.var_99, res.cvar_99 # Fallback to 99%
+            var, cvar = res.quantile_results[confidence]
 
         return CVaRResult(
             cvar=cvar,

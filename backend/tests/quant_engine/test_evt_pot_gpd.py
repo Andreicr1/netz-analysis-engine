@@ -240,8 +240,62 @@ def test_cvar_service_evt_integration():
     """Test 19: cvar_service.compute_cvar works with evt_pot method."""
     from quant_engine.cvar_service import compute_cvar
     returns = np.random.laplace(0, 0.02, 1000)
-    
+
     res = compute_cvar(returns, method="evt_pot", confidence=0.99)
     assert res.method == "evt_pot"
     assert res.cvar > 0
     assert res.evt_xi is not None
+
+
+def test_quantile_results_populated_for_requested_quantiles():
+    """Test 20 (PR-Q14): quantile_results dict carries every requested quantile.
+
+    Pre-PR-Q14 the constructor only populated legacy fields keyed by
+    "var_990", "var_995", "var_999". Any other quantile (e.g. 0.95)
+    silently fell back to 0.0 because the constructor's results.get()
+    looked up a key that was never written. The dict-based lookup keeps
+    arbitrary quantiles available to consumers.
+    """
+    returns = np.random.default_rng(42).laplace(0, 0.02, 1000)
+    res = extreme_var_evt(returns, quantiles=(0.95, 0.99, 0.999))
+
+    assert set(res.quantile_results.keys()) == {0.95, 0.99, 0.999}
+    var_95, cvar_95 = res.quantile_results[0.95]
+    var_99, cvar_99 = res.quantile_results[0.99]
+    assert var_95 > 0 and cvar_95 > 0  # non-zero for risky data
+    assert cvar_99 >= cvar_95  # higher confidence → larger tail
+
+
+def test_compute_cvar_evt_default_confidence_no_longer_zeroes():
+    """Test 21 (PR-Q14): compute_cvar(method='evt_pot', confidence=0.95)
+    now returns real EVT-derived CVaR, not silent (0.0, 0.0).
+
+    Pre-PR-Q14 the else branch in cvar_service mapped 0.95 to res.var_99
+    which was never populated (extreme_var_evt was called with
+    quantiles=(0.95,) only), so cvar=var=0.0 was returned silently.
+    """
+    from quant_engine.cvar_service import compute_cvar
+
+    returns = np.random.default_rng(7).laplace(0, 0.02, 1000)
+    res = compute_cvar(returns, method="evt_pot", confidence=0.95)
+    assert res.method == "evt_pot"
+    assert res.confidence == 0.95
+    if not res.degraded:
+        assert res.cvar > 0, "EVT 0.95 returned zero — Q14 fix regressed"
+        assert res.var > 0
+
+
+def test_risk_calc_evt_consumers_unaffected_by_q14():
+    """Test 22 (PR-Q14): risk_calc.py consumes legacy var_99/var_999 fields
+    directly; those must still be populated when 0.99/0.999 are passed."""
+    returns = np.random.default_rng(11).laplace(0, 0.02, 1000)
+    res = extreme_var_evt(returns, quantiles=(0.99, 0.999))
+
+    # Legacy fields still populated when matching quantiles requested.
+    assert res.var_99 > 0
+    assert res.cvar_99 > 0
+    assert res.var_999 > 0
+    assert res.cvar_999 > 0
+    # And the new dict mirrors them.
+    assert res.quantile_results[0.99] == (res.var_99, res.cvar_99)
+    assert res.quantile_results[0.999] == (res.var_999, res.cvar_999)
