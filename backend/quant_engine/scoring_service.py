@@ -8,6 +8,7 @@ Config is injected as parameter by callers via ConfigService.get("liquid_funds",
 
 from __future__ import annotations
 
+import math
 from decimal import Decimal
 from typing import Any, Protocol
 
@@ -55,6 +56,7 @@ class AltMetrics(Protocol):
     upside_capture_1y: Decimal | float | None
     crisis_alpha_score: Decimal | float | None
     calmar_ratio_3y: Decimal | float | None
+    max_drawdown_3y: Decimal | float | None
     sortino_1y: Decimal | float | None
     inflation_beta: Decimal | float | None
     yield_proxy_12m: Decimal | float | None  # Reused from FI (for REIT income)
@@ -64,15 +66,12 @@ class AltMetrics(Protocol):
 # Hardcoded fallback — used only if config parameter is not provided.
 # fee_efficiency replaces Lipper rating (provider never contracted).
 # insider_sentiment is opt-in (add weight > 0 in config to activate).
-# flows_momentum reduced from 10% to 5%: AUM-minus-NAV proxy is noisy
-# (dividends, splits, merges distort flow signal). Weight redistributed
-# to risk_adjusted_return (most analytically robust component).
 _DEFAULT_SCORING_WEIGHTS: dict[str, float] = {
     "return_consistency": 0.20,
-    "risk_adjusted_return": 0.30,
+    "risk_adjusted_return": 0.25,
     "drawdown_control": 0.20,
     "information_ratio": 0.15,
-    "flows_momentum": 0.05,
+    "flows_momentum": 0.10,
     "fee_efficiency": 0.10,
 }
 
@@ -166,6 +165,21 @@ _ALT_PROFILE_WEIGHTS: dict[str, dict[str, float]] = {
 }
 
 
+def _validate_weights(weights: dict[str, float], context: str) -> None:
+    """Validate that weights are finite, non-negative, and sum to 1.0 ± 1e-3."""
+    for k, w in weights.items():
+        if not math.isfinite(w):
+            raise ValueError(f"{context}: weight for {k!r} is non-finite ({w})")
+        if w < 0:
+            raise ValueError(f"{context}: weight for {k!r} is negative ({w})")
+    total = sum(weights.values())
+    if not math.isclose(total, 1.0, abs_tol=1e-3):
+        raise ValueError(
+            f"{context}: weights sum to {total:.4f}, expected 1.0 ± 0.001. "
+            f"Weights: {weights}"
+        )
+
+
 def resolve_alt_profile_weights(
     profile: str,
     config: dict[str, Any] | None = None,
@@ -177,9 +191,11 @@ def resolve_alt_profile_weights(
     """
     if config is not None:
         try:
-            weights = config.get("scoring_weights", config)
+            weights = config.get("scoring_weights")
             if isinstance(weights, dict) and weights:
-                return {k: float(v) for k, v in weights.items()}
+                result = {k: float(v) for k, v in weights.items()}
+                _validate_weights(result, "resolve_alt_profile_weights")
+                return result
         except (TypeError, ValueError):
             pass
     return _ALT_PROFILE_WEIGHTS.get(profile, _DEFAULT_ALT_GENERIC_WEIGHTS)
@@ -204,13 +220,30 @@ def resolve_scoring_weights(
         return default
 
     try:
-        weights = config.get("scoring_weights", config)
+        weights = config.get("scoring_weights")
         if isinstance(weights, dict) and weights:
-            return {k: float(v) for k, v in weights.items()}
+            result = {k: float(v) for k, v in weights.items()}
+            _validate_weights(result, "resolve_scoring_weights")
+            return result
         return default
     except (TypeError, ValueError) as e:
         logger.error("Malformed scoring config, using defaults", error=str(e))
         return default
+
+
+def _clamp_component_score(value: float, name: str) -> float:
+    """Clamp external component scores to [0, 100], rejecting non-finite."""
+    if not math.isfinite(value):
+        raise ValueError(f"{name}_score is non-finite ({value})")
+    return max(0.0, min(100.0, float(value)))
+
+
+def _peaked_score(value: float | None, target: float, half_range: float) -> float:
+    """Score = 100 at value=target, decays linearly to 0 at |value - target| >= half_range."""
+    if value is None or not math.isfinite(value):
+        return 45.0
+    distance = abs(value - target)
+    return max(0.0, 100.0 * (1.0 - distance / half_range))
 
 
 def _normalize(
@@ -226,7 +259,7 @@ def _normalize(
         opaque/short-history funds vs. transparent peers with mediocre scores.
       - If no peer_median, falls back to 45.0 (below midpoint, slight penalty).
     """
-    if value is None:
+    if value is None or not math.isfinite(value):
         if peer_median is not None:
             return max(0.0, min(100.0, peer_median - 5.0))
         return 45.0
@@ -272,8 +305,8 @@ def _compute_fee_efficiency(
     """Compute fee efficiency component (shared between equity and FI paths)."""
     pm = peer_medians or {}
     er_fraction = to_decimal_fraction(expense_ratio_pct)
-    if er_fraction is not None:
-        er_human_pct = er_fraction * 100.0  # decimal -> percent for scoring
+    if er_fraction is not None and math.isfinite(float(er_fraction)):
+        er_human_pct = float(er_fraction) * 100.0  # decimal -> percent for scoring
         return max(0.0, 100.0 - er_human_pct * 50.0)
     fee_pm = pm.get("fee_efficiency")
     return max(0.0, fee_pm - 5.0) if fee_pm is not None else 45.0
@@ -311,12 +344,13 @@ def _compute_fi_score(
         deviation = abs(dur - dur_center) / max(dur_half_range, 0.1)
         components["duration_management"] = max(0.0, min(100.0, (1 - deviation) * 100))
     else:
-        components["duration_management"] = pm.get("duration_management", 45.0) - 5.0
+        components["duration_management"] = pm.get("duration_management", 45.0)
 
     # spread_capture: credit beta as proxy for spread capture skill.
-    # Moderate exposure (0.5-1.5) is ideal. Range: -1.0 to 3.0.
+    # Peaked at credit_beta = 1.0; symmetric ±1.0 half-range.
+    # Higher and lower betas penalized equally — moderate exposure is the institutional ideal.
     cb = float(fi.credit_beta) if fi.credit_beta is not None else None
-    components["spread_capture"] = _normalize(cb, -1.0, 3.0, pm.get("spread_capture"))
+    components["spread_capture"] = _peaked_score(cb, target=1.0, half_range=1.0)
 
     # duration_adjusted_drawdown: drawdown per unit of duration.
     # Range: -5.0 (terrible) to 0.0 (no drawdown). Higher is better.
@@ -330,7 +364,14 @@ def _compute_fi_score(
 
     weights = resolve_scoring_weights(config, asset_class="fixed_income")
 
-    score = sum(components.get(k, 50.0) * w for k, w in weights.items())
+    missing = set(weights.keys()) - components.keys()
+    if missing:
+        raise ValueError(
+            f"_compute_fi_score: weights reference components not provided: "
+            f"{sorted(missing)}. All weighted components must be computed."
+        )
+
+    score = sum(components[k] * w for k, w in weights.items())
     return round(score, 2), {k: round(v, 2) for k, v in components.items()}
 
 
@@ -348,19 +389,17 @@ def _compute_cash_score(
     pm = peer_medians or {}
     components: dict[str, float] = {}
 
-    # yield_vs_risk_free: relative yield advantage over fed funds rate
+    # yield_vs_risk_free: absolute spread over policy rate (handles negative rates).
+    # 0 pp → 50, 5 pp → 100, -5 pp → 0. Continuous across the zero boundary.
     yld = float(cash.seven_day_net_yield) if cash.seven_day_net_yield is not None else None
     ffr = float(cash.fed_funds_rate_at_calc) if cash.fed_funds_rate_at_calc is not None else None
-    if yld is not None and ffr is not None:
-        if ffr > 0:
-            relative_yield = (yld - ffr) / ffr
-        else:
-            relative_yield = 0.10 if yld > 0 else 0.0
+    if yld is not None and ffr is not None and math.isfinite(ffr):
+        spread_pp = (yld - ffr) * 100.0  # percentage points
         components["yield_vs_risk_free"] = _normalize(
-            relative_yield, -0.20, 0.20, pm.get("yield_vs_risk_free"),
+            spread_pp, -5.0, 5.0, pm.get("yield_vs_risk_free"),
         )
     else:
-        components["yield_vs_risk_free"] = pm.get("yield_vs_risk_free", 45.0) - 5.0
+        components["yield_vs_risk_free"] = pm.get("yield_vs_risk_free", 45.0)
 
     # nav_stability: deviation from $1.00 par value
     nav = float(cash.nav_per_share_mmf) if cash.nav_per_share_mmf is not None else None
@@ -369,7 +408,7 @@ def _compute_cash_score(
         stability = max(0.0, 1.0 - deviation * 1000)  # 0.001 deviation = 0 score
         components["nav_stability"] = stability * 100
     else:
-        components["nav_stability"] = pm.get("nav_stability", 45.0) - 5.0
+        components["nav_stability"] = pm.get("nav_stability", 45.0)
 
     # liquidity_quality: weekly liquid assets %
     wl = float(cash.pct_weekly_liquid) if cash.pct_weekly_liquid is not None else None
@@ -379,7 +418,7 @@ def _compute_cash_score(
             wl, 30.0, 100.0, pm.get("liquidity_quality"),
         )
     else:
-        components["liquidity_quality"] = pm.get("liquidity_quality", 45.0) - 5.0
+        components["liquidity_quality"] = pm.get("liquidity_quality", 45.0)
 
     # maturity_discipline: lower WAM = less interest rate risk = better
     wam = float(cash.weighted_avg_maturity_days) if cash.weighted_avg_maturity_days is not None else None
@@ -388,14 +427,21 @@ def _compute_cash_score(
         wam_score = max(0.0, (1.0 - wam / 60.0)) * 100
         components["maturity_discipline"] = wam_score
     else:
-        components["maturity_discipline"] = pm.get("maturity_discipline", 45.0) - 5.0
+        components["maturity_discipline"] = pm.get("maturity_discipline", 45.0)
 
     # fee_efficiency: same logic as equity/FI
     components["fee_efficiency"] = _compute_fee_efficiency(expense_ratio_pct, pm)
 
     weights = resolve_scoring_weights(config, asset_class="cash")
 
-    score = sum(components.get(k, 50.0) * w for k, w in weights.items())
+    missing = set(weights.keys()) - components.keys()
+    if missing:
+        raise ValueError(
+            f"_compute_cash_score: weights reference components not provided: "
+            f"{sorted(missing)}. All weighted components must be computed."
+        )
+
+    score = sum(components[k] * w for k, w in weights.items())
     return round(score, 2), {k: round(v, 2) for k, v in components.items()}
 
 
@@ -422,7 +468,7 @@ def _compute_alternatives_score(
         div_value = 1.0 - abs(eq_corr)
         components["diversification_value"] = _normalize(div_value, 0.0, 0.50, pm.get("diversification_value"))
     else:
-        components["diversification_value"] = pm.get("diversification_value", 45.0) - 5.0
+        components["diversification_value"] = pm.get("diversification_value", 45.0)
 
     # downside_protection: 1 - downside_capture_1y
     # Score 100 at capture=0, score 50 at capture=1.0, score 0 at capture >= 2.0.
@@ -431,7 +477,7 @@ def _compute_alternatives_score(
         protection = 1.0 - dc
         components["downside_protection"] = _normalize(protection, -1.0, 1.0, pm.get("downside_protection"))
     else:
-        components["downside_protection"] = pm.get("downside_protection", 45.0) - 5.0
+        components["downside_protection"] = pm.get("downside_protection", 45.0)
 
     # crisis_alpha: excess return vs benchmark during drawdown periods.
     # Empirical p10=-0.034, p50=+0.009, p90=+0.050.
@@ -462,8 +508,14 @@ def _compute_alternatives_score(
     calmar = float(alt.calmar_ratio_3y) if alt.calmar_ratio_3y is not None else None
     components["risk_adjusted_return"] = _normalize(calmar, 0.0, 1.5, pm.get("risk_adjusted_return"))
 
-    # drawdown_control: calmar_ratio_3y (same metric, commodity profile)
-    components["drawdown_control"] = _normalize(calmar, 0.0, 1.5, pm.get("drawdown_control"))
+    # drawdown_control: based on max_drawdown_3y directly (lower max DD → higher score).
+    # Score 100 at max DD = 0%, score 0 at max DD = -50%.
+    max_dd = float(alt.max_drawdown_3y) if alt.max_drawdown_3y is not None else None
+    if max_dd is not None and math.isfinite(max_dd):
+        drawdown_pct = abs(max_dd) * 100.0
+        components["drawdown_control"] = _normalize(-drawdown_pct, -50.0, 0.0, pm.get("drawdown_control"))
+    else:
+        components["drawdown_control"] = 45.0
 
     # tracking_efficiency: lower tracking error = better (for gold passive exposure)
     # Range: 0 to 5% TE. Score 100 at TE=0, score 0 at TE >= 5%.
@@ -473,14 +525,21 @@ def _compute_alternatives_score(
         te_score = max(0.0, min(100.0, (1.0 - te / 0.05) * 100))
         components["tracking_efficiency"] = te_score
     else:
-        components["tracking_efficiency"] = pm.get("tracking_efficiency", 45.0) - 5.0
+        components["tracking_efficiency"] = pm.get("tracking_efficiency", 45.0)
 
     # fee_efficiency: shared formula
     components["fee_efficiency"] = _compute_fee_efficiency(expense_ratio_pct, pm)
 
     weights = resolve_alt_profile_weights(profile, config)
 
-    score = sum(components.get(k, 50.0) * w for k, w in weights.items())
+    missing = set(weights.keys()) - components.keys()
+    if missing:
+        raise ValueError(
+            f"_compute_alternatives_score: weights reference components not provided: "
+            f"{sorted(missing)}. All weighted components must be computed."
+        )
+
+    score = sum(components[k] * w for k, w in weights.items())
     # Only return components that carry weight in this profile.
     # Prevents nonsensical display (e.g., "Income Generation: 38" on a CTA fund).
     active_components = {k: round(v, 2) for k, v in components.items() if weights.get(k, 0) > 0}
@@ -489,7 +548,7 @@ def _compute_alternatives_score(
 
 def compute_fund_score(
     metrics: RiskMetrics,
-    flows_momentum_score: float = 50.0,
+    flows_momentum_score: float | None = None,
     config: dict[str, Any] | None = None,
     expense_ratio_pct: float | None = None,
     insider_sentiment_score: float | None = None,
@@ -562,7 +621,11 @@ def compute_fund_score(
     ir = float(metrics.information_ratio_1y) if metrics.information_ratio_1y is not None else None
     components["information_ratio"] = _normalize(ir, -1.0, 2.0, pm.get("information_ratio"))
 
-    components["flows_momentum"] = flows_momentum_score
+    components["flows_momentum"] = (
+        _clamp_component_score(flows_momentum_score, "flows_momentum")
+        if flows_momentum_score is not None
+        else 45.0
+    )
 
     # Fee efficiency — shared with FI path
     components["fee_efficiency"] = _compute_fee_efficiency(expense_ratio_pct, pm)
@@ -570,12 +633,21 @@ def compute_fund_score(
     weights = resolve_scoring_weights(config)
 
     # Opt-in insider sentiment (activated when config includes "insider_sentiment" weight > 0)
-    if insider_sentiment_score is not None and weights.get("insider_sentiment", 0) > 0:
-        components["insider_sentiment"] = insider_sentiment_score
+    if weights.get("insider_sentiment", 0) > 0:
+        if insider_sentiment_score is not None:
+            components["insider_sentiment"] = _clamp_component_score(
+                insider_sentiment_score, "insider_sentiment",
+            )
+        else:
+            components["insider_sentiment"] = 45.0  # missing-data fallback
 
-    score = sum(
-        components.get(k, 50.0) * w
-        for k, w in weights.items()
-    )
+    missing = set(weights.keys()) - components.keys()
+    if missing:
+        raise ValueError(
+            f"compute_fund_score: weights reference components not provided: "
+            f"{sorted(missing)}. Caller must pass {{key}}_score kwargs for each."
+        )
+
+    score = sum(components[k] * w for k, w in weights.items())
 
     return round(score, 2), {k: round(v, 2) for k, v in components.items()}
