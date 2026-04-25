@@ -7,11 +7,13 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 import structlog
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from quant_engine.ipca.fit import IPCAFit
+from quant_engine.ipca.preprocessing import rank_transform
 from vertical_engines.wealth.attribution.holdings_based import (
+    cik_variants,
     latest_period_for_cik,
     resolve_fund_cik,
 )
@@ -23,13 +25,23 @@ logger = structlog.get_logger()
 async def load_latest_ipca_fit(
     db: AsyncSession, asset_class: str
 ) -> IPCAFit | None:
-    """Load latest converged IPCA fit for asset class."""
+    """Load latest IPCA fit for asset class.
+
+    Accepts fits that either converged cleanly OR hit max_iter but
+    produced positive predictive signal (oos_r² > 0). KP-S 2019
+    reports IPCA frequently converges asymptotically without clean
+    break in max_iter iterations on equity panels — refusing those
+    silently kills the rail in production.
+    """
     stmt = text(
         """
-        SELECT k_factors, gamma_loadings, factor_returns, oos_r_squared, converged, n_iterations
+        SELECT k_factors, gamma_loadings, factor_returns,
+               oos_r_squared, converged, n_iterations
         FROM factor_model_fits
-        WHERE engine = 'ipca' AND universe_hash = :asset_class AND converged = true
-        ORDER BY fit_date DESC
+        WHERE engine = 'ipca'
+          AND asset_class = :asset_class
+          AND (converged = true OR oos_r_squared > 0.0)
+        ORDER BY fit_date DESC, created_at DESC
         LIMIT 1
         """
     )
@@ -64,90 +76,101 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
         return None
         
     fit = await load_latest_ipca_fit(db, request.fund_asset_class)
-    # WORKAROUND (PR-Q9 follow-up tracked in #295): the rail computes
-    # Gamma @ z_fund on raw characteristic values, but Gamma is now
-    # estimated on cross-sectionally rank-transformed inputs (per
-    # Kelly-Pruitt-Su 2019 / PR-Q9 fix commit 68b0cf88). Executing the
-    # rail without the matching rank transform on the rail side produces
-    # mathematically wrong factor exposures. The 0.50 threshold here is
-    # deliberately above realistic oos_r² values (KP-S band 0.02-0.05) so
-    # the rail short-circuits until the follow-up PR adds rank transform
-    # inside resolve_fund_cik / load_chars or wherever chars are sourced.
-    # DO NOT lower this threshold without first applying the rank
-    # transform — see docs/investigations/2026-04-25-pr-q9-oos-r2-zero-diagnosis.md §F.
-    if not fit or fit.oos_r_squared is None or fit.oos_r_squared < 0.50:
+    # IPCA validity gate. KP-S 2019 reports realistic out-of-sample R² in
+    # the 0.02-0.05 band on equity panels — accept any positive signal.
+    # A negative oos_r² means the model predicts worse than the historical
+    # mean, in which case the rail abstains and the dispatcher falls through.
+    if not fit or fit.oos_r_squared is None or fit.oos_r_squared <= 0.0:
         return None
 
     # Option B: Get fund CIK and latest holdings
     cik = await resolve_fund_cik(db, request.fund_instrument_id)
     if not cik:
-        return None
-        
+        return await _run_ipca_rail_option_a(request, db, fit)
+
     not_before = request.asof - timedelta(days=int(30.4375 * 9))
     period = await latest_period_for_cik(db, cik, not_before=not_before)
     if not period:
-        return None
+        return await _run_ipca_rail_option_a(request, db, fit)
 
-    # Fetch characteristics for top 10 holdings
-    stmt_chars = text(
+    # --- Reference period: latest cross-section date <= request.asof ---
+    stmt_ref = text(
+        "SELECT MAX(as_of) AS ref_period FROM equity_characteristics_monthly WHERE as_of <= :asof"
+    )
+    ref_row = (await db.execute(stmt_ref, {"asof": request.asof})).first()
+    ref_period = ref_row.ref_period if ref_row else None
+    if ref_period is None:
+        return await _run_ipca_rail_option_a(request, db, fit)
+
+    # --- Full cross-section at ref_period (for rank transform) ---
+    stmt_cs = text(
+        """
+        SELECT instrument_id,
+               size_log_mkt_cap   AS size,
+               book_to_market     AS value,
+               mom_12_1           AS momentum,
+               quality_roa        AS quality,
+               investment_growth  AS investment,
+               profitability_gross AS profitability
+        FROM equity_characteristics_monthly
+        WHERE as_of = :ref_period
+        """
+    )
+    res_cs = await db.execute(stmt_cs, {"ref_period": ref_period})
+    rows_cs = res_cs.all()
+    if not rows_cs:
+        return await _run_ipca_rail_option_a(request, db, fit)
+
+    char_cols = ["size", "value", "momentum", "quality", "investment", "profitability"]
+    cs_index = pd.MultiIndex.from_arrays(
+        [[str(r.instrument_id) for r in rows_cs], [ref_period] * len(rows_cs)],
+        names=["instrument_id", "as_of"],
+    )
+    cs_df = pd.DataFrame(
+        [{c: float(getattr(r, c) or 0.0) for c in char_cols} for r in rows_cs],
+        index=cs_index,
+    )
+    ranked_cs = rank_transform(cs_df)
+
+    # --- Top-10 holdings + instrument_id mapping ---
+    cik_candidates = cik_variants(cik)
+    stmt_holdings = text(
         """
         WITH top_holdings AS (
             SELECT cusip, pct_of_nav
             FROM sec_nport_holdings
-            WHERE cik = :cik AND report_date = :period
+            WHERE cik IN :candidates AND report_date = :period
               AND pct_of_nav IS NOT NULL AND pct_of_nav > 0
             ORDER BY pct_of_nav DESC
             LIMIT 10
-        ),
-        mapped_holdings AS (
-            SELECT h.cusip, h.pct_of_nav, COALESCE(iu1.instrument_id, iu2.instrument_id) AS instrument_id
-            FROM top_holdings h
-            LEFT JOIN instruments_universe iu1
-              ON iu1.attributes->>'cusip' = h.cusip
-            LEFT JOIN instruments_universe iu2
-              ON iu2.isin LIKE ('US' || h.cusip || '_')
-            WHERE COALESCE(iu1.instrument_id, iu2.instrument_id) IS NOT NULL
-        ),
-        latest_chars AS (
-            SELECT e.instrument_id,
-                   e.size_log_mkt_cap AS size,
-                   e.book_to_market AS value,
-                   e.mom_12_1 AS momentum,
-                   e.quality_roa AS quality,
-                   e.investment_growth AS investment,
-                   e.profitability_gross AS profitability,
-                   ROW_NUMBER() OVER(PARTITION BY e.instrument_id ORDER BY e.as_of DESC) as rn
-            FROM mapped_holdings m
-            JOIN equity_characteristics_monthly e ON e.instrument_id = m.instrument_id
-            WHERE e.as_of <= :asof
         )
-        SELECT m.pct_of_nav,
-               c.size, c.value, c.momentum, c.quality, c.investment, c.profitability
-        FROM mapped_holdings m
-        JOIN latest_chars c ON c.instrument_id = m.instrument_id AND c.rn = 1
+        SELECT h.pct_of_nav, COALESCE(iu1.instrument_id, iu2.instrument_id) AS instrument_id
+        FROM top_holdings h
+        LEFT JOIN instruments_universe iu1
+          ON iu1.attributes->>'cusip' = h.cusip
+        LEFT JOIN instruments_universe iu2
+          ON iu2.isin LIKE ('US' || h.cusip || '_')
+        WHERE COALESCE(iu1.instrument_id, iu2.instrument_id) IS NOT NULL
         """
-    )
-    res_chars = await db.execute(stmt_chars, {"cik": cik, "period": period, "asof": request.asof})
-    rows_chars = res_chars.all()
-    
-    if not rows_chars:
-        # Fallback to Option A if no holdings mapped
+    ).bindparams(bindparam("candidates", expanding=True))
+    res_h = await db.execute(stmt_holdings, {"candidates": list(cik_candidates), "period": period})
+    rows_h = res_h.all()
+    if not rows_h:
         return await _run_ipca_rail_option_a(request, db, fit)
 
-    # Compute z_fund (weighted average of characteristics)
-    total_weight = sum(float(r.pct_of_nav) for r in rows_chars)
+    # Inner-join holdings against ranked cross-section
+    holdings_ids = {str(r.instrument_id): float(r.pct_of_nav) for r in rows_h}
+    matched = ranked_cs.loc[ranked_cs.index.get_level_values(0).isin(holdings_ids)]
+    if matched.empty:
+        return await _run_ipca_rail_option_a(request, db, fit)
+
+    # Compute z_fund (weighted average of ranked characteristics)
+    weights = np.array([holdings_ids[iid] for iid in matched.index.get_level_values(0)])
+    total_weight = weights.sum()
     if total_weight == 0:
         return await _run_ipca_rail_option_a(request, db, fit)
-        
-    z_fund = np.zeros(6)
-    for r in rows_chars:
-        w = float(r.pct_of_nav) / total_weight
-        z_fund[0] += w * float(r.size or 0.0)
-        z_fund[1] += w * float(r.value or 0.0)
-        z_fund[2] += w * float(r.momentum or 0.0)
-        z_fund[3] += w * float(r.quality or 0.0)
-        z_fund[4] += w * float(r.investment or 0.0)
-        z_fund[5] += w * float(r.profitability or 0.0)
+
+    z_fund = (matched.values * (weights / total_weight)[:, None]).sum(axis=0)
 
     # Implied beta = Gamma' * z_fund
     beta = fit.gamma.T @ z_fund
@@ -171,7 +194,12 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
     )
 
 async def _estimate_alpha_fixed_beta(request: AttributionRequest, db: AsyncSession, fit: IPCAFit, beta: np.ndarray) -> float:
-    """Estimate alpha as the mean residual: r_fund - beta' * f_t."""
+    """Estimate alpha as the mean residual: r_fund - beta' * f_t.
+
+    beta is in ranked-chars space (Gamma.T @ ranked_z_fund). The equation
+    still holds because factor_returns from the fit are also estimated in
+    ranked-chars space — units cancel in the dot product.
+    """
     # Fetch monthly returns for fund
     stmt = text(
         """
@@ -196,23 +224,26 @@ async def _estimate_alpha_fixed_beta(request: AttributionRequest, db: AsyncSessi
     fund_returns_df.set_index("month", inplace=True)
     fund_returns_df["return"] = fund_returns_df["nav"].pct_change()
     fund_returns_df.dropna(inplace=True)
-    
+    fund_returns_df.index = pd.to_datetime(fund_returns_df.index).to_period("M")
+    fund_returns_df = fund_returns_df[~fund_returns_df.index.duplicated(keep="last")]
+
     if fit.dates is None:
         return 0.0
 
     factor_df = pd.DataFrame(
         fit.factor_returns.T,
-        index=fit.dates.date, 
-        columns=[f"factor_{i}" for i in range(fit.K)]
+        index=pd.to_datetime(fit.dates).to_period("M"),
+        columns=[f"factor_{i}" for i in range(fit.K)],
     )
-    
+    factor_df = factor_df[~factor_df.index.duplicated(keep="last")]
+
     aligned = pd.concat([fund_returns_df["return"], factor_df], axis=1, join="inner")
     if len(aligned) < 12:
         return 0.0
-        
+
     y = aligned["return"].values
     X = aligned[[f"factor_{i}" for i in range(fit.K)]].values
-    
+
     # alpha = mean(y - X * beta)
     residuals = y - (X @ beta)
     return float(np.mean(residuals))
@@ -244,21 +275,24 @@ async def _run_ipca_rail_option_a(request: AttributionRequest, db: AsyncSession,
     fund_returns_df.set_index("month", inplace=True)
     fund_returns_df["return"] = fund_returns_df["nav"].pct_change()
     fund_returns_df.dropna(inplace=True)
-    
+    fund_returns_df.index = pd.to_datetime(fund_returns_df.index).to_period("M")
+    fund_returns_df = fund_returns_df[~fund_returns_df.index.duplicated(keep="last")]
+
     if fit.dates is None:
         return None
 
     factor_df = pd.DataFrame(
         fit.factor_returns.T,
-        index=fit.dates.date, # match index type with month
-        columns=[f"factor_{i}" for i in range(fit.K)]
+        index=pd.to_datetime(fit.dates).to_period("M"),
+        columns=[f"factor_{i}" for i in range(fit.K)],
     )
-    
+    factor_df = factor_df[~factor_df.index.duplicated(keep="last")]
+
     # Align fund returns and factor returns
     aligned = pd.concat([fund_returns_df["return"], factor_df], axis=1, join="inner")
     if len(aligned) < 12:
         return None
-        
+
     # Time-series regression: r_fund_t = α + β' f_t + ε_t
     y = aligned["return"].values
     X = aligned[[f"factor_{i}" for i in range(fit.K)]].values

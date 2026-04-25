@@ -88,6 +88,7 @@ class TestIPCAEstimation:
             # converge in max_iter=200 on the real panel — accept either.
             assert isinstance(result["converged"], bool)
             assert result["n_instruments"] > 100
+            assert result["asset_class"] == "Equity"
 
             # Verify DB row
             async with factory() as db:

@@ -68,8 +68,8 @@ async def test_ipca_rail_wins_when_oos_r2_high(mock_request):
 
 
 @pytest.mark.asyncio
-async def test_ipca_rail_skipped_when_oos_r2_low(mock_request):
-    """2. IPCA rail skipped when OOS R² < 0.50."""
+async def test_ipca_rail_skipped_when_rail_returns_none(mock_request):
+    """2. IPCA rail returns None → dispatcher falls through to next rail."""
     with patch("vertical_engines.wealth.attribution.service._run_ipca_rail") as mock_ipca:
         mock_ipca.return_value = None
         

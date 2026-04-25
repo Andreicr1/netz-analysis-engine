@@ -60,6 +60,7 @@ WHERE e.as_of <= :asof
 async def run_ipca_estimation(
     asof: date | None = None,
     min_panel_size: int = 300,
+    asset_class: str = "Equity",
 ) -> dict[str, Any]:
     """Entry point. Acquires advisory lock, builds panel, fits IPCA, persists."""
     if asof is None:
@@ -73,7 +74,7 @@ async def run_ipca_estimation(
             logger.info("ipca_estimation skip — lock held")
             return {"status": "skipped", "reason": "lock_held"}
         try:
-            return await _run(db, asof=asof, min_panel_size=min_panel_size)
+            return await _run(db, asof=asof, min_panel_size=min_panel_size, asset_class=asset_class)
         except Exception:
             await db.rollback()
             raise
@@ -90,6 +91,7 @@ async def _run(
     db: Any,
     asof: date,
     min_panel_size: int,
+    asset_class: str,
 ) -> dict[str, Any]:
     logger.info("ipca_estimation_started", asof=str(asof))
 
@@ -160,10 +162,11 @@ async def _run(
     try:
         stmt_old = text("""
             SELECT gamma_loadings FROM factor_model_fits
-            WHERE engine = 'ipca' AND universe_hash = :hash
+            WHERE engine = 'ipca' AND asset_class = :asset_class
+              AND universe_hash = :hash
             ORDER BY fit_date DESC LIMIT 1
         """)
-        res_old = await db.execute(stmt_old, {"hash": universe_hash})
+        res_old = await db.execute(stmt_old, {"asset_class": asset_class, "hash": universe_hash})
         row_old = res_old.first()
         if row_old and row_old.gamma_loadings:
             gamma_old_data = row_old.gamma_loadings
@@ -204,11 +207,11 @@ async def _run(
     await db.execute(
         text("""
             INSERT INTO factor_model_fits (
-                fit_id, engine, fit_date, universe_hash, k_factors,
+                fit_id, engine, fit_date, universe_hash, asset_class, k_factors,
                 gamma_loadings, factor_returns, oos_r_squared,
                 converged, n_iterations
             ) VALUES (
-                gen_random_uuid(), 'ipca', :fit_date, :hash, :k,
+                gen_random_uuid(), 'ipca', :fit_date, :hash, :asset_class, :k,
                 CAST(:gamma AS jsonb), CAST(:f_returns AS jsonb), :oos_r2,
                 :converged, :n_iter
             )
@@ -216,6 +219,7 @@ async def _run(
         {
             "fit_date": asof,
             "hash": universe_hash,
+            "asset_class": asset_class,
             "k": fit.K,
             "gamma": json.dumps(gamma_loadings),
             "f_returns": json.dumps(factor_returns_json),
@@ -236,6 +240,7 @@ async def _run(
         "n_instruments": len(instrument_ids),
         "n_obs": n_obs,
         "universe_hash": universe_hash,
+        "asset_class": asset_class,
         "drift": drift,
     }
     logger.info("ipca_estimation_completed", **summary)
