@@ -9,7 +9,6 @@ Columns: peer_strategy_label, peer_sharpe_pctl, peer_sortino_pctl,
 peer_return_pctl, peer_drawdown_pctl, peer_count.
 """
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0075_peer_percentile"

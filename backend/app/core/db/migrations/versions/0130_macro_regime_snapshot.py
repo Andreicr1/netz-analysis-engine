@@ -10,9 +10,8 @@ Create Date: 2026-04-13
 """
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import JSONB
-
 from alembic import op
+from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0130_macro_regime_snapshot"
 down_revision = "0129_elite_regime_flags"

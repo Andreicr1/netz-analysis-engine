@@ -12,7 +12,6 @@ Create Date: 2026-04-14
 """
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0131_return_5y_10y"

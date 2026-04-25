@@ -23,7 +23,6 @@ ON CONFLICT DO NOTHING.
 from __future__ import annotations
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0146_canonical_liquid_beta_backfill"

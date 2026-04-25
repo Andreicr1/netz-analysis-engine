@@ -9,7 +9,6 @@ revision = "0053_widen_instrument_isin"
 down_revision = "0052_sec_entity_links"
 
 import sqlalchemy as sa
-
 from alembic import op
 
 

@@ -5,9 +5,8 @@ Creates ~60 credit domain tables + RLS policies on ALL tenant-scoped tables
 """
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "0003"
 down_revision = "0002"

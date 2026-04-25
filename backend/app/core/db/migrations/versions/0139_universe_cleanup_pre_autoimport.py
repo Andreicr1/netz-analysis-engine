@@ -21,7 +21,6 @@ Create Date: 2026-04-16
 """
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0139_universe_cleanup_pre_autoimport"

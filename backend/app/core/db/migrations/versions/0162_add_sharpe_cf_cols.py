@@ -16,7 +16,6 @@ Create Date: 2026-04-20
 from __future__ import annotations
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0162_add_sharpe_cf_cols"

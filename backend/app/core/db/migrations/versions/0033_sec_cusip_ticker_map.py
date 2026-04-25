@@ -8,7 +8,6 @@ depends_on: 0032 (hypertable_skip_documentation).
 """
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0033_sec_cusip_ticker_map"

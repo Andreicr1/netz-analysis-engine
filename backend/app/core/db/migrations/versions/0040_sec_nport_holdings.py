@@ -17,7 +17,6 @@ import os
 
 import psycopg
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0040_sec_nport_holdings"

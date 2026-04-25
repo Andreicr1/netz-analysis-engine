@@ -19,7 +19,6 @@ depends_on: 0025 (sec_13f_hypertable).
 import os
 
 import psycopg
-
 from alembic import op
 
 revision = "0026_macro_market_hypertables"

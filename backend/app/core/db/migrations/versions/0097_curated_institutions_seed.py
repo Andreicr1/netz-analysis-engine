@@ -5,7 +5,6 @@ Revises: 0096_discovery_fcl_keyset_indexes
 Create Date: 2026-04-08
 """
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0097_curated_institutions_seed"

@@ -18,7 +18,6 @@ import os
 
 import psycopg
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0037_ofr_hedge_fund_hypertable"

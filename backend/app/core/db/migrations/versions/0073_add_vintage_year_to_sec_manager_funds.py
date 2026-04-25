@@ -8,7 +8,6 @@ Back-fills vintage_year by extracting 4-digit years from fund_name via regex.
 Matches patterns like "Fund IX 2019", "KKR NA XII (2022)", "Fund III, L.P. - 2018".
 """
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0073_add_vintage_year"

@@ -11,7 +11,6 @@ after this migration carry source='tiingo'.
 from __future__ import annotations
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0121_tiingo_default_source"

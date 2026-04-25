@@ -6,9 +6,8 @@ Create Date: 2026-03-27
 """
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID
-
 from alembic import op
+from sqlalchemy.dialects.postgresql import UUID
 
 revision = "0060_portfolio_views"
 down_revision = "0059_wealth_vector_chunks"

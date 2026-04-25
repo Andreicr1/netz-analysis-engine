@@ -15,9 +15,8 @@ depends_on: 0022 (wealth_status_constraints).
 """
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "0023_sec_data_providers"
 down_revision = "0022_wealth_status"

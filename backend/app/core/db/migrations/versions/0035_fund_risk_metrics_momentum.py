@@ -9,7 +9,6 @@ Revises: 0034_appendonly_hypertables
 """
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0035_fund_risk_metrics_momentum"

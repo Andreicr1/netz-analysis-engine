@@ -23,7 +23,6 @@ the upgrade is a no-op.
 from __future__ import annotations
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0151_fix_known_strategy_labels"

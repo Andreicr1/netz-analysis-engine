@@ -1,7 +1,6 @@
 """Add fund count columns to sec_managers from Form ADV Section 7B."""
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0051_sec_mgr_fund_cols"

@@ -68,7 +68,6 @@ import os
 from collections.abc import Sequence
 
 import psycopg
-
 from alembic import op
 
 revision: str = "0102_portfolio_weight_snapshots_hypertable"
