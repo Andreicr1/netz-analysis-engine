@@ -79,12 +79,43 @@ async def seeded_factor_model_universe():
             )
 
         # ── 2. benchmark_nav (7 tickers × n_days) ─────────────────────
+        # PR-Q15: build_fundamental_factor_returns now queries NAV levels
+        # (not return_1d). Delete benchmark_nav from OTHER allocation_blocks
+        # that share the same benchmark_tickers in the test date range to
+        # avoid groupby mixing test + production NAV levels.
+        other_block_ids = await conn.fetch(
+            """
+            SELECT block_id FROM allocation_blocks
+            WHERE benchmark_ticker = ANY($1::text[])
+            AND block_id != ALL($2::text[])
+            """,
+            block_tickers, block_ids,
+        )
+        _other_ids = [r["block_id"] for r in other_block_ids]
+        if _other_ids:
+            await conn.execute(
+                """
+                DELETE FROM benchmark_nav
+                WHERE block_id = ANY($1::text[])
+                AND nav_date >= $2 AND nav_date <= $3
+                """,
+                _other_ids, start, start + timedelta(days=n_days),
+            )
+
+        # Use a random walk from realistic base prices so pct_change
+        # produces reasonable daily returns.
+        base_prices = {
+            "SPY": 500.0, "IEF": 100.0, "HYG": 77.0, "IWM": 200.0,
+            "IWD": 180.0, "IWF": 55.0, "EFA": 80.0,
+        }
+        nav_state = {t: base_prices.get(t, 100.0) for t in block_tickers}
         bench_rows = []
         for d_off in range(n_days):
             d = start + timedelta(days=d_off)
-            for bid in block_ids:
+            for bid, ticker in zip(block_ids, block_tickers, strict=True):
                 ret = float(rng.standard_normal() * 0.01)
-                bench_rows.append((bid, d, 100.0 + d_off * 0.01, ret))
+                nav_state[ticker] *= (1 + ret)
+                bench_rows.append((bid, d, nav_state[ticker], ret))
         await conn.executemany(
             """
             INSERT INTO benchmark_nav (block_id, nav_date, nav, return_1d)
