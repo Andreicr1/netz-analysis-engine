@@ -152,15 +152,25 @@ def check_openfigi_rate(has_api_key: bool = False) -> None:
     """Rate-limit OpenFIGI API requests (25 req/min free, 250 req/min with key).
 
     Without key: enforce ~20 req/min (0.33 req/s) to stay safely under 25/min.
-    With key: ~3 req/s. _check_rate increments first and only sleeps when
-    count > max_per_second, so the cap effectively becomes max+1 inside a
-    single second window. Passing 3 yields a 4 req/s peak (240 req/min),
-    which stays safely under the OpenFIGI 250 req/min ceiling. Bumping to
-    4 would let a hot loop hit 5 req/s peak (300/min) and provoke 429s —
-    track tightening _check_rate to use `>=` semantics as a follow-up.
+
+    With key: pass max_per_second=4 → 4 req/s peak → 240 req/min. Stays
+    under the documented 250 req/min ceiling.
+
+    Why max=4 (not 3, despite an early review concern about overshoot):
+    _check_rate uses an atomic `incr` against a per-second Redis key, then
+    checks `count > max_per_second`. Within a single second, the i-th
+    caller observes count=i (Redis incr is monotonic and serialized).
+    So with max=N, callers 1..N see count<=N → no sleep, and the (N+1)-th
+    caller sees count=N+1 → sleep until the next second. Exactly N
+    requests fire per second — no off-by-one. Picking max=N gives N req/s.
+
+    Concretely:
+      max=3 → 3 req/s = 180/min (over-conservative, leaves 70/min on the table)
+      max=4 → 4 req/s = 240/min (safely under 250) ← chosen
+      max=5 → 5 req/s = 300/min (would exceed 250, do NOT use)
     """
     if has_api_key:
-        _check_rate("openfigi_esma", 3)
+        _check_rate("openfigi_esma", 4)
     else:
         # 25 req/min = 0.42/s — use blocking sleep to enforce ~3s gap
         _check_rate_local("openfigi_esma_nokey", 1)
