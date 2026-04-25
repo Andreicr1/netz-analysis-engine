@@ -169,27 +169,36 @@ async def _run(
             gamma_old_data = row_old.gamma_loadings
             if isinstance(gamma_old_data, str):
                 gamma_old_data = json.loads(gamma_old_data)
-            gamma_old = np.array(gamma_old_data["values"], dtype=np.float64)
+            # Handle both legacy dict {"values": ...} and new raw 2D list format
+            if isinstance(gamma_old_data, dict):
+                gamma_old = np.array(gamma_old_data["values"], dtype=np.float64)
+            else:
+                gamma_old = np.array(gamma_old_data, dtype=np.float64)
             drift = compute_gamma_drift(gamma_old, fit.gamma)
             logger.info("ipca_gamma_drift", drift=drift)
     except Exception:
         logger.warning("ipca_drift_computation_failed", exc_info=True)
 
     # Persist
-    gamma_json = {
-        "rows": CHARS_COLS,
-        "cols": [f"f{i+1}" for i in range(fit.K)],
-        "values": fit.gamma.tolist(),
-    }
+    # gamma_loadings rows correspond to CHARS_COLS in order:
+    #   row 0 = size_log_mkt_cap, row 1 = book_to_market, row 2 = mom_12_1,
+    #   row 3 = quality_roa, row 4 = investment_growth, row 5 = profitability_gross.
+    # columns correspond to estimated latent factors (k_factors = K).
+    gamma_loadings = fit.gamma.tolist()  # 6 rows (chars) × K cols (factors)
     dates_str = (
         [d.isoformat() for d in fit.dates.date]
         if fit.dates is not None
         else []
     )
-    # factor_returns shape from ipca is (K, T); transpose to (T, K) for JSONB
+    # factor_returns persisted as (K, T): each row is one factor's full T-length series.
+    assert fit.factor_returns.ndim == 2, "factor_returns must be 2D"
+    assert fit.factor_returns.shape[1] == len(dates_str), (
+        f"factor_returns axis-1 length ({fit.factor_returns.shape[1]}) "
+        f"must equal dates length ({len(dates_str)}). Layout must be (K, T)."
+    )
     factor_returns_json = {
         "dates": dates_str,
-        "values": fit.factor_returns.T.tolist(),
+        "values": fit.factor_returns.tolist(),  # K rows × T cols
     }
 
     await db.execute(
@@ -208,7 +217,7 @@ async def _run(
             "fit_date": asof,
             "hash": universe_hash,
             "k": fit.K,
-            "gamma": json.dumps(gamma_json),
+            "gamma": json.dumps(gamma_loadings),
             "f_returns": json.dumps(factor_returns_json),
             "oos_r2": float(fit.oos_r_squared) if fit.oos_r_squared is not None else None,
             "converged": fit.converged,
