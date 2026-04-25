@@ -23,7 +23,7 @@ from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 from vertical_engines.wealth.attribution.models import (
     AttributionRequest,
@@ -35,6 +35,20 @@ if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
+
+
+def cik_variants(cik: str) -> tuple[str, str]:
+    """Return (unpadded, zero-padded-10) candidates for CIK lookups.
+
+    ``sec_nport_holdings.cik`` is stored unpadded today (see
+    ``fund_characteristics_aggregator.py:138``). Other consumers may emit
+    padded form. Lookups should accept both via ``IN`` to preserve the
+    btree index — do not use SQL ``LTRIM``/``LPAD`` in WHERE, that
+    disables the index.
+    """
+    clean = cik.lstrip("0") or "0"
+    return (clean, clean.zfill(10))
+
 
 # Per PR-Q4 acceptance: N-PORT filings within 9 months of asof count as
 # fresh. N-PORT is monthly-reported but filed quarterly with 60-day lag.
@@ -76,15 +90,26 @@ async def resolve_fund_cik(
 
 
 async def latest_period_for_cik(
-    db: "AsyncSession", cik: str, not_before: date,
+    db: "AsyncSession", cik: str, not_before: date | None = None,
 ) -> date | None:
     """Return the latest matview period_of_report for this CIK, or None."""
-    row = (await db.execute(text("""
-        SELECT MAX(period_of_report)
-        FROM mv_nport_sector_attribution
-        WHERE filer_cik = :cik
-          AND period_of_report >= :not_before
-    """), {"cik": cik, "not_before": not_before})).first()
+    candidates = cik_variants(cik)
+    if not_before is not None:
+        stmt = text("""
+            SELECT MAX(period_of_report)
+            FROM mv_nport_sector_attribution
+            WHERE filer_cik IN :candidates
+              AND period_of_report >= :not_before
+        """).bindparams(bindparam("candidates", expanding=True))
+        params: dict = {"candidates": list(candidates), "not_before": not_before}
+    else:
+        stmt = text("""
+            SELECT MAX(period_of_report)
+            FROM mv_nport_sector_attribution
+            WHERE filer_cik IN :candidates
+        """).bindparams(bindparam("candidates", expanding=True))
+        params = {"candidates": list(candidates)}
+    row = (await db.execute(stmt, params)).first()
     if row is None:
         return None
     return row[0]

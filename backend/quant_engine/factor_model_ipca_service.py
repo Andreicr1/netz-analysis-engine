@@ -12,22 +12,9 @@ import structlog
 
 from quant_engine.factor_model_service import FactorModelResult
 from quant_engine.ipca.fit import IPCAFit, fit_ipca
+from quant_engine.ipca.preprocessing import rank_transform
 
 logger = structlog.get_logger()
-
-
-def _rank_transform(chars: pd.DataFrame) -> pd.DataFrame:
-    """Cross-sectional rank → [-0.5, +0.5] per period (KP-S 2019 convention).
-
-    Ranks each characteristic within each cross-section (per time period in
-    the MultiIndex level=1) and rescales to [-0.5, +0.5]. Robust to outliers
-    in heavy-tailed inputs like book_to_market and investment_growth.
-    Per-period ranking is leakage-free: train and test cross-sections are
-    entirely disjoint by date.
-    """
-    return chars.groupby(level=1).transform(
-        lambda g: g.rank(pct=True) - 0.5
-    )
 
 
 @dataclass(frozen=True)
@@ -61,7 +48,7 @@ def fit_universe(
     # Applied once on the full panel — groupby(level=1) ensures each
     # time period is ranked independently, so train/test splits by date
     # are leakage-free.
-    aligned_chars = _rank_transform(aligned_chars)
+    aligned_chars = rank_transform(aligned_chars)
 
     dates = pd.DatetimeIndex(np.unique(aligned_chars.index.get_level_values(1))).sort_values()
     
