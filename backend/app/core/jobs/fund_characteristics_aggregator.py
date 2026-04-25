@@ -298,8 +298,14 @@ async def _aggregate_one_date(
     if not holdings:
         return None
 
-    # Accumulate portfolio-level numerators and denominators
-    sum_market_value = 0.0
+    # Accumulate portfolio-level numerators and denominators.
+    # Two market_value totals: one for size (ALL holdings, gives fund's full
+    # equity-sleeve AUM) and one for ratios (RESOLVED holdings only, so the
+    # B/M denominator matches the resolved-holdings numerator).
+    # Mixing them would bias B/M downward whenever shares_outstanding is
+    # missing for some holdings (numerator stays 0 but denominator inflates).
+    sum_market_value_size = 0.0       # ← all holdings (resolved + unresolved)
+    sum_market_value_resolved = 0.0   # ← resolved only (used for B/M)
     sum_book_equity = 0.0
     sum_total_assets = 0.0
     sum_net_income_ttm = 0.0
@@ -315,16 +321,17 @@ async def _aggregate_one_date(
         quantity = float(h.quantity) if h.quantity is not None else None
         shares_out = float(h.shares_outstanding) if h.shares_outstanding is not None else None
 
-        # Compute ownership fraction
-        if quantity is not None and shares_out is not None and shares_out > 0:
-            ownership_frac = quantity / shares_out
-        else:
-            # Fallback: skip this holding from ratio aggregation but still
-            # count its market_value for size_log_mkt_cap
-            sum_market_value += mv
+        # Always count market_value for size_log_mkt_cap, even when ownership
+        # cannot be resolved — size is the fund's equity-sleeve AUM, which
+        # exists regardless of whether per-share fundamentals do.
+        sum_market_value_size += mv
+
+        # Compute ownership fraction (skip ratio aggregation if missing)
+        if quantity is None or shares_out is None or shares_out <= 0:
             continue
 
-        sum_market_value += mv
+        ownership_frac = quantity / shares_out
+        sum_market_value_resolved += mv
 
         # Scale company-level values by ownership fraction
         if h.book_equity is not None:
@@ -351,12 +358,17 @@ async def _aggregate_one_date(
     if resolved_count == 0:
         return None
 
-    # Compute fund-level characteristics
-    size_log_mkt_cap = math.log(sum_market_value) if sum_market_value > 0 else None
+    # Compute fund-level characteristics.
+    # size uses the FULL market value (all holdings), so it represents the
+    # fund's actual equity AUM. The other ratios use the RESOLVED-only
+    # totals so numerator and denominator are over the same set of holdings.
+    size_log_mkt_cap = (
+        math.log(sum_market_value_size) if sum_market_value_size > 0 else None
+    )
 
     book_to_market = (
-        sum_book_equity / sum_market_value
-        if sum_market_value > 0
+        sum_book_equity / sum_market_value_resolved
+        if sum_market_value_resolved > 0
         else None
     )
 
@@ -482,7 +494,17 @@ async def _compute_bdc_direct(
 async def _load_nav_series(
     db: AsyncSession, instrument_id: Any,
 ) -> pd.Series:
-    """Load NAV time-series for an instrument as a DatetimeIndex pandas Series."""
+    """Load NAV time-series for an instrument as a month-end pandas Series.
+
+    nav_timeseries is stored at daily frequency (instrument_ingestion worker
+    pulls daily NAV from Yahoo Finance). For 12-1 momentum (Jegadeesh-Titman
+    convention) we need MONTHLY observations — derive_momentum_12_1 takes
+    iloc[-13:-1] expecting that to span 12 calendar months. Feeding it daily
+    data would give a 13-trading-day window (~2.5 weeks) instead of 12 months.
+
+    Resample to month-end last value here so any caller gets the correct
+    cadence for momentum / longitudinal characteristics.
+    """
     result = await db.execute(text("""
         SELECT nav_date, nav
         FROM nav_timeseries
@@ -497,7 +519,10 @@ async def _load_nav_series(
 
     dates = [r.nav_date for r in rows]
     values = [float(r.nav) for r in rows]
-    return pd.Series(values, index=pd.DatetimeIndex(dates))
+    daily = pd.Series(values, index=pd.DatetimeIndex(dates))
+    # Resample to month-end: last NAV of each month.
+    # 'ME' alias requires pandas >= 2.0; safe given backend runtime.
+    return daily.resample("ME").last().dropna()
 
 
 def _clamp(val: float | None, bound: float) -> float | None:
