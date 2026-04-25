@@ -137,7 +137,9 @@ class TestInsiderSentiment:
         _, components = compute_fund_score(
             metrics, config=config, insider_sentiment_score=None,
         )
-        assert "insider_sentiment" not in components
+        # When insider_sentiment weight > 0 but score is None, component is
+        # present with missing-data fallback (45.0) — not silently absent.
+        assert components["insider_sentiment"] == 45.0
 
 
 class TestLipperRemoval:
