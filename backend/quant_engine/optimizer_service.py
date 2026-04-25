@@ -7,6 +7,7 @@ Constraints: weights sum to 1, per-block bounds, portfolio CVaR <= limit, long-o
 
 import asyncio
 import time
+import zlib
 from dataclasses import dataclass, field
 from datetime import date as date_type
 from typing import Any
@@ -478,7 +479,13 @@ async def optimize_fund_portfolio(
             winning_phase=None,
         )
 
-    mu = np.array([expected_returns.get(fid, 0.0) for fid in fund_ids])
+    missing = set(fund_ids) - expected_returns.keys()
+    if missing:
+        raise ValueError(
+            f"expected_returns missing {len(missing)} fund(s) of {len(fund_ids)}: "
+            f"{sorted(missing)[:5]}{'...' if len(missing) > 5 else ''}"
+        )
+    mu = np.array([expected_returns[fid] for fid in fund_ids])
 
     # ── PR-A19 L8 — mu_trace_lp_input + invariant check (diagnose-only) ────
     # Confirms nothing between ``compute_fund_level_inputs`` and the LP
@@ -636,7 +643,12 @@ async def optimize_fund_portfolio(
             else True
         )
 
-        fw = {fid: round(float(w_arr[i]), 6) for i, fid in enumerate(fund_ids)}
+        # Aggregate weights when fund_ids contains duplicates (e.g. dual share
+        # classes mapped to the same instrument). Dict comprehension would drop
+        # the earlier slice and silently underweight the instrument.
+        fw: dict[str, float] = {}
+        for i, fid in enumerate(fund_ids):
+            fw[fid] = round(fw.get(fid, 0.0) + float(w_arr[i]), 6)
         bw: dict[str, float] = {}
         for fid, wt in fw.items():
             blk = fund_blocks.get(fid, "unknown")
@@ -702,8 +714,10 @@ async def optimize_fund_portfolio(
             n_funds=n,
             caller_kind=caller_kind,
         )
-        # Deterministic seed derived from fund_ids so repeated calls match.
-        seed = int(abs(hash(tuple(fund_ids))) % (2**32 - 1))
+        # CLAUDE.md: never use Python built-in hash() for deterministic
+        # cross-process seeds. PYTHONHASHSEED randomization causes identical
+        # inputs to produce different scenario matrices across Railway pods.
+        seed = zlib.crc32(",".join(fund_ids).encode("utf-8")) & 0xFFFFFFFF
         rng = np.random.default_rng(seed)
         try:
             L_synth = np.linalg.cholesky(cov_matrix / 252.0)
@@ -1238,7 +1252,9 @@ async def optimize_portfolio_pareto(
     skewness = np.zeros(n)
     excess_kurtosis = np.zeros(n)
 
-    cvar_limit = constraints.cvar_limit or 0.15
+    cvar_limit = (
+        0.15 if constraints.cvar_limit is None else float(constraints.cvar_limit)
+    )
     rf = risk_free_rate
 
     # Per-block bounds
