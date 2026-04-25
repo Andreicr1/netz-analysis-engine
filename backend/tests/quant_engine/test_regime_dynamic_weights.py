@@ -32,14 +32,29 @@ class TestAmplifyWeights:
         assert w_extreme > 0.20  # significantly above base 0.10
 
     def test_w_max_cap_enforced(self):
-        """No signal exceeds w_max after amplification."""
+        """When cap is feasible (n * w_max >= 1.0), no signal exceeds w_max."""
+        signals = [
+            ("a", 100.0, 0.20, ""),
+            ("b", 50.0, 0.30, ""),
+            ("c", 10.0, 0.25, ""),
+            ("d", 0.0, 0.25, ""),
+        ]
+        result = _amplify_weights(signals, w_max=0.35)
+        for _, _, w, _ in result:
+            assert w <= 0.35 + 0.001
+
+    def test_w_max_infeasible_uses_uniform(self):
+        """When cap is infeasible (n * w_max < 1.0), fall back to uniform weights."""
         signals = [
             ("extreme", 100.0, 0.30, ""),  # 0.30 * 3.0 = 0.90 pre-norm
             ("calm", 5.0, 0.70, ""),
         ]
         result = _amplify_weights(signals, w_max=0.35)
-        w_extreme = next(w for l, _, w, _ in result if l == "extreme")
-        assert w_extreme <= 0.35 + 0.001
+        # n=2, w_max=0.35 → 2*0.35=0.70 < 1.0 → uniform = 0.5 each
+        total = sum(w for _, _, w, _ in result)
+        assert abs(total - 1.0) < 1e-6
+        for _, _, w, _ in result:
+            assert abs(w - 0.5) < 1e-6
 
     def test_weights_sum_to_one(self):
         """Weights always sum to ~1.0 after amplification."""
