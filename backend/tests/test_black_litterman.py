@@ -15,6 +15,8 @@ import pytest
 
 from quant_engine.black_litterman_service import compute_bl_returns
 
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
 
 @pytest.fixture
 def simple_cov():
