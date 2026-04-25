@@ -36,7 +36,7 @@ async def _cleanup_fits(db):
     """Remove test fit rows."""
     from sqlalchemy import text
     await db.execute(text(
-        "DELETE FROM factor_model_fits WHERE engine = 'kpsu_ipca' "
+        "DELETE FROM factor_model_fits WHERE engine = 'ipca' "
         "AND fit_date = '2024-12-31'"
     ))
     await db.commit()
@@ -67,7 +67,7 @@ class TestIPCAEstimation:
                 from sqlalchemy import text
                 row = (await db.execute(text(
                     "SELECT * FROM factor_model_fits "
-                    "WHERE engine = 'kpsu_ipca' AND fit_date = '2024-12-31' "
+                    "WHERE engine = 'ipca' AND fit_date = '2024-12-31' "
                     "ORDER BY created_at DESC LIMIT 1"
                 ))).first()
                 assert row is not None
@@ -111,7 +111,7 @@ class TestIPCAEstimation:
                 from sqlalchemy import text
                 count = (await db.execute(text(
                     "SELECT COUNT(*) FROM factor_model_fits "
-                    "WHERE engine = 'kpsu_ipca' AND fit_date = '2024-12-31'"
+                    "WHERE engine = 'ipca' AND fit_date = '2024-12-31'"
                 ))).scalar()
                 assert count == 0
 
@@ -141,7 +141,7 @@ class TestIPCAEstimation:
                 from sqlalchemy import text
                 count = (await db.execute(text(
                     "SELECT COUNT(*) FROM factor_model_fits "
-                    "WHERE engine = 'kpsu_ipca' AND fit_date = '2024-12-31'"
+                    "WHERE engine = 'ipca' AND fit_date = '2024-12-31'"
                 ))).scalar()
                 assert count == 2
                 await _cleanup_fits(db)

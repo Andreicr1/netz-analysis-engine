@@ -160,7 +160,7 @@ async def _run(
     try:
         stmt_old = text("""
             SELECT gamma_loadings FROM factor_model_fits
-            WHERE engine = 'kpsu_ipca' AND universe_hash = :hash
+            WHERE engine = 'ipca' AND universe_hash = :hash
             ORDER BY fit_date DESC LIMIT 1
         """)
         res_old = await db.execute(stmt_old, {"hash": universe_hash})
@@ -199,7 +199,7 @@ async def _run(
                 gamma_loadings, factor_returns, oos_r_squared,
                 converged, n_iterations
             ) VALUES (
-                gen_random_uuid(), 'kpsu_ipca', :fit_date, :hash, :k,
+                gen_random_uuid(), 'ipca', :fit_date, :hash, :k,
                 CAST(:gamma AS jsonb), CAST(:f_returns AS jsonb), :oos_r2,
                 :converged, :n_iter
             )
