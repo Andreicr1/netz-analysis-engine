@@ -235,6 +235,7 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `form345_ingestion` | 900_051 | global | `sec_insider_transactions`, `sec_insider_sentiment` (MV) | SEC EDGAR Form 345 bulk TSV (insider buys/sells) | Quarterly |
 | `sec_xbrl_facts_ingestion` | 900_060 | global | `sec_xbrl_facts` | SEC XBRL Company Facts bulk (local) | On-demand (local dev) |
 | `company_characteristics_compute` | 900_091 | global | `company_characteristics_monthly` | Computed (3 fundamentals-only Kelly-Pruitt-Su chars + 8 raw components from sec_xbrl_facts) | Daily |
+| `fund_characteristics_aggregator` | 900_093 | global | `equity_characteristics_monthly` | Aggregates company_characteristics_monthly via N-PORT holdings (portfolio-level ratios, fund's own NAV for momentum) | Daily |
 | `ipca_estimation` | 900_092 | global | `factor_model_fits` | Computed (Kelly-Pruitt-Su IPCA model on 6 chars) | Quarterly |
 | `universe_sync` | 900_070 | global | `instruments_universe` | SEC/ESMA catalog (auto-fetches company_tickers_mf.json) | Weekly |
 | `library_index_rebuild` | 900_080 | org | `wealth_library_index` | Self-heal cross-check via EXCEPT/MINUS vs source tables | Nightly |
