@@ -603,6 +603,20 @@ async def optimize_fund_portfolio(
                 return False, f"block_{blk_id} {bs:.6f} not in [{bc.min_weight}, {bc.max_weight}]"
         return True, None
 
+    def _add_turnover_penalty(
+        w_var: cp.Variable,
+        constraints_list: list[Any],
+        objective_expr: Any,
+    ) -> Any:
+        """Add L1 turnover penalty to the constraints + objective. No-op when
+        current_weights is None or turnover_cost is 0. Returns the updated
+        objective_expr (constraints list mutated in-place)."""
+        if current_weights is None or turnover_cost <= 0:
+            return objective_expr
+        t = cp.Variable(w_var.size, nonneg=True)
+        constraints_list += [t >= w_var - current_weights, t >= current_weights - w_var]
+        return objective_expr - turnover_cost * cp.sum(t)
+
     # Resolve moments: use provided arrays or fall back to zeros
     _skew = skewness if skewness is not None else np.zeros(n)
     _kurt = excess_kurtosis if excess_kurtosis is not None else np.zeros(n)
@@ -817,11 +831,7 @@ async def optimize_fund_portfolio(
         )
         phase1_constraints.extend(ru_cs)
 
-    objective_expr1 = mu @ w1
-    if current_weights is not None and turnover_cost > 0:
-        t1 = cp.Variable(n, nonneg=True)
-        phase1_constraints += [t1 >= w1 - current_weights, t1 >= current_weights - w1]
-        objective_expr1 = objective_expr1 - turnover_cost * cp.sum(t1)
+    objective_expr1 = _add_turnover_penalty(w1, phase1_constraints, mu @ w1)
 
     prob1 = cp.Problem(cp.Maximize(objective_expr1), phase1_constraints)
     _t_p1 = time.perf_counter()
@@ -948,10 +958,11 @@ async def optimize_fund_portfolio(
                 )
                 constraints2.extend(ru_cs2)
 
-            robust_obj = cp.Maximize(
-                mu @ w2 - kappa * cp.norm(L_chol.T @ w2, 2)
+            robust_expr = _add_turnover_penalty(
+                w2, constraints2,
+                mu @ w2 - kappa * cp.norm(L_chol.T @ w2, 2),
             )
-            prob2 = cp.Problem(robust_obj, constraints2)
+            prob2 = cp.Problem(cp.Maximize(robust_expr), constraints2)
 
             _t_p2 = time.perf_counter()
             status2 = await _solve_problem(prob2)
@@ -1030,7 +1041,14 @@ async def optimize_fund_portfolio(
         alpha=cvar_alpha,
     )
     constraints3 = _build_base_constraints(w3) + slack_cs3
-    prob3 = cp.Problem(cp.Minimize(cvar_expr3), constraints3)
+    # Turnover penalty for Phase 3 (minimize objective): add cost instead of
+    # subtract, since we're minimizing. min(CVaR + turnover_cost * |Δw|).
+    phase3_obj_expr = cvar_expr3
+    if current_weights is not None and turnover_cost > 0:
+        t3 = cp.Variable(n, nonneg=True)
+        constraints3 += [t3 >= w3 - current_weights, t3 >= current_weights - w3]
+        phase3_obj_expr = cvar_expr3 + turnover_cost * cp.sum(t3)
+    prob3 = cp.Problem(cp.Minimize(phase3_obj_expr), constraints3)
 
     _t_p3 = time.perf_counter()
     status3 = await _solve_problem(prob3)
@@ -1119,16 +1137,24 @@ async def optimize_fund_portfolio(
             cvar_limit_effective=effective_cvar_limit,
         ))
 
-    # If Phase 3 failed, the constraint polytope is malformed (block bands
-    # sum > 1 etc.). This is the ONLY failure mode in PR-A12.
-    if phase3_weights is None:
-        logger.error(
-            "constraint_polytope_empty",
-            n_funds=n,
-        )
+    # Phase 3 is "always-solvable by construction" via the min-CVaR objective
+    # on the base polytope. If it returns None despite a valid base polytope
+    # (rare — usually a numerical solver glitch), don't discard a valid Phase 1
+    # result. Only abort when all three phases failed.
+    if phase1_weights is None and phase2_weights is None and phase3_weights is None:
+        logger.error("constraint_polytope_empty", n_funds=n)
         return _empty_result("constraint_polytope_empty", "CLARABEL")
-    assert min_achievable_cvar is not None  # non-None whenever phase3_weights is set
-    phase3_expected_return = float(mu @ phase3_weights)
+
+    if phase3_weights is None:
+        logger.warning(
+            "phase3_solver_glitch_phase1_or_2_valid",
+            phase1_valid=phase1_weights is not None,
+            phase2_valid=phase2_weights is not None,
+        )
+        phase3_expected_return = 0.0
+    else:
+        assert min_achievable_cvar is not None
+        phase3_expected_return = float(mu @ phase3_weights)
 
     # ── Winner selection (Phase 1 > Phase 2 > Phase 3) ───────────────────
     # PR-A12.4 — gate Phase 1 / Phase 2 promotion on realized CVaR honouring
@@ -1213,17 +1239,23 @@ async def optimize_fund_portfolio(
 
     assert winner_return is not None
     winner_cvar_ru = _cvar_from_ru(winner_w)
-    band: dict[str, float] = {
-        "lower": round(phase3_expected_return, 6),
-        "upper": round(float(winner_return), 6),
-        "lower_at_cvar": round(min_achievable_cvar, 6),
-        "upper_at_cvar": round(winner_cvar_ru, 6),
-    }
+    band: dict[str, float] | None = (
+        {
+            "lower": round(phase3_expected_return, 6),
+            "upper": round(float(winner_return), 6),
+            "lower_at_cvar": round(min_achievable_cvar, 6),
+            "upper_at_cvar": round(winner_cvar_ru, 6),
+        }
+        if min_achievable_cvar is not None
+        else None
+    )
 
     result = _build_result(
         winner_w, winner_solver, winner_status,
         winning_phase=winner_phase,
-        min_achievable_cvar=round(min_achievable_cvar, 6),
+        min_achievable_cvar=(
+            round(min_achievable_cvar, 6) if min_achievable_cvar is not None else None
+        ),
         achievable_return_band=band,
     )
 
@@ -1233,8 +1265,11 @@ async def optimize_fund_portfolio(
         cvar_95=result.cvar_95, cvar_limit=effective_cvar_limit,
         solver=winner_solver, status=winner_status,
         winning_phase=winner_phase,
-        min_achievable_cvar=round(min_achievable_cvar, 6),
-        band_upper=band["upper"], band_lower=band["lower"],
+        min_achievable_cvar=(
+            round(min_achievable_cvar, 6) if min_achievable_cvar is not None else None
+        ),
+        band_upper=band["upper"] if band else None,
+        band_lower=band["lower"] if band else None,
     )
     return result
 
