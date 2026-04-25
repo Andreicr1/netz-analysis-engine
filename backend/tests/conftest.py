@@ -32,15 +32,24 @@ async def client():
 
 
 @pytest.fixture(autouse=True, scope="session")
-async def _dispose_engine_after_session():
-    """Dispose the async engine after all tests complete.
+async def _dispose_engine_around_session():
+    """Re-bind the asyncpg pool to the pytest session loop and dispose at end.
 
-    Prevents SAWarning about non-checked-in asyncpg connections
-    when the garbage collector runs after test teardown.
+    The SQLAlchemy engine is created at import time (module-level singleton),
+    so its asyncpg connection pool is initially bound to whichever loop ran
+    the import. Several integration tests in this suite use
+    asyncio.run / new_event_loop / run_until_complete, which can leave the
+    pool attached to a now-closed auxiliary loop. The dispose() at session
+    start runs inside the pytest-asyncio session loop, tearing down any
+    orphaned pool so the first real query lazily creates a fresh pool on
+    the session loop. Without this, the first test that hits the DB after
+    a different-loop usage gets "Future attached to a different loop" or
+    "Event loop is closed".
     """
-    yield
     from app.core.db.engine import engine
 
+    await engine.dispose()
+    yield
     await engine.dispose()
 
 
