@@ -126,7 +126,7 @@ def fit_universe(
                         if len(y_t) > 0:
                             denom = gamma.T @ X_t.T @ X_t @ gamma
                             # avoid singular matrix
-                            if np.linalg.cond(denom) < 1e-12:
+                            if np.linalg.cond(denom) > 1e12:
                                 continue
                             f_t = np.linalg.inv(denom) @ gamma.T @ X_t.T @ y_t
                             pred_t = X_t @ gamma @ f_t
