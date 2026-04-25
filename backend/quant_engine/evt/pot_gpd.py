@@ -4,7 +4,7 @@ Implementation of Extreme Value Theory (EVT) for extreme VaR/CVaR estimation.
 Reference: EDHEC Gaps Quant Math Spec §4.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 import numpy as np
@@ -34,6 +34,10 @@ class GPDFit:
 
 @dataclass(frozen=True)
 class ExtremeVaRResult:
+    # Legacy fixed-quantile fields. Populated when the matching quantile is
+    # in the requested ``quantiles`` tuple; default 0.0 otherwise. Kept for
+    # backward compatibility with risk_calc.py which reads var_99/var_999
+    # directly. New consumers should prefer ``quantile_results`` instead.
     var_99: float
     var_995: float
     var_999: float
@@ -43,6 +47,11 @@ class ExtremeVaRResult:
     fit: GPDFit
     degraded: bool
     degraded_reason: str | None
+    # PR-Q14: flexible quantile lookup. Maps the requested quantile (e.g.
+    # 0.95) to (var, cvar). Populated for every quantile passed in the
+    # ``quantiles`` tuple. Avoids the silent 0.0 fallback when a non-legacy
+    # quantile (anything other than 0.99/0.995/0.999) is requested.
+    quantile_results: dict[float, tuple[float, float]] = field(default_factory=dict)
 
 
 def compute_hill_estimator(losses: np.ndarray, k: int) -> float:
@@ -167,6 +176,16 @@ def extreme_var_evt(
         results[f"var_{int(q*1000)}"] = float(var_q)
         results[f"cvar_{int(q*1000)}"] = float(cvar_q)
 
+    # Build flexible per-quantile lookup so callers can request arbitrary
+    # quantiles (e.g. 0.95) without falling back to the legacy 0.0 default.
+    quantile_results: dict[float, tuple[float, float]] = {
+        float(q): (
+            float(results[f"var_{int(q*1000)}"]),
+            float(results[f"cvar_{int(q*1000)}"]),
+        )
+        for q in quantiles
+    }
+
     fit = GPDFit(
         xi=float(xi),
         beta=float(beta),
@@ -186,6 +205,7 @@ def extreme_var_evt(
         fit=fit,
         degraded=degraded,
         degraded_reason=reason,
+        quantile_results=quantile_results,
     )
 
 
@@ -246,6 +266,14 @@ def _fallback_to_normal(
         converged=False,
     )
 
+    quantile_results: dict[float, tuple[float, float]] = {
+        float(q): (
+            float(results[f"var_{int(q*1000)}"]),
+            float(results[f"cvar_{int(q*1000)}"]),
+        )
+        for q in quantiles
+    }
+
     return ExtremeVaRResult(
         var_99=results.get("var_990", 0.0),
         var_995=results.get("var_995", 0.0),
@@ -256,6 +284,7 @@ def _fallback_to_normal(
         fit=fit,
         degraded=True,
         degraded_reason=reason,
+        quantile_results=quantile_results,
     )
 
 
@@ -275,4 +304,5 @@ def _degraded_result(u: float, reason: str) -> ExtremeVaRResult:
         fit=fit,
         degraded=True,
         degraded_reason=reason,
+        # Empty dict — caller must check ``degraded`` before reading.
     )
