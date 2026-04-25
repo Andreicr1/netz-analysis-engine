@@ -109,7 +109,9 @@ def test_ipca_walk_forward_oos_r2():
     ret, chars, _, _ = _generate_synthetic_panel(T=100, N=30, K=2, L=6, seed=10)
     fit = fit_universe(ret, chars, max_k=3)
     assert fit.oos_r_squared is not None
-    assert fit.oos_r_squared >= 0.0
+    # Post PR-Q17: oos_r_squared is no longer clamped at 0.
+    # The raw value can be negative on weak panels — that's correct.
+    assert isinstance(fit.oos_r_squared, float)
 
 def test_drift_monitor_identical():
     """10. Drift monitor: two identical Γs → drift = 0."""
@@ -167,6 +169,7 @@ def test_ipca_fit_universe_small_panel():
     fit = fit_universe(ret, chars, max_k=3)
     assert fit.K == 3
     assert fit.oos_r_squared == 0.0
+    assert fit.degraded is True
 
 def test_ipca_fit_serialization_round_trip():
     """20. Fit serialization round-trip."""
