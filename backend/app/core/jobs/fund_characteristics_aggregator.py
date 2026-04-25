@@ -496,11 +496,14 @@ async def _load_nav_series(
 ) -> pd.Series:
     """Load NAV time-series for an instrument as a month-end pandas Series.
 
-    nav_timeseries is stored at daily frequency (instrument_ingestion worker
-    pulls daily NAV from Yahoo Finance). For 12-1 momentum (Jegadeesh-Titman
-    convention) we need MONTHLY observations — derive_momentum_12_1 takes
-    iloc[-13:-1] expecting that to span 12 calendar months. Feeding it daily
-    data would give a 13-trading-day window (~2.5 weeks) instead of 12 months.
+    nav_timeseries is populated at daily frequency by the
+    instrument_ingestion worker (lock 900_010), which pulls per-ticker
+    daily NAV via the Tiingo API (~15 years of history covered for the
+    universe). For 12-1 momentum (Jegadeesh-Titman convention) we need
+    MONTHLY observations — derive_momentum_12_1 takes iloc[-13:-1]
+    expecting that 13-element window to span 12 calendar months.
+    Feeding it the raw daily series would give a 13-trading-day window
+    (~2.5 weeks) instead of 12 months.
 
     Resample to month-end last value here so any caller gets the correct
     cadence for momentum / longitudinal characteristics.
