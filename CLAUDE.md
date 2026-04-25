@@ -95,7 +95,7 @@ frontends/
   wealth/           ← SvelteKit "netz-wealth-os"
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0173_factor_model_fits`.
+**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0174_company_characteristics_monthly`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header. **Tenant and user management is 100% via Clerk Dashboard** — no custom admin UI. Organizations, user invites, and role assignment (`ADMIN`, `INVESTMENT_TEAM`, `investor`) are all managed in Clerk. `ConfigService` defaults mean new tenants work immediately without provisioning.
 
@@ -234,7 +234,7 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `sec_bulk_ingestion` | 900_050 | global | sec_etfs, sec_bdcs, sec_money_market_funds, sec_mmf_metrics, sec_registered_funds, strategy_label | SEC DERA bulk ZIPs (N-CEN, N-MFP, N-PORT, BDC) | Quarterly |
 | `form345_ingestion` | 900_051 | global | `sec_insider_transactions`, `sec_insider_sentiment` (MV) | SEC EDGAR Form 345 bulk TSV (insider buys/sells) | Quarterly |
 | `sec_xbrl_facts_ingestion` | 900_060 | global | `sec_xbrl_facts` | SEC XBRL Company Facts bulk (local) | On-demand (local dev) |
-| ~~`equity_characteristics_compute`~~ | ~~900_091~~ | global | `equity_characteristics_monthly` | _Removed — Tiingo worker deprecated. XBRL × nav replacement tracked in #286 (PR-Q8)._ | _pending_ |
+| `company_characteristics_compute` | 900_091 | global | `company_characteristics_monthly` | Computed (3 fundamentals-only Kelly-Pruitt-Su chars + 8 raw components from sec_xbrl_facts) | Daily |
 | `ipca_estimation` | 900_092 | global | `factor_model_fits` | Computed (Kelly-Pruitt-Su IPCA model on 6 chars) | Quarterly |
 | `universe_sync` | 900_070 | global | `instruments_universe` | SEC/ESMA catalog (auto-fetches company_tickers_mf.json) | Weekly |
 | `library_index_rebuild` | 900_080 | org | `wealth_library_index` | Self-heal cross-check via EXCEPT/MINUS vs source tables | Nightly |
