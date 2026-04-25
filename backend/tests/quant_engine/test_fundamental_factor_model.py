@@ -75,6 +75,9 @@ def test_fit_fundamental_loadings(sample_factor_returns, sample_fund_returns):
     # A.6 — Ledoit-Wolf shrinkage λ is recorded on the fit
     assert fit.shrinkage_lambda is not None
     assert 0.0 <= fit.shrinkage_lambda <= 1.0
+    # PR-Q15 Fix 3 — alphas_per_fund is populated
+    assert fit.alphas_per_fund is not None
+    assert len(fit.alphas_per_fund) == 5
 
 
 def test_fit_fundamental_loadings_zero_variance_fund_guarded():
@@ -130,25 +133,29 @@ def test_compute_residual_pca(sample_fund_returns):
 async def test_build_fundamental_factor_returns_joins_allocation_blocks():
     """T1: Assert SQL joins through allocation_blocks."""
     db = AsyncMock()
-    # Mock return values for benchmark and macro queries
+    # PR-Q15: mock returns NAV levels (not return_1d) after Fix 1.
     db.execute.side_effect = [
-        # benchmark_res
+        # benchmark_res — NAV levels
         MagicMock(all=MagicMock(return_value=[
-            (date(2021, 1, 1), "SPY", 0.01),
-            (date(2021, 1, 2), "SPY", -0.005),
-            (date(2021, 1, 1), "IEF", 0.002),
+            (date(2021, 1, 1), "SPY", 100.0),
+            (date(2021, 1, 2), "SPY", 101.0),
+            (date(2021, 1, 3), "SPY", 100.5),
+            (date(2021, 1, 1), "IEF", 50.0),
+            (date(2021, 1, 2), "IEF", 50.1),
+            (date(2021, 1, 3), "IEF", 50.05),
         ])),
-        # macro_res
+        # macro_res — levels
         MagicMock(all=MagicMock(return_value=[
             (date(2021, 1, 1), "DTWEXBGS", 100.0),
             (date(2021, 1, 2), "DTWEXBGS", 101.0),
+            (date(2021, 1, 3), "DTWEXBGS", 100.5),
         ])),
     ]
-    
+
     factors = await build_fundamental_factor_returns(
         db, date(2021, 1, 1), date(2021, 1, 10)
     )
-    
+
     assert isinstance(factors, pd.DataFrame)
     # SPY and IEF should be present
     assert "equity_us" in factors.columns
@@ -162,15 +169,17 @@ async def test_build_fundamental_factor_returns_joins_allocation_blocks():
 async def test_iwf_absent_triggers_value_factor_skip():
     """T2: Value factor skipped when IWF absent."""
     db = AsyncMock()
-    # benchmark_res only has IWD
+    # PR-Q15: NAV levels (not return_1d)
     db.execute.side_effect = [
         MagicMock(all=MagicMock(return_value=[
-            (date(2021, 1, 1), "SPY", 0.01),
-            (date(2021, 1, 1), "IWD", 0.01),
+            (date(2021, 1, 1), "SPY", 100.0),
+            (date(2021, 1, 2), "SPY", 101.0),
+            (date(2021, 1, 1), "IWD", 50.0),
+            (date(2021, 1, 2), "IWD", 50.5),
         ])),
         MagicMock(all=MagicMock(return_value=[])),
     ]
-    
+
     factors = await build_fundamental_factor_returns(
         db, date(2021, 1, 1), date(2021, 1, 2)
     )
@@ -183,13 +192,15 @@ async def test_iwf_absent_triggers_value_factor_skip():
 async def test_efa_absent_triggers_international_factor_skip():
     """T3: International factor skipped when EFA absent."""
     db = AsyncMock()
+    # PR-Q15: NAV levels
     db.execute.side_effect = [
         MagicMock(all=MagicMock(return_value=[
-            (date(2021, 1, 1), "SPY", 0.01),
+            (date(2021, 1, 1), "SPY", 100.0),
+            (date(2021, 1, 2), "SPY", 101.0),
         ])),
         MagicMock(all=MagicMock(return_value=[])),
     ]
-    
+
     factors = await build_fundamental_factor_returns(
         db, date(2021, 1, 1), date(2021, 1, 2)
     )
@@ -226,11 +237,14 @@ async def test_k_equals_six_contract_with_stubbed_factor_returns(monkeypatch):
     # Build the underlying rows that build_fundamental_factor_returns will
     # pivot into factors. 7 benchmark tickers + 2 macro series. We skip EFA
     # and IWF so only 6 factors survive — matching the original intent.
+    # PR-Q15: benchmark mock data uses NAV levels (not return_1d).
     bench_tickers = ["SPY", "IEF", "HYG", "IWM", "IWD"]
+    bench_levels_state = {t: 100.0 for t in bench_tickers}
     bench_rows = []
     for d in dates:
         for t in bench_tickers:
-            bench_rows.append((d, t, rng.standard_normal() * 0.01))
+            bench_levels_state[t] *= (1 + rng.standard_normal() * 0.01)
+            bench_rows.append((d, t, bench_levels_state[t]))
     macro_rows = []
     for d in dates:
         macro_rows.append((d, "DTWEXBGS", 100.0 + rng.standard_normal()))
