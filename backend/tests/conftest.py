@@ -6,6 +6,17 @@ Tests run against real PostgreSQL (not SQLite — asyncpg requires PG).
 
 from __future__ import annotations
 
+import os
+
+# Disable Redis-backed rate-limit middleware during tests. Every test reuses
+# the same dev org_id (_TEAM_HEADER / _ADMIN_HEADER / DEV_ACTOR_HEADER), so the
+# compute-tier 10 RPM ceiling (settings.rate_limit_compute_rpm) is hit within
+# seconds when the full suite runs in CI — causing tests like
+# test_preview_upstream_failure_returns_422 to receive 429 before their
+# upstream-failure mock can run. Production gates remain intact via real env.
+# Must run BEFORE any `from app.main import app` import path executes.
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
