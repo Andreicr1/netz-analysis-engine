@@ -41,6 +41,31 @@ PORTFOLIO_EVAL_LOCK_ID = 900_008
 PROFILES = ["conservative", "moderate", "growth"]
 
 
+async def _last_known_regime(
+    db: AsyncSession, profile: str, fallback: str = "RISK_OFF",
+) -> str:
+    """Return the most recent persisted regime for a profile, else RISK_OFF.
+
+    Supports BUG-R5 fallback chain: callers should NEVER hardcode RISK_ON.
+    """
+    stmt = (
+        select(PortfolioSnapshot.regime)
+        .where(PortfolioSnapshot.profile == profile)
+        .order_by(PortfolioSnapshot.snapshot_date.desc())
+        .limit(1)
+    )
+    last = (await db.execute(stmt)).scalar_one_or_none()
+    if last:
+        return last
+    logger.warning(
+        "regime_default_fallback",
+        site="portfolio_eval.no_prior_snapshot",
+        profile=profile,
+        fallback_regime=fallback,
+    )
+    return fallback
+
+
 async def _load_worker_config(db: AsyncSession) -> dict:
     """Load portfolio_profiles config for worker context (no RLS).
 
@@ -179,6 +204,7 @@ async def evaluate_profile(
     block_weights = await _get_profile_weights(db, profile)
     if not block_weights:
         logger.info("No strategic weights found", profile=profile)
+        last_regime = await _last_known_regime(db, profile)
         return {
             "profile": profile,
             "snapshot_date": today,
@@ -188,7 +214,7 @@ async def evaluate_profile(
             "cvar_utilized_pct": None,
             "trigger_status": "ok",
             "consecutive_breach_days": 0,
-            "regime": "RISK_ON",
+            "regime": last_regime,
             "core_weight": sum(block_weights.values()) if block_weights else None,
             "satellite_weight": None,
         }
@@ -210,10 +236,10 @@ async def evaluate_profile(
             regime_result = detect_regime(portfolio_returns)
         else:
             cvar = 0.0
-            regime_result = detect_regime(np.array([]))
+            regime_result = None
     else:
         cvar = 0.0
-        regime_result = detect_regime(np.array([]))
+        regime_result = None
 
     # Pre-fetch consecutive breach days from last snapshot
     prev_breach_stmt = (
@@ -230,6 +256,8 @@ async def evaluate_profile(
     if breach.trigger_status in ("warning", "breach"):
         await _publish_alert(profile, breach)
 
+    regime_label = regime_result.regime if regime_result is not None else await _last_known_regime(db, profile)
+
     return {
         "profile": profile,
         "snapshot_date": today,
@@ -239,7 +267,7 @@ async def evaluate_profile(
         "cvar_utilized_pct": round(breach.cvar_utilized_pct, 2),
         "trigger_status": breach.trigger_status,
         "consecutive_breach_days": breach.consecutive_breach_days,
-        "regime": regime_result.regime,
+        "regime": regime_label,
         "core_weight": round(sum(block_weights.values()), 4),
         "satellite_weight": round(1.0 - sum(block_weights.values()), 4),
     }

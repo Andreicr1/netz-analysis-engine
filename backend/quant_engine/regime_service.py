@@ -8,10 +8,13 @@ Classifies market regime using multi-signal approach:
 
 Priority hierarchy: CRISIS > INFLATION > RISK_OFF > RISK_ON
 
-Phase 2 additions:
-- Per-region regime classification using ICE BofA credit spread signals
-- Asymmetric hysteresis (immediate CRISIS entry, slow RISK_ON recovery)
-- GDP-weighted global composition with pessimistic override
+classify_regime_multi_signal is a pure function. Hysteresis (regime
+stickiness across consecutive evaluations) lives in callers — see
+apply_regime_hysteresis() below. Wealth applies it via
+risk_calc::_compute_and_persist_taa_state by reading the prior
+MacroRegimeSnapshot.raw_regime; portfolio_eval applies it via
+PortfolioSnapshot.regime. Credit can opt in by reading its prior
+stress_severity record before calling this function.
 
 Sync/async boundary: Pure classification functions are sync.
 get_latest_macro_values() and get_current_regime() are async (DB access).
@@ -101,7 +104,7 @@ _DEFAULT_THRESHOLDS: RegimeThresholds = {
     "cpi_yoy_high": 4.0,
     "cpi_yoy_normal": 2.5,
     "sahm_rule_recession": 0.50,
-    "default": "RISK_ON",
+    "default": "RISK_OFF",  # was "RISK_ON" — see BUG-R5
 }
 
 REGIME_DEFINITIONS: dict[str, RegimeDefinition] = {
@@ -152,7 +155,7 @@ def resolve_regime_thresholds(config: dict[str, Any] | None = None) -> RegimeThr
             cpi_yoy_high=float(raw.get("cpi_yoy_high", 4.0)),
             cpi_yoy_normal=float(raw.get("cpi_yoy_normal", 2.5)),
             sahm_rule_recession=float(raw.get("sahm_rule_recession", 0.50)),
-            default=raw.get("default", "RISK_ON"),
+            default=raw.get("default", "RISK_OFF"),
         )
     except (KeyError, TypeError, ValueError) as e:
         logger.error("Malformed regime config, using defaults", error=str(e))
@@ -292,6 +295,58 @@ class RegimeResult:
     reasons: dict[str, str] = field(default_factory=dict)
 
 
+# Asymmetric severity ranking for hysteresis.
+# Higher = more severe. CRISIS entry should be immediate;
+# de-escalation back to RISK_ON should require a real shift, not
+# a one-day blip below threshold.
+_REGIME_SEVERITY: dict[str, int] = {
+    "RISK_ON":   0,
+    "INFLATION": 1,
+    "RISK_OFF":  2,
+    "CRISIS":    3,
+}
+
+
+def apply_regime_hysteresis(
+    prev_regime: str | None,
+    new_regime: str,
+    severity_jump_threshold: int = 1,
+) -> str:
+    """Asymmetric regime stickiness — immediate escalation, slow de-escalation.
+
+    Caller-side helper. classify_regime_multi_signal does NOT call this.
+
+    Behavior:
+      * Escalation (new severity > prev): always honor immediately. CRISIS
+        entry never blocked.
+      * De-escalation (new severity < prev): only honor if the severity drop
+        meets `severity_jump_threshold`. Default 1 = drop one notch per
+        evaluation.
+      * Same severity: pass through.
+
+    Args:
+        prev_regime: prior regime label (None on cold start → no hysteresis).
+        new_regime: regime returned by classify_regime_multi_signal.
+        severity_jump_threshold: minimum severity decrease to honor a
+            de-escalation. 1 = honor any drop; 2 = require dropping two
+            severity ranks in a single step (rare).
+
+    Returns:
+        Effective regime label after applying hysteresis.
+
+    """
+    if prev_regime is None or prev_regime == new_regime:
+        return new_regime
+    prev_sev = _REGIME_SEVERITY.get(prev_regime, 0)
+    new_sev = _REGIME_SEVERITY.get(new_regime, 0)
+    if new_sev >= prev_sev:
+        return new_regime  # escalation or same severity → honor immediately
+    # De-escalation: only honor if drop is large enough.
+    if (prev_sev - new_sev) >= severity_jump_threshold:
+        return new_regime
+    return prev_regime
+
+
 def classify_regime_multi_signal(
     vix: float | None,
     yield_curve_spread: float | None,
@@ -398,10 +453,12 @@ def classify_regime_multi_signal(
 
     # ═══ SLOW SIGNALS (45%) — structural, weeks-to-months lag ═══
 
-    # Energy Shock Composite (10%): fuses WTI Z-score (1Y) and WTI RoC (3m)
-    # into a single signal via max(). Avoids multicollinearity — during a supply
-    # shock both spike together (correlation ~1.0), so separate weights would
-    # double-count the same event. max() captures whichever tail is louder.
+    # Energy Shock Composite (10%): fuses WTI symmetric Z-score (1Y) and WTI
+    # RoC (3m) into a single signal via max(). The Z-score is symmetric so a
+    # negative-WTI demand-crash (April 2020) and an OPEC+ supply cut both
+    # register as macro stress. RoC captures any sharp move regardless of
+    # direction. Avoids multicollinearity since both spike together during
+    # real shocks.
     if energy_shock is not None:
         s = _ramp(energy_shock, calm=0.0, panic=100.0)
         signals.append(("energy_shock", s, 0.12, f"Energy_shock={energy_shock:.0f}/100 (stress={s:.0f}/100)"))
@@ -606,6 +663,17 @@ def detect_regime(
     if len(returns) < 10:
         default = thresholds["default"]
         defn = REGIME_DEFINITIONS.get(default)
+        logger.warning(
+            "regime_default_fallback",
+            site="detect_regime.insufficient_data",
+            default_regime=default,
+            n_returns=int(len(returns)),
+            message=(
+                "detect_regime received < 10 returns and is returning the default "
+                f"regime ({default}). Callers should provide a last-known-good "
+                "regime via PortfolioSnapshot lookup before falling through here."
+            ),
+        )
         return RegimeResult(
             regime=default,
             description=defn["description"] if defn is not None else None,
@@ -616,6 +684,17 @@ def detect_regime(
     if len(clean) < 10:
         default = thresholds["default"]
         defn = REGIME_DEFINITIONS.get(default)
+        logger.warning(
+            "regime_default_fallback",
+            site="detect_regime.insufficient_clean_data",
+            default_regime=default,
+            n_returns=int(len(clean)),
+            message=(
+                "detect_regime received < 10 clean returns after non-finite filter and is "
+                f"returning the default regime ({default}). Callers should provide a "
+                "last-known-good regime via PortfolioSnapshot lookup before falling through here."
+            ),
+        )
         return RegimeResult(
             regime=default,
             description=defn["description"] if defn is not None else None,
@@ -1072,7 +1151,13 @@ async def build_regime_inputs(
     )
     energy_shock: float | None = None
     if crude_z is not None or crude_roc is not None:
-        z_score = _ramp(crude_z, calm=0.5, panic=3.0) if crude_z is not None else 0.0
+        # Symmetric z-score: oil supply shocks (z >> 0) AND demand-crash shocks
+        # (z << 0, e.g. April 2020 negative WTI) both indicate macro stress.
+        z_score = (
+            max(_ramp(crude_z, calm=0.5, panic=3.0), _ramp(-crude_z, calm=0.5, panic=3.0))
+            if crude_z is not None
+            else 0.0
+        )
         roc_score = _ramp(crude_roc, calm=0.0, panic=50.0) if crude_roc is not None else 0.0
         energy_shock = max(z_score, roc_score)
 
@@ -1110,23 +1195,28 @@ async def get_current_regime(
     config: dict[str, Any] | None = None,
     *,
     as_of_date: date | None = None,
-    fallback_regime: str = "RISK_ON",
+    fallback_regime: str = "RISK_OFF",  # was "RISK_ON" — see BUG-R5
 ) -> RegimeRead:
     """Get current market regime from FRED macro data.
+
+    Fallback chain (applied in order):
+        1. Caller-supplied fallback_regime (if explicitly passed).
+        2. The hardcoded RISK_OFF default if no fallback was supplied.
+
+    Callers SHOULD pre-fetch their own last-known-good regime
+    (Wealth: PortfolioSnapshot.regime; Credit: stress_severity level)
+    and pass it as fallback_regime. Falling through to the RISK_OFF
+    default emits a deprecation warning so misuse can be audited.
 
     Args:
         config: Raw calibration config dict from ConfigService.
         as_of_date: Historical evaluation date for backtests. Forwarded
             to build_regime_inputs.
-        fallback_regime: Regime label to use when FRED data is unavailable.
-            Callers provide their own fallback strategy:
-            - Wealth: pre-fetches from PortfolioSnapshot.regime
-            - Credit: uses stress_severity level or defaults to "RISK_ON"
+        fallback_regime: Regime to use when no FRED data is available.
 
     """
     inputs = await build_regime_inputs(db, as_of_date=as_of_date)
 
-    # Need at least VIX or HY OAS or energy data to classify
     if inputs.get("vix") is not None or inputs.get("hy_oas") is not None or inputs.get("energy_shock") is not None:
         regime, reasons, _ = classify_regime_multi_signal(
             vix=inputs.get("vix"),
@@ -1144,8 +1234,6 @@ async def get_current_regime(
             credit_impulse=inputs.get("credit_impulse"),
             permits_roc=inputs.get("permits_roc"),
         )
-
-        # Determine as_of from macro_data latest obs_date
         stmt = (
             select(MacroData.obs_date)
             .where(MacroData.series_id.in_(REGIME_SERIES_STALENESS.keys()))
@@ -1153,17 +1241,17 @@ async def get_current_regime(
             .limit(1)
         )
         as_of_row = (await db.execute(stmt)).scalar_one_or_none()
+        return RegimeRead(regime=regime, as_of_date=as_of_row, reasons=reasons)
 
-        return RegimeRead(
-            regime=regime,
-            as_of_date=as_of_row,
-            reasons=reasons,
-        )
-
-    # Fallback: caller-provided regime (no DB query for PortfolioSnapshot)
-    logger.info(
-        "No FRED macro data available, using caller-provided fallback",
+    logger.warning(
+        "regime_default_fallback",
+        site="get_current_regime.no_signals",
         fallback_regime=fallback_regime,
+        message=(
+            f"No FRED macro data available — returning caller-supplied "
+            f"fallback_regime={fallback_regime}. Callers should pre-fetch "
+            "last-known-good from PortfolioSnapshot/stress_severity."
+        ),
     )
     return RegimeRead(
         regime=fallback_regime,
