@@ -220,6 +220,13 @@ async def test_idempotent_repost_returns_same_job_id(
     assert r1.status_code in (200, 202)
     assert r2.status_code in (200, 202)
     assert r1.json()["job_id"] == r2.json()["job_id"]
+    # The route fires the worker via asyncio.create_task; yield once so the
+    # scheduled coroutine can run before we assert call count. Previously the
+    # RateLimitMiddleware (BaseHTTPMiddleware) provided this yield-point
+    # incidentally via its anyio TaskGroup cleanup, so the test was timing-
+    # dependent on the middleware stack. The explicit yield removes that
+    # implicit coupling.
+    await asyncio.sleep(0)
     # Worker fired once (the second call hit the @idempotent cache).
     assert len(patch_worker_to_noop) == 1
 
