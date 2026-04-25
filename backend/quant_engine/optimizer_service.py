@@ -1242,6 +1242,8 @@ async def optimize_fund_portfolio(
         winner_return = phase2_expected_return
         winner_status = "optimal"
     else:
+        assert phase3_weights is not None  # all-None case returned _empty_result above
+        assert min_achievable_cvar is not None
         winner_w = phase3_weights
         winner_phase = "phase_3_min_cvar"
         winner_solver = "CLARABEL"
@@ -1281,6 +1283,7 @@ async def optimize_fund_portfolio(
     )
 
     assert winner_return is not None
+    assert winner_w is not None  # at least one phase succeeded (else _empty_result)
     winner_cvar_ru = _cvar_from_ru(winner_w)
     band: dict[str, float] | None = (
         {
