@@ -92,6 +92,7 @@ def test_pcadiagnostic_is_not_a_fit() -> None:
         "r_squared_per_fund",
         "shrinkage_lambda",
         "factors_skipped",
+        "alphas_per_fund",  # PR-Q15 Fix 3
     }
     assert diag_fields.isdisjoint({"loadings", "factor_cov", "residual_variance"})
     assert fit_fields.issuperset({"loadings", "factor_cov", "residual_variance"})
