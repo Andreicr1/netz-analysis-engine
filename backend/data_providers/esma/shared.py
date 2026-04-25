@@ -152,10 +152,15 @@ def check_openfigi_rate(has_api_key: bool = False) -> None:
     """Rate-limit OpenFIGI API requests (25 req/min free, 250 req/min with key).
 
     Without key: enforce ~20 req/min (0.33 req/s) to stay safely under 25/min.
-    With key: ~200 req/min (3 req/s) to stay safely under 250/min.
+    With key: ~3 req/s. _check_rate increments first and only sleeps when
+    count > max_per_second, so the cap effectively becomes max+1 inside a
+    single second window. Passing 3 yields a 4 req/s peak (240 req/min),
+    which stays safely under the OpenFIGI 250 req/min ceiling. Bumping to
+    4 would let a hot loop hit 5 req/s peak (300/min) and provoke 429s —
+    track tightening _check_rate to use `>=` semantics as a follow-up.
     """
     if has_api_key:
-        _check_rate("openfigi_esma", 4)
+        _check_rate("openfigi_esma", 3)
     else:
         # 25 req/min = 0.42/s — use blocking sleep to enforce ~3s gap
         _check_rate_local("openfigi_esma_nokey", 1)
