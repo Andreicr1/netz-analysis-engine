@@ -180,13 +180,14 @@ def compute_bl_posterior_multi_view(
         eps = REG_OMEGA_EPS_FACTOR * trace / max(k, 1)
     Omega_reg = Omega + eps * np.eye(k)
 
-    tau_sigma = tau * sigma
-    tau_sigma_inv = np.linalg.inv(tau_sigma)
+    # Solve via linear systems — no np.linalg.inv in this module (PR-Q19 Fix 5).
+    # sigma^{-1} via solve is numerically superior for near-singular covariance
+    # (e.g. 12 funds in same Vanguard share-class family, cond ≈ 1e15).
+    tau_sigma_inv_mu = np.linalg.solve(tau * sigma, mu_prior)         # (τΣ)⁻¹ · μ
+    tau_sigma_inv_I = np.linalg.solve(tau * sigma, np.eye(n))         # (τΣ)⁻¹
 
-    # Solve via linear system (more stable than inv + matmul)
-    #   M · μ_post = rhs
-    M = tau_sigma_inv + P_stack.T @ np.linalg.solve(Omega_reg, P_stack)
-    rhs = tau_sigma_inv @ mu_prior + P_stack.T @ np.linalg.solve(Omega_reg, Q_stack)
+    M = tau_sigma_inv_I + P_stack.T @ np.linalg.solve(Omega_reg, P_stack)
+    rhs = tau_sigma_inv_mu + P_stack.T @ np.linalg.solve(Omega_reg, Q_stack)
     mu_post = np.linalg.solve(M, rhs)
 
     logger.info(
@@ -398,16 +399,14 @@ def compute_bl_returns(
     except Exception as e:  # pragma: no cover — defensive
         logger.debug("he_litterman_check_failed", error=str(e))
 
-    # Step 4: Posterior
-    tau_sigma = tau_eff * sigma
-    tau_sigma_inv = np.linalg.inv(tau_sigma)
+    # Step 4: Posterior — solve-based (PR-Q19 Fix 5, no np.linalg.inv).
     Omega_inv = np.diag(1.0 / omega_arr)
+    tau_sigma_inv_pi = np.linalg.solve(tau_eff * sigma, pi)            # (τΣ)⁻¹ · π
+    tau_sigma_inv_I = np.linalg.solve(tau_eff * sigma, np.eye(n))      # (τΣ)⁻¹
 
-    # M = inv(tau*Sigma)^{-1} + P' Omega^{-1} P
-    M = tau_sigma_inv + P.T @ Omega_inv @ P
-    M_inv = np.linalg.inv(M)
-
-    mu_bl = M_inv @ (tau_sigma_inv @ pi + P.T @ Omega_inv @ Q)
+    M = tau_sigma_inv_I + P.T @ Omega_inv @ P
+    rhs = tau_sigma_inv_pi + P.T @ Omega_inv @ Q
+    mu_bl = np.linalg.solve(M, rhs)
 
     logger.info(
         "bl_returns_computed",
