@@ -158,8 +158,17 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
     if not rows_h:
         return await _run_ipca_rail_option_a(request, db, fit)
 
-    # Inner-join holdings against ranked cross-section
-    holdings_ids = {str(r.instrument_id): float(r.pct_of_nav) for r in rows_h}
+    # Inner-join holdings against ranked cross-section. Sum (not overwrite)
+    # weights when multiple holdings map to the same instrument_id — happens
+    # when dual share classes share an issuer-level instrument, when the
+    # instruments_universe has both 8-char and 9-char CUSIPs for the same
+    # security, or when N-PORT splits a position across multiple rows.
+    # A dict comprehension would silently drop earlier rows and underweight
+    # the instrument in z_fund / factor exposures.
+    holdings_ids: dict[str, float] = {}
+    for r in rows_h:
+        iid = str(r.instrument_id)
+        holdings_ids[iid] = holdings_ids.get(iid, 0.0) + float(r.pct_of_nav)
     matched = ranked_cs.loc[ranked_cs.index.get_level_values(0).isin(holdings_ids)]
     if matched.empty:
         return await _run_ipca_rail_option_a(request, db, fit)
