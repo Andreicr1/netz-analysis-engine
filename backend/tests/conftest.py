@@ -31,6 +31,33 @@ async def client():
         yield ac
 
 
+@pytest.fixture(autouse=True)
+async def _rebind_engine_for_integration(request):
+    """Dispose the asyncpg pool before every @pytest.mark.integration test.
+
+    Some integration tests in this suite (and a few non-integration tests
+    they depend on indirectly) drive their async setup with `asyncio.run`
+    or `loop.run_until_complete`, each of which opens a private event loop,
+    causes the SQLAlchemy module-level engine to bind its asyncpg pool to
+    that loop, and then closes the loop. Subsequent integration tests that
+    use the canonical pytest-asyncio session loop then inherit an orphaned
+    pool and fail with "Future attached to a different loop".
+
+    Calling `engine.dispose()` immediately before the test runs (in the
+    session loop) tears down the orphan and lets the test's first DB call
+    lazily build a fresh pool on the loop that is actually about to use it.
+
+    Scope=function and gated on the integration marker keeps the cost
+    bounded — dispose() is millisecond-cheap and the bonus only fires for
+    the ~37 integration tests, not the 4900+ unit tests.
+    """
+    if request.node.get_closest_marker("integration"):
+        from app.core.db.engine import engine
+
+        await engine.dispose()
+    yield
+
+
 @pytest.fixture(autouse=True, scope="session")
 async def _dispose_engine_around_session():
     """Re-bind the asyncpg pool to the pytest session loop and dispose at end.
