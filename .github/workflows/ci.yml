@@ -77,8 +77,18 @@ jobs:
       - name: Lint
         run: python -m ruff check .
         working-directory: backend
-      - name: Test
-        run: python -m pytest tests/ -v --tb=short --ignore=tests/test_macro_committee.py
+      # Unit + route tests (~99% of the suite). Run in their own pytest
+      # invocation so the SQLAlchemy module-level engine binds its asyncpg
+      # pool to a single fresh event loop. Integration tests below run in
+      # a separate invocation (separate Python process, separate engine,
+      # separate pool) — that isolation prevents the "Future attached to a
+      # different loop" cross-loop bug caused by some integration tests
+      # using asyncio.run / loop.run_until_complete instead of pytest-asyncio.
+      - name: Test (unit + routes)
+        run: python -m pytest tests/ -v --tb=short --ignore=tests/test_macro_committee.py -m "not integration"
+        working-directory: backend
+      - name: Test (integration)
+        run: python -m pytest tests/ -v --tb=short --ignore=tests/test_macro_committee.py -m "integration"
         working-directory: backend
 
   check-frontends:
