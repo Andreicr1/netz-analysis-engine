@@ -15,14 +15,11 @@ import pytest
 
 from quant_engine.factor_model_service import (
     FactorContributionResult,
-    FactorModelResult,
-    FundamentalFactorFit,
     _safe_correlation,
     compute_factor_contributions,
     decompose_factors,
     fit_fundamental_loadings,
 )
-
 
 # ─── Fix 1: ffill levels, not returns — no compounding bug ──────────────
 
@@ -350,7 +347,6 @@ def test_lstsq_warns_on_rank_deficient_design(caplog):
     factor_returns = np.hstack([factor_col, factor_col])  # rank 1
     fund_returns = rng.standard_normal((T, N)) * 0.01
 
-    import structlog
     with caplog.at_level("WARNING"):
         fit = fit_fundamental_loadings(
             fund_returns,
