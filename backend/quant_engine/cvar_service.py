@@ -8,8 +8,14 @@ check_breach_status() accepts consecutive_breach_days as parameter —
 the caller (wealth portfolio_eval) pre-fetches from PortfolioSnapshot.
 
 Config is injected as parameter by callers via ConfigService.get("liquid_funds", "portfolio_profiles").
+
+Sign convention (PR-Q13): all methods return **return-space** values.
+Losses are negative (e.g. CVaR = -0.08 means 8% loss). This is
+consistent with the historical path and with check_breach_status()
+which compares cvar_current (negative) against cvar_limit (negative).
 """
 
+import math
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
 
@@ -53,6 +59,11 @@ _DEFAULT_CVAR_CONFIG: dict[str, ProfileCVaRConfig] = {
         "breach_days": 5,
     },
 }
+
+# Floating-point tolerance for breach boundary detection.
+# Prevents false breaches when utilization is exactly at the 100% boundary
+# due to floating-point arithmetic (e.g. 100.0000000001).
+_BREACH_EPSILON = 1e-6
 
 
 def resolve_cvar_config(
@@ -135,9 +146,22 @@ def compute_cvar(
     """Compute CVaR using specified method.
 
     Central entry point for all fund and portfolio CVaR calculations.
+    All methods return return-space values (losses are negative).
     """
     clean_returns = returns[~np.isnan(returns)]
-    n_obs = len(clean_returns)
+    n_obs = int(len(clean_returns))
+
+    # Fix 10: early guard for insufficient observations across ALL methods.
+    if n_obs < 5:
+        return CVaRResult(
+            cvar=float("nan"),
+            var=float("nan"),
+            confidence=confidence,
+            method=method,
+            n_obs=n_obs,
+            degraded=True,
+            degraded_reason=f"insufficient_obs_{n_obs}",
+        )
 
     if method == "evt_pot":
         from quant_engine.evt.pot_gpd import extreme_var_evt
@@ -145,13 +169,8 @@ def compute_cvar(
         res = extreme_var_evt(clean_returns, quantiles=(confidence,))
 
         # PR-Q14: pot_gpd now exposes ``quantile_results`` keyed by the
-        # exact quantile passed in. Earlier versions of this branch
-        # silently mapped non-legacy quantiles (e.g. 0.95) to 99% legacy
-        # fields, which were not populated for that request and returned
-        # 0.0 — making the EVT path useless at the default confidence.
+        # exact quantile passed in.
         if confidence not in res.quantile_results:
-            # Degraded path may return an empty dict; surface that to the
-            # caller instead of silently returning a zeroed result.
             if not res.degraded:
                 logger.warning(
                     "evt_quantile_missing_unexpected",
@@ -161,6 +180,11 @@ def compute_cvar(
             var, cvar = 0.0, 0.0
         else:
             var, cvar = res.quantile_results[confidence]
+            # Fix 2: EVT returns loss-space (positive = loss magnitude).
+            # Convert to return-space (negative = loss) for consistency
+            # with historical and parametric paths.
+            var = -var
+            cvar = -cvar
 
         return CVaRResult(
             cvar=cvar,
@@ -178,13 +202,18 @@ def compute_cvar(
 
     if method == "parametric":
         from scipy.stats import norm
-        mu = np.mean(clean_returns)
-        sigma = np.std(clean_returns)
+
+        mu = float(np.mean(clean_returns))
+        # Fix 9: use sample std (ddof=1) instead of population std (ddof=0).
+        sigma = float(np.std(clean_returns, ddof=1))
         z = norm.ppf(1 - confidence)
-        var = -(mu + z * sigma)
         phi_z = norm.pdf(z)
-        cvar = -mu + sigma * phi_z / (1 - confidence)
-        
+        # Fix 1: return return-space values (negative for losses).
+        # z is negative (e.g. -1.6449 for 95%), so mu + z*sigma is negative
+        # for typical loss tails — exactly the return-space convention.
+        var = mu + z * sigma
+        cvar = mu - sigma * phi_z / (1 - confidence)
+
         return CVaRResult(
             cvar=float(cvar),
             var=float(var),
@@ -195,6 +224,19 @@ def compute_cvar(
 
     # Default: historical
     cvar_val, var_val = compute_cvar_from_returns(clean_returns, confidence)
+
+    # Fix 5/10: propagate NaN from insufficient obs as degraded.
+    if math.isnan(cvar_val):
+        return CVaRResult(
+            cvar=cvar_val,
+            var=var_val,
+            confidence=confidence,
+            method="historical",
+            n_obs=n_obs,
+            degraded=True,
+            degraded_reason=f"insufficient_obs_{n_obs}",
+        )
+
     return CVaRResult(
         cvar=cvar_val,
         var=var_val,
@@ -219,6 +261,18 @@ def compute_regime_cvar_audited(
     """
     audit_notes: list[str] = []
 
+    # Fix 6: validate regime_probs are probabilities in [0, 1].
+    if regime_probs.size > 0 and not np.all(
+        (regime_probs >= 0.0) & (regime_probs <= 1.0)
+    ):
+        raise ValueError(
+            f"regime_probs must be in [0, 1]; got range "
+            f"[{regime_probs.min():.4f}, {regime_probs.max():.4f}]"
+        )
+
+    # Fix 7: preserve original returns for unconditional fallback.
+    original_returns = returns
+
     if len(returns) != len(regime_probs):
         logger.warning(
             "regime_cvar_length_mismatch",
@@ -226,16 +280,19 @@ def compute_regime_cvar_audited(
             probs_len=len(regime_probs),
         )
         min_len = min(len(returns), len(regime_probs))
-        returns = returns[-min_len:]
+        aligned_returns = returns[-min_len:]
         regime_probs = regime_probs[-min_len:]
         audit_notes.append("length_mismatch_truncated")
+    else:
+        aligned_returns = returns
 
     stress_mask = regime_probs > regime_threshold
     n_stress = int(stress_mask.sum())
-    n_total = int(len(returns))
+    # Fix 7: report total from original history, not truncated alignment.
+    n_total = int(len(original_returns))
 
     if n_stress >= MIN_STRESS_OBSERVATIONS:
-        stress_returns = returns[stress_mask]
+        stress_returns = aligned_returns[stress_mask]
         is_conditional = True
         audit_notes.append("conditional")
     else:
@@ -244,7 +301,9 @@ def compute_regime_cvar_audited(
             n=n_stress,
             min_required=MIN_STRESS_OBSERVATIONS,
         )
-        stress_returns = returns
+        # Fix 7: unconditional fallback uses FULL original history,
+        # not the truncated alignment slice.
+        stress_returns = original_returns
         is_conditional = False
         audit_notes.append("insufficient_stress_obs_fallback_to_unconditional")
 
@@ -290,16 +349,18 @@ def compute_cvar_from_returns(
     CVaR (Expected Shortfall) = mean of returns below VaR threshold.
     Returns (cvar, var) as negative numbers (losses).
     """
+    # Fix 5: return NaN for insufficient data instead of optimistic 0.0.
     if len(returns) < 5:
-        return 0.0, 0.0
+        return float("nan"), float("nan")
 
     sorted_returns = np.sort(returns)
-    cutoff_idx = int(len(sorted_returns) * (1 - confidence))
-    if cutoff_idx == 0:
-        cutoff_idx = 1
-
-    var = float(sorted_returns[cutoff_idx])
-    cvar = float(sorted_returns[:cutoff_idx].mean())
+    # Fix 8: use math.ceil for correct tail count and consistent VaR/CVaR.
+    # Round to 10 decimal places first to avoid floating-point edge cases
+    # (e.g. 20 * 0.05 = 1.0000000000000009 which ceil() rounds to 2).
+    n = len(sorted_returns)
+    tail_count = max(1, math.ceil(round(n * (1.0 - confidence), 10)))
+    var = float(sorted_returns[tail_count - 1])
+    cvar = float(sorted_returns[:tail_count].mean())
 
     return cvar, var
 
@@ -307,12 +368,19 @@ def compute_cvar_from_returns(
 def get_cvar_utilization(cvar_current: float, cvar_limit: float) -> float:
     """Compute CVaR utilization as a percentage of the limit.
 
-    Both cvar_current and cvar_limit are negative numbers (losses).
-    Returns a positive percentage (0-100+).
+    Both cvar_current and cvar_limit are in return-space (negative = losses).
+    Returns a positive percentage (0-100+), clamped to 0 for gains.
     """
-    if cvar_limit == 0:
-        return 0.0
-    return abs(cvar_current / cvar_limit) * 100.0
+    # Fix 4: reject invalid limits (must be negative in return-space).
+    if cvar_limit >= 0:
+        raise ValueError(
+            f"cvar_limit must be negative (return-space loss limit), got {cvar_limit}"
+        )
+    # Fix 3: use ratio instead of abs() to correctly handle gains.
+    # When both are negative (loss case): ratio is positive → utilization > 0.
+    # When cvar_current > 0 (gain case): ratio is negative → clamped to 0.
+    ratio = cvar_current / cvar_limit
+    return max(0.0, ratio * 100.0)
 
 
 def classify_trigger_status(
@@ -322,7 +390,12 @@ def classify_trigger_status(
     breach_consecutive_days: int = 5,
 ) -> str:
     """Classify CVaR trigger status. Returns 'ok', 'warning', or 'breach'."""
-    if utilization_pct >= 100.0 and consecutive_days >= breach_consecutive_days:
+    # Fix 11: add epsilon tolerance to prevent false breaches from
+    # floating-point drift at the exact 100% boundary.
+    if (
+        utilization_pct >= (100.0 + _BREACH_EPSILON)
+        and consecutive_days >= breach_consecutive_days
+    ):
         return "breach"
     if utilization_pct >= warning_threshold_pct:
         return "warning"
