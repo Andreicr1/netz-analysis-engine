@@ -12,7 +12,6 @@ depends_on: 0006 (macro_reviews).
 import json
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0007"

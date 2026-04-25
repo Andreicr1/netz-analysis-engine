@@ -12,9 +12,8 @@ Create Date: 2026-04-14
 """
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "0133_strategy_reclassification_stage"
 down_revision = "0132_merge_0110_heads"

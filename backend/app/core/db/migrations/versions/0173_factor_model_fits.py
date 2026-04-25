@@ -22,9 +22,8 @@ Create Date: 2026-04-20
 
 """
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = '0173_factor_model_fits'
 down_revision = '0172_add_intraday_market_ticks'

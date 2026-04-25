@@ -9,7 +9,6 @@ depends_on: 0023 (sec_data_providers_tables).
 """
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0024_sec_13f_sector"

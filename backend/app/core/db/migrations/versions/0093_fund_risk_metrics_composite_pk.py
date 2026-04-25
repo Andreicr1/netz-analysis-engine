@@ -29,9 +29,8 @@ rewrites historical chunks and is I/O heavy.
 
 import logging
 
-from sqlalchemy import text
-
 from alembic import op
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 

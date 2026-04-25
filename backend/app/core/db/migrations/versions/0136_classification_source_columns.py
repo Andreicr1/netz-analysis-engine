@@ -15,7 +15,6 @@ Create Date: 2026-04-14
 """
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0136_classification_source_columns"

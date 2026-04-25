@@ -12,7 +12,6 @@ Create Date: 2026-04-05 14:00:00.000000
 from collections.abc import Sequence
 
 import psycopg
-
 from alembic import op
 
 revision: str = "0085_fix_13f_sector_mv_and_cusip_queue"

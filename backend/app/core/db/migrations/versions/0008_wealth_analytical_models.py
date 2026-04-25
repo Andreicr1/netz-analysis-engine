@@ -9,9 +9,8 @@ depends_on: 0007 (governance_policy_seed).
 """
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "0008"
 down_revision = "0007"

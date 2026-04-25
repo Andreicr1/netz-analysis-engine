@@ -11,7 +11,6 @@ in the down-migration before the column is removed.
 from __future__ import annotations
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0154_portfolio_construction_run_mode"

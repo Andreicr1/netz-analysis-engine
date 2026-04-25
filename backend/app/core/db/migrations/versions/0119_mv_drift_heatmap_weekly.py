@@ -44,7 +44,6 @@ import os
 from collections.abc import Sequence
 
 import psycopg
-
 from alembic import op
 
 revision: str = "0119_mv_drift_heatmap_weekly"

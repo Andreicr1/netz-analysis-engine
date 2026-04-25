@@ -23,7 +23,6 @@ depends_on: 0028 (sec_institutional_hypertable).
 import os
 
 import psycopg
-
 from alembic import op
 
 revision = "0029_drift_alert_hypertables"

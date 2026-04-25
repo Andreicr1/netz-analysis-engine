@@ -6,7 +6,6 @@ Creates pg_notify trigger on vertical_config_overrides for cache invalidation.
 """
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0015"

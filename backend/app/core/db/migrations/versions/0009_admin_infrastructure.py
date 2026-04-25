@@ -7,7 +7,6 @@ depends_on: 0008 (wealth_analytical_models).
 """
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0009"

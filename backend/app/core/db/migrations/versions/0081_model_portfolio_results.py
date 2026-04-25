@@ -10,9 +10,8 @@ Create Date: 2026-04-02 20:00:00.000000
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "0081_model_portfolio_results"
 down_revision: str | None = "0080_fix_mv_unified_funds_manager"

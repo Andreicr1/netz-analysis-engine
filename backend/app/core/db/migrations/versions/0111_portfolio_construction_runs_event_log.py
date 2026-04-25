@@ -25,9 +25,8 @@ Create Date: 2026-04-11
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "0111_portfolio_construction_runs_event_log"
 down_revision: str | None = "0110_fund_risk_metrics_compress_segmentby_fix"

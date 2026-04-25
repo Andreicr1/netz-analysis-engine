@@ -11,7 +11,6 @@ depends_on: 0013 (benchmark_nav).
 """
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0014"
