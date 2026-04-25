@@ -428,9 +428,22 @@ def check_breach_status(
     )
     cvar_limit = profile_config["limit"]
 
+    # Fix 12: NaN cvar_current (from Fix 5 insufficient obs) must surface
+    # as a "degraded" status, not silently resolve to "ok" via NaN arithmetic.
+    if math.isnan(cvar_current):
+        return BreachStatus(
+            trigger_status="degraded",
+            cvar_current=cvar_current,
+            cvar_limit=cvar_limit,
+            cvar_utilized_pct=float("nan"),
+            consecutive_breach_days=0,
+        )
+
     utilization = get_cvar_utilization(cvar_current, cvar_limit)
 
-    if utilization >= 100.0:
+    # Fix 13: use same epsilon as classify_trigger_status to keep the
+    # consecutive-day counter consistent with the breach classification.
+    if utilization >= (100.0 + _BREACH_EPSILON):
         new_consecutive = consecutive_breach_days + 1
     else:
         new_consecutive = 0

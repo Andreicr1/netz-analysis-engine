@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from quant_engine.cvar_service import (
+    check_breach_status,
     classify_trigger_status,
     compute_cvar,
     compute_cvar_from_returns,
@@ -201,3 +202,56 @@ def test_classify_trigger_status_handles_float_drift() -> None:
     assert status_above == "breach", (
         f"Expected 'breach' at 100.001%, got '{status_above}'"
     )
+
+
+# ── Fix 12 — NaN cvar_current surfaces degraded BreachStatus ─────────────
+
+def test_check_breach_status_returns_degraded_on_nan_cvar() -> None:
+    """NaN cvar_current (from insufficient obs) must return trigger_status='degraded'."""
+    result = check_breach_status(
+        profile="conservative",
+        cvar_current=float("nan"),
+        consecutive_breach_days=3,
+    )
+    assert result.trigger_status == "degraded"
+    assert result.consecutive_breach_days == 0  # reset when degraded
+    assert math.isnan(result.cvar_utilized_pct)
+    assert math.isnan(result.cvar_current)
+
+
+# ── Fix 13 — check_breach_status uses epsilon for consecutive counter ─────
+
+def test_check_breach_status_uses_breach_epsilon_at_boundary() -> None:
+    """Utilization at 100 + tiny float drift should NOT increment consecutive days.
+
+    cvar_current / cvar_limit * 100 lands at ~100.0000005 due to float math.
+    Both the counter (Fix 13) and classify_trigger_status (Fix 11) must agree
+    this is NOT a breach.
+    """
+    # Construct values where ratio is just barely above 100% due to float drift.
+    # cvar_limit = -0.08, cvar_current = -0.08 * (1 + 5e-9) ≈ -0.0800000004
+    cvar_limit = -0.08
+    cvar_current = cvar_limit * (1.0 + 5e-9)  # tiny overshoot
+
+    result = check_breach_status(
+        profile="conservative",
+        cvar_current=cvar_current,
+        consecutive_breach_days=4,
+        config={
+            "conservative": {
+                "cvar": {
+                    "window_months": 12,
+                    "confidence": 0.95,
+                    "limit": cvar_limit,
+                    "warning_pct": 0.80,
+                    "breach_days": 5,
+                },
+            },
+        },
+    )
+    # Counter should NOT increment — the overshoot is within epsilon.
+    assert result.consecutive_breach_days == 0, (
+        f"Expected counter reset at boundary, got {result.consecutive_breach_days}"
+    )
+    # Status should be warning (utilization ≈ 100%), not breach.
+    assert result.trigger_status == "warning"
