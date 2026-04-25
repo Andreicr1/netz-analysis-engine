@@ -236,36 +236,39 @@ def compute_bl_returns(
     sample_size: int | None = None,
     mandate: str | None = None,
 ) -> "np.ndarray":
-    """Compute Black-Litterman posterior expected returns.
+    """Legacy single-view BL with scalar confidence (diagonal Omega).
+
+    .. deprecated::
+        This interface assumes uncorrelated views (diagonal Omega).
+        For multi-view portfolios where views may be correlated, use
+        :func:`compute_bl_posterior_multi_view` with full ``View.Omega``.
+
+        Migration plan:
+        1. PR-Q19 marks legacy as deprecated.
+        2. Follow-up PR adds parity-check test.
+        3. Follow-up PR migrates production callers.
+        4. Future major version removes compute_bl_returns.
 
     Args:
         sigma: (N x N) annualized covariance matrix.
         w_market: (N,) market equilibrium weights (strategic allocation targets).
-        views: List of IC views. Each view is a dict with:
-            - type: "absolute" | "relative"
-            - asset_idx: int (for absolute views)
-            - long_idx: int, short_idx: int (for relative views)
-            - Q: float — expected return (or return differential)
-            - confidence: float in (0, 1] — maps to omega via Idzorek method
-        risk_aversion: λ override. When ``None``, λ is resolved from the
-            ``mandate`` argument (or falls back to the moderate default).
-            Backwards-compat: historical callers pass ``2.5`` which is
-            honoured verbatim.
-        tau: Scalar uncertainty on equilibrium prior. When ``None``, τ is
-            derived adaptively as ``1 / sample_size`` (see He & Litterman
-            1999 §3.2). Falls back to the 0.05 folklore value if
-            ``sample_size`` is not supplied.
-        sample_size: Number of historical observations used to build the
-            prior covariance. Used only to derive an adaptive τ; does not
-            affect the posterior otherwise.
-        mandate: Investor mandate label (``"conservative"``,
-            ``"moderate"``, ``"aggressive"``, …). Resolved through
-            :func:`quant_engine.mandate_risk_aversion.resolve_risk_aversion`
-            when ``risk_aversion`` is None.
+        views: List of IC views (dict-based, diagonal Omega only).
+        risk_aversion: λ override. ``None`` resolves from ``mandate``.
+        tau: Scalar uncertainty on equilibrium prior.
+        sample_size: Historical observation count for adaptive τ.
+        mandate: Investor mandate label.
 
     Returns:
         (N,) array of BL posterior expected returns.
     """
+    import warnings
+
+    warnings.warn(
+        "compute_bl_returns is deprecated; use compute_bl_posterior_multi_view "
+        "with View dataclass for full Omega support. See docstring for migration.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     n = sigma.shape[0]
 
     # ── Resolve λ ────────────────────────────────────────────────────────
@@ -295,7 +298,7 @@ def compute_bl_returns(
     # ── Validate w_market (Fix 3 — reject negative weights for long-only) ─
     w_arr = np.asarray(w_market, dtype=np.float64)
     if not np.all(np.isfinite(w_arr)):
-        raise ValueError(f"w_market contains non-finite values")
+        raise ValueError("w_market contains non-finite values")
     if (w_arr < -1e-12).any():
         raise ValueError(
             f"w_market has negative entries (institutional long-only convention). "
