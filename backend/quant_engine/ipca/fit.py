@@ -1,6 +1,8 @@
 """IPCA fitting logic."""
 from __future__ import annotations
 
+import contextlib
+import io
 from dataclasses import dataclass
 from datetime import date
 
@@ -77,16 +79,21 @@ def fit_ipca(
     if y.ndim == 2 and y.shape[1] == 1:
         y = y.flatten()
 
-    reg.fit(X=X, y=y, indices=aligned_chars.index)
+    # Capture stdout to parse iteration count — ipca==0.6.7 prints
+    # "Step N: ..." per ALS iteration but exposes no converged attribute.
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        reg.fit(X=X, y=y, indices=aligned_chars.index)
+    output = buf.getvalue()
+    n_iterations = output.count("Step ")
+    converged = n_iterations < max_iter
 
     gamma = np.asarray(reg.Gamma, dtype=np.float64)
     factor_returns = np.asarray(reg.Factors, dtype=np.float64)
     r_squared_total = reg.score(X=X, y=y, indices=aligned_chars.index)
-    
-    converged = getattr(reg, "converged", True)
-    n_iterations = getattr(reg, "n_iter_", 0) or getattr(reg, "n_iter", 0)
+
     if not converged:
-        logger.warning("ipca_fit_did_not_converge", K=K, max_iter=max_iter)
+        logger.warning("ipca_fit_did_not_converge", K=K, max_iter=max_iter, n_iterations=n_iterations)
 
     dates = None
     if isinstance(aligned_chars.index, pd.MultiIndex):

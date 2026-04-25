@@ -394,9 +394,9 @@ async def _aggregate_one_date(
     mom_12_1 = derive_momentum_12_1(nav_series, report_date)
 
     # Clamp ratios to catch data quality issues
-    book_to_market = _clamp(book_to_market, 50.0)
+    book_to_market = _clamp(book_to_market, 10.0)
     quality_roa = _clamp(quality_roa, 10.0)
-    investment_growth = _clamp(investment_growth, 100.0)
+    investment_growth = _clamp(investment_growth, 10.0)
     profitability_gross = _clamp(profitability_gross, 10.0)
 
     return {
@@ -474,13 +474,13 @@ async def _compute_bdc_direct(
             "ticker": ticker,
             "as_of": cr.period_end,
             "size_log_mkt_cap": _round4(size_log),
-            "book_to_market": _round4(_clamp(book_to_market, 50.0)),
+            "book_to_market": _round4(_clamp(book_to_market, 10.0)),
             "mom_12_1": _round4(mom_12_1),
             "quality_roa": _round4(_clamp(
                 float(cr.quality_roa) if cr.quality_roa is not None else None, 10.0
             )),
             "investment_growth": _round4(_clamp(
-                float(cr.investment_growth) if cr.investment_growth is not None else None, 100.0
+                float(cr.investment_growth) if cr.investment_growth is not None else None, 10.0
             )),
             "profitability_gross": _round4(_clamp(
                 float(cr.profitability_gross) if cr.profitability_gross is not None else None, 10.0

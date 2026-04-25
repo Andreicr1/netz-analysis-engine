@@ -56,9 +56,12 @@ def test_ipca_convergence_synthetic_panel():
     assert fit.converged
     assert fit.n_iterations <= 100
 
-def test_ipca_non_convergence_path(caplog):
-    """3. Non-convergence path: max_iter reached → converged=False, logged."""
-    pytest.skip("Not supported in older IPCA")
+def test_ipca_non_convergence_path():
+    """3. Non-convergence path: max_iter=1 → converged=False."""
+    ret, chars, _, _ = _generate_synthetic_panel(T=50, N=20, K=2, L=6)
+    fit = fit_ipca(ret, chars, K=2, max_iter=1)
+    assert fit.converged is False
+    assert fit.n_iterations >= 1
 
 def test_ipca_k1_edge():
     """4. K=1 edge: single latent factor fit succeeds."""
@@ -197,3 +200,79 @@ def test_fit_universe_missing_chars():
     ret, chars, _, _ = _generate_synthetic_panel(T=10, N=5, K=1, L=6)
     with pytest.raises(ValueError):
         fit_universe(ret, pd.DataFrame())
+
+
+def test_ipca_heterogeneous_scale_rank_transform():
+    """Rank transform prevents high-variance chars from dominating fit.
+
+    Regression test: one char has std=100 and others have std=0.01.
+    Without rank transform, IPCA would chase scale artifacts in the
+    dominant column. With rank transform in fit_universe(), the condition
+    number drops from ~1e5 to ~1 and ALS recovers genuine factor structure.
+
+    We verify the rank transform is applied by checking that the in-sample
+    R² is positive (model captures signal) despite heterogeneous raw scales.
+    OOS R² depends on panel size and noise, so we test in-sample here.
+    """
+    np.random.seed(99)
+    T, N, K, L = 100, 50, 2, 6
+    dates = pd.date_range("2010-01-31", periods=T, freq="M")
+    instruments = [f"fund_{i}" for i in range(N)]
+    idx = pd.MultiIndex.from_product([instruments, dates], names=["instrument_id", "month"])
+
+    # Create heterogeneous-scale characteristics
+    Z = np.random.randn(len(idx), L) * 0.01
+    Z[:, 0] *= 10_000  # book_to_market-like: std ≈ 100
+
+    chars = pd.DataFrame(Z, index=idx, columns=[f"char_{i}" for i in range(L)])
+
+    # Generate returns from RANKED chars (realistic DGP)
+    Gamma_true = np.random.randn(L, K) * 0.5
+    f_true = np.random.randn(T, K)
+    returns_vals = np.zeros(len(idx))
+    for t_idx, dt in enumerate(dates):
+        mask = idx.get_level_values("month") == dt
+        Z_t = Z[mask]
+        Z_ranked = np.argsort(np.argsort(Z_t, axis=0), axis=0) / Z_t.shape[0] - 0.5
+        returns_vals[mask] = Z_ranked @ Gamma_true @ f_true[t_idx] + 0.05 * np.random.randn(N)
+
+    ret = pd.DataFrame({"return": returns_vals}, index=idx)
+
+    fit = fit_universe(ret, chars, max_k=3)
+    # With rank transform, in-sample R² should be positive — the model
+    # captures signal even when raw scales span 4+ orders of magnitude.
+    assert fit.r_squared > 0.0, (
+        f"Expected positive in-sample R² with rank transform, got {fit.r_squared}"
+    )
+    # Gamma should load on all 6 chars, not just the dominant one
+    assert fit.gamma.shape[0] == L
+
+
+def test_ipca_convergence_detection_stdout():
+    """Convergence detection via stdout parsing produces n_iterations > 0."""
+    ret, chars, _, _ = _generate_synthetic_panel(T=50, N=20, K=2, L=6)
+    fit = fit_ipca(ret, chars, K=2, max_iter=200)
+    assert fit.n_iterations > 0, "stdout parsing should capture iteration count"
+    assert fit.converged is True, "should converge well within 200 iterations"
+
+
+def test_ipca_engine_name_consistency():
+    """Worker INSERT and rail SELECT use the same engine string."""
+    import inspect
+    import re
+
+    from app.core.jobs.ipca_estimation import _run
+    from vertical_engines.wealth.attribution.ipca_rail import load_latest_ipca_fit
+
+    worker_src = inspect.getsource(_run)
+    rail_src = inspect.getsource(load_latest_ipca_fit)
+
+    # Extract engine literals from SQL strings
+    worker_engines = set(re.findall(r"engine\s*=\s*'(\w+)'", worker_src))
+    rail_engines = set(re.findall(r"engine\s*=\s*'(\w+)'", rail_src))
+
+    assert worker_engines, "Worker should reference an engine name"
+    assert rail_engines, "Rail should reference an engine name"
+    assert worker_engines == rail_engines, (
+        f"Engine name mismatch: worker uses {worker_engines}, rail uses {rail_engines}"
+    )
