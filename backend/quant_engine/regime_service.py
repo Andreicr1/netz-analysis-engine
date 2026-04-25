@@ -28,6 +28,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, TypedDict
 
+from dateutil.relativedelta import relativedelta
+
 import numpy as np
 import structlog
 from sqlalchemy import select
@@ -736,8 +738,14 @@ async def _compute_ff_delta_6m(
         past_val = result_6m.scalar_one_or_none()
         if past_val is None:
             return None
-
-        return round(float(latest.value) - float(past_val), 4)
+        past_f = float(past_val)
+        latest_f = float(latest.value)
+        if not math.isfinite(past_f) or not math.isfinite(latest_f):
+            return None
+        result_val = latest_f - past_f
+        if not math.isfinite(result_val):
+            return None
+        return round(result_val, 4)
     except Exception:
         logger.exception("ff_delta_6m_failed")
         return None
@@ -813,10 +821,18 @@ async def _compute_series_roc(
             .limit(1),
         )
         past_val = result_past.scalar_one_or_none()
-        if past_val is None or float(past_val) == 0:
+        if past_val is None:
             return None
-
-        return round((float(latest.value) - float(past_val)) / float(past_val) * 100, 2)
+        past_f = float(past_val)
+        latest_f = float(latest.value)
+        if not math.isfinite(past_f) or not math.isfinite(latest_f):
+            return None
+        if abs(past_f) < 1e-6:
+            return None
+        result_val = (latest_f - past_f) / past_f * 100
+        if not math.isfinite(result_val):
+            return None
+        return round(result_val, 2)
     except Exception:
         logger.exception("series_roc_failed", series_id=series_id)
         return None
@@ -929,10 +945,18 @@ async def _compute_credit_impulse(
     )
     result_old = await db.execute(stmt_old)
     old = result_old.scalar_one_or_none()
-    if old is None or float(old) == 0:
+    if old is None:
         return None
-
-    return ((float(latest) - float(old)) / float(old)) * 100.0
+    old_f = float(old)
+    latest_f = float(latest)
+    if not math.isfinite(old_f) or not math.isfinite(latest_f):
+        return None
+    if abs(old_f) < 1e-6:
+        return None
+    result_val = ((latest_f - old_f) / old_f) * 100.0
+    if not math.isfinite(result_val):
+        return None
+    return result_val
 
 
 async def _compute_permits_roc(
@@ -1016,18 +1040,22 @@ async def build_regime_inputs(
     # ── CPI YoY ──
     cpi_yoy: float | None = None
     cpi_current = latest.get("CPIAUCSL")
-    if cpi_current is not None:
+    if cpi_current is not None and math.isfinite(cpi_current):
         cpi_12m_stmt = (
             select(MacroData.value)
             .where(MacroData.series_id == "CPIAUCSL")
-            .where(MacroData.obs_date <= effective_date - timedelta(days=380))
+            .where(MacroData.obs_date <= effective_date - relativedelta(months=12))
             .where(MacroData.value.is_not(None))
             .order_by(MacroData.obs_date.desc())
             .limit(1)
         )
-        cpi_12m = (await db.execute(cpi_12m_stmt)).scalar_one_or_none()
-        if cpi_12m is not None:
-            cpi_yoy = ((cpi_current / float(cpi_12m)) - 1.0) * 100.0
+        cpi_12m_raw = (await db.execute(cpi_12m_stmt)).scalar_one_or_none()
+        if cpi_12m_raw is not None:
+            cpi_12m = float(cpi_12m_raw)
+            if math.isfinite(cpi_12m) and abs(cpi_12m) > 1e-6:
+                cpi_yoy = ((cpi_current / cpi_12m) - 1.0) * 100.0
+                if not math.isfinite(cpi_yoy):
+                    cpi_yoy = None
 
     # ── Fed Funds delta 6m ──
     fed_delta = await _compute_ff_delta_6m(db, as_of_date=effective_date)
