@@ -12,6 +12,7 @@ is forbidden; app.domains.wealth → quant_engine is allowed.
 
 from __future__ import annotations
 
+import math
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -1022,6 +1023,16 @@ async def _resolve_risk_aversion(
     try:
         gamma = float(override)
     except (TypeError, ValueError):
+        return RISK_AVERSION_INSTITUTIONAL_DEFAULT, "institutional_default"
+
+    # PR-Q19 Fix 8 — reject non-positive overrides (λ <= 0 produces
+    # zero or sign-flipped equilibrium in Black-Litterman).
+    if not math.isfinite(gamma) or gamma <= 0:
+        logger.warning(
+            "risk_aversion_override_invalid",
+            override=override,
+            fallback=RISK_AVERSION_INSTITUTIONAL_DEFAULT,
+        )
         return RISK_AVERSION_INSTITUTIONAL_DEFAULT, "institutional_default"
 
     if gamma == RISK_AVERSION_INSTITUTIONAL_DEFAULT:

@@ -141,6 +141,14 @@ def compute_bl_posterior_multi_view(
             omega = np.asarray(v.Omega, dtype=np.float64)
             if not np.all(np.isfinite(omega)):
                 invalid.append(f"view[{i}]: Omega contains non-finite values")
+            # Fix 7 — Omega must be PSD (tolerance -1e-10 for numerical noise)
+            elif omega.ndim == 2 and omega.shape[0] == omega.shape[1]:
+                eigvals = np.linalg.eigvalsh(omega)
+                if eigvals.min() < -1e-10:
+                    invalid.append(
+                        f"view[{i}]: Omega is not PSD "
+                        f"(smallest eigenvalue {eigvals.min():.4e})"
+                    )
         if invalid:
             raise ValueError(
                 "BL views have invalid inputs:\n  " + "\n  ".join(invalid)
@@ -261,7 +269,14 @@ def compute_bl_returns(
     n = sigma.shape[0]
 
     # ── Resolve λ ────────────────────────────────────────────────────────
-    lambda_risk = resolve_risk_aversion(risk_aversion, mandate)
+    lambda_resolved = float(resolve_risk_aversion(risk_aversion, mandate))
+    if lambda_resolved <= 0:
+        logger.warning(
+            "bl_lambda_risk_floored",
+            original=lambda_resolved,
+            floor=1e-3,
+        )
+    lambda_risk = max(lambda_resolved, 1e-3)
 
     # ── Resolve τ (Fix 1 — reject tau <= 0) ──────────────────────────────
     if tau is None:
