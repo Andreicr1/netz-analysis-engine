@@ -30,7 +30,7 @@ ESMA_SOLR_BASE = (
 ESMA_RATE_LIMIT = 4  # req/s (conservative — no documented rate limit)
 
 OPENFIGI_BATCH_URL = "https://api.openfigi.com/v3/mapping"
-OPENFIGI_BATCH_SIZE = 50  # conservative — 100 can trigger 413 with extra fields
+OPENFIGI_BATCH_SIZE = 100  # OpenFIGI v3 hard limit with API key
 
 # OpenFIGI exchange code → Yahoo Finance suffix mapping for European exchanges.
 EXCHANGE_SUFFIX_MAP: dict[str, str] = {
@@ -155,7 +155,7 @@ def check_openfigi_rate(has_api_key: bool = False) -> None:
     With key: ~200 req/min (3 req/s) to stay safely under 250/min.
     """
     if has_api_key:
-        _check_rate("openfigi_esma", 3)
+        _check_rate("openfigi_esma", 4)
     else:
         # 25 req/min = 0.42/s — use blocking sleep to enforce ~3s gap
         _check_rate_local("openfigi_esma_nokey", 1)

@@ -47,8 +47,12 @@ _TIINGO_BATCH_SIZE = 100
 # Tiingo free fundamentals tier: ~2400 req/hr. 100 tickers/req → ~4M
 # tickers/hr. The real bottleneck is OpenFIGI (25 req/min free tier).
 # Default cadence adds a small sleep between batches to be polite.
-_OPENFIGI_BATCH_SLEEP_S = 2.5
 _TIINGO_BATCH_SLEEP_S = 0.3
+
+
+def _openfigi_sleep_seconds(has_api_key: bool) -> float:
+    """OpenFIGI sleep between batches — 0.24s with key (250 req/min), 2.4s without."""
+    return 60.0 / 250 if has_api_key else 60.0 / 25
 # Skip tickers whose meta was fetched in the last N days (re-enrich later).
 _TIINGO_STALENESS_DAYS = 90
 
@@ -136,8 +140,12 @@ async def _phase_resolve_tickers(
     working set — the matview enrichment runs pick them up within days.
     """
     api_key = os.getenv("OPENFIGI_API_KEY")
+    if not api_key:
+        logger.warning("nport_cusip_tiingo.no_api_key — using free tier (25 req/min × 10 jobs)")
+    sleep_s = _openfigi_sleep_seconds(bool(api_key))
+
     cusips_needed = await _distinct_cusips_without_ticker(db)
-    logger.info("nport_cusip_tiingo_phase_a_start", candidates=len(cusips_needed))
+    logger.info("nport_cusip_tiingo_phase_a_start", candidates=len(cusips_needed), has_api_key=bool(api_key))
 
     if not cusips_needed:
         return {"candidates": 0, "resolved": 0, "batches": 0, "skipped": True}
@@ -166,7 +174,7 @@ async def _phase_resolve_tickers(
                     batch_size=len(batch),
                 )
                 batches_run += 1
-                await asyncio.sleep(_OPENFIGI_BATCH_SLEEP_S)
+                await asyncio.sleep(sleep_s)
                 continue
 
             resolved = await _upsert_ticker_map(db, results)
@@ -178,7 +186,7 @@ async def _phase_resolve_tickers(
                 resolved=resolved,
                 size=len(batch),
             )
-            await asyncio.sleep(_OPENFIGI_BATCH_SLEEP_S)
+            await asyncio.sleep(sleep_s)
 
     return {
         "candidates": len(cusips_needed),
