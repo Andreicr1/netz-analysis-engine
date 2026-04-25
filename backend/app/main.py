@@ -350,10 +350,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Rate limiting registered first (innermost) — runs after CORS
-from app.core.middleware.rate_limit import RateLimitMiddleware  # noqa: E402
+# Rate limiting registered first (innermost) — runs after CORS.
+# Skipped entirely when disabled (e.g. in tests) because BaseHTTPMiddleware
+# instantiates an internal anyio TaskGroup at middleware-stack build time
+# that conflicts with pytest-asyncio's session-scoped loop, even when the
+# middleware's dispatch() short-circuits via the rate_limit_enabled flag.
+# See https://github.com/encode/starlette/issues/1438.
+if settings.rate_limit_enabled:
+    from app.core.middleware.rate_limit import RateLimitMiddleware  # noqa: E402
 
-app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(RateLimitMiddleware)
 
 # CORS registered next — handles preflight OPTIONS before rate limiter sees it
 app.add_middleware(
