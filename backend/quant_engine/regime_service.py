@@ -212,6 +212,12 @@ def _amplify_weights(
     ]
 
     # Step 3: enforce w_max cap with redistribution
+    n = len(normalized)
+    # If the cap is infeasible (n * w_max < 1.0), uniform weights are the only
+    # stable answer. Detect this up front to avoid pointless iteration.
+    if n * w_max < 1.0 - 1e-9:
+        return [(label, score, 1.0 / n, reason) for label, score, _, reason in normalized]
+
     for _ in range(5):  # Max 5 iterations to converge
         excess = 0.0
         uncapped_total = 0.0
@@ -227,8 +233,24 @@ def _amplify_weights(
                 uncapped_total += w
                 result.append((label, score, w, reason))
 
-        if not has_capped or excess <= 0 or uncapped_total <= 0:
+        if not has_capped or excess <= 0:
             normalized = result
+            break
+
+        if uncapped_total <= 0:
+            # All non-capped signals are at zero (or all signals capped).
+            # Distribute the residual equally to all signals.
+            residual = excess / n
+            normalized = [
+                (label, score, w_max + residual, reason)
+                for label, score, _, reason in result
+            ]
+            logger.warning(
+                "regime_amplify_cap_infeasible",
+                n_signals=n,
+                w_max=w_max,
+                residual=residual,
+            )
             break
 
         # Redistribute excess proportionally among uncapped signals
@@ -322,12 +344,6 @@ def classify_regime_multi_signal(
     sahm_rule = _validate_plausibility("sahm_rule", sahm_rule)
 
     reasons: dict[str, str] = {}
-
-    # ── Inflation override (structural regime, not stress-driven) ──
-    if cpi_yoy is not None and cpi_yoy >= thresholds["cpi_yoy_high"]:
-        reasons["cpi"] = f"CPI_YoY={cpi_yoy:.1f}% >= {thresholds['cpi_yoy_high']}% (INFLATION)"
-        reasons["decision"] = "INFLATION: CPI above threshold overrides stress score"
-        return "INFLATION", reasons, []
 
     # ── Multi-factor stress scoring ──
     # Each signal produces a sub-score 0-100 via _ramp().
@@ -455,6 +471,14 @@ def classify_regime_multi_signal(
     elif stress_score >= 50:
         regime = "CRISIS"
         reasons["decision"] = f"CRISIS: composite stress {stress_score}/100 — multiple elevated signals"
+    elif cpi_yoy is not None and cpi_yoy >= thresholds["cpi_yoy_high"]:
+        # Inflation override: structural regime, but only when stress isn't already CRISIS.
+        # Priority hierarchy: CRISIS > INFLATION > RISK_OFF > RISK_ON.
+        regime = "INFLATION"
+        reasons["cpi"] = f"CPI_YoY={cpi_yoy:.1f}% >= {thresholds['cpi_yoy_high']}% (INFLATION)"
+        reasons["decision"] = (
+            f"INFLATION: CPI above threshold (stress {stress_score}/100 below CRISIS floor)"
+        )
     elif stress_score >= 25:
         regime = "RISK_OFF"
         reasons["decision"] = f"RISK_OFF: composite stress {stress_score}/100 — caution warranted"
@@ -877,7 +901,6 @@ async def build_regime_inputs(
     from datetime import timedelta
 
     effective_date = as_of_date if as_of_date is not None else date.today()
-    today = date.today()
 
     # ── Bulk-fetch latest values for all raw series ──
     stmt = (
@@ -893,7 +916,7 @@ async def build_regime_inputs(
     latest: dict[str, float] = {}
     for series_id, value, obs_date in rows:
         max_stale = REGIME_SERIES_STALENESS.get(series_id, STALENESS_DAILY)
-        days_stale = (today - obs_date).days
+        days_stale = (effective_date - obs_date).days
         if days_stale > max_stale:
             logger.warning(
                 "regime_signal_stale",
@@ -901,6 +924,7 @@ async def build_regime_inputs(
                 last_date=str(obs_date),
                 days_stale=days_stale,
                 threshold=max_stale,
+                effective_date=str(effective_date),
             )
         else:
             latest[series_id] = float(value)
@@ -978,19 +1002,22 @@ async def get_current_regime(
     db: AsyncSession,
     config: dict[str, Any] | None = None,
     *,
+    as_of_date: date | None = None,
     fallback_regime: str = "RISK_ON",
 ) -> RegimeRead:
     """Get current market regime from FRED macro data.
 
     Args:
         config: Raw calibration config dict from ConfigService.
+        as_of_date: Historical evaluation date for backtests. Forwarded
+            to build_regime_inputs.
         fallback_regime: Regime label to use when FRED data is unavailable.
             Callers provide their own fallback strategy:
             - Wealth: pre-fetches from PortfolioSnapshot.regime
             - Credit: uses stress_severity level or defaults to "RISK_ON"
 
     """
-    inputs = await build_regime_inputs(db)
+    inputs = await build_regime_inputs(db, as_of_date=as_of_date)
 
     # Need at least VIX or HY OAS or energy data to classify
     if inputs.get("vix") is not None or inputs.get("hy_oas") is not None or inputs.get("energy_shock") is not None:
