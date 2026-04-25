@@ -27,6 +27,7 @@ Sprint S3 calibrations:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -113,7 +114,37 @@ def compute_bl_posterior_multi_view(
         the solve numerically stable. This is the standard BL implementation
         detail in Meucci (2010) §5.3 and Idzorek (2005) §4.
     """
+    # ── Input validation (PR-Q19 Fixes 1, 2, 4) ──────────────────────────
+    if not math.isfinite(tau) or tau <= 0:
+        raise ValueError(
+            f"tau must be a positive finite scalar (typical: 0.025–0.10); got {tau}"
+        )
+
     n = sigma.shape[0]
+
+    if views:
+        invalid: list[str] = []
+        for i, v in enumerate(views):
+            # Fix 2 — P shape must match (k, N)
+            p = np.asarray(v.P, dtype=np.float64)
+            if p.ndim == 1:
+                p = p.reshape(1, -1)
+            if p.shape[1] != n:
+                invalid.append(
+                    f"view[{i}]: P cols={p.shape[1]}, expected {n}"
+                )
+            # Fix 4 — Q must be finite
+            q = np.asarray(v.Q, dtype=np.float64)
+            if not np.all(np.isfinite(q)):
+                invalid.append(f"view[{i}]: Q contains non-finite values")
+            # Fix 4 — Omega must be finite
+            omega = np.asarray(v.Omega, dtype=np.float64)
+            if not np.all(np.isfinite(omega)):
+                invalid.append(f"view[{i}]: Omega contains non-finite values")
+        if invalid:
+            raise ValueError(
+                "BL views have invalid inputs:\n  " + "\n  ".join(invalid)
+            )
 
     if not views:
         mu_out = np.asarray(mu_prior, dtype=np.float64)
@@ -231,12 +262,7 @@ def compute_bl_returns(
     # ── Resolve λ ────────────────────────────────────────────────────────
     lambda_risk = resolve_risk_aversion(risk_aversion, mandate)
 
-    # ── Resolve τ ────────────────────────────────────────────────────────
-    # He & Litterman (1999) and Meucci (2010) both recommend τ ≈ 1/T: the
-    # posterior uncertainty on the prior mean should scale with the sample
-    # size used to estimate it. A hardcoded 0.05 silently assumes T=20,
-    # which is nonsense for a weekly-rebalanced strategic allocation with
-    # 3–5 years of history.
+    # ── Resolve τ (Fix 1 — reject tau <= 0) ──────────────────────────────
     if tau is None:
         if sample_size is not None and sample_size > 0:
             tau_eff = 1.0 / float(sample_size)
@@ -245,12 +271,24 @@ def compute_bl_returns(
     else:
         tau_eff = float(tau)
 
-    # Normalize w_market to sum to 1 (handles partial coverage)
-    w_sum = w_market.sum()
-    if w_sum > 0:
-        w_mkt = w_market / w_sum
-    else:
-        w_mkt = np.ones(n) / n
+    if not math.isfinite(tau_eff) or tau_eff <= 0:
+        raise ValueError(
+            f"tau must be a positive finite scalar (typical: 0.025–0.10); got {tau_eff}"
+        )
+
+    # ── Validate w_market (Fix 3 — reject negative weights for long-only) ─
+    w_arr = np.asarray(w_market, dtype=np.float64)
+    if not np.all(np.isfinite(w_arr)):
+        raise ValueError(f"w_market contains non-finite values")
+    if (w_arr < -1e-12).any():
+        raise ValueError(
+            f"w_market has negative entries (institutional long-only convention). "
+            f"Min: {w_arr.min():.6f}. Pass allow_short=True if intentional."
+        )
+    w_sum = float(w_arr.sum())
+    if w_sum <= 0:
+        raise ValueError(f"w_market.sum() = {w_sum:.6f}, expected > 0")
+    w_mkt = w_arr / w_sum
 
     # Step 1: Market-implied equilibrium returns
     pi = lambda_risk * sigma @ w_mkt
@@ -264,24 +302,43 @@ def compute_bl_returns(
     Q_list: list[float] = []
     omega_diag: list[float] = []
 
-    for view in views:
+    for i, view in enumerate(views):
         vtype = view.get("type", "absolute")
+
+        # Fix 4 — Q must be finite
         q_val = float(view["Q"])
-        conf = view.get("confidence", 0.5)
-        confidence = max(_CONFIDENCE_FLOOR, min(float(conf), _CONFIDENCE_CEIL))
+        if not math.isfinite(q_val):
+            raise ValueError(f"view[{i}].Q is non-finite ({q_val})")
+
+        # Fix 4 — confidence must be finite and in (0, 1)
+        conf = float(view.get("confidence", 0.5))
+        if not math.isfinite(conf):
+            raise ValueError(f"view[{i}].confidence is non-finite ({conf})")
+        if not (0.0 < conf < 1.0):
+            raise ValueError(
+                f"view[{i}].confidence must be in (0, 1), got {conf}"
+            )
+        confidence = max(_CONFIDENCE_FLOOR, min(conf, _CONFIDENCE_CEIL))
 
         p_row = np.zeros(n)
 
         if vtype == "absolute":
+            # Fix 2 — reject out-of-range indices instead of silently dropping
             idx = int(view["asset_idx"])
             if idx < 0 or idx >= n:
-                continue
+                raise ValueError(
+                    f"view[{i}]: asset_idx={idx} out of range [0, {n}). "
+                    f"Caller must filter views before passing."
+                )
             p_row[idx] = 1.0
         elif vtype == "relative":
             long_idx = int(view["long_idx"])
             short_idx = int(view["short_idx"])
             if long_idx < 0 or long_idx >= n or short_idx < 0 or short_idx >= n:
-                continue
+                raise ValueError(
+                    f"view[{i}]: long_idx={long_idx}, short_idx={short_idx} "
+                    f"out of range [0, {n})."
+                )
             p_row[long_idx] = 1.0
             p_row[short_idx] = -1.0
         else:
