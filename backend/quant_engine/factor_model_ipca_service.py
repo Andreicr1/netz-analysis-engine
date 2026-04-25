@@ -1,6 +1,8 @@
 """Factor model IPCA service."""
 from __future__ import annotations
 
+import contextlib
+import io
 from dataclasses import dataclass
 
 import numpy as np
@@ -12,6 +14,20 @@ from quant_engine.factor_model_service import FactorModelResult
 from quant_engine.ipca.fit import IPCAFit, fit_ipca
 
 logger = structlog.get_logger()
+
+
+def _rank_transform(chars: pd.DataFrame) -> pd.DataFrame:
+    """Cross-sectional rank → [-0.5, +0.5] per period (KP-S 2019 convention).
+
+    Ranks each characteristic within each cross-section (per time period in
+    the MultiIndex level=1) and rescales to [-0.5, +0.5]. Robust to outliers
+    in heavy-tailed inputs like book_to_market and investment_growth.
+    Per-period ranking is leakage-free: train and test cross-sections are
+    entirely disjoint by date.
+    """
+    return chars.groupby(level=1).transform(
+        lambda g: g.rank(pct=True) - 0.5
+    )
 
 
 @dataclass(frozen=True)
@@ -40,7 +56,13 @@ def fit_universe(
         mask = mask & aligned_returns.notna()
     aligned_chars = aligned_chars[mask]
     aligned_returns = aligned_returns[mask]
-    
+
+    # KP-S 2019: cross-sectional rank transform before any IPCA fit.
+    # Applied once on the full panel — groupby(level=1) ensures each
+    # time period is ranked independently, so train/test splits by date
+    # are leakage-free.
+    aligned_chars = _rank_transform(aligned_chars)
+
     dates = pd.DatetimeIndex(np.unique(aligned_chars.index.get_level_values(1))).sort_values()
     
     if len(dates) < 72:
@@ -75,16 +97,7 @@ def fit_universe(
             
             if train_X.empty:
                 continue
-                
-            try:
-                fit_train = fit_ipca(train_y, train_X, K=k)
-            except Exception as exc:
-                logger.warning("ipca_cv_fit_failed", K=k, start=train_dates[0], exc=str(exc))
-                continue
-                
-            if not fit_train.converged:
-                continue
-                
+
             # Select test data
             test_mask = aligned_chars.index.get_level_values(1).isin(test_dates)
             test_X = aligned_chars[test_mask]
@@ -101,7 +114,16 @@ def fit_universe(
             # But we can just use the provided bkelly-lab ipca regressor fit with the same params
             from ipca import InstrumentedPCA
             reg_oos = InstrumentedPCA(n_factors=k, intercept=False, iter_tol=1e-6)
-            reg_oos.fit(X=train_X.values, y=train_y.values.flatten(), indices=train_X.index)
+            buf = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(buf):
+                    reg_oos.fit(X=train_X.values, y=train_y.values.flatten(), indices=train_X.index)
+            except Exception as exc:
+                logger.warning("ipca_cv_fit_failed", K=k, start=train_dates[0], exc=str(exc))
+                continue
+            n_iter_fold = buf.getvalue().count("Step ")
+            if n_iter_fold >= reg_oos.max_iter:
+                continue  # skip non-converged folds
             
             # IPCA package does not support direct predict on new data out-of-the-box in early versions,
             # but predict_OOS exists in later versions. Let's try predict_OOS if available, or compute manually.
