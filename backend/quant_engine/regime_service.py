@@ -31,10 +31,9 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, TypedDict
 
-from dateutil.relativedelta import relativedelta
-
 import numpy as np
 import structlog
+from dateutil.relativedelta import relativedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1080,8 +1079,6 @@ async def build_regime_inputs(
     Single authoritative signal builder. Both get_current_regime() and
     risk_calc TAA use this — no duplicated logic.
     """
-    from datetime import timedelta
-
     effective_date = as_of_date if as_of_date is not None else date.today()
 
     # ── Bulk-fetch latest values for all raw series ──
