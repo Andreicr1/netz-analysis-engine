@@ -1057,7 +1057,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--openfigi-key",
         help="OpenFIGI API key (free at openfigi.com/api). "
-             "Without key: 25 req/min. With key: 250 req/min.",
+             "Without key: 25 req/min × 10 jobs = 250 jobs/min. "
+             "With key: 250 req/min × 100 jobs = 25,000 jobs/min (100× faster).",
         default=os.environ.get("OPENFIGI_API_KEY"),
     )
     parser.add_argument(

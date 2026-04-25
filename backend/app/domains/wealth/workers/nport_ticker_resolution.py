@@ -13,6 +13,7 @@ Advisory lock ID = 900_025.
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any, Sequence
 
 import structlog
@@ -23,7 +24,10 @@ from app.core.db.engine import async_session_factory as async_session
 
 logger = structlog.get_logger()
 TICKER_LOCK_ID = 900_025
-_OPENFIGI_BATCH_SIZE = 10
+_OPENFIGI_BATCH_SIZE_NO_KEY = 10
+_OPENFIGI_BATCH_SIZE_WITH_KEY = 100
+_OPENFIGI_RATE_PER_MIN_NO_KEY = 25
+_OPENFIGI_RATE_PER_MIN_WITH_KEY = 250
 _MAX_FUNDS_PER_RUN = 500
 _OPENFIGI_URL = "https://api.openfigi.com/v3/mapping"
 
@@ -57,17 +61,31 @@ async def run_nport_ticker_resolution() -> dict[str, Any]:
                 logger.info("nport_ticker_no_funds_to_resolve")
                 return {"status": "completed", "resolved": 0, "total": 0}
 
-            logger.info("nport_ticker_resolution_start", funds=len(funds))
+            api_key = os.environ.get("OPENFIGI_API_KEY")
+            if not api_key:
+                logger.warning("nport_ticker_resolution.no_api_key — using free tier (25 req/min × 10 jobs)")
+
+            batch_size = _OPENFIGI_BATCH_SIZE_WITH_KEY if api_key else _OPENFIGI_BATCH_SIZE_NO_KEY
+            rate_limit = _OPENFIGI_RATE_PER_MIN_WITH_KEY if api_key else _OPENFIGI_RATE_PER_MIN_NO_KEY
+            sleep_between = 60.0 / rate_limit  # 0.24s with key, 2.4s without
+
+            logger.info(
+                "nport_ticker_resolution.start",
+                funds=len(funds),
+                batch_size=batch_size,
+                rate_limit_per_min=rate_limit,
+                has_api_key=bool(api_key),
+            )
 
             resolved = 0
             errors = 0
 
-            # Process in batches of 10 (OpenFIGI limit)
-            for batch_start in range(0, len(funds), _OPENFIGI_BATCH_SIZE):
-                batch = funds[batch_start:batch_start + _OPENFIGI_BATCH_SIZE]
+            # Process in batches of 100 with API key, 10 without (OpenFIGI v3)
+            for batch_start in range(0, len(funds), batch_size):
+                batch = funds[batch_start:batch_start + batch_size]
 
                 try:
-                    tickers = await _resolve_batch_openfigi(batch)
+                    tickers = await _resolve_batch_openfigi(batch, api_key=api_key)
 
                     for (cik, _, _, _), ticker in zip(batch, tickers, strict=True):
                         if ticker:
@@ -91,8 +109,7 @@ async def run_nport_ticker_resolution() -> dict[str, Any]:
                         error=str(exc),
                     )
 
-                # Rate limiting: 25 req/min without key, 250 with key
-                await asyncio.sleep(2.5)
+                await asyncio.sleep(sleep_between)
 
             summary = {
                 "status": "completed",
@@ -111,6 +128,8 @@ async def run_nport_ticker_resolution() -> dict[str, Any]:
 
 async def _resolve_batch_openfigi(
     batch: Sequence[Row[Any] | tuple[Any, ...]],
+    *,
+    api_key: str | None = None,
 ) -> list[str | None]:
     """Resolve a batch of funds to tickers via OpenFIGI.
 
@@ -128,10 +147,6 @@ async def _resolve_batch_openfigi(
             payload.append({"idType": "BASE_TICKER", "idValue": fund_name or ""})
 
     headers = {"Content-Type": "application/json"}
-
-    # Optional API key for higher rate limits
-    import os
-    api_key = os.environ.get("OPENFIGI_API_KEY")
     if api_key:
         headers["X-OPENFIGI-APIKEY"] = api_key
 

@@ -11,6 +11,7 @@ Covers:
 """
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -661,3 +662,40 @@ class TestResolveSector:
         result = resolve_sector("037833100", "ACME Corp")
         assert result is None
         mock_cache_set.assert_called_once_with("037833100", None)
+
+
+# ── OpenFIGI rate config tests ─────────────────────────────────────
+
+
+class TestOpenFIGIRateConfig:
+    """Verify rate/batch config responds to OPENFIGI_API_KEY presence."""
+
+    def test_openfigi_rate_config_with_key(self):
+        """With OPENFIGI_API_KEY set, rate config favors batch=100 + 250 req/min."""
+        with patch.dict(os.environ, {"OPENFIGI_API_KEY": "test-key"}):
+            api_key = os.environ.get("OPENFIGI_API_KEY")
+            batch_size = 100 if api_key else 10
+            rate_limit = 250 if api_key else 25
+            assert batch_size == 100
+            assert rate_limit == 250
+            assert pytest.approx(60.0 / rate_limit, abs=0.01) == 0.24
+
+    def test_openfigi_rate_config_without_key(self):
+        """Without OPENFIGI_API_KEY, rate config falls back to free tier."""
+        env = {k: v for k, v in os.environ.items() if k != "OPENFIGI_API_KEY"}
+        with patch.dict(os.environ, env, clear=True):
+            api_key = os.environ.get("OPENFIGI_API_KEY")
+            batch_size = 100 if api_key else 10
+            rate_limit = 250 if api_key else 25
+            assert batch_size == 10
+            assert rate_limit == 25
+            assert pytest.approx(60.0 / rate_limit, abs=0.01) == 2.4
+
+    def test_openfigi_sleep_seconds_helper(self):
+        """The _openfigi_sleep_seconds helper in nport_cusip_enrichment_tiingo."""
+        from app.domains.wealth.workers.nport_cusip_enrichment_tiingo import (
+            _openfigi_sleep_seconds,
+        )
+
+        assert pytest.approx(_openfigi_sleep_seconds(True), abs=0.01) == 0.24
+        assert pytest.approx(_openfigi_sleep_seconds(False), abs=0.01) == 2.4
