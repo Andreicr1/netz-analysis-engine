@@ -109,6 +109,42 @@ class ParetoResult:
     solver_info: str | None = None
 
 
+def _build_block_map(blocks: list[BlockConstraint]) -> dict[str, BlockConstraint]:
+    """Build {block_id: constraint} dict, raising on duplicates."""
+    seen: set[str] = set()
+    out: dict[str, BlockConstraint] = {}
+    for bc in blocks:
+        if bc.block_id in seen:
+            raise ValueError(
+                f"Duplicate BlockConstraint for block_id={bc.block_id!r}; "
+                f"constraints.blocks must be uniquely keyed"
+            )
+        seen.add(bc.block_id)
+        out[bc.block_id] = bc
+    return out
+
+
+def _project_to_bounded_simplex(
+    z: np.ndarray, xl: np.ndarray, xu: np.ndarray, max_iters: int = 50,
+) -> np.ndarray:
+    """Project vector z onto {w: sum(w)=1, xl<=w<=xu}. Iterative clip-to-bounds
+    + redistribute residual across not-yet-saturated coordinates."""
+    w = np.clip(z, xl, xu)
+    for _ in range(max_iters):
+        residual = 1.0 - w.sum()
+        if abs(residual) < 1e-9:
+            return w
+        if residual > 0:
+            free = w < xu - 1e-12
+        else:
+            free = w > xl + 1e-12
+        if not free.any():
+            return w
+        w[free] += residual / free.sum()
+        w = np.clip(w, xl, xu)
+    return w
+
+
 def _make_portfolio_problem_class() -> tuple[type, type]:
     """Lazy factory for PortfolioProblem — only called when pymoo is available."""
     from pymoo.core.problem import Problem
@@ -122,11 +158,10 @@ def _make_portfolio_problem_class() -> tuple[type, type]:
         """
 
         def _do(self, problem: Any, Z: Any, **kwargs: Any) -> Any:
-            Z = np.clip(Z, problem.xl, problem.xu)
-            Z[Z < 1e-4] = 0.0
-            row_sums = Z.sum(axis=1, keepdims=True)
-            row_sums = np.where(row_sums == 0, 1.0, row_sums)
-            return Z / row_sums
+            Z_proj = np.empty_like(Z)
+            for i, z in enumerate(Z):
+                Z_proj[i] = _project_to_bounded_simplex(z, problem.xl, problem.xu)
+            return Z_proj
 
     class PortfolioProblem(Problem):
         """Bi-objective: minimize [-Sharpe, CVaR_95].
@@ -449,6 +484,14 @@ async def optimize_fund_portfolio(
             winning_phase=None,
         )
 
+    if current_weights is not None:
+        if current_weights.shape != (n,):
+            raise ValueError(
+                f"current_weights shape {current_weights.shape} does not match "
+                f"len(fund_ids)={n}; caller must pass a 1D array "
+                f"aligned by fund_ids order"
+            )
+
     # B.7 — caller is responsible for assembling Σ. The optimizer
     # validates the matrix shape and enforces PSD before handing it to
     # CVXPY (cp.psd_wrap raises late and unhelpfully). A negative
@@ -529,7 +572,7 @@ async def optimize_fund_portfolio(
     psd_cov = cp.psd_wrap(cov_matrix)
 
     # Pre-compute block structure (shared across all solve phases)
-    block_map = {bc.block_id: bc for bc in constraints.blocks}
+    block_map = _build_block_map(constraints.blocks)
     block_fund_indices: dict[str, list[int]] = {}
     for i, fid in enumerate(fund_ids):
         block = fund_blocks.get(fid)
@@ -1349,7 +1392,7 @@ async def optimize_portfolio_pareto(
     rf = risk_free_rate
 
     # Per-block bounds
-    block_map = {c.block_id: c for c in constraints.blocks}
+    block_map = _build_block_map(constraints.blocks)
     xl = np.array([block_map[bid].min_weight if bid in block_map else 0.0 for bid in block_ids])
     xu = np.array([block_map[bid].max_weight if bid in block_map else 1.0 for bid in block_ids])
 
