@@ -22,6 +22,7 @@ Config is injected as parameter by callers via ConfigService.get("liquid_funds",
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import date
@@ -118,6 +119,15 @@ _PLAUSIBILITY = {
     "cpi_yoy": (-10.0, 30.0),
     "yield_curve": (-10.0, 10.0),
     "sahm_rule": (-1.0, 5.0),
+    "hy_oas": (0.0, 50.0),
+    "baa_spread": (-2.0, 20.0),
+    "fed_funds_delta_6m": (-15.0, 15.0),
+    "dxy_zscore": (-10.0, 10.0),
+    "energy_shock": (0.0, 100.0),
+    "cfnai": (-10.0, 10.0),
+    "icsa_zscore": (-10.0, 10.0),
+    "credit_impulse": (-100.0, 100.0),
+    "permits_roc": (-100.0, 200.0),
 }
 
 
@@ -151,8 +161,15 @@ def _validate_plausibility(
     name: str,
     value: float | None,
 ) -> float | None:
-    """Reject physically impossible values with warning log."""
+    """Reject None, NaN, Inf, and out-of-bounds values."""
     if value is None:
+        return None
+    if not math.isfinite(value):
+        logger.warning(
+            "Non-finite macro value rejected",
+            signal=name,
+            value=value,
+        )
         return None
     lo, hi = _PLAUSIBILITY.get(name, (float("-inf"), float("inf")))
     if value < lo or value > hi:
@@ -342,6 +359,15 @@ def classify_regime_multi_signal(
     yield_curve_spread = _validate_plausibility("yield_curve", yield_curve_spread)
     cpi_yoy = _validate_plausibility("cpi_yoy", cpi_yoy)
     sahm_rule = _validate_plausibility("sahm_rule", sahm_rule)
+    hy_oas = _validate_plausibility("hy_oas", hy_oas)
+    baa_spread = _validate_plausibility("baa_spread", baa_spread)
+    fed_funds_delta_6m = _validate_plausibility("fed_funds_delta_6m", fed_funds_delta_6m)
+    dxy_zscore = _validate_plausibility("dxy_zscore", dxy_zscore)
+    energy_shock = _validate_plausibility("energy_shock", energy_shock)
+    cfnai = _validate_plausibility("cfnai", cfnai)
+    icsa_zscore = _validate_plausibility("icsa_zscore", icsa_zscore)
+    credit_impulse = _validate_plausibility("credit_impulse", credit_impulse)
+    permits_roc = _validate_plausibility("permits_roc", permits_roc)
 
     reasons: dict[str, str] = {}
 
@@ -426,9 +452,33 @@ def classify_regime_multi_signal(
         s = _ramp(-permits_roc, calm=-5.0, panic=20.0)
         signals.append(("permits", s, 0.04, f"Permits_\u03946m={permits_roc:+.1f}% (stress={s:.0f}/100)"))
 
-    # Need at least 2 signals for confident classification
-    if len(signals) < 2:
-        reasons["decision"] = "RISK_OFF: insufficient signals for confident classification"
+    # Single-signal path: classify directly from sub-score with degraded confidence
+    if len(signals) == 1:
+        label, sub_score, _, reason_str = signals[0]
+        reasons[label] = reason_str
+        reasons["composite_stress"] = f"{sub_score:.1f}/100 (1 signal — degraded confidence)"
+        if sub_score >= 75:
+            regime = "CRISIS"
+            reasons["decision"] = (
+                f"CRISIS: single-signal {label}={sub_score:.0f}/100 "
+                "(degraded confidence — only 1 signal available)"
+            )
+        elif sub_score >= 50:
+            regime = "RISK_OFF"
+            reasons["decision"] = (
+                f"RISK_OFF: single-signal {label}={sub_score:.0f}/100 "
+                "(degraded confidence — only 1 signal available)"
+            )
+        else:
+            regime = "RISK_ON"
+            reasons["decision"] = (
+                f"RISK_ON: single-signal {label}={sub_score:.0f}/100 "
+                "(degraded confidence — only 1 signal available)"
+            )
+        return regime, reasons, []
+
+    if len(signals) == 0:
+        reasons["decision"] = "RISK_OFF: no signals available — defensive default"
         return "RISK_OFF", reasons, []
 
     # Step 1: renormalize base weights for available signals
@@ -507,7 +557,13 @@ def classify_regime_multi_signal(
 
 
 def _ramp(value: float, calm: float, panic: float) -> float:
-    """Linear ramp from 0 (at calm) to 100 (at panic). Clamped to [0, 100]."""
+    """Linear ramp from 0 (at calm) to 100 (at panic). Clamped to [0, 100].
+
+    Returns 0 for non-finite inputs (defensive — _validate_plausibility
+    should have stripped them already).
+    """
+    if not math.isfinite(value):
+        return 0.0
     if panic == calm:
         return 50.0
     return max(0.0, min(100.0, (value - calm) / (panic - calm) * 100))
@@ -518,9 +574,13 @@ def classify_regime_from_volatility(
     vix_risk_off: float = 25.0,
     vix_extreme: float = 35.0,
 ) -> str:
-    """Fallback: classify regime from portfolio volatility proxy."""
-    vol_pct = annualized_vol * 100
+    """Fallback: classify regime from portfolio volatility proxy.
 
+    Returns "RISK_OFF" defensively if input is non-finite.
+    """
+    if not math.isfinite(annualized_vol):
+        return "RISK_OFF"
+    vol_pct = annualized_vol * 100
     if vol_pct >= vix_extreme:
         return "CRISIS"
     if vol_pct >= vix_risk_off:
@@ -550,7 +610,26 @@ def detect_regime(
             reasons={"decision": "insufficient data, using default"},
         )
 
-    vol = float(np.std(returns) * np.sqrt(trading_days_per_year))
+    clean = returns[np.isfinite(returns)] if returns.size else returns
+    if len(clean) < 10:
+        default = thresholds["default"]
+        defn = REGIME_DEFINITIONS.get(default)
+        return RegimeResult(
+            regime=default,
+            description=defn["description"] if defn is not None else None,
+            reasons={"decision": "insufficient data after non-finite filter, using default"},
+        )
+
+    vol = float(np.std(clean) * np.sqrt(trading_days_per_year))
+    if not math.isfinite(vol):
+        default = thresholds["default"]
+        defn = REGIME_DEFINITIONS.get(default)
+        return RegimeResult(
+            regime=default,
+            description=defn["description"] if defn is not None else None,
+            reasons={"decision": "non-finite volatility computed, using default"},
+        )
+
     regime = classify_regime_from_volatility(
         vol,
         vix_risk_off=thresholds["vix_risk_off"],
