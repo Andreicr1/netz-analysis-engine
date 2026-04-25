@@ -143,7 +143,11 @@ class TestResolveFunctions:
 
         result = resolve_regime_thresholds(None)
         assert result["vix_risk_off"] == 25
-        assert result["default"] == "RISK_ON"
+        # PR-Q16 GRAY-resolved (BUG-R5): default regime is RISK_OFF defensive
+        # fallback. Pre-PR was RISK_ON. Callers (Wealth/Credit) should override
+        # via PortfolioSnapshot.regime / stress_severity, but when no caller
+        # fallback is provided, defensive RISK_OFF is institutional convention.
+        assert result["default"] == "RISK_OFF"
 
     def test_resolve_regime_thresholds_from_config(self):
         from quant_engine.regime_service import resolve_regime_thresholds
