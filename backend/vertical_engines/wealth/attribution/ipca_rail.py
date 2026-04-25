@@ -64,6 +64,17 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
         return None
         
     fit = await load_latest_ipca_fit(db, request.fund_asset_class)
+    # WORKAROUND (PR-Q9 follow-up tracked in #295): the rail computes
+    # Gamma @ z_fund on raw characteristic values, but Gamma is now
+    # estimated on cross-sectionally rank-transformed inputs (per
+    # Kelly-Pruitt-Su 2019 / PR-Q9 fix commit 68b0cf88). Executing the
+    # rail without the matching rank transform on the rail side produces
+    # mathematically wrong factor exposures. The 0.50 threshold here is
+    # deliberately above realistic oos_r² values (KP-S band 0.02-0.05) so
+    # the rail short-circuits until the follow-up PR adds rank transform
+    # inside resolve_fund_cik / load_chars or wherever chars are sourced.
+    # DO NOT lower this threshold without first applying the rank
+    # transform — see docs/investigations/2026-04-25-pr-q9-oos-r2-zero-diagnosis.md §F.
     if not fit or fit.oos_r_squared is None or fit.oos_r_squared < 0.50:
         return None
 
