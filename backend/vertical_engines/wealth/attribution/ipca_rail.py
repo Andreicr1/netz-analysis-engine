@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -126,8 +127,22 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
         [[str(r.instrument_id) for r in rows_cs], [ref_period] * len(rows_cs)],
         names=["instrument_id", "as_of"],
     )
+
+    def _safe_float(value: Any) -> float:
+        """Preserve None as NaN so rank_transform can skip it.
+
+        Coercing missing characteristics to 0.0 before ranking would
+        inject a spurious sentinel value into the cross-section: any
+        instrument with NULL chars would land at the bottom of every
+        rank, shifting every other instrument's percentile upward and
+        biasing z_fund / beta cross-sectionally — even for holdings
+        with complete data. The rank_transform helper's own contract
+        is 'NaNs allowed (skipped by rank)'; we honour that here.
+        """
+        return float("nan") if value is None else float(value)
+
     cs_df = pd.DataFrame(
-        [{c: float(getattr(r, c) or 0.0) for c in char_cols} for r in rows_cs],
+        [{c: _safe_float(getattr(r, c)) for c in char_cols} for r in rows_cs],
         index=cs_index,
     )
     ranked_cs = rank_transform(cs_df)
@@ -173,7 +188,15 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
     if matched.empty:
         return await _run_ipca_rail_option_a(request, db, fit)
 
-    # Compute z_fund (weighted average of ranked characteristics)
+    # Compute z_fund (weighted average of ranked characteristics).
+    # rank_transform preserves NaN for instruments with NULL chars in the
+    # source panel; here we map any residual NaN to 0.0 (the midpoint of
+    # the [-0.5, +0.5] ranked space, i.e. cross-sectional median) so a
+    # holding with one missing char is treated as having neutral exposure
+    # on that factor rather than poisoning the entire weighted average
+    # with NaN. Holdings with all chars NaN still contribute zero tilt
+    # but retain their pct_of_nav weight.
+    matched = matched.fillna(0.0)
     weights = np.array([holdings_ids[iid] for iid in matched.index.get_level_values(0)])
     total_weight = weights.sum()
     if total_weight == 0:
