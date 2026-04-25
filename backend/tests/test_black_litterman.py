@@ -83,11 +83,10 @@ class TestRelativeViews:
 class TestEdgeCases:
     """Edge cases and robustness."""
 
-    def test_invalid_asset_idx_skipped(self, simple_cov, equal_weights):
+    def test_invalid_asset_idx_raises(self, simple_cov, equal_weights):
         views = [{"type": "absolute", "asset_idx": 99, "Q": 0.10, "confidence": 0.5}]
-        result = compute_bl_returns(simple_cov, equal_weights, views=views)
-        expected = 2.5 * simple_cov @ equal_weights
-        np.testing.assert_allclose(result, expected, atol=1e-10)
+        with pytest.raises(ValueError, match="asset_idx=99 out of range"):
+            compute_bl_returns(simple_cov, equal_weights, views=views)
 
     def test_unknown_view_type_skipped(self, simple_cov, equal_weights):
         views = [{"type": "unknown", "Q": 0.10, "confidence": 0.5}]
@@ -95,19 +94,18 @@ class TestEdgeCases:
         expected = 2.5 * simple_cov @ equal_weights
         np.testing.assert_allclose(result, expected, atol=1e-10)
 
-    def test_zero_weights_uses_equal(self, simple_cov):
+    def test_zero_weights_raises(self, simple_cov):
         w_zero = np.zeros(3)
-        result = compute_bl_returns(simple_cov, w_zero, views=None)
-        expected = 2.5 * simple_cov @ np.array([1 / 3, 1 / 3, 1 / 3])
-        np.testing.assert_allclose(result, expected, atol=1e-10)
+        with pytest.raises(ValueError, match="w_market.sum\\(\\).*expected > 0"):
+            compute_bl_returns(simple_cov, w_zero, views=None)
 
-    def test_confidence_clamped(self, simple_cov, equal_weights):
-        # Confidence > 1 clamped to 1, < 0.01 clamped to 0.01
+    def test_confidence_out_of_range_raises(self, simple_cov, equal_weights):
         views_over = [{"type": "absolute", "asset_idx": 0, "Q": 0.10, "confidence": 5.0}]
         views_under = [{"type": "absolute", "asset_idx": 0, "Q": 0.10, "confidence": -1.0}]
-        # Should not raise
-        compute_bl_returns(simple_cov, equal_weights, views=views_over)
-        compute_bl_returns(simple_cov, equal_weights, views=views_under)
+        with pytest.raises(ValueError, match="confidence must be in"):
+            compute_bl_returns(simple_cov, equal_weights, views=views_over)
+        with pytest.raises(ValueError, match="confidence must be in"):
+            compute_bl_returns(simple_cov, equal_weights, views=views_under)
 
     def test_multiple_views(self, simple_cov, equal_weights):
         views = [
