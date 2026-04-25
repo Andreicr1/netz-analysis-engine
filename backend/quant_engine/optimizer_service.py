@@ -50,6 +50,13 @@ class OptimizationResult:
 # source of truth for Mean-Variance λ (see S3 consolidation, 2026-04-08).
 
 
+def _safe_volatility(weights: np.ndarray, cov: np.ndarray) -> float:
+    """sqrt of weights @ cov @ weights, floored at 0 to absorb tiny
+    negative eigenvalues from numerical noise (PSD check tolerates them
+    above -1e-10)."""
+    return float(np.sqrt(max(float(weights @ cov @ weights), 0.0)))
+
+
 def parametric_cvar_cf(
     weights: "np.ndarray",
     mu: "np.ndarray",
@@ -66,19 +73,23 @@ def parametric_cvar_cf(
     """
     from scipy.stats import norm as sp_norm
     mu_p = float(weights @ mu)
-    sigma_p = float(np.sqrt(weights @ cov @ weights))
+    sigma_p = _safe_volatility(weights, cov)
     port_skew = float(weights @ skewness)
     port_kurt = float(weights @ excess_kurtosis)
 
-    z = sp_norm.ppf(alpha)  # base quantile
+    z = sp_norm.ppf(alpha)  # base quantile (negative)
     z_cf = (
         z
         + (z**2 - 1) * port_skew / 6
         + (z**3 - 3 * z) * port_kurt / 24
         - (2 * z**3 - 5 * z) * port_skew**2 / 36
     )
-    phi_z = sp_norm.pdf(z_cf)
-    cvar = -(mu_p + sigma_p * z_cf) + sigma_p * phi_z / alpha
+    phi_z_cf = sp_norm.pdf(z_cf)  # evaluate density at CF-adjusted quantile
+    # Cornish-Fisher Expected Shortfall (loss-space, positive):
+    #   ES_CF = -mu + sigma * phi(z_CF) / alpha
+    # Reference: Boudt, Peterson, Croux 2008 "Estimation and decomposition
+    # of downside risk for portfolios with non-normal distributions".
+    cvar = -mu_p + sigma_p * phi_z_cf / alpha
     return max(float(cvar), 0.0)
 
 
@@ -519,16 +530,21 @@ async def optimize_fund_portfolio(
             block_fund_indices.setdefault(block, []).append(i)
 
     def _build_base_constraints(w_var: cp.Variable) -> list[Any]:
-        """Build constraints shared by all solve phases."""
+        """Build constraints shared by all solve phases.
+
+        Iterates the FULL block_map (all declared constraints), not just
+        blocks that happen to have funds. A constraint for an empty block
+        with min_weight > 0 is INFEASIBLE — surface it as such
+        (cp.sum([]) == 0, which violates blk_sum >= bc.min_weight > 0).
+        """
         cs: list[Any] = [cp.sum(w_var) == 1]  # type: ignore[attr-defined]
         for i in range(n):
             cs.append(w_var[i] <= max_fund_w)
-        for blk_id, indices in block_fund_indices.items():
-            if blk_id in block_map:
-                bc = block_map[blk_id]
-                blk_sum = cp.sum([w_var[i] for i in indices])
-                cs.append(blk_sum >= bc.min_weight)
-                cs.append(blk_sum <= bc.max_weight)
+        for blk_id, bc in block_map.items():
+            indices = block_fund_indices.get(blk_id, [])
+            blk_sum = cp.sum([w_var[i] for i in indices]) if indices else 0
+            cs.append(blk_sum >= bc.min_weight)
+            cs.append(blk_sum <= bc.max_weight)
         return cs
 
     async def _solve_problem(prob: cp.Problem) -> str | None:
@@ -1063,7 +1079,18 @@ async def optimize_fund_portfolio(
         phase2_weights is not None
         and (effective_cvar_limit is None or _phase2_within_limit is True)
     )
-    if _phase1_usable:
+    # Robust mode (when caller passed robust=True): prefer Phase 2 (robust SOCP)
+    # over Phase 1 if both are usable. This is the difference between "max return
+    # with CVaR limit" (Phase 1) and "robust max return under ellipsoidal mu
+    # uncertainty with CVaR limit" (Phase 2). Without this branch, the robust
+    # flag is effectively a no-op for healthy universes.
+    if robust and _phase2_usable:
+        winner_w = phase2_weights
+        winner_phase = "phase_2_ru_robust"
+        winner_solver = phase2_solver
+        winner_return = phase2_expected_return
+        winner_status = "optimal"
+    elif _phase1_usable:
         winner_w = phase1_weights
         winner_phase = "phase_1_ru_max_return"
         winner_solver = phase1_solver
