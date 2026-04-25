@@ -135,36 +135,53 @@ async def _load_universe(
     - Are BDCs (direct XBRL path, no N-PORT needed)
     """
     limit_clause = f" LIMIT {int(limit)}" if limit else ""
+    # CIK normalization: instruments_universe.attributes.sec_cik is stored
+    # as a string sometimes zero-padded ("0000884394" for SPY), sometimes
+    # not ("36405" for VTI). sec_nport_holdings.cik (text) and
+    # sec_bdcs/sec_money_market_funds.cik (varchar) are stored without
+    # padding. Casting both sides to BIGINT works but bypasses the btree
+    # index on n.cik causing seqscan on a 2M-row table (>2min queries).
+    # Instead, normalize the universe value via LTRIM(_, '0') to match
+    # the unpadded format — this preserves index lookups on the
+    # indexed columns. Match as text.
     result = await db.execute(text(f"""
+        WITH norm_universe AS (
+            SELECT
+                i.instrument_id,
+                i.ticker,
+                i.asset_class,
+                i.attributes->>'sec_cik' AS sec_cik_raw,
+                LTRIM(i.attributes->>'sec_cik', '0') AS sec_cik_norm
+            FROM instruments_universe i
+            WHERE i.attributes->>'sec_cik' IS NOT NULL
+              AND i.attributes->>'sec_cik' ~ '^[0-9]+$'
+        )
         SELECT
-            i.instrument_id,
-            i.ticker,
-            i.asset_class,
-            i.attributes->>'sec_cik' AS sec_cik,
+            u.instrument_id,
+            u.ticker,
+            u.asset_class,
+            u.sec_cik_norm AS sec_cik,
             CASE
                 WHEN EXISTS (
                     SELECT 1 FROM sec_bdcs b
-                    WHERE b.cik::text = i.attributes->>'sec_cik'
+                    WHERE b.cik = u.sec_cik_norm
                 ) THEN 'bdc'
                 WHEN EXISTS (
                     SELECT 1 FROM sec_money_market_funds m
-                    WHERE m.cik::text = i.attributes->>'sec_cik'
+                    WHERE m.cik = u.sec_cik_norm
                 ) THEN 'mmf'
                 ELSE 'standard'
             END AS fund_category
-        FROM instruments_universe i
-        WHERE i.attributes->>'sec_cik' IS NOT NULL
-          AND (
-              EXISTS (
+        FROM norm_universe u
+        WHERE EXISTS (
                   SELECT 1 FROM sec_nport_holdings n
-                  WHERE n.cik = i.attributes->>'sec_cik'
+                  WHERE n.cik = u.sec_cik_norm
               )
               OR EXISTS (
                   SELECT 1 FROM sec_bdcs b
-                  WHERE b.cik::text = i.attributes->>'sec_cik'
+                  WHERE b.cik = u.sec_cik_norm
               )
-          )
-        ORDER BY i.ticker NULLS LAST
+        ORDER BY u.ticker NULLS LAST
         {limit_clause}
     """))
     return [
@@ -197,7 +214,9 @@ async def _compute_via_aggregation(
     instrument_id = fund["instrument_id"]
     ticker = fund.get("ticker") or ""
 
-    # Get all distinct N-PORT report dates for this fund
+    # Get all distinct N-PORT report dates for this fund.
+    # sec_cik is normalized text (no leading zeros) from _load_universe.
+    # n.cik is text — direct equality preserves index usage.
     report_dates_result = await db.execute(text("""
         SELECT DISTINCT report_date
         FROM sec_nport_holdings
