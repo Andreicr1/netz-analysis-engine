@@ -559,6 +559,7 @@ async def _source_3_esma(
             text("""
                 SELECT
                     iu.instrument_id::text,
+                    iu.ticker AS iu_ticker,
                     ef.isin AS esma_isin,
                     ef.esma_manager_id,
                     em.lei
@@ -610,6 +611,15 @@ async def _source_3_esma(
                 sr.set("esma_manager_id", row.esma_manager_id)
             if row.lei:
                 sr.set("lei", row.lei)
+            # Andrei (2026-04-26): UCITS ticker matters institutionally for
+            # broker-facing identification; CUSIP 144A wrapper is not the
+            # primary need. Emit ticker from instruments_universe.ticker
+            # (which equals esma_funds.yahoo_ticker by ingestion contract)
+            # so that 2.929 UCITS get a usable ticker in instrument_identity.
+            # Authority: ESMA = 2 (per FIELD_AUTHORITY); SEC sources (3-4)
+            # never resolve UCITS so no real conflict.
+            if row.iu_ticker:
+                sr.set("ticker", row.iu_ticker)
 
             if sr.fields:
                 results[iid] = sr
