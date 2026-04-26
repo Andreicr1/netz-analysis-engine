@@ -84,7 +84,7 @@ def extreme_var_evt(
     Follows the 11-step pipeline for institutional asset/wealth management.
     """
     # 1. Clean data
-    clean_returns = returns[~np.isnan(returns)]
+    clean_returns = returns[np.isfinite(returns)]
     if len(clean_returns) == 0:
         return _degraded_result(0.0, "no_data")
 
@@ -139,7 +139,7 @@ def extreme_var_evt(
     xi_hill = compute_hill_estimator(losses, k_hill)
     
     degraded = not converged
-    reason = None
+    reason = "gpd_fit_did_not_converge" if not converged else None
     
     if abs(xi_hill - xi) > 2 * abs(xi) and xi > 0.1:
          degraded = True

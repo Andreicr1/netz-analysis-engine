@@ -166,3 +166,50 @@ def test_BUG_G5_percent_returns_input_raises():
 
     with pytest.raises(ValueError, match="returns appear to be in percent form"):
         fit_garch(percent_returns)
+
+
+# ─── PR-Q31 F04 ────────────────────────────────────────────────────────────
+
+
+def test_garch_non_convergence_sets_degraded():
+    """PR-Q31 F04: GARCH convergence_flag != 0 path must set degraded=True.
+
+    Pre-fix: returned degraded=False (default), masking pipeline failure.
+    Post-fix: degraded=True with degraded_reason='garch_did_not_converge'.
+    """
+    # Mock arch to return a non-converged result
+    mock_result = MagicMock()
+    mock_result.convergence_flag = 1
+    mock_model = MagicMock()
+    mock_model.fit.return_value = mock_result
+
+    rng = np.random.default_rng(42)
+    returns = rng.normal(0.0, 0.01, size=200)
+
+    with patch("arch.arch_model", return_value=mock_model):
+        result = fit_garch(returns)
+
+    assert result is not None
+    assert result.degraded is True
+    assert result.degraded_reason == "garch_did_not_converge"
+    assert result.volatility_garch is None
+    assert result.converged is False
+
+
+def test_garch_exception_path_sets_degraded():
+    """PR-Q31 F04: GARCH exception fallback must set degraded=True with reason='garch_fit_failed'."""
+    rng = np.random.default_rng(42)
+    returns = rng.normal(0.0, 0.01, size=200)
+
+    # Force arch_model to raise during fit
+    def _raise(*args, **kwargs):
+        raise RuntimeError("synthetic arch failure")
+
+    with patch("arch.arch_model", side_effect=_raise):
+        result = fit_garch(returns)
+
+    assert result is not None
+    assert result.degraded is True
+    assert result.degraded_reason == "garch_fit_failed"
+    assert result.volatility_garch is None
+    assert result.converged is False

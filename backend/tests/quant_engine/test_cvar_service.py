@@ -255,3 +255,26 @@ def test_check_breach_status_uses_breach_epsilon_at_boundary() -> None:
     )
     # Status should be warning (utilization ≈ 100%), not breach.
     assert result.trigger_status == "warning"
+
+
+# ─── PR-Q31 F03 ────────────────────────────────────────────────────────────
+
+
+def test_compute_cvar_filters_inf_consistent_with_tail_var():
+    """PR-Q31 F03: ±Inf must be filtered out, matching tail_var_service / garch_service convention.
+
+    Pre-fix: ~np.isnan() lets ±Inf survive, producing nan/inf CVaR silently.
+    Post-fix: np.isfinite() drops them; CVaR computed over the finite subset.
+    """
+    # 40 finite returns + 2 Inf rows that must be filtered
+    returns = np.concatenate([
+        np.array([0.01, 0.02, -0.03, 0.05] * 10),  # 40 finite obs
+        np.array([np.inf, -np.inf]),
+    ])
+
+    result = compute_cvar(returns, confidence=0.95, method="historical")
+
+    assert np.isfinite(result.cvar), f"CVaR should be finite, got {result.cvar}"
+    assert np.isfinite(result.var), f"VaR should be finite, got {result.var}"
+    # n_obs reflects finite-filtered count (40), not nan-filtered (would be 42)
+    assert result.n_obs == 40

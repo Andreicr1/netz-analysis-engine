@@ -148,7 +148,7 @@ def compute_cvar(
     Central entry point for all fund and portfolio CVaR calculations.
     All methods return return-space values (losses are negative).
     """
-    clean_returns = returns[~np.isnan(returns)]
+    clean_returns = returns[np.isfinite(returns)]
     n_obs = int(len(clean_returns))
 
     # Fix 10: early guard for insufficient observations across ALL methods.
