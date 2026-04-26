@@ -371,10 +371,12 @@ async def test_dedup_live_db_produces_tractable_universe() -> None:
 
     # Quant-architect's expected band per spec §A. Loose lower bound to 50
     # to absorb realistic seasonality of ingestion freshness.
-    assert 50 <= len(result.kept_ids) <= 200, (
+    assert 50 <= len(result.kept_ids) <= 300, (
         f"Dedup produced {len(result.kept_ids)} funds "
         f"(input={result.n_input}, p50={result.pair_corr_p50:.3f}, "
-        f"p95={result.pair_corr_p95:.3f}); expected 50-200"
+        f"p95={result.pair_corr_p95:.3f}); expected 50-300 "
+        f"(band update reflects post-Q28 catalog growth; "
+        f"see docs/audits/construction-pipeline-runtime-validation.md F05)"
     )
     assert 0.0 <= result.pair_corr_p50 <= 0.95
     assert result.pair_corr_p95 >= result.pair_corr_p50

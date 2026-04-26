@@ -233,12 +233,17 @@ async def test_openfigi_populates_figi_cusip_when_missing(conn, db_session):
 
 
 @pytest.mark.asyncio
-async def test_openfigi_no_api_key_returns_failure(conn, db_session):
+async def test_openfigi_no_api_key_returns_failure(conn, db_session, monkeypatch):
     """Without OPENFIGI_API_KEY, source 5 returns success=False."""
     iid = await _get_test_iid(conn)
 
-    with patch.dict("os.environ", {"OPENFIGI_API_KEY": ""}):
-        results, success = await _source_5_openfigi(db_session, [iid])
+    # Patch settings directly — Pydantic loads .env at import time, so
+    # patching os.environ alone is insufficient (settings.openfigi_api_key
+    # is already truthy and short-circuits the `or os.environ.get(...)` fallback).
+    monkeypatch.setattr(settings, "openfigi_api_key", "")
+    monkeypatch.delenv("OPENFIGI_API_KEY", raising=False)
+
+    results, success = await _source_5_openfigi(db_session, [iid])
 
     assert success is False
     assert results == {}
