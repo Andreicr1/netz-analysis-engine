@@ -81,6 +81,24 @@ def determine_cascade_action(
             expected_range="[0.0, 2.0]",
         )
 
+    # ── Degraded: CVaR computation failed upstream (NaN/insufficient data) ──
+    # Operational event — not a breach, but fiduciary record of risk-blindness.
+    if trigger_status == "degraded":
+        return "cvar_degraded", (
+            "CVaR unavailable — insufficient or invalid data; "
+            "cascade evaluation skipped this period"
+        )
+
+    # ── Recovery transitions ──
+    # warning → ok and breach → ok both emit cvar_recovery.
+    # breach → warning stays silent (granular transition; ok-recovery is the
+    # institutional event of record).
+    if trigger_status == "ok" and previous_trigger_status in ("warning", "breach"):
+        return "cvar_recovery", (
+            f"CVaR returned to compliance from {previous_trigger_status}"
+        )
+
+    # ── Escalation transitions ──
     if trigger_status == "ok":
         return None, None
 
