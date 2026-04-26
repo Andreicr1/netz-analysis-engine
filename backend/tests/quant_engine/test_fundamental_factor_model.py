@@ -314,20 +314,51 @@ async def test_k_equals_six_contract_with_stubbed_factor_returns(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_oas_level_is_never_used_as_credit_return():
-    """T6: Defensive test against OAS level change usage."""
+async def test_oas_level_is_filtered_not_crashed_on(monkeypatch):
+    """T6 (PR-Q35 F06): OAS levels filtered defensively without crashing.
+
+    Replaces previous test_oas_level_is_never_used_as_credit_return which
+    asserted pytest.raises(ValueError). Per Wave 6 Session 03 F06, the
+    defensive intent is preserved but the crash is replaced with degraded
+    skip pattern (charter §3 degraded > crash).
+
+    Verifies:
+    - build_fundamental_factor_returns does NOT raise ValueError
+    - OAS rows are filtered from the result
+    - skipped accumulator (factors.attrs["skipped"]) records the OAS filter
+    """
+    async def _noop_audit(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "quant_engine.factor_model_service.write_audit_event",
+        _noop_audit,
+    )
+
     db = AsyncMock()
-    # Mock return value including an OAS ticker
+    # Mock returns: one OAS row + one valid SPY row + empty macro
     db.execute.side_effect = [
         MagicMock(all=MagicMock(return_value=[
-            MagicMock(benchmark_ticker="BAMLH0A0HYM2"),
+            MagicMock(benchmark_ticker="BAMLH0A0HYM2", nav_date=date(2021, 1, 2), nav=8.5),
+            MagicMock(benchmark_ticker="SPY", nav_date=date(2021, 1, 2), nav=400.0),
         ])),
+        # Macro query returns empty
+        MagicMock(all=MagicMock(return_value=[])),
     ]
-    
-    with pytest.raises(ValueError, match="OAS level is not a total return"):
-        await build_fundamental_factor_returns(
-            db, date(2021, 1, 1), date(2021, 1, 2)
-        )
+
+    # Should NOT raise — degraded skip instead
+    result = await build_fundamental_factor_returns(
+        db, date(2021, 1, 1), date(2021, 1, 2)
+    )
+
+    # Result is a DataFrame with skipped attrs populated
+    assert result is not None
+    skipped = result.attrs.get("skipped", [])
+    skipped_names = [s["name"] for s in skipped]
+    assert any("oas" in n.lower() for n in skipped_names), (
+        f"OAS filter not recorded in skipped: {skipped_names}. "
+        f"F06 fix should append 'oas_*' entries when OAS rows are present."
+    )
 
 
 def test_residual_pca_not_fed_back_into_sigma():

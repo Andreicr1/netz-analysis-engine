@@ -117,7 +117,8 @@ def test_drift_monitor_identical():
     """10. Drift monitor: two identical Γs → drift = 0."""
     g1 = np.random.randn(6, 3)
     drift = compute_gamma_drift(g1, g1)
-    assert drift == 0.0
+    # PR-Q35 F01: Procrustes SVD introduces ~1e-16 floating-point noise
+    assert drift == pytest.approx(0.0, abs=1e-10)
 
 def test_drift_monitor_scaled(caplog):
     """11. Drift monitor: Γ scaled by 2 → drift ≈ 1."""
