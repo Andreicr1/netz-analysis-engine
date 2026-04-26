@@ -503,53 +503,35 @@ def fit_fundamental_loadings(
     alphas_per_fund = beta_with_alpha[0, :]     # shape (N,)
     loadings = beta_with_alpha[1:, :].T         # shape (N, K)
 
-    # ── PR-Q15 Fix 2: EWMA covariance + LW shrinkage ─────────────────────
-    shrinkage_lambda: float | None = None
-    try:
-        from sklearn.covariance import LedoitWolf
-
-        # Step 1: EWMA covariance from properly weighted, demeaned factor
-        # returns.  Weights normalized so they sum to 1.
-        w_norm = weights / weights.sum()
-        weighted_mean = (factor_returns * w_norm[:, None]).sum(axis=0)
-        centered_f = factor_returns - weighted_mean
-        factor_cov_ewma = (centered_f * w_norm[:, None]).T @ centered_f
-
-        # Step 2: LW shrinkage intensity from the UNWEIGHTED factor returns
-        # (LW's iid assumption holds for that sample).  Apply the intensity
-        # to the EWMA covariance.  Ref: Ledoit & Wolf (2004).
-        lw = LedoitWolf()
-        lw.fit(factor_returns)
-        K_dim = factor_returns.shape[1]
-        shrinkage_target = (np.trace(factor_cov_ewma) / K_dim) * np.eye(K_dim)
-        factor_cov = (
-            (1.0 - lw.shrinkage_) * factor_cov_ewma
-            + lw.shrinkage_ * shrinkage_target
-        )
-        factor_cov = factor_cov * TRADING_DAYS_PER_YEAR
-        shrinkage_lambda = float(lw.shrinkage_)
-    except (ImportError, ValueError):
-        logger.warning(
-            "ledoit_wolf_failed",
-            reason="sklearn absent or value error, using EWMA sample cov without shrinkage",
-        )
-        w_norm = weights / weights.sum()
-        weighted_mean = (factor_returns * w_norm[:, None]).sum(axis=0)
-        centered_f = factor_returns - weighted_mean
-        factor_cov = (
-            (centered_f * w_norm[:, None]).T @ centered_f
-        ) * TRADING_DAYS_PER_YEAR
+    # ── PR-Q34 F08: EWMA covariance (LW scaled-identity shrinkage removed) ──
+    # Previous LW target (np.trace/K * np.eye(K)) systematically biased factor
+    # covariance toward zero cross-correlation. For K≤8 factors and T=1260
+    # (5Y daily), EWMA covariance is well-conditioned (T >> K), so shrinkage
+    # is unnecessary. Ref: Wave 6 Session 03 F08, audit-validation-session03.md.
+    # Cross-ref: correlation_regime_service.py:96-102 documents the same
+    # anti-pattern (LW destroys correlation structure).
+    shrinkage_lambda: float | None = None  # always None post-Q34 F08
+    w_norm = weights / weights.sum()
+    weighted_mean = (factor_returns * w_norm[:, None]).sum(axis=0)
+    centered_f = factor_returns - weighted_mean
+    factor_cov = (
+        (centered_f * w_norm[:, None]).T @ centered_f
+    ) * TRADING_DAYS_PER_YEAR
 
     # Residuals accounting for intercept (PR-Q15 Fix 3).
     X_unweighted = np.hstack([np.ones((T, 1)), factor_returns])
     predicted = X_unweighted @ beta_with_alpha
     residual_series = fund_returns_matrix - predicted
 
-    # PR-Q15 Fix 8: residual variance with regression-aware DOF.
-    # K factors + 1 intercept = K+1 parameters.
-    dof = max(T - K - 1, 1)
-    sse = np.sum(residual_series ** 2, axis=0)
-    residual_variance = (sse / dof) * TRADING_DAYS_PER_YEAR
+    # PR-Q34 F07: weighted SSE matching EWMA WLS regression (line 491).
+    # Unweighted SSE inflates residuals where β was optimized to fit recent
+    # data (EWMA-driven β shift produces large old-period residuals that the
+    # WLS regression intentionally down-weighted). For 5Y daily with λ=0.97
+    # and a recent β shift, unweighted SSE was ~28x the weighted analogue.
+    # Ref: Wave 6 Session 03 F07, audit-validation-session03.md.
+    dof = max(T - K - 1, 1)  # PR-Q15 Fix 8 preserved
+    weighted_sse = np.sum(w_norm[:, None] * (residual_series ** 2), axis=0) * T
+    residual_variance = (weighted_sse / dof) * TRADING_DAYS_PER_YEAR
 
     # A.10 — guard against zero-variance funds (constant returns)
     total_var = np.var(fund_returns_matrix, axis=0, ddof=1)
