@@ -6,7 +6,6 @@ Skipped cleanly if DATABASE_URL is unreachable.
 from __future__ import annotations
 
 import json
-import uuid
 from unittest.mock import patch
 
 import asyncpg
@@ -14,7 +13,6 @@ import pytest
 
 from app.core.config import settings
 from app.core.jobs.identity_resolver import (
-    FIELD_AUTHORITY,
     IDENTITY_RESOLVER_LOCK_ID,
     SourceResult,
     _source_4_sec_adv,

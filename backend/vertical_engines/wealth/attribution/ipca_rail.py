@@ -11,9 +11,9 @@ import structlog
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from data_providers.identity.resolver import resolve_cik
 from quant_engine.ipca.fit import IPCAFit
 from quant_engine.ipca.preprocessing import rank_transform
-from data_providers.identity.resolver import resolve_cik
 from vertical_engines.wealth.attribution.holdings_based import (
     latest_period_for_cik,
 )

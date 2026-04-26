@@ -5,7 +5,6 @@ Skipped cleanly if DATABASE_URL is unreachable.
 """
 from __future__ import annotations
 
-import json
 import asyncio
 from unittest.mock import AsyncMock, patch
 
