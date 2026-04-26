@@ -2308,6 +2308,7 @@ async def _run_construction_async(
     # below; synthesized on the heuristic fallback branch so every result
     # dict carries a uniform ``cascade`` key consumed by the executor.
     fund_result: FundOptimizationResult | None = None
+    _degraded_reason_from_exc: str | None = None  # PR-Q29
 
     try:
         # ── BL-5: Fetch regime probs for regime-conditioned covariance ──
@@ -2585,6 +2586,8 @@ async def _run_construction_async(
             pair_corr_p50=round(dedup_metrics.get("pair_corr_p50") or 0.0, 3),
             pair_corr_p95=round(dedup_metrics.get("pair_corr_p95") or 0.0, 3),
         )
+        # PR-Q29: capture the structured degraded reason for top-level surface
+        _degraded_reason_from_exc = getattr(e, "degraded_reason", None) or str(e)
 
     # ── 5. Fallback to block-level heuristic if fund-level failed ──
     if composition is None:
@@ -2755,6 +2758,19 @@ async def _run_construction_async(
                 result["optimization"]["factor_exposures"] = factor_result
         except Exception:
             logger.debug("factor_decomposition_skipped")
+
+    # PR-Q29 — top-level degraded signal for synchronous-route consumers.
+    # Matches the worker path (construction_run_executor sets run.status="degraded").
+    if used_heuristic:
+        result["degraded"] = True
+        result["degraded_reason"] = (
+            _degraded_reason_from_exc
+            if _degraded_reason_from_exc
+            else "upstream_heuristic_fallback: optimizer cascade did not produce a fund-level composition"
+        )
+    else:
+        result["degraded"] = False
+        result["degraded_reason"] = None
 
     return result
 
