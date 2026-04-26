@@ -13,6 +13,7 @@ from quant_engine.return_statistics_service import (
     _compute_sterling_ratio,
     _to_monthly_returns,
     compute_return_statistics,
+    compute_sortino_ratio,
 )
 
 # ── Fixtures ──────────────────────────────────────────────────────────
@@ -207,3 +208,83 @@ class TestComputeReturnStatistics:
             assert result.avg_monthly_gain >= 0
         if result.avg_monthly_loss is not None:
             assert result.avg_monthly_loss <= 0
+
+
+# ── F02: Sterling ratio parenthesization ─────────────────────────────
+
+
+def test_sterling_ratio_handles_low_drawdown_funds():
+    """Fund with steady returns has small DD (<10%); pre-fix returned None."""
+    daily = np.full(252, 0.0001)
+    result = compute_return_statistics(daily)
+    assert result.sterling_ratio is not None
+    assert result.sterling_ratio > 0
+
+
+# ── F03 + OOS-2: Sortino canonical TDD ──────────────────────────────
+
+
+def test_sortino_canonical_tdd():
+    """Identical losses: pre-fix returns None (np.std=0), post-fix returns finite."""
+    returns = np.array([-0.005, -0.005, -0.005, 0.001] * 65)  # ~260 days
+    result = compute_sortino_ratio(returns)
+    assert result is not None
+    assert result < 0
+
+
+def test_sortino_uses_full_sample_denominator():
+    """Single large loss + many zeros: TDD on full sample yields moderate Sortino."""
+    returns = np.concatenate([np.zeros(99), np.array([-0.10])])
+    result = compute_sortino_ratio(returns, risk_free_rate=0.0)
+    # Closed-form: TDD = sqrt(0.01/100) = 0.01
+    # Sortino = mean / TDD * sqrt(252) = (-0.001 / 0.01) * sqrt(252) ≈ -1.587
+    assert abs(result - (-0.001 / 0.01) * np.sqrt(252)) < 0.01
+
+
+# ── F07 + OOS-1: Treynor uses geometric mean ────────────────────────
+
+
+def test_treynor_uses_geometric_mean():
+    """Volatile returns: arith mean inflates Treynor; geom mean does not."""
+    from scipy import stats as sp_stats
+
+    rng = np.random.default_rng(42)
+    high_vol_pos = rng.normal(0.005, 0.02, size=21 * 12)
+    high_vol_neg = rng.normal(-0.004, 0.02, size=21 * 12)
+    daily = np.concatenate([high_vol_pos, high_vol_neg])
+    bench = daily * 0.7 + rng.normal(0.0, 0.005, size=len(daily))
+
+    result = compute_return_statistics(daily, benchmark_returns=bench, risk_free_rate=0.04)
+
+    monthly = _to_monthly_returns(daily)
+    geom = float(np.prod(1 + monthly) ** (1 / len(monthly)) - 1)
+    expected_ann_geom = (1 + geom) ** 12 - 1
+    arith = float(np.mean(monthly))
+    expected_ann_arith = (1 + arith) ** 12 - 1
+
+    # Verify the two annualizations differ materially (Jensen gap > 1pp)
+    assert abs(expected_ann_geom - expected_ann_arith) > 0.01
+
+    # Verify Treynor uses the geometric one
+    bm_monthly = _to_monthly_returns(bench)
+    n_common = min(len(monthly), len(bm_monthly))
+    slope, _, _, _, _ = sp_stats.linregress(bm_monthly[:n_common], monthly[:n_common])
+    expected_treynor = round((expected_ann_geom - 0.04) / slope, 4)
+    assert result.treynor_ratio == expected_treynor
+
+
+# ── F04: Jensen alpha annualized + simple Rf ─────────────────────────
+
+
+def test_jensen_alpha_is_annualized_with_simple_rf():
+    """Jensen output must be annualized to match Treynor scale."""
+    monthly_pattern = np.array([0.01, 0.005] * 13)  # 26 months
+    daily = np.repeat(monthly_pattern / 21, 21)[:546]
+    bench_monthly = monthly_pattern - 0.005
+    bench_daily = np.repeat(bench_monthly / 21, 21)[: len(daily)]
+
+    result = compute_return_statistics(daily, benchmark_returns=bench_daily, risk_free_rate=0.04)
+
+    # Annualized Jensen ≈ 12 × monthly outperformance ≈ 6% (with β-adjustment)
+    assert result.jensen_alpha is not None
+    assert 0.04 < result.jensen_alpha < 0.08
