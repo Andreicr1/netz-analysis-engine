@@ -163,3 +163,55 @@ def test_band_bounds_annualized() -> None:
         f"lower_at_cvar={band['lower_at_cvar']} — expected annualized magnitude"
     )
     assert band["upper_at_cvar"] > band["lower_at_cvar"] - 1e-6
+
+
+# ── PR-Q32 F01 — Exact RU empirical estimator ────────────────────────────
+
+
+def test_realized_cvar_matches_exact_ru_formula():
+    """PR-Q32 F01: realized_cvar_from_weights must equal the exact RU LP empirical
+    estimator, not the discretized tail.mean().
+
+    Reference: Gemini Stage 1 example. losses=[0,10,10,20], alpha=0.5.
+    Exact RU: var_threshold = quantile(losses, 0.5, 'higher') = 10.
+                u = max(losses - 10, 0) = [0, 0, 0, 10]
+                cvar = 10 + 10 / (0.5 * 4) = 10 + 5 = 15.0
+    Pre-fix tail.mean() = (10 + 10 + 20) / 3 = 13.333.
+    """
+    # losses = [0, 10, 10, 20] when w = [-1] and returns_scenarios = [[0], [-10], [-10], [-20]]
+    returns_scenarios = np.array([[0.0], [-10.0], [-10.0], [-20.0]])
+    weights = np.array([1.0])
+    cvar = realized_cvar_from_weights(weights, returns_scenarios, alpha=0.5)
+    assert cvar == pytest.approx(15.0, abs=1e-9), (
+        f"Exact RU LP estimator should give 15.0, got {cvar}. "
+        f"Pre-fix tail.mean() returned 13.333 — that was the bug."
+    )
+
+
+def test_realized_cvar_matches_lp_objective_at_optimality():
+    """PR-Q32 F01: post-solve verifier value must equal the LP objective value
+    at optimality within numerical tolerance, for any T and alpha.
+
+    Builds a small min-CVaR LP, solves it, and asserts the verifier matches.
+    """
+    import cvxpy as cp
+
+    from quant_engine.ru_cvar_lp import build_ru_cvar_objective
+
+    rng = np.random.default_rng(123)
+    T, N = 100, 3
+    R = rng.normal(0.0, 0.02, size=(T, N))
+
+    w = cp.Variable(N, nonneg=True)
+    cvar_expr, slack_cs, _zeta, _u = build_ru_cvar_objective(w, R, alpha=0.95)
+    prob = cp.Problem(cp.Minimize(cvar_expr), slack_cs + [cp.sum(w) == 1.0])
+    prob.solve(solver=cp.CLARABEL)
+
+    assert prob.status == "optimal", f"LP solve failed: status={prob.status}"
+    lp_objective = float(prob.value)
+    verifier = realized_cvar_from_weights(w.value, R, alpha=0.95)
+
+    assert verifier == pytest.approx(lp_objective, abs=1e-6), (
+        f"Verifier {verifier} must match LP objective {lp_objective} at optimality. "
+        f"This is the institutional invariant that PR-Q32 F01 enforces."
+    )

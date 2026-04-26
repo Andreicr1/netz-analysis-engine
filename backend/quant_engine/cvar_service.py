@@ -346,23 +346,24 @@ def compute_cvar_from_returns(
 ) -> tuple[float, float]:
     """Compute CVaR and VaR from a returns array.
 
-    CVaR (Expected Shortfall) = mean of returns below VaR threshold.
-    Returns (cvar, var) as negative numbers (losses).
+    PR-Q32 F01: uses the exact Rockafellar-Uryasev empirical estimator
+    matching the LP objective at optimality:
+
+        VaR_α(L)  = inf{ ζ : P(L ≤ ζ) ≥ α }                       (upper-quantile)
+        CVaR_α(L) = ζ + (1/((1-α)·T)) · Σ max(L_i - ζ, 0)
+
+    where L = -returns. Returns (cvar, var) as negative numbers (return-space
+    losses), consistent with PR-Q13 sign convention.
     """
-    # Fix 5: return NaN for insufficient data instead of optimistic 0.0.
     if len(returns) < 5:
         return float("nan"), float("nan")
 
-    sorted_returns = np.sort(returns)
-    # Fix 8: use math.ceil for correct tail count and consistent VaR/CVaR.
-    # Round to 10 decimal places first to avoid floating-point edge cases
-    # (e.g. 20 * 0.05 = 1.0000000000000009 which ceil() rounds to 2).
-    n = len(sorted_returns)
-    tail_count = max(1, math.ceil(round(n * (1.0 - confidence), 10)))
-    var = float(sorted_returns[tail_count - 1])
-    cvar = float(sorted_returns[:tail_count].mean())
-
-    return cvar, var
+    # Convert to loss-space for the RU formulation, then negate result back.
+    losses = -returns
+    var_loss = float(np.quantile(losses, confidence, method="higher"))
+    u = np.maximum(losses - var_loss, 0.0)
+    cvar_loss = var_loss + u.sum() / ((1.0 - confidence) * len(losses))
+    return -float(cvar_loss), -float(var_loss)
 
 
 def get_cvar_utilization(cvar_current: float, cvar_limit: float) -> float:

@@ -117,15 +117,23 @@ def realized_cvar_from_weights(
 ) -> float:
     """Empirical CVaR_alpha of a realized weight vector (post-solve check).
 
+    PR-Q32 F01: uses the exact Rockafellar-Uryasev empirical estimator,
+    matching the LP objective at optimality. The previous tail.mean()
+    diverged from the LP value when (1-alpha)*T was non-integer or when
+    probability mass clustered at VaR.
+
     Used for telemetry and tests — computes CVaR directly from the
     scenario matrix without re-solving an LP. Equivalent to the LP
     objective value at optimality.
     """
     T, _ = returns_scenarios.shape
     losses = -returns_scenarios @ weights
-    # Empirical VaR at level alpha = (1-alpha)-quantile of losses from above.
-    # For CVaR: average of losses exceeding VaR.
-    var_threshold = float(np.quantile(losses, alpha))
+
+    var_threshold = float(np.quantile(losses, alpha, method="higher"))
+    u = np.maximum(losses - var_threshold, 0.0)
+    cvar = var_threshold + u.sum() / ((1.0 - alpha) * T)
+
+    # Existing telemetry — kept for observability post-fix
     tail = losses[losses >= var_threshold]
     tail_count = int(tail.size)
     expected_tail_mass = (1.0 - alpha) * T
@@ -138,10 +146,7 @@ def realized_cvar_from_weights(
         var_threshold=var_threshold,
         tail_count_observed=tail_count,
         tail_count_expected=float(expected_tail_mass),
+        cvar_computed=float(cvar),
         loss_sign_convention="L_i = -R_i @ weights",
     )
-    if tail_count == 0:
-        return float(var_threshold)
-    # RU definition equivalent: CVaR = zeta + mean(max(L - zeta, 0)) / (1 - alpha)
-    # At zeta = VaR, this reduces to mean of tail losses when tail mass = (1-alpha).
-    return float(tail.mean())
+    return float(cvar)
