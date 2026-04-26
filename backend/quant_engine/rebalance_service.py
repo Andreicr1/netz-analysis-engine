@@ -40,7 +40,7 @@ class CascadeResult:
 def determine_cascade_action(
     trigger_status: str,
     previous_trigger_status: str | None,
-    cvar_utilized_pct: float,
+    cvar_utilization: float,
     consecutive_breach_days: int,
     profile: str,
     config: dict[str, Any] | None = None,
@@ -48,20 +48,45 @@ def determine_cascade_action(
     """Determine if a cascade action is needed based on status transition.
 
     Args:
+        cvar_utilization: CVaR utilization as a fraction (0.55 = 55%). NOT a percentage.
         config: portfolio_profiles config dict from ConfigService.
 
     Returns (event_type, trigger_reason) or (None, None) if no action needed.
 
     """
     profiles = resolve_cvar_config(config)
-    profile_config = profiles[profile]
+    profile_config = profiles.get(profile)
+    if profile_config is None:
+        logger.error(
+            "unknown_rebalance_profile",
+            profile=profile,
+            available=list(profiles.keys()),
+        )
+        return None, None
+
+    REQUIRED_KEYS = {"warning_pct", "breach_days"}
+    missing = REQUIRED_KEYS - profile_config.keys()
+    if missing:
+        logger.error(
+            "incomplete_rebalance_profile",
+            profile=profile,
+            missing=list(missing),
+        )
+        return None, None
+
+    if not (0.0 <= cvar_utilization <= 2.0):
+        logger.warning(
+            "cvar_utilization_out_of_range",
+            cvar_utilization=cvar_utilization,
+            expected_range="[0.0, 2.0]",
+        )
 
     if trigger_status == "ok":
         return None, None
 
     if trigger_status == "warning" and previous_trigger_status in (None, "ok"):
         return "cvar_breach", (
-            f"CVaR utilization at {cvar_utilized_pct:.1f}% "
+            f"CVaR utilization at {cvar_utilization * 100:.1f}% "
             f"(warning threshold: {profile_config['warning_pct'] * 100:.0f}%)"
         )
 

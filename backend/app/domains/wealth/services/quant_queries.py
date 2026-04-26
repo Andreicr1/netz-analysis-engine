@@ -2455,7 +2455,7 @@ async def process_cascade(
     event_type, reason = determine_cascade_action(
         trigger_status,
         previous_status,
-        cvar_utilized_pct,
+        cvar_utilized_pct / 100.0,  # BreachStatus stores percentage; function expects fraction
         consecutive_breach_days,
         profile,
         config=config,
