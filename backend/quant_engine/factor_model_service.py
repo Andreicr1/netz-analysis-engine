@@ -389,6 +389,9 @@ class FactorModelResult:
     portfolio_factor_exposures: dict[str, float]  # {label: exposure}
     r_squared: float  # fraction of variance explained by K factors
     residual_returns: npt.NDArray[np.float64]
+    # PR-Q29: top-level degraded signal for silent-corruption prevention
+    degraded: bool = False
+    degraded_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -404,6 +407,9 @@ class FundamentalFactorFit:
     shrinkage_lambda: float | None = None
     factors_skipped: list[dict[str, str]] = field(default_factory=list)
     alphas_per_fund: npt.NDArray[np.float64] | None = None  # PR-Q15 Fix 3
+    # PR-Q29: top-level degraded signal for silent-corruption prevention
+    degraded: bool = False
+    degraded_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -421,6 +427,7 @@ def fit_fundamental_loadings(
     factor_returns: npt.NDArray[np.float64],
     factor_names: list[str],
     ewma_lambda: float = 0.97,
+    factors_skipped: list[dict[str, str]] | None = None,
 ) -> FundamentalFactorFit:
     """Per-fund weighted OLS on 5Y daily returns with EWMA weights.
 
@@ -554,6 +561,14 @@ def fit_fundamental_loadings(
         )
     np.clip(r_squared_per_fund, 0.0, 1.0, out=r_squared_per_fund)
 
+    # PR-Q29: propagate degraded signal when factors were skipped
+    skipped = factors_skipped or []
+    _degraded = bool(skipped)
+    _degraded_reason = (
+        f"factor_model_partial_fit: missing {len(skipped)} factor(s): "
+        + ", ".join(s.get("name", "<unknown>") for s in skipped)
+    ) if _degraded else None
+
     return FundamentalFactorFit(
         loadings=np.asarray(loadings, dtype=np.float64),
         factor_cov=np.asarray(factor_cov, dtype=np.float64),
@@ -562,7 +577,10 @@ def fit_fundamental_loadings(
         residual_series=np.asarray(residual_series, dtype=np.float64),
         r_squared_per_fund=r_squared_per_fund,
         shrinkage_lambda=shrinkage_lambda,
+        factors_skipped=skipped,
         alphas_per_fund=np.asarray(alphas_per_fund, dtype=np.float64),
+        degraded=_degraded,
+        degraded_reason=_degraded_reason,
     )
 
 

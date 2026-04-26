@@ -210,11 +210,13 @@ class IllConditionedCovarianceError(Exception):
         n_obs: int,
         worst_eigenvalues: list[float] | None = None,
         message: str | None = None,
+        degraded_reason: str | None = None,
     ) -> None:
         self.condition_number = condition_number
         self.n_funds = n_funds
         self.n_obs = n_obs
         self.worst_eigenvalues = worst_eigenvalues or []
+        self.degraded_reason = degraded_reason
         detail = (
             f"kappa(Sigma)={condition_number:.3e} exceeds error threshold ({KAPPA_ERROR_THRESHOLD:.0e}); "
             f"N={n_funds}, T={n_obs}"
@@ -1526,11 +1528,13 @@ async def compute_fund_level_inputs(
                 matrix_idx = [date_to_idx[d] for d in common_idx]
                 r_matrix = returns_matrix[matrix_idx]
 
+                skipped_meta = factor_returns_df.attrs.get("skipped", [])
                 fit = fit_fundamental_loadings(
                     r_matrix,
                     f_returns,
                     factor_names=factor_returns_df.columns.tolist(),
                     ewma_lambda=ewma_lambda,
+                    factors_skipped=skipped_meta,
                 )
                 annual_cov = assemble_factor_covariance(fit)
                 covariance_source = "factor_model"
@@ -1542,7 +1546,7 @@ async def compute_fund_level_inputs(
                 factor_names = fit.factor_names
                 residual_variance = fit.residual_variance
 
-                factors_skipped = factor_returns_df.attrs.get("skipped", [])
+                factors_skipped = fit.factors_skipped
                 try:
                     kappa_factor_cov = float(np.linalg.cond(fit.factor_cov))
                 except Exception:
@@ -1666,6 +1670,14 @@ async def compute_fund_level_inputs(
                     f"fit={'set' if fit is not None else 'none'}, "
                     f"k_effective={factor_model_meta.get('k_factors_effective', 0)})"
                 ),
+                degraded_reason=(
+                    f"covariance_fallback_unavailable: "
+                    f"kappa(Sigma)={cond_primary.kappa:.3e} in fallback band, "
+                    f"covariance_source={covariance_source}, "
+                    f"factor_model_fit={'set' if fit is not None else 'none'}, "
+                    f"k_effective={factor_model_meta.get('k_factors_effective', 0)}, "
+                    f"factors_skipped={factor_model_meta.get('factors_skipped', [])}"
+                ),
             )
 
         # Assemble the factor-cov candidate lazily (avoids wasted work when
@@ -1692,6 +1704,11 @@ async def compute_fund_level_inputs(
                     f"(kappa>={KAPPA_ERROR_THRESHOLD:.0e}) covariances are "
                     f"ill-conditioned."
                 ),
+                degraded_reason=(
+                    f"covariance_fallback_unavailable: both sample "
+                    f"(kappa={cond_primary.kappa:.3e}) and factor covariances "
+                    f"ill-conditioned, covariance_source={covariance_source}"
+                ),
             ) from factor_exc
         if cond_factor.decision != "sample":
             raise IllConditionedCovarianceError(
@@ -1702,6 +1719,12 @@ async def compute_fund_level_inputs(
                     f"Both sample (kappa={cond_primary.kappa:.3e}) and factor "
                     f"(kappa={cond_factor.kappa:.3e}) covariances are "
                     f"ill-conditioned."
+                ),
+                degraded_reason=(
+                    f"covariance_fallback_unavailable: both sample "
+                    f"(kappa={cond_primary.kappa:.3e}) and factor "
+                    f"(kappa={cond_factor.kappa:.3e}) covariances ill-conditioned, "
+                    f"covariance_source={covariance_source}"
                 ),
             )
         logger.info(
