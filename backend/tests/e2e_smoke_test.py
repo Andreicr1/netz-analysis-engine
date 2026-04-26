@@ -554,8 +554,7 @@ async def main() -> None:
             from quant_engine.rebalance_service import determine_cascade_action
 
             event, action = determine_cascade_action(
-                "warning", "ok", 0.85, 0, "moderate",
-                {"profiles": {"moderate": {"warning_pct": 0.50, "breach_days": 5}}},
+                "warning", "ok", 0.85, 0, "moderate", None,
             )
             ok("4.7 Rebalance", f"event={event}, action={action}")
         except Exception as e:
