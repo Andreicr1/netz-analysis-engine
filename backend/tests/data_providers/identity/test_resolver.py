@@ -1,7 +1,10 @@
-"""PR-Q11 Phase 1 — unit tests for instrument_identity schema + resolver.
+"""PR-Q11 Phase 1 — integration tests for instrument_identity schema + resolver.
 
-Tests run against local docker-compose PostgreSQL (``make up``).
-Skipped cleanly if DATABASE_URL is unreachable.
+Tests run against local docker-compose PostgreSQL (``make up``) with
+``instruments_universe`` populated. Marked as integration: CI's default
+``-m "not integration"`` filter skips them. Run locally with::
+
+    pytest backend/tests/data_providers/identity/ -m integration
 """
 from __future__ import annotations
 
@@ -11,6 +14,8 @@ import asyncpg
 import pytest
 
 from app.core.config import settings
+
+pytestmark = pytest.mark.integration
 
 # ---------------------------------------------------------------------------
 # Helpers
