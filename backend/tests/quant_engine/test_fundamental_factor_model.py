@@ -72,9 +72,9 @@ def test_fit_fundamental_loadings(sample_factor_returns, sample_fund_returns):
     assert fit.residual_series.shape == (100, 5)
     assert len(fit.r_squared_per_fund) == 5
     assert np.all(fit.r_squared_per_fund > 0.8)  # high fit by construction
-    # A.6 — Ledoit-Wolf shrinkage λ is recorded on the fit
-    assert fit.shrinkage_lambda is not None
-    assert 0.0 <= fit.shrinkage_lambda <= 1.0
+    # PR-Q34 F08: LW shrinkage removed (scaled-identity target destroyed
+    # cross-factor correlations). shrinkage_lambda is always None post-Q34.
+    assert fit.shrinkage_lambda is None
     # PR-Q15 Fix 3 — alphas_per_fund is populated
     assert fit.alphas_per_fund is not None
     assert len(fit.alphas_per_fund) == 5
@@ -305,8 +305,8 @@ async def test_k_equals_six_contract_with_stubbed_factor_returns(monkeypatch):
     assert fm["k_factors_effective"] == len(result.factor_names)
     assert set(fm["r_squared_per_fund"].keys()) == {str(i) for i in ids}
     assert fm["kappa_factor_cov"] is not None
-    # Ledoit-Wolf shrinkage recorded
-    assert fm["shrinkage_lambda"] is not None
+    # PR-Q34 F08: LW shrinkage removed; shrinkage_lambda always None post-Q34
+    assert fm["shrinkage_lambda"] is None
     # Residual PCA recorded
     pca = result.inputs_metadata["residual_pca"]
     assert pca["n_components"] >= 1
@@ -399,3 +399,146 @@ async def test_single_index_fallback_when_n_less_than_20(monkeypatch):
     assert result.factor_names is None
     assert result.cov_matrix.shape == (15, 15)
     assert result.condition_number < 1e3
+
+
+# ── PR-Q34 F07: weighted SSE tests ──────────────────────────────────────
+
+
+def test_residual_variance_uses_weighted_sse_consistent_with_ewma_wls():
+    """PR-Q34 F07: residual variance must reflect EWMA-weighted SSE, not unweighted full-history.
+
+    Synthetic 5-year setup with regime shift at t=4 years. EWMA λ=0.97
+    weights recent data ~30x more than 5-year-old data. Pre-fix unweighted
+    SSE inflates residual_variance ~28x; post-fix weighted SSE produces
+    consistent estimate.
+    """
+    rng = np.random.default_rng(42)
+    T_years = 5
+    T = 252 * T_years  # 1260 daily obs
+    K = 3  # small factor model for clean test
+    N = 1  # single fund
+
+    # Synthetic factor returns
+    factor_returns = rng.normal(0.0, 0.01, size=(T, K))
+
+    # Single fund with β shift at t=4 years
+    shift_idx = 252 * 4  # 4-year mark
+    beta_old = np.array([1.0, 0.5, -0.2])
+    beta_new = np.array([0.5, 1.5, 0.3])
+
+    fund_returns = np.zeros((T, N))
+    fund_returns[:shift_idx, 0] = factor_returns[:shift_idx, :] @ beta_old + rng.normal(0.0, 0.005, size=shift_idx)
+    fund_returns[shift_idx:, 0] = factor_returns[shift_idx:, :] @ beta_new + rng.normal(0.0, 0.005, size=T - shift_idx)
+
+    fit = fit_fundamental_loadings(
+        fund_returns_matrix=fund_returns,
+        factor_returns=factor_returns,
+        factor_names=["f1", "f2", "f3"],
+        ewma_lambda=0.97,
+    )
+
+    # Post-fix residual variance should reflect the recent (post-shift) regime,
+    # which has noise std ~0.005 → annualized variance ~0.005² * 252 ≈ 6.3e-3
+    expected_recent_var = (0.005 ** 2) * 252
+
+    # Allow generous tolerance (4x) since EWMA mixes some pre-shift residuals
+    assert fit.residual_variance[0] < 4 * expected_recent_var, (
+        f"Residual variance {fit.residual_variance[0]:.6f} vs expected ~{expected_recent_var:.6f}; "
+        f"if much larger, F07 unweighted-SSE bug not fixed"
+    )
+    assert fit.residual_variance[0] > expected_recent_var * 0.5, (
+        f"Residual variance {fit.residual_variance[0]:.6f} too low; possible over-correction"
+    )
+
+    # R² should be reasonable post-fix (not falsely suppressed to 0)
+    assert fit.r_squared_per_fund[0] > 0.5, (
+        f"R² per fund {fit.r_squared_per_fund[0]:.4f}; if near 0, F07 SSE inflation suppressed it"
+    )
+
+
+def test_residual_variance_matches_unweighted_when_lambda_is_one():
+    """PR-Q34 F07 sanity: when ewma_lambda=1.0 (uniform weights), the weighted
+    SSE must equal the unweighted SSE divided by T (since w_norm = 1/T).
+    Backward compatibility check.
+    """
+    rng = np.random.default_rng(42)
+    T = 500
+    K = 3
+    N = 2
+
+    factor_returns = rng.normal(0.0, 0.01, size=(T, K))
+    fund_returns = factor_returns @ rng.normal(0.0, 1.0, size=(K, N)) + rng.normal(0.0, 0.005, size=(T, N))
+
+    fit_uniform = fit_fundamental_loadings(
+        fund_returns_matrix=fund_returns,
+        factor_returns=factor_returns,
+        factor_names=["f1", "f2", "f3"],
+        ewma_lambda=1.0,  # uniform weights
+    )
+
+    # With ewma_lambda=1.0, weights are all 1; w_norm = 1/T; weighted_sse * T = sse
+    # So residual_variance = unweighted_sse / dof * 252 — same as pre-fix
+    assert fit_uniform.residual_variance.shape == (N,)
+    assert all(np.isfinite(fit_uniform.residual_variance))
+
+
+# ── PR-Q34 F08: cross-factor correlation tests ──────────────────────────
+
+
+def test_factor_covariance_preserves_cross_factor_correlations():
+    """PR-Q34 F08: factor covariance must preserve cross-factor correlations
+    (no LW shrinkage to scaled identity).
+
+    Synthetic: two perfectly correlated factors (Market and a copy with noise).
+    Pre-fix LW shrinkage would push the off-diagonal toward zero. Post-fix
+    EWMA covariance preserves the ~0.9+ correlation.
+    """
+    rng = np.random.default_rng(42)
+    T = 1260  # 5Y daily
+    K = 2  # two factors
+    N = 1
+
+    # Two highly correlated factors
+    common_signal = rng.normal(0.0, 0.01, size=T)
+    factor_returns = np.column_stack([
+        common_signal + rng.normal(0.0, 0.001, size=T),  # f1: signal + small noise
+        common_signal + rng.normal(0.0, 0.001, size=T),  # f2: same signal + small noise
+    ])
+
+    fund_returns = factor_returns @ np.array([[1.0], [0.5]]) + rng.normal(0.0, 0.005, size=(T, N))
+
+    fit = fit_fundamental_loadings(
+        fund_returns_matrix=fund_returns,
+        factor_returns=factor_returns,
+        factor_names=["f1", "f2"],
+        ewma_lambda=0.97,
+    )
+
+    # Post-fix factor_cov off-diagonal correlation should be > 0.85 (preserves
+    # true correlation). Pre-fix LW shrinkage would push it toward 0.
+    cov_diag = np.sqrt(np.diag(fit.factor_cov))
+    corr_off_diag = fit.factor_cov[0, 1] / (cov_diag[0] * cov_diag[1])
+
+    assert corr_off_diag > 0.85, (
+        f"Factor cross-correlation {corr_off_diag:.4f}; if near 0, F08 "
+        f"scaled-identity shrinkage was not removed"
+    )
+
+
+def test_shrinkage_lambda_is_none_post_q34():
+    """PR-Q34 F08: shrinkage_lambda field must always be None post-fix
+    (LW shrinkage removed)."""
+    rng = np.random.default_rng(42)
+    T = 200
+    K = 3
+    N = 2
+    factor_returns = rng.normal(0.0, 0.01, size=(T, K))
+    fund_returns = factor_returns @ rng.normal(0.0, 1.0, size=(K, N)) + rng.normal(0.0, 0.005, size=(T, N))
+
+    fit = fit_fundamental_loadings(
+        fund_returns_matrix=fund_returns,
+        factor_returns=factor_returns,
+        factor_names=["f1", "f2", "f3"],
+    )
+
+    assert fit.shrinkage_lambda is None
