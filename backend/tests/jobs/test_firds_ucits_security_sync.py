@@ -86,8 +86,9 @@ class TestFirdsSyncWorkerUnit:
     @pytest.mark.asyncio
     async def test_lock_busy_skips(self):
         """Worker skips if advisory lock is held."""
-        from app.core.jobs.firds_ucits_security_sync import run_firds_ucits_security_sync
         from unittest.mock import MagicMock
+
+        from app.core.jobs.firds_ucits_security_sync import run_firds_ucits_security_sync
 
         mock_db = AsyncMock()
 
@@ -103,8 +104,9 @@ class TestFirdsSyncWorkerUnit:
     @pytest.mark.asyncio
     async def test_no_esma_funds_skips(self):
         """Worker skips if esma_funds is empty."""
-        from app.core.jobs.firds_ucits_security_sync import run_firds_ucits_security_sync
         from unittest.mock import MagicMock
+
+        from app.core.jobs.firds_ucits_security_sync import run_firds_ucits_security_sync
 
         mock_db = AsyncMock()
 
