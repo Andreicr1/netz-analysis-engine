@@ -548,6 +548,42 @@ class TestPortfolioMetricsService:
         result = aggregate(returns, benchmark)
         assert result.information_ratio is not None
 
+    def test_annualized_return_is_geometric_not_arithmetic(self):
+        from quant_engine.portfolio_metrics_service import aggregate
+
+        rng = np.random.default_rng(42)
+        r = rng.normal(0.0004, 0.01, size=504)
+
+        result = aggregate(r)
+
+        cum = float(np.prod(1 + r))
+        expected_geom = cum ** (252 / len(r)) - 1
+        expected_arith = float(np.mean(r)) * 252
+
+        assert abs(result.annualized_return - round(expected_geom, 6)) < 1e-6
+        assert abs(result.annualized_return - expected_arith) > 0.001
+
+    def test_annualized_return_preserves_terminal_wealth(self):
+        """Alternating ±50%/+100%: true terminal wealth flat → 0% return."""
+        from quant_engine.portfolio_metrics_service import aggregate
+
+        r = np.array([-0.5, 1.0] * 252)  # 504 days
+        result = aggregate(r)
+        assert abs(result.annualized_return - 0.0) < 1e-6
+
+    def test_portfolio_metrics_sortino_matches_canonical(self):
+        from quant_engine.portfolio_metrics_service import aggregate
+        from quant_engine.return_statistics_service import compute_sortino_ratio
+
+        rng = np.random.default_rng(42)
+        r = rng.normal(0.0004, 0.012, size=504)
+        metrics = aggregate(r, risk_free_rate=0.04)
+        direct = compute_sortino_ratio(r, risk_free_rate=0.04)
+        if direct is not None:
+            assert metrics.sortino_ratio == round(direct, 4)
+        else:
+            assert metrics.sortino_ratio is None
+
 
 class TestQuantAnalyzerRewired:
     """Test QuantAnalyzer is no longer a scaffold."""

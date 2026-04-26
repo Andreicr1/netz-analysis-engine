@@ -75,26 +75,27 @@ def compute_sortino_ratio(
     trading_days_per_year: int = TRADING_DAYS_PER_YEAR,
     min_annualized_vol: float = MIN_ANNUALIZED_VOL,
 ) -> float | None:
-    """Annualised Sortino ratio (downside deviation denominator).
+    """Annualised Sortino ratio with canonical Target Downside Deviation.
 
-    Same canonical Netz formula as :func:`compute_sharpe_ratio`, but the
-    denominator only penalises **negative** excess returns. Returns
-    ``None`` when there are no losses (Sortino is undefined) or when the
-    annualised downside vol collapses below ``min_annualized_vol``.
+    Denominator: TDD = sqrt(mean(min(R - rf_daily, 0)²)) over full sample N.
+    Source: Spec §3.4. Replaces prior std(downside_excess) formulation which
+    was mathematically a "modified" Sortino that biased risk vs MAR.
     """
     if len(daily_returns) < 2:
         return None
-    excess = daily_returns - risk_free_rate / trading_days_per_year
-    downside = excess[excess < 0]
-    if len(downside) == 0:
+    rf_daily = risk_free_rate / trading_days_per_year
+    excess = daily_returns - rf_daily
+
+    # Target Downside Deviation: shortfall² over full sample
+    shortfall = np.minimum(excess, 0.0)
+    tdd = float(np.sqrt(np.mean(shortfall**2)))
+
+    if tdd == 0 or not np.isfinite(tdd):
         return None
-    downside_vol = float(np.std(downside, ddof=1))
-    if downside_vol == 0 or not np.isfinite(downside_vol):
+    annualized_tdd = tdd * np.sqrt(trading_days_per_year)
+    if annualized_tdd < min_annualized_vol:
         return None
-    annualized_downside_vol = downside_vol * np.sqrt(trading_days_per_year)
-    if annualized_downside_vol < min_annualized_vol:
-        return None
-    return float(np.mean(excess) / downside_vol * np.sqrt(trading_days_per_year))
+    return float(np.mean(excess) / tdd * np.sqrt(trading_days_per_year))
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,7 +199,7 @@ def _compute_sterling_ratio(
         yearly_max_dds.append(float(np.min(dd_series)))
 
     avg_max_dd = np.mean(yearly_max_dds)
-    denominator = abs(avg_max_dd) - 0.10
+    denominator = abs(avg_max_dd - 0.10)
 
     if denominator <= 0:
         return None
@@ -297,14 +298,15 @@ def compute_return_statistics(
             beta = float(slope)
             r_sq = float(r_value**2)
 
-            # Treynor: (ann_return - Rf) / beta
-            ann_return = _annualize_monthly(arith_mean)
+            # Treynor: (ann_return - Rf) / beta — geometric annualization
+            ann_return = _annualize_monthly(geom_mean)
             if abs(beta) > 1e-10:
                 treynor = float((ann_return - risk_free_rate) / beta)
 
-            # Jensen alpha: mean(R) - Rf_monthly - beta * (mean(Rm) - Rf_monthly)
-            rf_monthly = (1 + risk_free_rate) ** (1 / 12) - 1
-            jensen = float(np.mean(r) - rf_monthly - beta * (np.mean(bm) - rf_monthly))
+            # Jensen alpha: annualized, simple Rf (matches §3.1 and adjacent Treynor scale)
+            rf_monthly = risk_free_rate / 12
+            monthly_alpha = float(np.mean(r) - rf_monthly - beta * (np.mean(bm) - rf_monthly))
+            jensen = monthly_alpha * 12
 
             # Proficiency ratios
             bm_up_mask = bm >= 0

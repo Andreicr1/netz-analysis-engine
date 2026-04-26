@@ -53,27 +53,26 @@ def aggregate(
     if len(portfolio_returns) == 0:
         return PortfolioMetrics()
 
+    from quant_engine.return_statistics_service import compute_sortino_ratio
+
     rf_daily = risk_free_rate / 252
     n = len(portfolio_returns)
 
     mean_r = float(np.mean(portfolio_returns))
     std_r = float(np.std(portfolio_returns, ddof=1))
 
-    # Annualized
-    ann_return = float(mean_r * 252)
+    # Annualized return: geometric (preserves true terminal wealth)
+    cum_return = float(np.prod(1.0 + portfolio_returns))
+    ann_return = float(cum_return ** (252 / n) - 1.0) if n > 0 else None
+
+    # Annualized volatility: arithmetic by sqrt(252) (variance scales linearly under iid)
     ann_vol = float(std_r * np.sqrt(252)) if std_r > 0 else None
 
     # Sharpe
     sharpe = float((mean_r - rf_daily) / std_r * np.sqrt(252)) if std_r > 0 else None
 
-    # Sortino (downside deviation)
-    downside = portfolio_returns[portfolio_returns < rf_daily] - rf_daily
-    downside_std = float(np.std(downside, ddof=1)) if len(downside) > 1 else None
-    sortino = (
-        float((mean_r - rf_daily) / downside_std * np.sqrt(252))
-        if downside_std and downside_std > 0
-        else None
-    )
+    # Sortino — delegate to canonical TDD helper
+    sortino = compute_sortino_ratio(portfolio_returns, risk_free_rate=risk_free_rate)
 
     # Max drawdown
     cum = np.cumprod(1.0 + portfolio_returns)
