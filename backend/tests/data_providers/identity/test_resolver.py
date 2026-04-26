@@ -37,14 +37,65 @@ async def _db_reachable() -> bool:
     return True
 
 
+async def _seed_test_instruments(conn, n: int) -> list[uuid.UUID]:
+    """Insert N synthetic instruments_universe rows for tests.
+
+    Uses slug prefix ``q11-test-fund-N`` for cleanup-by-pattern. Satisfies
+    chk_fund_attrs (aum_usd, manager_name, inception_date required).
+    """
+    ids: list[uuid.UUID] = []
+    for i in range(n):
+        row = await conn.fetchrow(
+            """
+            INSERT INTO instruments_universe (
+                instrument_type, name, asset_class, geography, currency,
+                attributes, slug
+            )
+            VALUES (
+                'fund',
+                $1,
+                'Equity',
+                'US',
+                'USD',
+                jsonb_build_object(
+                    'aum_usd', 1000000,
+                    'manager_name', 'Q11 Test Manager',
+                    'inception_date', '2024-01-01'
+                ),
+                $2
+            )
+            ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+            RETURNING instrument_id
+            """,
+            f"Q11 Test Fund {i}",
+            f"q11-test-fund-{i}",
+        )
+        ids.append(row["instrument_id"])
+    return ids
+
+
+async def _cleanup_test_instruments(conn) -> None:
+    """Remove synthetic universe rows after tests."""
+    await conn.execute(
+        "DELETE FROM instruments_universe WHERE slug LIKE 'q11-test-fund-%'"
+    )
+
+
 @pytest.fixture
 async def conn():
-    """Provide a raw asyncpg connection with automatic cleanup."""
+    """Provide a raw asyncpg connection with automatic cleanup.
+
+    Seeds 3 synthetic instruments_universe rows so tests can run on a
+    fresh CI database. Cleans up identity rows + history + universe rows
+    on teardown (order matters: history → identity → universe).
+    """
     if not await _db_reachable():
         pytest.skip("DATABASE_URL not reachable")
     c = await asyncpg.connect(_asyncpg_dsn(), timeout=5.0)
+    # Pre-seed a small universe so helpers below have rows to read.
+    await _seed_test_instruments(c, n=3)
     yield c
-    # Cleanup any test rows
+    # Cleanup: history → identity → universe (FK ON DELETE RESTRICT on identity).
     await c.execute(
         "DELETE FROM instrument_identity_history "
         "WHERE instrument_id IN ("
@@ -58,22 +109,28 @@ async def conn():
         "WHERE identity_sources->>'_test_prefix' = $1",
         TEST_PREFIX,
     )
+    await _cleanup_test_instruments(c)
     await c.close()
 
 
 async def _get_test_instrument_id(conn) -> uuid.UUID:
-    """Return first instrument_id from instruments_universe."""
+    """Return first synthetic test instrument_id (seeded by fixture)."""
     row = await conn.fetchrow(
-        "SELECT instrument_id FROM instruments_universe LIMIT 1"
+        "SELECT instrument_id FROM instruments_universe "
+        "WHERE slug LIKE 'q11-test-fund-%' "
+        "ORDER BY slug LIMIT 1"
     )
-    assert row is not None, "instruments_universe is empty"
+    assert row is not None, "test fixture failed to seed instruments_universe"
     return row["instrument_id"]
 
 
 async def _get_test_instrument_ids(conn, n: int = 3) -> list[uuid.UUID]:
-    """Return N instrument_ids from instruments_universe."""
+    """Return N synthetic test instrument_ids (seeded by fixture)."""
     rows = await conn.fetch(
-        "SELECT instrument_id FROM instruments_universe LIMIT $1", n
+        "SELECT instrument_id FROM instruments_universe "
+        "WHERE slug LIKE 'q11-test-fund-%' "
+        "ORDER BY slug LIMIT $1",
+        n,
     )
     return [r["instrument_id"] for r in rows]
 

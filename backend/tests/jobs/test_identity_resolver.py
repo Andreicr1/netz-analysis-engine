@@ -41,12 +41,39 @@ async def _db_reachable() -> bool:
     return True
 
 
+async def _seed_test_instruments(conn, n: int = 3) -> None:
+    """Seed N synthetic instruments_universe rows for worker tests."""
+    for i in range(n):
+        await conn.execute(
+            """
+            INSERT INTO instruments_universe (
+                instrument_type, name, asset_class, geography, currency,
+                attributes, slug
+            )
+            VALUES (
+                'fund', $1, 'Equity', 'US', 'USD',
+                jsonb_build_object(
+                    'aum_usd', 1000000,
+                    'manager_name', 'Q11 Test Manager',
+                    'inception_date', '2024-01-01'
+                ),
+                $2
+            )
+            ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+            """,
+            f"Q11 Worker Test Fund {i}",
+            f"q11-worker-test-fund-{i}",
+        )
+
+
 @pytest.fixture
 async def conn():
     if not await _db_reachable():
         pytest.skip("DATABASE_URL not reachable")
     c = await asyncpg.connect(_asyncpg_dsn(), timeout=5.0)
+    await _seed_test_instruments(c, n=3)
     yield c
+    # Cleanup: history → identity → universe (FK ON DELETE RESTRICT on identity).
     await c.execute(
         "DELETE FROM instrument_identity_history "
         "WHERE instrument_id IN ("
@@ -59,6 +86,9 @@ async def conn():
         "DELETE FROM instrument_identity "
         "WHERE identity_sources->>'_test_prefix' = $1",
         TEST_PREFIX,
+    )
+    await c.execute(
+        "DELETE FROM instruments_universe WHERE slug LIKE 'q11-worker-test-fund-%'"
     )
     await c.close()
 
@@ -77,15 +107,23 @@ async def db_session():
 
 
 async def _get_test_iid(conn) -> str:
+    """Return first synthetic worker test instrument_id (seeded by fixture)."""
     row = await conn.fetchrow(
-        "SELECT instrument_id::text FROM instruments_universe LIMIT 1"
+        "SELECT instrument_id::text FROM instruments_universe "
+        "WHERE slug LIKE 'q11-worker-test-fund-%' "
+        "ORDER BY slug LIMIT 1"
     )
+    assert row is not None, "test fixture failed to seed instruments_universe"
     return row["instrument_id"]
 
 
 async def _get_test_iids(conn, n: int = 3) -> list[str]:
+    """Return N synthetic worker test instrument_ids (seeded by fixture)."""
     rows = await conn.fetch(
-        "SELECT instrument_id::text FROM instruments_universe LIMIT $1", n
+        "SELECT instrument_id::text FROM instruments_universe "
+        "WHERE slug LIKE 'q11-worker-test-fund-%' "
+        "ORDER BY slug LIMIT $1",
+        n,
     )
     return [r["instrument_id"] for r in rows]
 
