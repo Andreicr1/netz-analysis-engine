@@ -122,17 +122,24 @@ async def resolve_fund(db: AsyncSession, external_id: str) -> dict[str, Any]:
             )
         ).scalar_one_or_none()
 
-    # D.2 — match on sec_cik attribute
+    # D.2 — match on CIK via identity resolver (with legacy fallback)
     if instrument_id is None and cik is not None:
-        instrument_id = (
-            await db.execute(
-                text(
-                    "SELECT instrument_id::text FROM instruments_universe "
-                    "WHERE attributes->>'sec_cik' = :cik LIMIT 1",
-                ),
-                {"cik": cik},
-            )
-        ).scalar_one_or_none()
+        from data_providers.identity.resolver import by_cik
+
+        ids = await by_cik(db, cik)
+        if ids:
+            instrument_id = str(ids[0])
+        else:
+            # Legacy fallback: attributes->>'sec_cik'
+            instrument_id = (
+                await db.execute(
+                    text(
+                        "SELECT instrument_id::text FROM instruments_universe "
+                        "WHERE attributes->>'sec_cik' = :cik LIMIT 1",
+                    ),
+                    {"cik": cik},
+                )
+            ).scalar_one_or_none()
 
     # D.3 — match on series_id attribute
     if instrument_id is None and effective_series_id is not None:

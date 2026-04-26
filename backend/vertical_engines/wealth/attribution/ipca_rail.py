@@ -13,10 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from quant_engine.ipca.fit import IPCAFit
 from quant_engine.ipca.preprocessing import rank_transform
+from data_providers.identity.resolver import resolve_cik
 from vertical_engines.wealth.attribution.holdings_based import (
-    cik_variants,
     latest_period_for_cik,
-    resolve_fund_cik,
 )
 from vertical_engines.wealth.attribution.models import AttributionRequest, IPCAResult
 
@@ -85,7 +84,8 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
         return None
 
     # Option B: Get fund CIK and latest holdings
-    cik = await resolve_fund_cik(db, request.fund_instrument_id)
+    cik_identity = await resolve_cik(db, request.fund_instrument_id)
+    cik = cik_identity.padded
     if not cik:
         return await _run_ipca_rail_option_a(request, db, fit)
 
@@ -148,7 +148,7 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
     ranked_cs = rank_transform(cs_df)
 
     # --- Top-10 holdings + instrument_id mapping ---
-    cik_candidates = cik_variants(cik)
+    cik_candidates = cik_identity.candidates()
     stmt_holdings = text(
         """
         WITH top_holdings AS (

@@ -567,6 +567,11 @@ async def _propagate_to_instruments_universe(db: AsyncSession) -> None:
                 )
             FROM sec_registered_funds f
             WHERE iu.attributes->>'sec_cik' = f.cik::text
+               OR iu.instrument_id IN (
+                   SELECT instrument_id FROM instrument_identity
+                   WHERE cik_unpadded = LTRIM(f.cik::text, '0')
+                      OR cik_padded = f.cik::text
+               )
             """,
         ),
     )

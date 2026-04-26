@@ -40,12 +40,14 @@ logger = structlog.get_logger()
 def cik_variants(cik: str) -> tuple[str, str]:
     """Return (unpadded, zero-padded-10) candidates for CIK lookups.
 
-    ``sec_nport_holdings.cik`` is stored unpadded today (see
-    ``fund_characteristics_aggregator.py:138``). Other consumers may emit
-    padded form. Lookups should accept both via ``IN`` to preserve the
-    btree index — do not use SQL ``LTRIM``/``LPAD`` in WHERE, that
-    disables the index.
+    .. deprecated:: PR-Q11
+        Use ``data_providers.identity.resolver.resolve_cik()`` instead.
+        This wrapper will be removed in a cleanup PR.
     """
+    logger.warning(
+        "deprecated.cik_variants",
+        msg="Use data_providers.identity.resolver.resolve_cik() instead",
+    )
     clean = cik.lstrip("0") or "0"
     return (clean, clean.zfill(10))
 
@@ -64,14 +66,22 @@ MAX_SECTOR_ROWS = 32
 async def resolve_fund_cik(
     db: "AsyncSession", fund_instrument_id: Any,
 ) -> str | None:
-    """Bridge fund_instrument_id → SEC CIK via instruments_universe attributes.
+    """Bridge fund_instrument_id → SEC CIK via identity resolver.
 
-    `sec_nport_holdings.cik` stores 10-digit zero-padded CIKs (EDGAR's
-    canonical form). `instruments_universe.attributes->>'sec_cik'` stores
-    whatever the ingestion worker wrote — verified in dev DB to be a mix
-    of 6-digit unpadded and 10-digit padded. We normalise to 10-digit to
-    match the matview key.
+    .. deprecated:: PR-Q11
+        Use ``data_providers.identity.resolver.resolve_cik()`` instead.
+        This wrapper will be removed in a cleanup PR.
     """
+    from data_providers.identity.resolver import resolve_cik as _resolve_cik
+
+    logger.warning(
+        "deprecated.resolve_fund_cik",
+        msg="Use data_providers.identity.resolver.resolve_cik() instead",
+    )
+    cik_id = await _resolve_cik(db, fund_instrument_id)
+    if cik_id.padded:
+        return cik_id.padded
+    # Fallback to legacy path if identity table not populated yet
     row = (await db.execute(text("""
         SELECT attributes->>'sec_cik' AS cik
         FROM instruments_universe
