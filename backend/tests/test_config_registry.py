@@ -148,3 +148,13 @@ class TestRegistryConsistency:
         assert domain is not None
         with pytest.raises(AttributeError):
             domain.config_type = "hacked"  # type: ignore[misc]
+
+    def test_taa_bands_is_registered_for_liquid_funds(self):
+        """PR-Q28 F06: registry must include (liquid_funds, taa_bands) to silence
+        validate_lookup warnings emitted on every construction run.
+        """
+        assert ConfigRegistry.is_registered("liquid_funds", "taa_bands") is True
+        domain = ConfigRegistry.get("liquid_funds", "taa_bands")
+        assert domain is not None
+        assert domain.ownership == "config_service"
+        assert domain.required is False

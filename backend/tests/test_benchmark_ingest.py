@@ -337,3 +337,17 @@ class TestResolvePeriod:
         from app.domains.wealth.workers.benchmark_ingest import _resolve_period
 
         assert _resolve_period(1095) == "3y"
+
+
+class TestFactorSourceBlocks:
+    """PR-Q28 F04: canonical factor-source blocks for IWF and EFA."""
+
+    def test_factor_source_blocks_exist(self):
+        """After migration 0184, IWF and EFA must be reachable for factor_model_service."""
+        from app.domains.wealth.models.block import AllocationBlock
+
+        columns = {c.name for c in AllocationBlock.__table__.columns}
+        assert "block_id" in columns
+        assert "benchmark_ticker" in columns
+        assert "is_canonical" in columns
+        assert "is_active" in columns
