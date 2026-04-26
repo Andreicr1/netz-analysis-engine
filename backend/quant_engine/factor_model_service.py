@@ -79,13 +79,28 @@ async def build_fundamental_factor_returns(
     benchmark_res = await db.execute(benchmark_stmt)
     benchmark_rows = benchmark_res.all()
 
-    # Defensive check for T6
+    # Defensive filter (PR-Q35 F06): OAS levels are not total returns. Previously
+    # raised ValueError, taking down the entire factor model fit. Per charter §3
+    # (degraded > crash), filter OAS rows defensively + record for the skipped
+    # accumulator so consumers see the degradation via FundamentalFactorFit.
+    # Reference: Wave 6 Session 03 F06, audit-validation-session03.md.
+    _oas_filtered: list[str] = []
     for row in benchmark_rows:
         ticker = getattr(row, "benchmark_ticker", row[1])
         if ticker in OAS_TICKERS:
-            raise ValueError(
-                f"OAS level is not a total return. Refusing to use {ticker} as credit factor."
-            )
+            _oas_filtered.append(ticker)
+
+    if _oas_filtered:
+        logger.warning(
+            "factor_returns_oas_level_filtered",
+            oas_tickers=sorted(set(_oas_filtered)),
+            rows_dropped=len(_oas_filtered),
+            reason="OAS levels are not total returns; filtered defensively (PR-Q35 F06)",
+        )
+        benchmark_rows = [
+            row for row in benchmark_rows
+            if getattr(row, "benchmark_ticker", row[1]) not in OAS_TICKERS
+        ]
 
     if benchmark_rows:
         bench_df = pd.DataFrame(
@@ -211,6 +226,16 @@ async def build_fundamental_factor_returns(
     # ── 4. Build factor series ────────────────────────────────────────────
     factors = pd.DataFrame(index=combined.index)
     skipped: list[dict[str, str]] = []
+
+    # PR-Q35 F06: record OAS-filtered tickers for downstream degraded propagation.
+    # These appear in factors.attrs["skipped"] at line 327, which feeds into
+    # FundamentalFactorFit.factors_skipped via the caller chain.
+    if _oas_filtered:
+        for ticker in sorted(set(_oas_filtered)):
+            skipped.append({
+                "name": f"oas_{ticker.lower()}",
+                "reason": "OAS level is not a total return; filtered defensively (PR-Q35 F06)",
+            })
 
     # 1. US equity beta (SPY)
     if "SPY" in combined.columns:
