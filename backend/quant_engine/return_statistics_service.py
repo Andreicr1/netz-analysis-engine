@@ -18,6 +18,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from quant_engine.drawdown_service import compute_drawdown_series
+
 # ── Canonical risk-ratio constants ────────────────────────────────────────────
 # A single source of truth for every quant consumer (risk_calc worker,
 # screener quant metrics, DD report, fact sheets). Prior to S4 the Sharpe
@@ -132,13 +134,15 @@ class ReturnStatisticsResult:
 def _to_monthly_returns(daily_returns: np.ndarray) -> np.ndarray:
     """Aggregate daily returns to monthly geometric returns.
 
-    Assumes ~21 trading days per month.  Groups by 21-day blocks.
+    Assumes ~21 trading days per month. Groups by 21-day blocks anchored to
+    the END of the series, so the most recent (as-of-date) observations are
+    always preserved. Older returns may be dropped if ``len % 21 != 0``.
     """
     if len(daily_returns) < 21:
         return np.array([])
 
     n_months = len(daily_returns) // 21
-    trimmed = daily_returns[: n_months * 21]
+    trimmed = daily_returns[-n_months * 21:]
     reshaped = trimmed.reshape(n_months, 21)
 
     result: np.ndarray = np.prod(1 + reshaped, axis=1) - 1
@@ -184,18 +188,20 @@ def _compute_sterling_ratio(
     if len(daily_returns) < 252:
         return None
 
-    # Annualized return
-    ann_return = float(np.mean(daily_returns)) * 252
+    # Annualized return — geometric (OOS-8, aligned with F08 convention)
+    n = len(daily_returns)
+    cum_return = float(np.prod(1.0 + daily_returns))
+    ann_return = float(cum_return ** (252 / n) - 1)
 
-    # Split into yearly chunks (252 trading days)
+    # Split into yearly chunks (252 trading days), anchored to END (F09)
     n_years = len(daily_returns) // 252
+    trimmed_daily = daily_returns[-n_years * 252:]
     yearly_max_dds: list[float] = []
 
     for i in range(n_years):
-        chunk = daily_returns[i * 252 : (i + 1) * 252]
-        navs = np.cumprod(1 + chunk)
-        running_max = np.maximum.accumulate(navs)
-        dd_series = (navs - running_max) / np.where(running_max > 0, running_max, 1.0)
+        chunk = trimmed_daily[i * 252 : (i + 1) * 252]
+        navs = np.concatenate([[1.0], np.cumprod(1 + chunk)])
+        dd_series = compute_drawdown_series(navs)
         yearly_max_dds.append(float(np.min(dd_series)))
 
     avg_max_dd = np.mean(yearly_max_dds)

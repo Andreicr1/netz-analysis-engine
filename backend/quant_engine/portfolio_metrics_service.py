@@ -74,11 +74,12 @@ def aggregate(
     # Sortino — delegate to canonical TDD helper
     sortino = compute_sortino_ratio(portfolio_returns, risk_free_rate=risk_free_rate)
 
-    # Max drawdown
-    cum = np.cumprod(1.0 + portfolio_returns)
-    running_max = np.maximum.accumulate(cum)
-    drawdowns = (cum - running_max) / np.where(running_max > 0, running_max, 1.0)
-    max_dd = float(np.min(drawdowns))
+    # Max drawdown — delegate to canonical drawdown_service (F01)
+    from quant_engine.drawdown_service import compute_drawdown_series
+
+    navs = np.concatenate([[1.0], np.cumprod(1.0 + portfolio_returns)])
+    dd_series = compute_drawdown_series(navs)
+    max_dd = float(np.min(dd_series)) if len(dd_series) > 0 else 0.0
 
     # Information ratio
     ir = None

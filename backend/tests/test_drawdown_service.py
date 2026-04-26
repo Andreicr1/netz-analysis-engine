@@ -75,6 +75,21 @@ class TestExtractDrawdownPeriods:
         periods = extract_drawdown_periods(dates, dd, top_n=2)
         assert len(periods) <= 2
 
+    def test_period_start_anchored_to_preceding_peak(self):
+        """For NAV [100, 100, 90, 100], duration_days from peak (i=1) to recovery (i=3) = 2 days."""
+        base = date(2024, 1, 1)
+        dates = [base + timedelta(days=i) for i in range(4)]
+        dd_series = np.array([0.0, 0.0, -0.10, 0.0])
+
+        periods = extract_drawdown_periods(dates, dd_series, top_n=5)
+        assert len(periods) == 1
+        period = periods[0]
+        assert period.start_date == dates[1]   # last peak before trough
+        assert period.trough_date == dates[2]
+        assert period.end_date == dates[3]
+        assert period.duration_days == 2       # was 1 pre-fix
+        assert period.recovery_days == 1
+
     def test_sorted_by_depth(self):
         navs = np.array([100, 110, 105, 115, 130, 90, 135])
         dd = compute_drawdown_series(np.array(navs, dtype=float))

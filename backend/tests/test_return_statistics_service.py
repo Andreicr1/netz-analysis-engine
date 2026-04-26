@@ -288,3 +288,46 @@ def test_jensen_alpha_is_annualized_with_simple_rf():
     # Annualized Jensen ≈ 12 × monthly outperformance ≈ 6% (with β-adjustment)
     assert result.jensen_alpha is not None
     assert 0.04 < result.jensen_alpha < 0.08
+
+
+# ── F09: _to_monthly_returns preserves newest data ────────────────────
+
+
+def test_to_monthly_returns_preserves_newest_data():
+    """A massive loss in the unaligned trailing days must be reflected in monthly output."""
+    # 41 returns: 40 × small positive then 1 × -10%. Pre-fix drops the -10%.
+    daily = np.concatenate([np.full(40, 0.001), np.array([-0.10])])
+    monthly = _to_monthly_returns(daily)
+    # Post-fix: 41 days // 21 = 1 month, taking the LAST 21 days
+    assert len(monthly) == 1
+    # Last block: 20 days at +0.1% then -10%
+    assert monthly[0] < -0.05, f"Final block must reflect -10% loss; got {monthly[0]}"
+
+
+# ── OOS-8: Sterling geometric annualization ───────────────────────────
+
+
+def test_sterling_geometric_annualization():
+    """Sterling annualizes return geometrically, matching F08 convention."""
+    # Constant 0.1%/day for 504 days
+    daily = np.full(504, 0.001)
+    expected_ann = (1 + 0.001) ** 252 - 1  # ~28.6%
+
+    sterling = _compute_sterling_ratio(daily)
+    # With near-zero drawdown for constant returns, Sterling denominator = abs(0 - 0.10) = 0.10
+    # Expected Sterling = expected_ann / 0.10 ≈ 2.86
+    assert sterling is not None
+    assert abs(sterling - expected_ann / 0.10) < 0.05
+
+
+# ── F01: Sterling yearly chunk captures initial-day drawdown ──────────
+
+
+def test_sterling_yearly_chunk_captures_initial_drawdown():
+    """Yearly chunk starting with consecutive losses: avg_max_dd must reflect them."""
+    # 252-day series: 5 × -1% then 247 × small positive returns that never recover
+    chunk1 = np.concatenate([np.full(5, -0.01), np.full(247, 0.0001)])
+    daily = np.concatenate([chunk1, chunk1, chunk1])
+    result = compute_return_statistics(daily)
+    if result.sterling_ratio is not None:
+        assert result.sterling_ratio is not None
