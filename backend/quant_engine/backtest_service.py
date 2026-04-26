@@ -19,6 +19,8 @@ from typing import Any
 import numpy as np
 import structlog
 
+from quant_engine.drawdown_service import compute_drawdown_series
+
 logger = structlog.get_logger()
 
 
@@ -38,10 +40,9 @@ def _compute_fold_metrics(
     cutoff = max(int(np.floor(len(sorted_r) * 0.05)), 1)
     cvar_95 = -float(np.mean(sorted_r[:cutoff]))
 
-    cum = np.cumprod(1.0 + returns)
-    running_max = np.maximum.accumulate(cum)
-    drawdowns = (cum - running_max) / np.where(running_max > 0, running_max, 1.0)
-    max_drawdown = float(np.min(drawdowns))
+    navs = np.concatenate([[1.0], np.cumprod(1.0 + returns)])
+    dd_series = compute_drawdown_series(navs)
+    max_drawdown = float(np.min(dd_series)) if len(dd_series) > 0 else 0.0
 
     return {
         "sharpe": round(sharpe, 4) if sharpe is not None else None,

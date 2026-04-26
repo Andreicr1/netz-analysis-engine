@@ -585,6 +585,21 @@ class TestPortfolioMetricsService:
             assert metrics.sortino_ratio is None
 
 
+class TestPortfolioMetricsF01:
+    """F01: aggregate captures initial-day drawdowns correctly."""
+
+    def test_aggregate_captures_initial_drawdown(self):
+        """Day 1 = -10% with subsequent returns never recovering: max_dd must reflect -10%, not 0."""
+        from quant_engine.portfolio_metrics_service import aggregate
+
+        # Day 1 is a 10% drop; remaining 99 days flat at +0.01% (never reaches initial wealth)
+        r = np.concatenate([np.array([-0.10]), np.full(99, 0.0001)])
+        result = aggregate(r)
+        assert result.max_drawdown <= -0.099, (
+            f"max_drawdown should reflect the day-1 10% loss, got {result.max_drawdown}"
+        )
+
+
 class TestQuantAnalyzerRewired:
     """Test QuantAnalyzer is no longer a scaffold."""
 

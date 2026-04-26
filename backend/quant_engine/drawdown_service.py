@@ -54,18 +54,27 @@ def extract_drawdown_periods(
     dd_series: np.ndarray,
     top_n: int = 5,
 ) -> list[DrawdownPeriodResult]:
-    """Extract worst drawdown periods ranked by depth (most negative first)."""
+    """Extract worst drawdown periods ranked by depth (most negative first).
+
+    Period start is the index of the most recent peak (dd == 0) preceding the
+    drawdown, matching institutional reporting conventions where duration
+    spans peak-to-recovery, not first-loss-to-recovery.
+    """
     periods: list[DrawdownPeriodResult] = []
     in_dd = False
+    last_peak_idx = 0
     start_idx = 0
     trough_idx = 0
     trough_val = 0.0
 
     for i, v in enumerate(dd_series):
+        if v == 0:
+            last_peak_idx = i
+
         if v < 0:
             if not in_dd:
                 in_dd = True
-                start_idx = i
+                start_idx = last_peak_idx
                 trough_idx = i
                 trough_val = v
             elif v < trough_val:
