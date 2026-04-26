@@ -23,6 +23,8 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config.settings import settings
+
 logger = structlog.get_logger(__name__)
 
 IDENTITY_RESOLVER_LOCK_ID = 900_110
@@ -722,7 +724,9 @@ async def _source_5_openfigi(
     source_name = "openfigi"
     results: dict[str, SourceResult] = {}
 
-    api_key = os.environ.get("OPENFIGI_API_KEY", "")
+    # Settings loads .env via Pydantic; falling back to os.environ keeps the
+    # legacy contract for direct env-var injection in CI/Railway.
+    api_key = settings.openfigi_api_key or os.environ.get("OPENFIGI_API_KEY", "")
     if not api_key:
         logger.warning("identity_resolver.openfigi_no_api_key")
         return results, False
