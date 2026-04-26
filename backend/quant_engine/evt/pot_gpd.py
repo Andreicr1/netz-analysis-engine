@@ -125,11 +125,14 @@ def extreme_var_evt(
     # Spec: Trigger when MLE does not converge OR CI of xi crosses 1.
     # Simplified trigger: xi >= 0.9 or not converged
     if (not converged or xi >= 0.9) and LMOMENTS_AVAILABLE:
-        xi_lm, beta_lm = _fit_gpd_lmoments(excesses)
-        if xi_lm < 1.0:
+        xi_lm, beta_lm, lm_converged = _fit_gpd_lmoments(excesses)
+        if lm_converged and xi_lm < 1.0:
             xi, beta = xi_lm, beta_lm
             method = "lmoments"
             converged = True
+        # else: keep MLE result with whatever flags it had.
+        # If MLE was non-converged and L-moments also failed, the downstream
+        # `degraded = not converged` branch (line 138) will mark the result degraded.
 
     # 7. Sanity check: Hill estimator
     k_hill = max(15, int(0.10 * len(losses)))
@@ -222,14 +225,24 @@ def _fit_gpd_mle(excesses: np.ndarray) -> tuple[float, float, bool]:
         return 0.0, float(np.std(excesses)), False
 
 
-def _fit_gpd_lmoments(excesses: np.ndarray) -> tuple[float, float]:
-    """Fit GPD using Method of L-moments."""
+def _fit_gpd_lmoments(excesses: np.ndarray) -> tuple[float, float, bool]:
+    """Fit GPD using Method of L-moments.
+
+    Returns
+    -------
+    (xi, beta, converged) :
+        ``xi``: shape parameter (positive = heavy tail, matching scipy genpareto).
+        ``beta``: scale parameter.
+        ``converged``: True if lmoments3.gpa.lmom_fit succeeded; False if the
+        fallback ``(0.0, std)`` was returned. Caller MUST gate on this flag
+        before substituting the MLE estimate (see PR-Q30 / Wave 6 Session 02 F02).
+    """
     try:
         paras = distr.gpa.lmom_fit(excesses)
-        return float(paras['c']), float(paras['scale'])
+        return float(paras['c']), float(paras['scale']), True
     except Exception as e:
         logger.warning("gpd_lmoments_fit_failed", error=str(e))
-        return 0.0, float(np.std(excesses))
+        return 0.0, float(np.std(excesses, ddof=1)), False
 
 
 def _fallback_to_normal(

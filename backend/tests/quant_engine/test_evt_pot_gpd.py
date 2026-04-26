@@ -58,8 +58,8 @@ def test_infinite_mean_tail(monkeypatch):
         return 1.1, 0.0, 0.02
         
     def mock_fit_lm(*args, **kwargs):
-        return 1.1, 0.02
-        
+        return 1.1, 0.02, True  # PR-Q30: 3-tuple including converged=True
+
     monkeypatch.setattr(genpareto, "fit", mock_fit_mle)
     if pot_gpd.LMOMENTS_AVAILABLE:
         monkeypatch.setattr(pot_gpd, "_fit_gpd_lmoments", mock_fit_lm)
@@ -301,3 +301,127 @@ def test_risk_calc_evt_consumers_unaffected_by_q14():
     # And the new dict mirrors them.
     assert res.quantile_results[0.99] == (res.var_99, res.cvar_99)
     assert res.quantile_results[0.999] == (res.var_999, res.cvar_999)
+
+
+def test_lmoments_fallback_does_not_silently_swap_to_exponential(monkeypatch):
+    """PR-Q30 F02: when MLE produces xi>=0.9 AND L-moments raises exception,
+    code must NOT silently replace heavy-tail with exponential xi=0.
+
+    Setup: MLE returns xi=0.9 (heavy tail). _fit_gpd_lmoments mocked to return
+    (0.0, 1.0, False) — simulating the package raising and the fallback firing.
+    Caller must observe lm_converged=False and KEEP the MLE estimate xi=0.9.
+    """
+    from scipy.stats import genpareto
+
+    from quant_engine.evt import pot_gpd
+
+    def mock_fit_mle(*args, **kwargs):
+        return 0.9, 0.0, 0.02
+
+    def mock_fit_lm_failed(*args, **kwargs):
+        # Simulates the except block returning the fallback tuple
+        return 0.0, 1.0, False
+
+    monkeypatch.setattr(genpareto, "fit", mock_fit_mle)
+    if pot_gpd.LMOMENTS_AVAILABLE:
+        monkeypatch.setattr(pot_gpd, "_fit_gpd_lmoments", mock_fit_lm_failed)
+
+    # Synthesize losses with sufficient excesses
+    losses = np.concatenate([np.linspace(0.001, 0.05, 180), np.linspace(0.051, 0.10, 50)])
+    returns = -losses
+
+    res = extreme_var_evt(returns)
+
+    # CRITICAL ASSERTION: xi must remain at MLE's heavy-tail estimate (>= 0.5),
+    # NOT silently swapped to exponential 0.0.
+    assert res.fit.xi >= 0.5, (
+        f"Heavy-tail estimate {res.fit.xi} silently swapped to exponential "
+        f"despite L-moments fallback failure (xi=0.9 MLE was correct)."
+    )
+    # method should be "mle" since L-moments failed
+    assert res.fit.method == "mle"
+
+
+def test_lmoments_fallback_succeeds_when_lmoments_returns_valid_xi(monkeypatch):
+    """PR-Q30 F02 paired test: when MLE has xi>=0.9 AND _fit_gpd_lmoments
+    returns a valid xi<1.0 with converged=True, the swap is intentional and
+    the result should reflect the L-moments estimate.
+
+    This is the COMPLEMENT of test_lmoments_fallback_does_not_silently_swap...
+    to ensure we did not over-correct.
+    """
+    from scipy.stats import genpareto
+
+    from quant_engine.evt import pot_gpd
+
+    if not pot_gpd.LMOMENTS_AVAILABLE:
+        pytest.skip("lmoments3 not installed in this environment")
+
+    def mock_fit_mle(*args, **kwargs):
+        return 0.95, 0.0, 0.02  # MLE heavy-tail near boundary
+
+    def mock_fit_lm_ok(*args, **kwargs):
+        return 0.4, 0.05, True  # L-moments converges with milder estimate
+
+    monkeypatch.setattr(genpareto, "fit", mock_fit_mle)
+    monkeypatch.setattr(pot_gpd, "_fit_gpd_lmoments", mock_fit_lm_ok)
+
+    losses = np.concatenate([np.linspace(0.001, 0.05, 180), np.linspace(0.051, 0.10, 50)])
+    returns = -losses
+
+    res = extreme_var_evt(returns)
+
+    # When L-moments converges legitimately, result should reflect it
+    assert res.fit.method == "lmoments"
+    assert res.fit.xi == pytest.approx(0.4, abs=0.01)
+
+
+def test_lmoments_gpa_sign_convention_matches_scipy():
+    """PR-Q30 F06: lmoments3 GPA fit must return xi with same sign as scipy genpareto.
+
+    Both scipy.stats.genpareto.fit (`c` parameter) and lmoments3.distr.gpa.lmom_fit
+    (`paras['c']`) should follow the Pickands-Balkema-de Haan convention:
+    positive shape = heavy tail. If a future package upgrade flips this, this
+    test will fail and the orchestrator's CI will catch it.
+
+    The current sign convention is verified against synthetic heavy-tail data:
+    we generate samples from genpareto(c=0.5) and assert both estimators recover
+    a positive shape parameter.
+    """
+    from scipy.stats import genpareto
+
+    from quant_engine.evt.pot_gpd import LMOMENTS_AVAILABLE, _fit_gpd_lmoments, _fit_gpd_mle
+
+    if not LMOMENTS_AVAILABLE:
+        pytest.skip("lmoments3 not installed in this environment")
+
+    # Synthesize heavy-tail GPD samples: xi=0.5, beta=1.0, threshold u=0
+    rng = np.random.default_rng(42)
+    samples = genpareto(c=0.5, scale=1.0).rvs(size=2000, random_state=rng)
+    excesses = samples[samples > 0]  # POT step — keep only positive excesses
+
+    # MLE estimate
+    xi_mle, beta_mle, mle_converged = _fit_gpd_mle(excesses)
+
+    # L-moments estimate
+    xi_lm, beta_lm, lm_converged = _fit_gpd_lmoments(excesses)
+
+    # Both should converge for this clean synthetic
+    assert mle_converged, "MLE should converge on clean synthetic GPD samples"
+    assert lm_converged, "L-moments should converge on clean synthetic GPD samples"
+
+    # Both should agree on sign convention: heavy tail → positive xi
+    assert xi_mle > 0.1, f"MLE xi={xi_mle} should reflect heavy tail (>0.1) for c=0.5 input"
+    assert xi_lm > 0.1, (
+        f"L-moments xi={xi_lm} should reflect heavy tail (>0.1) for c=0.5 input. "
+        f"If this fails, the sign convention of lmoments3.distr.gpa has changed "
+        f"and the L-moments fallback path in pot_gpd.py silently inverts the "
+        f"shape parameter."
+    )
+
+    # And approximately agree (within reasonable noise)
+    assert abs(xi_mle - xi_lm) < 0.25, (
+        f"MLE xi={xi_mle} and L-moments xi={xi_lm} disagree materially. "
+        f"This may indicate a sign convention drift, scale parameter divergence, "
+        f"or a package version incompatibility."
+    )
