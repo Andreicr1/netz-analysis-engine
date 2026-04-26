@@ -116,8 +116,14 @@ async def _resolve_entity_uuid(
         if found:
             return found
 
-    # 4. CIK (numeric string) → attributes->>'sec_cik'
+    # 4. CIK (numeric string) → identity resolver
     if raw_id.isdigit() or (raw_id.startswith("0") and raw_id.replace("0", "").isdigit()):
+        from data_providers.identity.resolver import by_cik
+
+        ids = await by_cik(db, raw_id)
+        if ids:
+            return ids[0]
+        # Fallback to legacy attributes lookup
         row = await db.execute(
             select(Instrument.instrument_id).where(
                 Instrument.attributes["sec_cik"].astext == raw_id,
@@ -557,13 +563,20 @@ async def get_entity_analytics(
             if attrs:
                 cik = attrs.get("sec_cik")
                 ticker = attrs.get("sec_ticker")
-                
-                if cik or ticker:
+
+                # Normalize CIK via identity resolver if available
+                if cik:
+                    from data_providers.identity.resolver import _normalize_cik
+                    cik_padded, _ = _normalize_cik(str(cik))
+                else:
+                    cik_padded = None
+
+                if cik_padded or ticker:
                     def fetch_insider_summary(sync_db):
                         from app.domains.wealth.services.insider_queries import get_insider_summary
                         return get_insider_summary(
-                            sync_db, 
-                            issuer_cik=str(cik).zfill(10) if cik else None, 
+                            sync_db,
+                            issuer_cik=cik_padded,
                             issuer_ticker=str(ticker) if ticker else None
                         )
 

@@ -135,26 +135,24 @@ async def _load_universe(
     - Are BDCs (direct XBRL path, no N-PORT needed)
     """
     limit_clause = f" LIMIT {int(limit)}" if limit else ""
-    # CIK normalization: instruments_universe.attributes.sec_cik is stored
-    # as a string sometimes zero-padded ("0000884394" for SPY), sometimes
-    # not ("36405" for VTI). sec_nport_holdings.cik (text) and
-    # sec_bdcs/sec_money_market_funds.cik (varchar) are stored without
-    # padding. Casting both sides to BIGINT works but bypasses the btree
-    # index on n.cik causing seqscan on a 2M-row table (>2min queries).
-    # Instead, normalize the universe value via LTRIM(_, '0') to match
-    # the unpadded format — this preserves index lookups on the
-    # indexed columns. Match as text.
+    # PR-Q11: Use instrument_identity table for CIK when available,
+    # falling back to legacy LTRIM normalization for instruments
+    # not yet in the identity table.
     result = await db.execute(text(f"""
         WITH norm_universe AS (
             SELECT
                 i.instrument_id,
                 i.ticker,
                 i.asset_class,
-                i.attributes->>'sec_cik' AS sec_cik_raw,
-                LTRIM(i.attributes->>'sec_cik', '0') AS sec_cik_norm
+                COALESCE(
+                    ii.cik_unpadded,
+                    LTRIM(i.attributes->>'sec_cik', '0')
+                ) AS sec_cik_norm
             FROM instruments_universe i
-            WHERE i.attributes->>'sec_cik' IS NOT NULL
-              AND i.attributes->>'sec_cik' ~ '^[0-9]+$'
+            LEFT JOIN instrument_identity ii USING (instrument_id)
+            WHERE (ii.cik_unpadded IS NOT NULL
+                   OR (i.attributes->>'sec_cik' IS NOT NULL
+                       AND i.attributes->>'sec_cik' ~ '^[0-9]+$'))
         )
         SELECT
             u.instrument_id,

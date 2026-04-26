@@ -304,22 +304,15 @@ async def _read_instruments_universe(
     rows = await db.execute(
         text(
             f"""
-            WITH cik_counts AS (
-                SELECT attributes->>'sec_cik' AS sec_cik, COUNT(*) AS n
-                FROM instruments_universe
-                WHERE attributes->>'sec_cik' IS NOT NULL
-                GROUP BY attributes->>'sec_cik'
-            )
             SELECT
                 iu.instrument_id::text        AS pk,
                 iu.name                       AS fund_name,
                 iu.attributes->>'fund_type'   AS fund_type,
                 iu.attributes->>'strategy_label'      AS current_label,
                 iu.attributes->>'tiingo_description'  AS tiingo_desc,
-                CASE WHEN cc.n = 1 THEN iu.attributes->>'sec_cik' END  AS cik
+                ii.cik_unpadded               AS cik
             FROM instruments_universe iu
-            LEFT JOIN cik_counts cc
-              ON cc.sec_cik = iu.attributes->>'sec_cik'
+            LEFT JOIN instrument_identity ii USING (instrument_id)
             WHERE iu.is_active = true
               AND iu.name IS NOT NULL
             ORDER BY iu.instrument_id
