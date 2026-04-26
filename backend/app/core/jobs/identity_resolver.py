@@ -50,8 +50,8 @@ FIELD_AUTHORITY: dict[str, dict[str, int]] = {
     "sec_crd": {"sec_adv": 3},
     "sec_private_fund_id": {"sec_adv": 3},
     "isin": {"esma": 3, "openfigi": 2},
-    "cusip_8": {"openfigi": 3},
-    "cusip_9": {"openfigi": 3},
+    "cusip_8": {"sec_cusip_map": 4, "openfigi": 3},
+    "cusip_9": {"sec_cusip_map": 4, "openfigi": 3},
     "figi": {"openfigi": 3},
     "ticker": {
         "sec_company_tickers": 4,
@@ -838,6 +838,58 @@ async def _source_5_openfigi(
 
 
 # ---------------------------------------------------------------------------
+# Source 6: sec_cusip_ticker_map (local SEC EDGAR derived data)
+# ---------------------------------------------------------------------------
+
+
+async def _source_6_sec_cusip_ticker_map(
+    db: AsyncSession,
+    target_ids: list[str],
+) -> tuple[dict[str, SourceResult], bool]:
+    """Source 6: ``sec_cusip_ticker_map`` — populate CUSIP for US-listed instruments.
+
+    OpenFIGI ``/v3/mapping`` with ``idType=TICKER`` returns FIGI metadata but
+    not CUSIP. ``sec_cusip_ticker_map`` is a local SEC-derived table with
+    CUSIP-9 ↔ ticker, providing CUSIP coverage for US custodian
+    reconciliation (BNY/Northern/Pershing reconcile US-listed by CUSIP)
+    without extra external API calls. Authority 4: higher than OpenFIGI (3)
+    because SEC-derived data is the canonical source for US CUSIPs.
+    """
+    source_name = "sec_cusip_map"
+    results: dict[str, SourceResult] = {}
+
+    try:
+        rows = await db.execute(
+            text(
+                """
+                SELECT iu.instrument_id::text, sct.cusip
+                FROM instruments_universe iu
+                JOIN sec_cusip_ticker_map sct ON sct.ticker = iu.ticker
+                WHERE iu.instrument_id = ANY(:ids)
+                  AND iu.ticker IS NOT NULL
+                  AND sct.cusip IS NOT NULL
+                  AND length(sct.cusip) = 9
+                """
+            ),
+            {"ids": target_ids},
+        )
+        for row in rows.fetchall():
+            sr = SourceResult(source_name)
+            sr.set("cusip_9", row.cusip)
+            sr.set("cusip_8", row.cusip[:8])
+            if sr.fields:
+                results[row.instrument_id] = sr
+    except Exception as exc:
+        logger.warning(
+            "identity_resolver.source_6_failed",
+            error=str(exc)[:200],
+        )
+        return results, False
+
+    return results, True
+
+
+# ---------------------------------------------------------------------------
 # Main worker entry point
 # ---------------------------------------------------------------------------
 
@@ -922,6 +974,7 @@ async def _resolve_identities(
         ("source_3", _source_3_esma),
         ("source_4", _source_4_sec_adv),
         ("source_5", _source_5_openfigi),
+        ("source_6", _source_6_sec_cusip_ticker_map),
     ]
 
     all_results: dict[str, list[SourceResult]] = {iid: [] for iid in target_ids}
