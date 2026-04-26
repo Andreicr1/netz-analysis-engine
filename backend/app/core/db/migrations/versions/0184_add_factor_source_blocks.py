@@ -5,15 +5,37 @@ Revises: 0183_mv_unified_funds_ucits_share_classes
 Create Date: 2026-04-26
 
 PR-Q28 — Add IWF (Russell 1000 Growth Factor) and EFA (MSCI EAFE) as
-canonical factor-source allocation blocks. These blocks are NOT used in
-strategic allocation templates; they exist purely so benchmark_ingest
-worker fetches their NAV time-series into benchmark_nav, which the
-fundamental factor model requires for the value factor (IWD-IWF) and
-international factor (EFA-SPY).
+factor-source allocation blocks. These blocks are NOT used in strategic
+allocation templates; they exist purely so benchmark_ingest worker fetches
+their NAV time-series into benchmark_nav, which the fundamental factor
+model requires for the value factor (IWD-IWF) and international factor
+(EFA-SPY).
 
 Without this fix, factor_model_service silently degrades to 6/8 factors,
 producing ill-conditioned covariance and forcing all 3 construction
 profiles to fall to heuristic fallback.
+
+Pre-merge dry-run findings (orchestrator, 2026-04-26):
+
+1. ``geography`` is lowercase by convention — using ``'north_america'`` and
+   ``'global'`` (matching the 18 canonical blocks from migration 0153).
+   Uppercase ``'US'`` / ``'INTL'`` would persist but break consistency.
+
+2. ``is_canonical=false`` is INTENTIONAL. The trigger
+   ``trg_enforce_allocation_template_sa`` (AFTER INSERT on
+   ``strategic_allocation``) auto-populates new ``(organization_id, profile)``
+   tuples with every block where ``is_canonical=true``. Marking these
+   factor-source blocks canonical would silently inject IWF/EFA into every
+   newly onboarded client's strategic allocation template with
+   ``target_weight=NULL`` — an institutional silent-corruption pattern.
+
+Filters that matter for the consumers:
+- ``benchmark_ingest._do_ingest`` filters by ``is_active=true AND benchmark_ticker IS NOT NULL`` (no canonical check). Confirmed at ``benchmark_ingest.py:85-88``.
+- ``factor_model_service`` joins ``benchmark_nav`` to ``allocation_blocks``
+  by ``block_id`` and filters by ``benchmark_ticker``. Confirmed at
+  ``factor_model_service.py:66-77``. No canonical check.
+
+Both consumers will pick up the new blocks regardless of canonical status.
 
 Reference: docs/audits/construction-pipeline-runtime-validation.md F04.
 """
@@ -44,25 +66,25 @@ def upgrade() -> None:
         ) VALUES
         (
             'factor_source_us_growth',
-            'US',
+            'north_america',
             'equity',
             'US Growth Factor (factor source)',
-            'Russell 1000 Growth ETF (IWF). Factor-model NAV source only — not used in strategic allocation templates. Required for the value factor spread (IWD - IWF) in factor_model_service.',
+            'Russell 1000 Growth ETF (IWF). Factor-model NAV source only — not used in strategic allocation templates. Required for the value factor spread (IWD - IWF) in factor_model_service. is_canonical=false intentionally to bypass strategic_allocation auto-populate trigger (trg_enforce_allocation_template_sa).',
             'IWF',
             true,
-            true,
+            false,
             now(),
             now()
         ),
         (
             'factor_source_intl_developed',
-            'INTL',
+            'global',
             'equity',
             'Intl Developed Broad (factor source)',
-            'iShares MSCI EAFE ETF (EFA). Factor-model NAV source only — not used in strategic allocation templates. Required for the international factor spread (EFA - SPY) in factor_model_service.',
+            'iShares MSCI EAFE ETF (EFA). Factor-model NAV source only — not used in strategic allocation templates. Required for the international factor spread (EFA - SPY) in factor_model_service. is_canonical=false intentionally to bypass strategic_allocation auto-populate trigger.',
             'EFA',
             true,
-            true,
+            false,
             now(),
             now()
         )
