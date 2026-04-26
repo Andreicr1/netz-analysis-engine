@@ -1,9 +1,22 @@
 """Rebalance workflow service.
 
 Implements the rebalance cascade state machine:
-    ok → warning → breach → hard_stop
+    pending → {approved | rejected | cancelled | applied}
+    approved → executed
+    {rejected, cancelled, applied, executed} → terminal
 
-Each state transition creates a RebalanceEvent with actor_source tracking.
+Each state transition can create an immutable RebalanceEvent for audit.
+
+Cascade event types emitted by determine_cascade_action():
+    cvar_breach    — escalation (ok→warning, anything→breach)
+    cvar_recovery  — de-escalation (warning→ok, breach→ok)
+    cvar_degraded  — CVaR computation unavailable; risk-blind period
+
+Note on CVaR config coupling:
+    This module currently sources profile configuration from
+    cvar_service.resolve_cvar_config(). If future cascades trigger on
+    non-CVaR signals (drawdown, regime, mandate breach), generalize
+    by parameterizing on a config-resolver Callable. Out of scope here.
 
 Config is injected as parameter by callers via ConfigService.
 """
