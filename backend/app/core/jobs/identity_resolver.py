@@ -579,8 +579,31 @@ async def _source_3_esma(
             sr = SourceResult(source_name)
             iid = row.instrument_id
 
-            if row.esma_isin:
-                sr.set("isin", row.esma_isin)
+            # esma_funds.isin is corrupted: it stores LEIs (20 chars) for many
+            # rows, not ISINs. Detect format and route to the correct field.
+            # Real ISINs are 12 chars matching ^[A-Z]{2}[A-Z0-9]{9}[0-9]$;
+            # anything 20-char alphanumeric is a LEI; everything else is logged
+            # and dropped. This is a defensive heuristic — the canonical fix
+            # lives upstream in the ESMA ingestion worker (separate ticket).
+            val = row.esma_isin
+            if val:
+                if (
+                    len(val) == 12
+                    and val.isascii()
+                    and val[:2].isalpha()
+                    and val.isalnum()
+                    and val[-1].isdigit()
+                ):
+                    sr.set("isin", val)
+                elif len(val) == 20 and val.isascii() and val.isalnum():
+                    sr.set("lei", val)
+                else:
+                    logger.info(
+                        "identity_resolver.esma_isin_unrecognized",
+                        value_preview=val[:30],
+                        value_length=len(val),
+                    )
+
             if row.esma_manager_id:
                 sr.set("esma_manager_id", row.esma_manager_id)
             if row.lei:
