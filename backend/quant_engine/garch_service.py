@@ -141,6 +141,8 @@ def fit_garch(
                 log_likelihood=None,
                 converged=False,
                 vol_model="EWMA_0.94",
+                degraded=True,
+                degraded_reason="garch_did_not_converge",
             )
 
         # ── Fix 3 (BUG-G2): fail loud on missing param keys ──────────
@@ -235,4 +237,6 @@ def fit_garch(
             log_likelihood=None,
             converged=False,
             vol_model="EWMA_0.94",
+            degraded=True,
+            degraded_reason="garch_fit_failed",
         )

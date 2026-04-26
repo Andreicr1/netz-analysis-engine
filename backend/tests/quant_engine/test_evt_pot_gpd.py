@@ -425,3 +425,57 @@ def test_lmoments_gpa_sign_convention_matches_scipy():
         f"This may indicate a sign convention drift, scale parameter divergence, "
         f"or a package version incompatibility."
     )
+
+
+# ─── PR-Q31 F03 ────────────────────────────────────────────────────────────
+
+
+def test_extreme_var_evt_filters_inf_consistent_with_sibling_modules():
+    """PR-Q31 F03: ±Inf must be filtered before EVT POT to avoid undefined excesses.
+
+    Pre-fix: ~np.isnan() lets ±Inf survive; np.quantile on losses with +inf
+    returns inf as the threshold, producing degenerate excesses.
+    Post-fix: np.isfinite() drops them; EVT runs cleanly on finite subset.
+    """
+    # Sufficient finite returns to drive POT + 2 Inf rows
+    rng = np.random.default_rng(42)
+    finite_returns = rng.normal(0.0, 0.02, size=500)
+    returns = np.concatenate([finite_returns, np.array([np.inf, -np.inf])])
+
+    res = extreme_var_evt(returns)
+
+    # Result should not be degraded due to Inf survival (it may be degraded
+    # for legitimate POT reasons, but not because of Inf in the input)
+    assert np.isfinite(res.fit.u), f"Threshold u should be finite, got {res.fit.u}"
+    assert np.isfinite(res.var_99) or res.degraded, (
+        f"VaR_99 should be finite when not degraded; got {res.var_99}, degraded={res.degraded}"
+    )
+
+
+# ─── PR-Q31 F05 ────────────────────────────────────────────────────────────
+
+
+def test_evt_non_convergence_sets_degraded_reason(monkeypatch):
+    """PR-Q31 F05: when both MLE and L-moments fail, degraded_reason must be set
+    to 'gpd_fit_did_not_converge', not None.
+    """
+    from quant_engine.evt import pot_gpd
+
+    def mock_fit_mle(*args, **kwargs):
+        raise ValueError("synthetic MLE failure")
+
+    def mock_fit_lm_failed(*args, **kwargs):
+        return 0.0, 1.0, False  # post-PR-Q30 3-tuple, lm_converged=False
+
+    monkeypatch.setattr(genpareto, "fit", mock_fit_mle)
+    if pot_gpd.LMOMENTS_AVAILABLE:
+        monkeypatch.setattr(pot_gpd, "_fit_gpd_lmoments", mock_fit_lm_failed)
+
+    # Generate enough data to reach the convergence-check branch
+    losses = np.concatenate([np.linspace(0.001, 0.05, 180), np.linspace(0.051, 0.10, 50)])
+    returns = -losses
+
+    res = extreme_var_evt(returns)
+
+    assert res.degraded is True
+    assert res.degraded_reason == "gpd_fit_did_not_converge"
