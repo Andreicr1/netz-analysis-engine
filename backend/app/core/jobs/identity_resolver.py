@@ -641,11 +641,22 @@ async def run_identity_resolver(
 
     try:
         return await _resolve_identities(db, target_instrument_ids=target_instrument_ids)
+    except Exception:
+        await db.rollback()
+        raise
     finally:
-        await db.execute(
-            text("SELECT pg_advisory_unlock(:lock_id)"),
-            {"lock_id": IDENTITY_RESOLVER_LOCK_ID},
-        )
+        try:
+            await db.execute(
+                text("SELECT pg_advisory_unlock(:lock_id)"),
+                {"lock_id": IDENTITY_RESOLVER_LOCK_ID},
+            )
+        except Exception:
+            # If the session is in failed state, rollback first then unlock
+            await db.rollback()
+            await db.execute(
+                text("SELECT pg_advisory_unlock(:lock_id)"),
+                {"lock_id": IDENTITY_RESOLVER_LOCK_ID},
+            )
 
 
 async def _resolve_identities(
@@ -713,6 +724,7 @@ async def _resolve_identities(
                 f"identity_resolver.{source_name}_error",
                 error=str(e)[:200],
             )
+            await db.rollback()
 
     # Apply UPSERT for each instrument
     upserted = 0
@@ -727,6 +739,7 @@ async def _resolve_identities(
                     instrument_id=iid,
                     error=str(e)[:200],
                 )
+                await db.rollback()
 
     # Update last_resolved_at only on full success
     if all_success and upserted > 0:
