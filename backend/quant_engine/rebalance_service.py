@@ -19,13 +19,36 @@ from quant_engine.cvar_service import resolve_cvar_config
 logger = structlog.get_logger()
 
 # Valid status transitions
-VALID_TRANSITIONS = {
+VALID_TRANSITIONS: dict[str, set[str]] = {
+    # 'pending' → {approval gate states OR direct apply}
     "pending": {"approved", "rejected", "cancelled", "applied"},
+    # 'approved' → only 'executed' (after four-eyes)
     "approved": {"executed"},
+    # Terminal states (no outbound transitions)
     "rejected": set(),
     "cancelled": set(),
-    "executed": set(),
+    "applied": set(),    # explicit — direct-apply path bypassing approval
+    "executed": set(),   # explicit — full four-eyes path
 }
+"""
+State semantics:
+  pending  — proposal awaiting decision
+  approved — passed approval gate; ready to execute
+  rejected — proposal denied
+  cancelled — withdrawn before decision
+  applied  — direct apply (caller bypassed approval; logged with actor_source)
+  executed — post-approval terminal (four-eyes complete)
+
+Distinction between 'applied' and 'executed':
+  Both are terminal. 'applied' represents a model/allocation change made
+  without the approval workflow (e.g., automated rebalance under a
+  pre-approved policy). 'executed' represents a trade/order that went
+  through the full approval gate.
+
+  Operational reporting should aggregate both as 'closed' but audit
+  reporting should distinguish them — 'applied' implies caller assumed
+  approval responsibility.
+"""
 
 
 @dataclass
