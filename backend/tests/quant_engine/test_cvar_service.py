@@ -278,3 +278,26 @@ def test_compute_cvar_filters_inf_consistent_with_tail_var():
     assert np.isfinite(result.var), f"VaR should be finite, got {result.var}"
     # n_obs reflects finite-filtered count (40), not nan-filtered (would be 42)
     assert result.n_obs == 40
+
+
+# ── PR-Q32 F01 — Exact RU empirical estimator ────────────────────────────
+
+
+def test_compute_cvar_from_returns_matches_exact_ru_formula():
+    """PR-Q32 F01: compute_cvar_from_returns uses exact RU empirical estimator.
+
+    Reference: T=5 returns with alpha=0.7 (target tail mass = 1.5). Pre-fix
+    used ceil(5 * 0.3) = 2 tail items, averaging 2 of the worst returns. Post-fix
+    uses the exact RU formula matching the LP minimum.
+    """
+    # Returns: [0.05, 0.04, 0.03, -0.02, -0.10] (T=5)
+    # Losses: [-0.05, -0.04, -0.03, 0.02, 0.10]
+    # confidence=0.7 → quantile(losses, 0.7, "higher") = 0.02 (3rd-worst loss)
+    # u = max(losses - 0.02, 0) = [0, 0, 0, 0, 0.08]
+    # cvar_loss = 0.02 + 0.08 / (0.3 * 5) = 0.02 + 0.0533 = 0.0733
+    # Returns negated: cvar = -0.0733, var = -0.02
+    returns = np.array([0.05, 0.04, 0.03, -0.02, -0.10])
+    cvar, var = compute_cvar_from_returns(returns, confidence=0.7)
+
+    assert cvar == pytest.approx(-0.0733, abs=1e-3)
+    assert var == pytest.approx(-0.02, abs=1e-9)

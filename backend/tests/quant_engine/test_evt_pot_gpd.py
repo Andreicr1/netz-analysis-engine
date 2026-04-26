@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from scipy.stats import genpareto
 
-from quant_engine.evt.pot_gpd import extreme_var_evt
+from quant_engine.evt.pot_gpd import LMOMENTS_AVAILABLE, extreme_var_evt
 
 
 def test_gpd_synthetic_recovery():
@@ -114,6 +114,10 @@ def test_ground_truth_simple():
     assert pytest.approx(res.var_99, abs=0.01) == expected_var_99
 
 
+@pytest.mark.skipif(
+    not LMOMENTS_AVAILABLE,
+    reason="lmoments3 not installed; test requires L-moments fallback to be available",
+)
 def test_mle_failure_fallback_lmoments(monkeypatch):
     """Test 7: MLE failure path -> L-moments fallback invoked."""
     from scipy.stats import genpareto
