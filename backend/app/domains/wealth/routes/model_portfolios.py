@@ -2927,6 +2927,7 @@ async def _load_universe_funds(
         .join(
             StrategicAllocation,
             (StrategicAllocation.block_id == InstrumentOrg.block_id)
+            & (StrategicAllocation.organization_id == org_id)  # PR-Q33: defense-in-depth
             & (StrategicAllocation.profile == profile)
             & (StrategicAllocation.effective_from <= today)
             & (
@@ -2935,6 +2936,7 @@ async def _load_universe_funds(
             ),
         )
         .where(
+            InstrumentOrg.organization_id == org_id,  # PR-Q33: defense-in-depth (was RLS-only)
             Instrument.is_active == True,  # noqa: E712 — SQLAlchemy boolean compare
             InstrumentOrg.block_id.isnot(None),
         )
