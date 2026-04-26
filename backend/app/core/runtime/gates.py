@@ -139,6 +139,34 @@ def get_sec_edgar_bulk_gate() -> ExternalProviderGate[Any]:
     return _sec_edgar_bulk_gate
 
 
+# ── OpenFIGI provider gate ────────────────────────────────────────
+
+# OpenFIGI rate limit with API key: 25 req/6s (≈250 req/min).
+# Batch size: 100 IDs per request. For 9.8k instruments: ~99 requests.
+# Worker-only, bulk variant with 5 minute wall.
+_OPENFIGI_GATE_CONFIG = GateConfig(
+    name="openfigi",
+    timeout_s=300.0,
+    failure_threshold=10,
+    recovery_after_s=60.0,
+    cache_ttl_s=None,
+)
+
+_openfigi_gate: ExternalProviderGate[Any] | None = None
+
+
+def get_openfigi_gate() -> ExternalProviderGate[Any]:
+    """Lazy singleton gate for OpenFIGI /v3/mapping API calls.
+
+    Worker-only — never call from request handlers. 5 minute wall
+    to accommodate bulk ticker-to-FIGI resolution.
+    """
+    global _openfigi_gate
+    if _openfigi_gate is None:
+        _openfigi_gate = ExternalProviderGate(_OPENFIGI_GATE_CONFIG)
+    return _openfigi_gate
+
+
 # ── Test hooks ─────────────────────────────────────────────────────
 
 
@@ -146,7 +174,8 @@ def reset_for_tests() -> None:
     """Drop every cached singleton. Tests call this between cases so
     a circuit opened in one test doesn't bleed into the next.
     """
-    global _idempotency_storage, _sec_edgar_gate, _sec_edgar_bulk_gate
+    global _idempotency_storage, _sec_edgar_gate, _sec_edgar_bulk_gate, _openfigi_gate
     _idempotency_storage = None
     _sec_edgar_gate = None
     _sec_edgar_bulk_gate = None
+    _openfigi_gate = None

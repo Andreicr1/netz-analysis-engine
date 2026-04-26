@@ -616,6 +616,161 @@ async def _source_4_sec_adv(
 
 
 # ---------------------------------------------------------------------------
+# Source 5: OpenFIGI /v3/mapping (external API)
+# ---------------------------------------------------------------------------
+
+OPENFIGI_BATCH_SIZE = 100
+OPENFIGI_RATE_LIMIT_REQUESTS = 25
+OPENFIGI_RATE_LIMIT_WINDOW_S = 6.0
+OPENFIGI_ENDPOINT = "https://api.openfigi.com/v3/mapping"
+
+
+async def _openfigi_batch_request(
+    tickers: list[dict[str, str]],
+    api_key: str,
+) -> list[dict | None]:
+    """Send a batch of up to 100 items to OpenFIGI /v3/mapping."""
+    import aiohttp
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-OPENFIGI-APIKEY": api_key,
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            OPENFIGI_ENDPOINT,
+            json=tickers,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=30),
+        ) as resp:
+            if resp.status != 200:
+                text_body = await resp.text()
+                logger.warning(
+                    "openfigi.request_failed",
+                    status=resp.status,
+                    body=text_body[:200],
+                )
+                return [None] * len(tickers)
+            return await resp.json()
+
+
+async def _source_5_openfigi(
+    db: AsyncSession,
+    target_ids: list[str],
+) -> tuple[dict[str, SourceResult], bool]:
+    """Source 5: OpenFIGI — resolve ticker to CUSIP, ISIN, FIGI, MIC."""
+    source_name = "openfigi"
+    results: dict[str, SourceResult] = {}
+
+    api_key = os.environ.get("OPENFIGI_API_KEY", "")
+    if not api_key:
+        logger.warning("identity_resolver.openfigi_no_api_key")
+        return results, False
+
+    # Fetch tickers from target instruments
+    rows = await db.execute(
+        text(
+            "SELECT instrument_id::text, ticker "
+            "FROM instruments_universe "
+            "WHERE instrument_id = ANY(:ids) AND ticker IS NOT NULL"
+        ),
+        {"ids": target_ids},
+    )
+    ticker_rows = rows.fetchall()
+
+    if not ticker_rows:
+        return results, True
+
+    # Build batches of 100
+    batches: list[list[tuple[str, str]]] = []  # (instrument_id, ticker)
+    current_batch: list[tuple[str, str]] = []
+    for row in ticker_rows:
+        current_batch.append((row.instrument_id, row.ticker))
+        if len(current_batch) >= OPENFIGI_BATCH_SIZE:
+            batches.append(current_batch)
+            current_batch = []
+    if current_batch:
+        batches.append(current_batch)
+
+    from app.core.runtime.gates import get_openfigi_gate
+
+    gate = get_openfigi_gate()
+    request_count = 0
+
+    for batch in batches:
+        # Rate limiting: 25 requests per 6 seconds
+        if request_count > 0 and request_count % OPENFIGI_RATE_LIMIT_REQUESTS == 0:
+            await asyncio.sleep(OPENFIGI_RATE_LIMIT_WINDOW_S)
+
+        figi_request = [
+            {"idType": "TICKER", "idValue": ticker, "exchCode": "US"}
+            for _, ticker in batch
+        ]
+
+        try:
+            response = await gate.call(
+                f"openfigi_batch_{request_count}",
+                lambda req=figi_request: _openfigi_batch_request(req, api_key),
+            )
+        except Exception as e:
+            logger.warning(
+                "identity_resolver.openfigi_batch_error",
+                batch=request_count,
+                error=str(e)[:200],
+            )
+            continue
+
+        request_count += 1
+
+        if not response or len(response) != len(batch):
+            continue
+
+        for (iid, ticker), result_item in zip(batch, response):
+            if result_item is None or "data" not in result_item:
+                continue
+
+            data_items = result_item["data"]
+            if not data_items:
+                continue
+
+            # Take first match
+            item = data_items[0]
+            sr = SourceResult(source_name)
+
+            figi_val = item.get("compositeFIGI") or item.get("figi")
+            if figi_val:
+                sr.set("figi", figi_val)
+
+            cusip = item.get("cusip")
+            if cusip:
+                if len(cusip) == 9:
+                    sr.set("cusip_9", cusip)
+                    sr.set("cusip_8", cusip[:8])
+                elif len(cusip) == 8:
+                    sr.set("cusip_8", cusip)
+
+            isin_val = item.get("isin")
+            if isin_val:
+                sr.set("isin", isin_val)
+
+            exch_code = item.get("exchCode")
+            if exch_code:
+                sr.set("ticker_exchange", f"{ticker}:{exch_code}")
+            mic_val = item.get("micCode")
+            if mic_val:
+                sr.set("mic", mic_val)
+
+            if ticker:
+                sr.set("ticker", ticker)
+
+            if sr.fields:
+                results[iid] = sr
+
+    return results, True
+
+
+# ---------------------------------------------------------------------------
 # Main worker entry point
 # ---------------------------------------------------------------------------
 
@@ -693,12 +848,13 @@ async def _resolve_identities(
 
     logger.info("identity_resolver.start", targets=len(target_ids))
 
-    # Run all 4 internal sources
+    # Run all 5 sources (4 internal + OpenFIGI)
     source_funcs = [
         ("source_1", _source_1_company_tickers),
         ("source_2", _source_2_mf_tickers),
         ("source_3", _source_3_esma),
         ("source_4", _source_4_sec_adv),
+        ("source_5", _source_5_openfigi),
     ]
 
     all_results: dict[str, list[SourceResult]] = {iid: [] for iid in target_ids}
