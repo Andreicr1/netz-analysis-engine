@@ -386,3 +386,38 @@ Portfolio is asset-centric post-conversion. Tenor/basis/covenant are deal-level 
 ## Audit Trail
 
 Immutable audit logging via `write_audit_event()` in `backend/app/core/db/audit.py`. Records CREATE/UPDATE/DELETE with before/after JSONB snapshots, correlated via `request_id`. Model: `AuditEvent` in `backend/app/core/db/models.py` (RLS-scoped). Used across 17+ modules for entity-level change tracking.
+
+## Instrument Identity Layer (PR-Q11, 2026-04-26)
+
+Canonical resolver for CIK / CUSIP / ticker / ISIN / FIGI / series_id / class_id / CRD / private_fund_id / LEI lookups. Lives at `backend/data_providers/identity/resolver.py`. Backed by global table `instrument_identity` (current state, listing/share-class grain) plus append-only `instrument_identity_history` for SCD audit.
+
+**Grain:** listing/share-class. Entity, registrant and manager identifiers (CIK, CRD, LEI) are many-to-one or one-to-many at this grain — they are **not** UNIQUE in `instrument_identity`. Reverse helpers (`by_cik`, `by_cusip`, `by_ticker`, `by_isin`, `by_series_class`) return `list[UUID]`, never single.
+
+**Resolution states** (`resolution_status` ENUM):
+- `canonical` — has fund-level identifier (CIK + series, ISIN, CUSIP-9, sec_private_fund_id, ticker, or esma_manager_id)
+- `candidate` — only weaker signals (CRD + name); never assume canonical for downstream joins
+- `unresolved` — no usable identifier resolved yet
+
+**Worker `identity_resolver`** (lock 900_110, weekly + on-demand after `universe_sync`). Five sources, prioritised per field — never overwriting a higher-authority value with a lower-authority source. Conflicts between two authoritative sources go to `conflict_state` JSONB instead of silent overwrite. `last_resolved_at` is updated only on full success across attempted sources; partial failures keep the row eligible for the next run.
+
+| Source | Provides |
+|---|---|
+| SEC `company_tickers.json` (local) | CIK ↔ ticker (10-K filers) |
+| SEC `company_tickers_mf.json` | CIK ↔ series_id ↔ class_id ↔ ticker |
+| ESMA Fund Register (`esma_funds`) | ISIN ↔ esma_manager_id ↔ LEI |
+| SEC ADV bulk (`sec_managers` + `sec_manager_funds`) | CRD ↔ adviser CIK + sec_private_fund_id |
+| OpenFIGI `/v3/mapping` (key in `OPENFIGI_API_KEY`) | CUSIP ↔ ISIN ↔ FIGI ↔ ticker:exchange:mic |
+
+ISIN in `instrument_identity` is restricted by CHECK to ISO 6166 format and may only be written by ESMA or OpenFIGI. SEC sources never populate `instrument_identity.isin` because they emit `series_id`, not ISIN.
+
+**Mandatory consumer rules:**
+- New code must read identifiers via `data_providers.identity.resolver`, not via `attributes->>'sec_cik'`, `zfill(10)`, `lstrip('0')` or `LTRIM(cik,'0')`. Existing legacy callsites (PR-Q11 Phase 4) carry deprecated wrappers — remove those when their cleanup tickets land.
+- Do **not** write to `instruments_universe.isin` for identity enrichment. The legacy column is corrupted (mixes ISINs, series_ids, LEIs, CIKs); treat it as opaque historical data, not a source of truth.
+- Reverse lookups assume listing/share-class grain. If you need entity-level aggregation (one CIK → many listings), iterate the returned `list[UUID]` explicitly.
+- `sec_nport_holdings.cik_padded` (added by migration 0179) is a trigger-maintained mirror of `cik` always 10-digit zero-padded. Use it for index-friendly joins against `instrument_identity.cik_padded`.
+
+**TimescaleDB compatibility note (PR-Q11 Phase 5):** generated columns of the form `GENERATED ALWAYS AS (...) STORED` are rejected by Postgres on hypertables that have columnstore (compression policy) enabled, even when no chunks are actually compressed. Use a `BEFORE INSERT OR UPDATE` trigger plus a backfill `UPDATE`, as in migration 0179. Never assume `ADD COLUMN GENERATED` will succeed on `sec_*` hypertables.
+
+**OpenFIGI rate limits:** 25 requests / 6s with key, 100 IDs per request. Worker uses `ExternalProviderGate` bulk variant (5 min) with provider-isolated circuit breaker — Tiingo (removed from Q11) outage cannot starve OpenFIGI.
+
+**Source of truth during dev:** the local Docker DB (`netz-analysis-engine-db-1`). Timescale Cloud (`netz_engine`, service `nvhhm6dwvh`) is deprecated for identity work and may be stale.
