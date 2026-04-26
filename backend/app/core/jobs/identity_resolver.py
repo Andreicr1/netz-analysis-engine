@@ -69,6 +69,31 @@ FIELD_AUTHORITY: dict[str, dict[str, int]] = {
 # ---------------------------------------------------------------------------
 
 
+# Per-field VARCHAR length limits from instrument_identity schema (migration 0177).
+# Sources occasionally emit values that exceed these limits (e.g. OpenFIGI may
+# return a composite ticker like "TICKER:EXCH:MIC" that is too wide). Without
+# pre-validation those rows fail the whole INSERT with StringDataRightTruncationError
+# and the entire instrument's identity row is lost.
+_FIELD_MAX_LENGTH: dict[str, int] = {
+    "cik_padded": 10,
+    "cik_unpadded": 10,
+    "sec_series_id": 15,
+    "sec_class_id": 15,
+    "sec_crd": 10,
+    "sec_private_fund_id": 50,
+    "cusip_8": 8,
+    "cusip_9": 9,
+    "isin": 12,
+    "sedol": 7,
+    "figi": 12,
+    "ticker": 20,
+    "ticker_exchange": 20,
+    "mic": 4,
+    "lei": 20,
+    "esma_manager_id": 20,
+}
+
+
 class SourceResult:
     """Container for identity fields discovered by a single source."""
 
@@ -77,8 +102,20 @@ class SourceResult:
         self.fields: dict[str, str | None] = {}
 
     def set(self, field: str, value: str | None) -> None:
-        if value is not None:
-            self.fields[field] = value
+        if value is None:
+            return
+        max_len = _FIELD_MAX_LENGTH.get(field)
+        if max_len is not None and len(value) > max_len:
+            logger.warning(
+                "identity_resolver.field_too_long",
+                source=self.source_name,
+                field=field,
+                value_length=len(value),
+                max_length=max_len,
+                value_preview=value[:50],
+            )
+            return
+        self.fields[field] = value
 
 
 # ---------------------------------------------------------------------------
