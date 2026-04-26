@@ -87,6 +87,14 @@ _REGISTRY: tuple[ConfigDomain, ...] = (
         description="Screener AI-assisted deep filter criteria",
         required=False,
     ),
+    ConfigDomain(
+        vertical="liquid_funds",
+        config_type="taa_bands",
+        ownership="config_service",
+        client_visible=False,
+        description="TAA tactical asset allocation bands per profile (consumed by risk_calc and model_portfolios construction)",
+        required=False,
+    ),
     # ── private_credit: ConfigService-managed ────────────────────────────
     ConfigDomain(
         vertical="private_credit",
