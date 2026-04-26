@@ -82,19 +82,19 @@ class TestEsmaManager:
 class TestEsmaFund:
     def test_creation(self):
         f = EsmaFund(
-            isin="IE00B4L5Y983",
+            lei="IE00B4L5Y983ABCDEFGH",
             fund_name="iShares Core MSCI World",
             esma_manager_id="MGR001",
             domicile="IE",
             fund_type="UCITS",
             host_member_states=["DE", "FR", "NL"],
         )
-        assert f.isin == "IE00B4L5Y983"
+        assert f.lei == "IE00B4L5Y983ABCDEFGH"
         assert len(f.host_member_states) == 3
 
     def test_default_host_states(self):
         f = EsmaFund(
-            isin="IE00B4L5Y983",
+            lei="IE00B4L5Y983ABCDEFGH",
             fund_name="Test Fund",
             esma_manager_id="MGR001",
             domicile=None,
@@ -104,7 +104,7 @@ class TestEsmaFund:
 
     def test_optional_ticker(self):
         f = EsmaFund(
-            isin="IE00B4L5Y983",
+            lei="IE00B4L5Y983ABCDEFGH",
             fund_name="Test Fund",
             esma_manager_id="MGR001",
             domicile=None,
@@ -166,7 +166,7 @@ class TestParseFundDoc:
         }
         fund = _parse_fund_doc(doc)
         assert fund is not None
-        assert fund.isin == "529900KQKMU0OADYYE46"
+        assert fund.lei == "529900KQKMU0OADYYE46"
         assert fund.fund_name == "iShares Core MSCI World"
         assert fund.host_member_states == ["DE", "FR"]
 
@@ -207,7 +207,7 @@ class TestParseFundDoc:
         }
         fund = _parse_fund_doc(doc)
         assert fund is not None
-        assert fund.isin == "529900KQKMU0OADYYE46"
+        assert fund.lei == "529900KQKMU0OADYYE46"
 
     def test_host_states_as_string(self):
         doc = {
@@ -571,7 +571,7 @@ class TestRegisterService:
                 funds.append(fund)
 
             assert len(funds) == 1
-            assert funds[0].isin == "529900KQKMU0OADYYE46"
+            assert funds[0].lei == "529900KQKMU0OADYYE46"
 
     async def test_iter_ucits_funds_max_pages(self):
         doc = {

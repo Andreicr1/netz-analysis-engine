@@ -95,7 +95,7 @@ frontends/
   wealth/           ← SvelteKit "netz-wealth-os"
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0175_add_issuer_cik_to_cusip_map`.
+**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0183_mv_unified_funds_ucits_share_classes`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header. **Tenant and user management is 100% via Clerk Dashboard** — no custom admin UI. Organizations, user invites, and role assignment (`ADMIN`, `INVESTMENT_TEAM`, `investor`) are all managed in Clerk. `ConfigService` defaults mean new tenants work immediately without provisioning.
 
@@ -152,7 +152,7 @@ Six non-negotiable principles enforced across the stack: **P1 Bounded**, **P2 Ba
 - **expire_on_commit=False:** Always. Prevents implicit I/O in async context.
 - **lazy="raise":** Set on ALL relationships. Forces explicit `selectinload()`/`joinedload()`.
 - **RLS subselect:** All RLS policies must use `(SELECT current_setting(...))` not bare `current_setting()`. Without subselect, per-row evaluation causes 1000x slowdown.
-- **Global tables:** `macro_data`, `allocation_blocks`, `vertical_config_defaults`, `benchmark_nav`, `macro_regional_snapshots`, `treasury_data`, `ofr_hedge_fund_data`, `bis_statistics`, `imf_weo_forecasts`, `sec_*` tables, `sec_insider_transactions`, `esma_funds`, `esma_managers`, `instruments_universe`, `nav_timeseries`, `sec_fund_prospectus_returns`, `sec_fund_prospectus_stats`, `fund_risk_metrics` have NO `organization_id`, NO RLS. They are shared across all tenants.
+- **Global tables:** `macro_data`, `allocation_blocks`, `vertical_config_defaults`, `benchmark_nav`, `macro_regional_snapshots`, `treasury_data`, `ofr_hedge_fund_data`, `bis_statistics`, `imf_weo_forecasts`, `sec_*` tables, `sec_insider_transactions`, `esma_funds`, `esma_managers`, `esma_securities`, `instruments_universe`, `nav_timeseries`, `sec_fund_prospectus_returns`, `sec_fund_prospectus_stats`, `fund_risk_metrics` have NO `organization_id`, NO RLS. They are shared across all tenants.
 - **`fund_risk_metrics`** is GLOBAL — pre-computed by `global_risk_metrics` worker (lock 900_071) for ALL active instruments in `instruments_universe`, including DTW drift (by strategy_label), 5Y/10Y annualized returns. `organization_id` column is nullable (NULL for global rows). RLS is disabled (hypertable compression incompatible). All tenants see the same risk metrics. Org-scoped `risk_calc` (lock 900_007) computes org-specific overrides (no DTW — handled globally). Routes must NOT filter by `organization_id` when reading risk metrics.
 - **`instruments_universe`** is a GLOBAL catalog (no RLS). Org-scoped instrument selection is via `instruments_org` (has RLS, `organization_id`, `block_id`, `approval_status`). The `Instrument` model has NO `organization_id`, `block_id`, or `approval_status` — those live on `InstrumentOrg`. All queries needing org-scoped instruments must JOIN `instruments_org`.
 - **`nav_timeseries`** is GLOBAL (no RLS, no `organization_id`). Prices are market data shared across all tenants. Org-scoping for NAV queries is via JOIN `instruments_org`.
@@ -230,6 +230,7 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `portfolio_nav_synthesizer` | 900_030 | org | `model_portfolio_nav` (1mo chunks) | Computed (weighted NAV from nav_timeseries) | Daily |
 | `nport_fund_discovery` | 900_024 | global | `sec_registered_funds`, `sec_fund_classes` | SEC EDGAR N-PORT headers | Weekly |
 | `esma_ingestion` | — | global | `esma_funds`, `esma_managers` | ESMA Fund Register | Weekly |
+| `firds_ucits_security_sync` | crc32 | global | `esma_securities` | ESMA FIRDS FULINS_C (share-class ISINs filtered by esma_funds.lei) | Daily |
 | `wealth_embedding` | 900_041 | global | `wealth_vector_chunks` | OpenAI text-embedding-3-large (12 sources) | Daily |
 | `sec_bulk_ingestion` | 900_050 | global | sec_etfs, sec_bdcs, sec_money_market_funds, sec_mmf_metrics, sec_registered_funds, strategy_label | SEC DERA bulk ZIPs (N-CEN, N-MFP, N-PORT, BDC) | Quarterly |
 | `form345_ingestion` | 900_051 | global | `sec_insider_transactions`, `sec_insider_sentiment` (MV) | SEC EDGAR Form 345 bulk TSV (insider buys/sells) | Quarterly |
@@ -404,7 +405,7 @@ Canonical resolver for CIK / CUSIP / ticker / ISIN / FIGI / series_id / class_id
 |---|---|
 | SEC `company_tickers.json` (local) | CIK ↔ ticker (10-K filers) |
 | SEC `company_tickers_mf.json` | CIK ↔ series_id ↔ class_id ↔ ticker |
-| ESMA Fund Register (`esma_funds`) | ISIN ↔ esma_manager_id ↔ LEI |
+| ESMA Fund Register (`esma_funds`) | LEI (PK) ↔ esma_manager_id; share-class ISINs via `esma_securities` (FIRDS) |
 | SEC ADV bulk (`sec_managers` + `sec_manager_funds`) | CRD ↔ adviser CIK + sec_private_fund_id |
 | OpenFIGI `/v3/mapping` (key in `OPENFIGI_API_KEY`) | CUSIP ↔ ISIN ↔ FIGI ↔ ticker:exchange:mic |
 
@@ -421,3 +422,14 @@ ISIN in `instrument_identity` is restricted by CHECK to ISO 6166 format and may 
 **OpenFIGI rate limits:** 25 requests / 6s with key, 100 IDs per request. Worker uses `ExternalProviderGate` bulk variant (5 min) with provider-isolated circuit breaker — Tiingo (removed from Q11) outage cannot starve OpenFIGI.
 
 **Source of truth during dev:** the local Docker DB (`netz-analysis-engine-db-1`). Timescale Cloud (`netz_engine`, service `nvhhm6dwvh`) is deprecated for identity work and may be stale.
+
+## ESMA Identity Correction (PR-Q11B, 2026-04-26)
+
+`esma_funds.isin` column historically stored **LEIs** (20-char), not ISINs. PR-Q11B corrects this:
+
+- **`esma_funds`** PK is now `lei` (20-char LEI). Old `isin` column renamed `legacy_isin_misnamed`. `yahoo_ticker` and `ticker_resolved_at` remain (Q11C migrates them to provider-aware storage).
+- **`esma_securities`** (new) stores real FIRDS ISINs (ISO 6166) per share class. PK `isin`, FK `fund_lei → esma_funds.lei`. One fund → N share classes. Populated by `firds_ucits_security_sync` worker.
+- **`mv_unified_funds`** UCITS branch: `external_id = COALESCE(es.isin, ef.lei)`, `isin = es.isin`, `ticker = ef.yahoo_ticker` (legacy). LEFT JOIN `esma_securities` — when empty, falls back to LEI.
+- **ORM:** `EsmaFund.lei` is PK; `EsmaSecurity` model added. Dataclass `data_providers.esma.models.EsmaFund.lei` (was `isin`).
+- **Identity resolver source 3:** reads `ef.lei` direct + JOINs `esma_securities` LATERAL for best ISIN. No heuristic.
+- **Q11C scope (not in Q11B):** OpenFIGI enrichment, Tiingo validation, `esma_security_provider_symbols`, `yahoo_ticker` migration, migration 0184 (drop legacy columns).

@@ -31,6 +31,7 @@ def _row(
     series_id: str | None = None,
     fund_name: str | None = None,
     sec_cik: str | None = None,
+    fund_lei: str | None = None,
     current_label: str | None = None,
 ) -> InstrumentRow:
     return InstrumentRow(
@@ -40,6 +41,7 @@ def _row(
         series_id=series_id,
         fund_name=fund_name,
         sec_cik=sec_cik,
+        fund_lei=fund_lei,
         current_label=current_label,
     )
 
@@ -171,11 +173,12 @@ class TestPriorityLadder:
         assert result.source == SOURCE_TIINGO
         assert result.label == "Real Estate"
 
-    def test_esma_when_real_isin_and_no_sec_match(self) -> None:
-        inst = _row(isin="LU0123456789")
+    def test_esma_when_fund_lei_matches(self) -> None:
+        lei = "549300MLUDYVRQOOXS22"
+        inst = _row(fund_lei=lei)
         result = _resolve_with(
             inst,
-            esma={"LU0123456789": ("Asian Equity", "JPM Asia")},
+            esma={lei: ("Asian Equity", "JPM Asia")},
         )
         assert result.label == "Asian Equity"
         assert result.source == SOURCE_ESMA

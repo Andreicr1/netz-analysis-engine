@@ -51,9 +51,9 @@ class TestEsmaFundModel:
         columns = {c.name for c in EsmaFund.__table__.columns}
         assert "organization_id" not in columns
 
-    def test_primary_key_is_isin(self) -> None:
+    def test_primary_key_is_lei(self) -> None:
         pk_cols = [c.name for c in EsmaFund.__table__.primary_key.columns]
-        assert pk_cols == ["isin"]
+        assert pk_cols == ["lei"]
 
     def test_fk_to_esma_managers(self) -> None:
         fks = list(EsmaFund.__table__.foreign_keys)
@@ -93,13 +93,13 @@ class TestEsmaWorkerConstants:
 # ═══════════════════════════════════════════════════════════════════
 
 
-def _make_fund_dc(isin: str, manager_id: str = "MGR001") -> MagicMock:
+def _make_fund_dc(lei: str, manager_id: str = "MGR001") -> MagicMock:
     """Create a frozen EsmaFund dataclass mock."""
     from data_providers.esma.models import EsmaFund as EsmaFundDC
 
     return EsmaFundDC(
-        isin=isin,
-        fund_name=f"Fund {isin}",
+        lei=lei,
+        fund_name=f"Fund {lei}",
         esma_manager_id=manager_id,
         domicile="IE",
         fund_type="UCITS",
@@ -162,7 +162,7 @@ class TestEsmaDataclasses:
     def test_fund_dataclass_frozen(self) -> None:
         fund = _make_fund_dc("IE00ABC")
         with pytest.raises(AttributeError):
-            fund.isin = "CHANGED"  # type: ignore[misc]
+            fund.lei = "CHANGED"  # type: ignore[misc]
 
     def test_manager_dataclass_frozen(self) -> None:
         mgr = _make_manager_dc()

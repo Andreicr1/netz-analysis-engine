@@ -377,7 +377,7 @@ class TestEsmaRegisterE2E:
 
         sample = funds[0]
         assert isinstance(sample, EsmaFund)
-        assert sample.isin  # Fund LEI used as identifier
+        assert sample.lei  # Fund LEI used as identifier
         assert sample.fund_name
         assert sample.esma_manager_id
 

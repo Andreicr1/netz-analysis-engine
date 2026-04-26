@@ -267,6 +267,14 @@ def _get_text(elem: object, local_name: str) -> str | None:
     return None
 
 
+def _get_mic_from_trading_venue(ref_data: object) -> str | None:
+    """Extract MIC from TradgVnRltdAttrbts/Id inside a RefData element."""
+    trading_venue = _find_recursive(ref_data, "TradgVnRltdAttrbts")
+    if trading_venue is not None:
+        return _get_text(trading_venue, "Id")
+    return None
+
+
 def _extract_instrument(ref_data: object) -> FirdsInstrument | None:
     """Extract a FirdsInstrument from a RefData XML element."""
     isin = _get_text(ref_data, "Id")
@@ -284,11 +292,15 @@ def _extract_instrument(ref_data: object) -> FirdsInstrument | None:
     if not _LEI_RE.match(lei):
         return None
 
+    # MIC lives at TradgVnRltdAttrbts/Id — extract from that container
+    # to avoid picking up the top-level FinInstrmGnlAttrbts/Id (ISIN).
+    mic = _get_mic_from_trading_venue(ref_data)
+
     return FirdsInstrument(
         isin=isin,
         lei=lei,
         full_name=_get_text(ref_data, "FullNm") or "",
         cfi_code=_get_text(ref_data, "ClssfctnTp"),
         currency=_get_text(ref_data, "NtnlCcy"),
-        mic=_get_text(ref_data, "Id"),  # TradgVnRltdAttrbts/Id (MIC)
+        mic=mic,
     )

@@ -440,16 +440,20 @@ class EsmaManager(Base):
 
 
 class EsmaFund(Base):
-    """UCITS fund entry from ESMA Register.
+    """UCITS fund legal entity from ESMA Register.
 
     GLOBAL TABLE: No organization_id, no RLS.
-    Natural PK on ISIN (unique identifier for securities).
+    Natural PK on LEI (20-char Legal Entity Identifier).
+    The ``isin`` column is a legacy misnomer — it actually stores the fund LEI.
+    Migration 0180 added a proper ``lei`` column; 0182 rotated the PK.
     FK to esma_managers on esma_manager_id.
     """
 
     __tablename__ = "esma_funds"
 
-    isin: Mapped[str] = mapped_column(Text, primary_key=True)
+    # PK after migration 0182. Before 0182, `isin` is still PK in DB
+    # but both columns exist after 0180.
+    lei: Mapped[str] = mapped_column(Text, primary_key=True)
     fund_name: Mapped[str] = mapped_column(Text, nullable=False)
     esma_manager_id: Mapped[str] = mapped_column(
         Text, ForeignKey("esma_managers.esma_id", ondelete="CASCADE"), nullable=False,
@@ -470,6 +474,45 @@ class EsmaFund(Base):
     )
 
     manager: Mapped[EsmaManager] = relationship(back_populates="funds", lazy="raise")
+    securities: Mapped[list[EsmaSecurity]] = relationship(
+        back_populates="fund", lazy="raise",
+    )
+
+
+class EsmaSecurity(Base):
+    """UCITS share-class security from ESMA FIRDS FULINS_C.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    PK on real ISIN (ISO 6166). One fund LEI → many share-class ISINs.
+    Populated by firds_ucits_security_sync worker (PR-Q11B).
+    """
+
+    __tablename__ = "esma_securities"
+
+    isin: Mapped[str] = mapped_column(Text, primary_key=True)
+    fund_lei: Mapped[str] = mapped_column(
+        Text, ForeignKey("esma_funds.lei", ondelete="CASCADE"), nullable=False,
+    )
+    full_name: Mapped[str] = mapped_column(Text, nullable=False)
+    cfi_code: Mapped[str | None] = mapped_column(Text)
+    currency: Mapped[str | None] = mapped_column(Text)
+    mic: Mapped[str | None] = mapped_column(Text)
+    firds_file_url: Mapped[str | None] = mapped_column(Text)
+    firds_publication_date: Mapped[dt.date | None] = mapped_column(Date)
+    first_seen_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+    last_seen_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+    data_fetched_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true",
+    )
+
+    fund: Mapped[EsmaFund] = relationship(back_populates="securities", lazy="raise")
 
 
 class EsmaIsinTickerMap(Base):

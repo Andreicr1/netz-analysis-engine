@@ -300,7 +300,7 @@ def _hydrate_ucits(
 ) -> UCITSExtendedData | None:
     from app.shared.models import EsmaFund
 
-    row = sync_db.query(EsmaFund).filter(EsmaFund.isin == external_id).first()
+    row = sync_db.query(EsmaFund).filter(EsmaFund.lei == external_id).first()
     if not row:
         return None
 

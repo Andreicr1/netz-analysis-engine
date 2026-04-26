@@ -10,10 +10,15 @@ from sqlalchemy import create_engine, text
 # Fetch 10 ISINs from DB
 engine = create_engine(os.environ["DATABASE_URL_SYNC"])
 with engine.connect() as conn:
-    rows = conn.execute(text("SELECT isin, fund_name, fund_type FROM esma_funds LIMIT 10")).fetchall()
+    rows = conn.execute(text(
+        "SELECT es.isin, ef.fund_name, ef.fund_type "
+        "FROM esma_securities es "
+        "JOIN esma_funds ef ON ef.lei = es.fund_lei "
+        "WHERE es.is_active LIMIT 10"
+    )).fetchall()
 
 isins = [r[0] for r in rows]
-print("Sample ISINs:")
+print("Sample ISINs (from esma_securities):")
 for r in rows:
     print(f"  {r[0]}  {r[1][:50]}  type={r[2]}")
 
