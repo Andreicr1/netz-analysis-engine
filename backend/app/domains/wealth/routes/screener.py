@@ -971,7 +971,7 @@ def _build_esma_query(
             literal("esma").label("source"),
             literal("fund").label("instrument_type"),
             EsmaFund.fund_name.label("name"),
-            EsmaFund.isin.label("isin"),
+            EsmaFund.lei.label("isin"),
             EsmaFund.yahoo_ticker.label("ticker"),
             literal("alternatives").label("asset_class"),
             _esma_geo_case.label("geography"),
@@ -995,7 +995,7 @@ def _build_esma_query(
         pattern = f"%{q}%"
         stmt = stmt.where(
             EsmaFund.fund_name.ilike(pattern)
-            | EsmaFund.isin.ilike(pattern)
+            | EsmaFund.lei.ilike(pattern)
             | EsmaFund.yahoo_ticker.ilike(pattern)
             | EsmaManager.company_name.ilike(pattern),
         )
@@ -1295,7 +1295,7 @@ async def get_screener_facets(
         )
         if q:
             esma_geo_stmt = esma_geo_stmt.where(
-                EsmaFund.fund_name.ilike(f"%{q}%") | EsmaFund.isin.ilike(f"%{q}%"),
+                EsmaFund.fund_name.ilike(f"%{q}%") | EsmaFund.lei.ilike(f"%{q}%"),
             )
         esma_total = 0
         for geo_label, cnt in (await db.execute(esma_geo_stmt)).all():

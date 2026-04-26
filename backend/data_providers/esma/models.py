@@ -28,9 +28,14 @@ class EsmaManager:
 
 @dataclass(frozen=True)
 class EsmaFund:
-    """UCITS fund entry from ESMA Register."""
+    """UCITS fund legal entity from ESMA Register.
 
-    isin: str
+    Natural PK on LEI (20-char Legal Entity Identifier).
+    The Register's "ISIN" field actually stores LEIs for UCITS funds.
+    Real ISINs live in ``EsmaSecurity`` (FIRDS FULINS_C).
+    """
+
+    lei: str
     fund_name: str
     esma_manager_id: str
     domicile: str | None

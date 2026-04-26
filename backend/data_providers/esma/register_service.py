@@ -210,7 +210,7 @@ def _parse_fund_doc(doc: dict[str, Any]) -> EsmaFund | None:
         host_states = [s.strip() for s in host_states_raw.split(",") if s.strip()]
 
     return EsmaFund(
-        isin=fund_lei,  # LEI as unique ID (ISIN not in Solr schema)
+        lei=fund_lei,  # Fund LEI (20-char) — not ISIN
         fund_name=str(fund_name).strip(),
         esma_manager_id=str(manager_id).strip(),
         domicile=_str_or_none(doc.get("funds_domicile_cou_code")),

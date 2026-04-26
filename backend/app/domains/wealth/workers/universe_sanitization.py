@@ -624,7 +624,8 @@ async def _propagate_to_instruments_universe(db: AsyncSession) -> None:
         ),
     )
 
-    # esma_funds — joined via isin
+    # esma_funds — joined via fund_lei attribute (post-Q11B)
+    # Transition fallback: also match by legacy isin attribute = lei
     await db.execute(
         text(
             """
@@ -635,7 +636,8 @@ async def _propagate_to_instruments_universe(db: AsyncSession) -> None:
                     'exclusion_reason', f.exclusion_reason
                 )
             FROM esma_funds f
-            WHERE iu.attributes->>'isin' = f.isin
+            WHERE iu.attributes->>'fund_lei' = f.lei
+               OR iu.attributes->>'isin' = f.lei
             """,
         ),
     )

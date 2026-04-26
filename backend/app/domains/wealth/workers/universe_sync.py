@@ -404,7 +404,12 @@ async def _sync_sec_bdcs(db: AsyncSession) -> dict[str, Any]:
 
 
 async def _sync_esma_funds(db: AsyncSession) -> dict[str, Any]:
-    """Upsert ESMA UCITS funds with resolved yahoo_ticker."""
+    """Upsert ESMA UCITS funds with resolved yahoo_ticker.
+
+    Post-Q11B: sources from esma_securities (share-class ISINs) joined to
+    esma_funds (fund-level metadata). Falls back to fund-level rows when
+    esma_securities is empty (pre-FIRDS run).
+    """
     _sql = """
         INSERT INTO instruments_universe (
             instrument_id, instrument_type, name, isin, ticker,
@@ -413,8 +418,8 @@ async def _sync_esma_funds(db: AsyncSession) -> dict[str, Any]:
         SELECT
             gen_random_uuid(),
             'fund',
-            ef.fund_name,
-            ef.isin,
+            COALESCE(NULLIF(es.full_name, ''), ef.fund_name),
+            COALESCE(es.isin, ef.lei),
             ef.yahoo_ticker,
             __ASSET_CLASS__,
             CASE ef.domicile
@@ -438,7 +443,7 @@ async def _sync_esma_funds(db: AsyncSession) -> dict[str, Any]:
             END,
             true,
             jsonb_build_object(
-                'isin', ef.isin,
+                'fund_lei', ef.lei,
                 'fund_subtype', 'ucits',
                 'strategy_label', ef.strategy_label,
                 'domicile', ef.domicile,
@@ -453,6 +458,7 @@ async def _sync_esma_funds(db: AsyncSession) -> dict[str, Any]:
                 'source', 'universe_sync'
             )
         FROM esma_funds ef
+        LEFT JOIN esma_securities es ON es.fund_lei = ef.lei AND es.is_active
         WHERE ef.yahoo_ticker IS NOT NULL
         ON CONFLICT (ticker) DO UPDATE SET
             name = EXCLUDED.name,

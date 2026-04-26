@@ -78,6 +78,7 @@ class InstrumentRow:
     series_id: str | None  # extracted from attributes.series_id (alias of isin for SEC funds).
     fund_name: str | None
     sec_cik: str | None
+    fund_lei: str | None  # ESMA fund LEI from attributes (Q11B)
     current_label: str | None
 
 
@@ -184,17 +185,17 @@ async def _load_bdc_index(db: Any) -> dict[str, tuple[str, str]]:
 
 
 async def _load_esma_index(db: Any) -> dict[str, tuple[str, str]]:
-    """Return ``{isin: (strategy_label, fund_name)}``."""
+    """Return ``{lei: (strategy_label, fund_name)}``."""
     result = await db.execute(
         text(
-            "SELECT isin, strategy_label, fund_name FROM esma_funds "
-            "WHERE strategy_label IS NOT NULL AND isin IS NOT NULL"
+            "SELECT lei, strategy_label, fund_name FROM esma_funds "
+            "WHERE strategy_label IS NOT NULL AND lei IS NOT NULL"
         )
     )
     out: dict[str, tuple[str, str]] = {}
     for row in result:
-        if row.isin not in out:
-            out[row.isin] = (row.strategy_label, row.fund_name or "")
+        if row.lei not in out:
+            out[row.lei] = (row.strategy_label, row.fund_name or "")
     return out
 
 
@@ -228,6 +229,7 @@ async def _load_active_instruments(db: Any) -> list[InstrumentRow]:
                    name AS fund_name,
                    attributes->>'sec_cik' AS sec_cik,
                    COALESCE(attributes->>'series_id', isin) AS series_id,
+                   attributes->>'fund_lei' AS fund_lei,
                    attributes->>'strategy_label' AS current_label
             FROM instruments_universe
             WHERE is_active = true
@@ -252,6 +254,7 @@ async def _load_active_instruments(db: Any) -> list[InstrumentRow]:
                 series_id=series,
                 fund_name=row.fund_name,
                 sec_cik=cik_norm,
+                fund_lei=row.fund_lei,
                 current_label=row.current_label,
             )
         )
@@ -335,9 +338,12 @@ def _resolve(
                 source_value=raw,
                 reason=mapping.reason,
             )
-    # 4. ESMA — bridge by actual ISIN (not series_id)
-    if inst.isin and not inst.isin.startswith("S0") and inst.isin in esma:
-        raw, _ = esma[inst.isin]
+    # 4. ESMA — bridge by fund_lei attribute or by isin matching LEI
+    esma_lei = getattr(inst, "fund_lei", None) or (
+        inst.isin if inst.isin and len(inst.isin) == 20 and inst.isin.isalnum() else None
+    )
+    if esma_lei and esma_lei in esma:
+        raw, _ = esma[esma_lei]
         mapping = map_esma_label(raw)
         if mapping.label is not None:
             return Resolution(

@@ -245,7 +245,7 @@ async def phase1_5_firds_isin_mapping(
     # Fetch all fund LEIs from esma_funds
     async with db_factory() as session:
         result = await session.execute(
-            sa_text("SELECT isin FROM esma_funds ORDER BY isin"),
+            sa_text("SELECT lei FROM esma_funds ORDER BY lei"),
         )
         fund_leis = {row[0] for row in result.fetchall()}
 

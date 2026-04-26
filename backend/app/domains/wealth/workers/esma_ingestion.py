@@ -159,7 +159,7 @@ async def run_esma_ingestion() -> dict:
                 batch = funds_dc[i : i + _BATCH_SIZE]
                 values = [
                     {
-                        "isin": f.isin,
+                        "lei": f.lei,
                         "fund_name": f.fund_name,
                         "esma_manager_id": f.esma_manager_id,
                         "domicile": f.domicile,
@@ -172,7 +172,7 @@ async def run_esma_ingestion() -> dict:
                 try:
                     stmt = pg_insert(EsmaFundModel).values(values)
                     stmt = stmt.on_conflict_do_update(
-                        index_elements=["isin"],
+                        index_elements=["lei"],
                         set_={
                             "fund_name": stmt.excluded.fund_name,
                             "esma_manager_id": stmt.excluded.esma_manager_id,
@@ -191,7 +191,9 @@ async def run_esma_ingestion() -> dict:
             logger.info("esma_ingestion.funds_upserted", count=funds_upserted)
 
             # ── Phase 4: Ticker resolution via OpenFIGI ───────────────
-            isins = [f.isin for f in funds_dc]
+            # Pre-Q11B these were LEIs masquerading as ISINs; post-Q11B
+            # still LEIs. Q11C will switch to real ISINs from esma_securities.
+            isins = [f.lei for f in funds_dc]
             ticker_count = 0
             errors = 0
 
@@ -239,13 +241,13 @@ async def run_esma_ingestion() -> dict:
                 if r.yahoo_ticker
             }
             if resolved_map:
-                for isin, ticker in resolved_map.items():
+                for lei_val, ticker in resolved_map.items():
                     await db.execute(
                         text(
                             "UPDATE esma_funds SET yahoo_ticker = :ticker, "
-                            "ticker_resolved_at = :now WHERE isin = :isin",
+                            "ticker_resolved_at = :now WHERE lei = :lei",
                         ),
-                        {"ticker": ticker, "now": now, "isin": isin},
+                        {"ticker": ticker, "now": now, "lei": lei_val},
                     )
                 await db.commit()
 

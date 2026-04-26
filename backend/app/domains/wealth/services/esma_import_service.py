@@ -1,7 +1,11 @@
 """ESMA fund import service — creates an Instrument from ESMA data.
 
-Reads esma_funds + esma_isin_ticker_map, enriches with geography/currency
-from domicile, and inserts into instruments_universe.
+Reads esma_securities (ISIN→fund_lei) + esma_funds (fund-level metadata),
+enriches with geography/currency from domicile, and inserts into
+instruments_universe.
+
+Post-Q11B: lookup by ISIN goes through esma_securities; fund metadata
+comes from esma_funds via fund_lei JOIN.
 """
 
 from __future__ import annotations
@@ -14,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.instrument_org import InstrumentOrg
-from app.shared.models import EsmaFund, EsmaIsinTickerMap, EsmaManager
+from app.shared.models import EsmaFund, EsmaManager, EsmaSecurity
 
 # Map ESMA domicile (ISO-2) → geography + currency
 _DOMICILE_MAP: dict[str, tuple[str, str]] = {
@@ -48,12 +52,11 @@ async def import_esma_fund_to_universe(
     block_id: str | None = None,
     strategy: str | None = None,
 ) -> Instrument:
-    """Create an Instrument in instruments_universe from esma_funds.
+    """Create an Instrument in instruments_universe from ESMA data.
 
-    Looks up fund_name, esma_manager_id, domicile from esma_funds.
-    Looks up yahoo_ticker from esma_isin_ticker_map.
+    Looks up esma_securities by ISIN → fund via fund_lei → esma_funds.
     Determines currency and geography from domicile.
-    Populates attributes JSONB with structure, domicile, fund_type, host_member_states.
+    Populates attributes JSONB with structure, domicile, fund_type, fund_lei.
     """
     # Check if instrument already exists globally by ISIN
     existing_stmt = select(Instrument).where(Instrument.isin == isin)
@@ -82,18 +85,25 @@ async def import_esma_fund_to_universe(
         await db.flush()
         return existing
 
-    # Fetch ESMA fund
-    fund_stmt = select(EsmaFund).where(EsmaFund.isin == isin)
-    fund = (await db.execute(fund_stmt)).scalar_one_or_none()
+    # Look up security by ISIN (esma_securities)
+    sec_stmt = select(EsmaSecurity).where(EsmaSecurity.isin == isin)
+    security = (await db.execute(sec_stmt)).scalar_one_or_none()
+
+    # Fetch ESMA fund — via security.fund_lei if available, else try LEI direct
+    fund = None
+    if security:
+        fund_stmt = select(EsmaFund).where(EsmaFund.lei == security.fund_lei)
+        fund = (await db.execute(fund_stmt)).scalar_one_or_none()
+    else:
+        # Fallback: try isin as LEI (pre-FIRDS transition period)
+        fund_stmt = select(EsmaFund).where(EsmaFund.lei == isin)
+        fund = (await db.execute(fund_stmt)).scalar_one_or_none()
+
     if fund is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"ESMA fund with ISIN {isin} not found",
+            detail=f"ESMA fund for ISIN {isin} not found",
         )
-
-    # Fetch ticker map
-    ticker_stmt = select(EsmaIsinTickerMap).where(EsmaIsinTickerMap.isin == isin)
-    ticker_row = (await db.execute(ticker_stmt)).scalar_one_or_none()
 
     # Fetch manager name
     mgr_stmt = select(EsmaManager.company_name).where(
@@ -105,11 +115,12 @@ async def import_esma_fund_to_universe(
     domicile = fund.domicile or ""
     geography, currency = _DOMICILE_MAP.get(domicile, ("dm_europe", "EUR"))
 
-    # Build attributes — chk_fund_attrs requires aum_usd, manager_name, inception_date
+    # Build attributes
     attributes: dict[str, object] = {
         "structure": "UCITS",
         "domicile": domicile,
         "fund_type": fund.fund_type,
+        "fund_lei": fund.lei,
         "esma_manager_id": fund.esma_manager_id,
         "source": "esma",
         "manager_name": manager_name,
@@ -120,15 +131,17 @@ async def import_esma_fund_to_universe(
         attributes["host_member_states"] = fund.host_member_states
     if strategy:
         attributes["strategy"] = strategy
-    # Enrich with ESMA strategy_label if available
     if hasattr(fund, "strategy_label") and fund.strategy_label:
         attributes["strategy_label"] = fund.strategy_label
 
+    # Use security name if available, else fund name
+    name = security.full_name if security and security.full_name else fund.fund_name
+
     instrument = Instrument(
         instrument_type="fund",
-        name=fund.fund_name,
+        name=name,
         isin=isin,
-        ticker=ticker_row.yahoo_ticker if ticker_row else fund.yahoo_ticker,
+        ticker=fund.yahoo_ticker,  # legacy fallback — Q11C migrates to provider-aware
         asset_class="alternatives",
         geography=geography,
         currency=currency,

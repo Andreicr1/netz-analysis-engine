@@ -548,31 +548,41 @@ async def _source_3_esma(
     db: AsyncSession,
     target_ids: list[str],
 ) -> tuple[dict[str, SourceResult], bool]:
-    """Source 3: ESMA join — match instruments to esma_funds by name/ISIN."""
+    """Source 3: ESMA join — match instruments to esma_funds by LEI.
+
+    Post-Q11B: reads ef.lei direct (no heuristic). JOINs esma_securities
+    to pick the best share-class ISIN per fund (deterministic LATERAL:
+    prefer USD, then EUR, then alphabetical).
+    """
     source_name = "esma"
     results: dict[str, SourceResult] = {}
 
     try:
-        # Match by ISIN (from instruments_universe.isin when it's real ISIN)
-        # or by name similarity
         rows = await db.execute(
             text("""
                 SELECT
                     iu.instrument_id::text,
                     iu.ticker AS iu_ticker,
-                    ef.isin AS esma_isin,
+                    ef.lei AS fund_lei,
                     ef.esma_manager_id,
-                    em.lei
+                    em.lei AS manager_lei,
+                    best_sec.isin AS security_isin
                 FROM instruments_universe iu
                 JOIN esma_funds ef
                     ON ef.yahoo_ticker = iu.ticker
-                    OR (
-                        iu.isin IS NOT NULL
-                        AND iu.isin ~ '^[A-Z]{2}[A-Z0-9]{9}[0-9]$'
-                        AND ef.isin = iu.isin
-                    )
+                    OR iu.attributes->>'fund_lei' = ef.lei
                 LEFT JOIN esma_managers em
                     ON em.esma_id = ef.esma_manager_id
+                LEFT JOIN LATERAL (
+                    SELECT es.isin
+                    FROM esma_securities es
+                    WHERE es.fund_lei = ef.lei AND es.is_active
+                    ORDER BY
+                        (es.currency = 'USD')::int DESC,
+                        (es.currency = 'EUR')::int DESC,
+                        es.isin
+                    LIMIT 1
+                ) best_sec ON true
                 WHERE iu.instrument_id = ANY(:ids)
             """),
             {"ids": target_ids},
@@ -582,42 +592,20 @@ async def _source_3_esma(
             sr = SourceResult(source_name)
             iid = row.instrument_id
 
-            # esma_funds.isin is corrupted: it stores LEIs (20 chars) for many
-            # rows, not ISINs. Detect format and route to the correct field.
-            # Real ISINs are 12 chars matching ^[A-Z]{2}[A-Z0-9]{9}[0-9]$;
-            # anything 20-char alphanumeric is a LEI; everything else is logged
-            # and dropped. This is a defensive heuristic — the canonical fix
-            # lives upstream in the ESMA ingestion worker (separate ticket).
-            val = row.esma_isin
-            if val:
-                if (
-                    len(val) == 12
-                    and val.isascii()
-                    and val[:2].isalpha()
-                    and val.isalnum()
-                    and val[-1].isdigit()
-                ):
-                    sr.set("isin", val)
-                elif len(val) == 20 and val.isascii() and val.isalnum():
-                    sr.set("lei", val)
-                else:
-                    logger.info(
-                        "identity_resolver.esma_isin_unrecognized",
-                        value_preview=val[:30],
-                        value_length=len(val),
-                    )
+            # LEI direct from esma_funds.lei — no heuristic needed
+            if row.fund_lei:
+                sr.set("lei", row.fund_lei)
+
+            # Real ISIN from esma_securities (FIRDS)
+            if row.security_isin:
+                sr.set("isin", row.security_isin)
 
             if row.esma_manager_id:
                 sr.set("esma_manager_id", row.esma_manager_id)
-            if row.lei:
-                sr.set("lei", row.lei)
-            # Andrei (2026-04-26): UCITS ticker matters institutionally for
-            # broker-facing identification; CUSIP 144A wrapper is not the
-            # primary need. Emit ticker from instruments_universe.ticker
-            # (which equals esma_funds.yahoo_ticker by ingestion contract)
-            # so that 2.929 UCITS get a usable ticker in instrument_identity.
-            # Authority: ESMA = 2 (per FIELD_AUTHORITY); SEC sources (3-4)
-            # never resolve UCITS so no real conflict.
+            if row.manager_lei:
+                sr.set("lei", row.manager_lei)
+
+            # Emit ticker for broker-facing identification (ESMA authority=2)
             if row.iu_ticker:
                 sr.set("ticker", row.iu_ticker)
 
