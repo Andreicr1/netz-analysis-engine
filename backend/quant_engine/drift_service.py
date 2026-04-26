@@ -8,6 +8,12 @@ Config is injected as parameter by callers via ConfigService.get("liquid_funds",
 Drift = actual_weight - (strategic_target + tactical_overweight)
 Intentional tactical bets are NOT flagged as drift.
 
+DTW configuration:
+  DTW_SAKOE_CHIBA_FRACTION = 0.1 — fraction of series length used as the
+  Sakoe-Chiba warping band for ddtw_distance. Per aeon's documented
+  convention (aeon>=0.5,<1.0): when window is a float in [0,1], it is
+  treated as fraction of the longer series. If aeon>=1.0 changes this
+  contract, revisit. Pinned via test_BUG_T3_dtw_window_pinned.
 """
 
 from dataclasses import dataclass
@@ -19,6 +25,10 @@ import numpy as np
 import structlog
 
 logger = structlog.get_logger()
+
+# 10% Sakoe-Chiba band per aeon convention. Pinned for reproducibility.
+# If aeon API changes (e.g., aeon>=1.0), revisit this constant.
+DTW_SAKOE_CHIBA_FRACTION = 0.1
 
 
 @dataclass
@@ -119,7 +129,8 @@ def resolve_dtw_thresholds(config: dict[str, Any] | None = None) -> tuple[float,
                 float(dtw_cfg["dtw_divergence_critical"]),
             )
         return 0.40, 0.90
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError) as e:
+        logger.error("Malformed dtw config, using defaults", error=str(e))
         return 0.40, 0.90
 
 
@@ -139,8 +150,20 @@ def compute_block_drifts(
     for block_id in sorted(all_blocks):
         current = current_weights.get(block_id, 0.0)
         target = target_weights.get(block_id, 0.0)
+
+        if not np.isfinite(current) or not np.isfinite(target):
+            raise ValueError(
+                f"non-finite weight for block {block_id}: "
+                f"current={current}, target={target}"
+            )
+
         abs_drift = current - target
-        rel_drift = abs_drift / target if target > 0 else 0.0
+        if abs(target) > 1e-12:
+            rel_drift = abs_drift / target
+        elif abs_drift != 0.0:
+            rel_drift = float("inf")
+        else:
+            rel_drift = 0.0
 
         if abs(abs_drift) >= urgent_trigger:
             drift_status = "urgent"
@@ -195,6 +218,13 @@ def compute_dtw_drift(
     computation failures are never silently encoded as 0.0.
 
     """
+    if window <= 0:
+        return DtwDriftResult(
+            score=None,
+            status=DtwDriftStatus.degraded,
+            reason=f"invalid window={window} (must be > 0)",
+        )
+
     try:
         from aeon.distances import ddtw_distance
     except ImportError:
@@ -212,17 +242,25 @@ def compute_dtw_drift(
     f = np.array(fund_returns[-window:], dtype=float)
     b = np.array(benchmark_returns[-window:], dtype=float)
 
-    if len(f) < 10 or len(b) < 10:
+    actual_window = min(len(f), len(b))
+
+    if actual_window < 10:
         return DtwDriftResult(
             score=None,
             status=DtwDriftStatus.degraded,
             reason=f"insufficient data: fund={len(f)}, benchmark={len(b)} (min 10)",
         )
 
+    if actual_window < window:
+        return DtwDriftResult(
+            score=None,
+            status=DtwDriftStatus.degraded,
+            reason=f"insufficient_window: have={actual_window}, need={window}",
+        )
+
     try:
-        raw = ddtw_distance(f, b, window=0.1)
-        # S5-H: √window normalisation, not raw / window.
-        normaliser = float(np.sqrt(max(len(f), 1)))
+        raw = ddtw_distance(f, b, window=DTW_SAKOE_CHIBA_FRACTION)
+        normaliser = float(np.sqrt(window))
         return DtwDriftResult(
             score=float(raw / normaliser),
             status=DtwDriftStatus.ok,
@@ -253,6 +291,17 @@ def compute_dtw_drift_batch(
     so that computation failures are never silently encoded as 0.0.
 
     """
+    if window <= 0:
+        n_funds = fund_returns_matrix.shape[0]
+        return [
+            DtwDriftResult(
+                score=None,
+                status=DtwDriftStatus.degraded,
+                reason=f"invalid window={window} (must be > 0)",
+            )
+            for _ in range(n_funds)
+        ]
+
     fund_returns_matrix = fund_returns_matrix[:, -max_lookback_days:]
     benchmark_returns = benchmark_returns[-max_lookback_days:]
     n_funds = fund_returns_matrix.shape[0]
@@ -272,16 +321,43 @@ def compute_dtw_drift_batch(
         ]
 
     try:
-        fund_slice = fund_returns_matrix[:, -window:]
-        bench_slice = benchmark_returns[-window:].reshape(1, -1)
+        fund_history = fund_returns_matrix.shape[1]
+        bench_history = len(benchmark_returns)
+        actual_window = min(fund_history, bench_history, window)
+
+        if actual_window < 10:
+            return [
+                DtwDriftResult(
+                    score=None,
+                    status=DtwDriftStatus.degraded,
+                    reason=f"insufficient data: fund_hist={fund_history}, "
+                           f"bench_hist={bench_history}, actual_window={actual_window} (min 10)",
+                )
+                for _ in range(n_funds)
+            ]
+
+        if actual_window < window:
+            return [
+                DtwDriftResult(
+                    score=None,
+                    status=DtwDriftStatus.degraded,
+                    reason=f"insufficient_window: have={actual_window}, need={window}",
+                )
+                for _ in range(n_funds)
+            ]
+
+        fund_slice = fund_returns_matrix[:, -actual_window:]
+        bench_slice = benchmark_returns[-actual_window:].reshape(1, -1)
 
         all_series = np.vstack([fund_slice, bench_slice])
-        dist_matrix = pairwise_distance(all_series, method="ddtw")
+        dist_matrix = pairwise_distance(
+            all_series,
+            method="ddtw",
+            window=DTW_SAKOE_CHIBA_FRACTION,
+        )
         benchmark_distances = dist_matrix[-1, :-1]
 
-        actual_window = fund_slice.shape[1]
-        # S5-H: √window normalisation, see ``compute_dtw_drift`` rationale.
-        normaliser = float(np.sqrt(max(actual_window, 1)))
+        normaliser = float(np.sqrt(window))
         return [
             DtwDriftResult(
                 score=float(d / normaliser),

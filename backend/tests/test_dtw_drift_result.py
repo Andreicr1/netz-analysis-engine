@@ -235,7 +235,7 @@ class TestComputeDtwDriftBatch:
     def test_valid_batch_returns_ok_list(self):
         """Successful batch → list of ok results with scores."""
 
-        def fake_pairwise(series, method="ddtw"):
+        def fake_pairwise(series, method="ddtw", **kwargs):
             n = series.shape[0]
             dist = np.zeros((n, n))
             for i in range(n):
