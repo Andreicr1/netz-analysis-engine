@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import json
-import logging
 import os
 from datetime import datetime, timezone
 from typing import Any
@@ -726,7 +725,7 @@ async def _source_5_openfigi(
         if not response or len(response) != len(batch):
             continue
 
-        for (iid, ticker), result_item in zip(batch, response):
+        for (iid, ticker), result_item in zip(batch, response, strict=False):
             if result_item is None or "data" not in result_item:
                 continue
 
