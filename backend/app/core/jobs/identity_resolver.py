@@ -690,30 +690,34 @@ async def _openfigi_batch_request(
     tickers: list[dict[str, str]],
     api_key: str,
 ) -> list[dict | None]:
-    """Send a batch of up to 100 items to OpenFIGI /v3/mapping."""
-    import aiohttp
+    """Send a batch of up to 100 items to OpenFIGI /v3/mapping.
+
+    Uses httpx (project standard, declared in pyproject.toml). Earlier
+    iteration used aiohttp by mistake — that module is not a project
+    dependency and caused 100% provider-gate circuit-open failures during
+    the first worker run.
+    """
+    import httpx
 
     headers = {
         "Content-Type": "application/json",
         "X-OPENFIGI-APIKEY": api_key,
     }
 
-    async with aiohttp.ClientSession() as session:
-        async with session.post(
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
             OPENFIGI_ENDPOINT,
             json=tickers,
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=30),
-        ) as resp:
-            if resp.status != 200:
-                text_body = await resp.text()
-                logger.warning(
-                    "openfigi.request_failed",
-                    status=resp.status,
-                    body=text_body[:200],
-                )
-                return [None] * len(tickers)
-            return await resp.json()
+        )
+        if resp.status_code != 200:
+            logger.warning(
+                "openfigi.request_failed",
+                status=resp.status_code,
+                body=resp.text[:200],
+            )
+            return [None] * len(tickers)
+        return resp.json()
 
 
 async def _source_5_openfigi(
