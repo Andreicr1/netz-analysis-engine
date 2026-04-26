@@ -1,7 +1,10 @@
-"""PR-Q11 Phase 2 — worker tests for identity_resolver.
+"""PR-Q11 Phase 2 — worker integration tests for identity_resolver.
 
-Tests run against local docker-compose PostgreSQL (``make up``).
-Skipped cleanly if DATABASE_URL is unreachable.
+Tests run against local docker-compose PostgreSQL (``make up``) with
+``instruments_universe`` populated. Marked as integration: CI's default
+``-m "not integration"`` filter skips them. Run locally with::
+
+    pytest backend/tests/jobs/test_identity_resolver.py -m integration
 """
 from __future__ import annotations
 
@@ -19,6 +22,8 @@ from app.core.jobs.identity_resolver import (
     _upsert_identity,
     run_identity_resolver,
 )
+
+pytestmark = pytest.mark.integration
 
 TEST_PREFIX = "q11-p2"
 

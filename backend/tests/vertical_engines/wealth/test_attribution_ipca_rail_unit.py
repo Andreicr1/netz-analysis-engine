@@ -15,9 +15,22 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from data_providers.identity.resolver import CikIdentity
 from quant_engine.ipca.fit import IPCAFit
 from vertical_engines.wealth.attribution.ipca_rail import run_ipca_rail
 from vertical_engines.wealth.attribution.models import AttributionRequest, IPCAResult
+
+
+def _mock_cik(padded: str | None) -> CikIdentity:
+    """Build a CikIdentity instance for patching ipca_rail.resolve_cik (PR-Q11).
+
+    Returns a real CikIdentity dataclass — ipca_rail calls .padded and
+    .candidates(); both must work on the mock.
+    """
+    if padded is None:
+        return CikIdentity(padded=None, unpadded=None)
+    unpadded = padded.lstrip("0") or "0"
+    return CikIdentity(padded=padded, unpadded=unpadded)
 
 
 def _make_request(**overrides) -> AttributionRequest:
@@ -105,7 +118,7 @@ async def test_rank_transform_applied_before_z_fund():
     db.execute = mock_execute
 
     with patch("vertical_engines.wealth.attribution.ipca_rail.load_latest_ipca_fit", return_value=fit), \
-         patch("vertical_engines.wealth.attribution.ipca_rail.resolve_fund_cik", return_value="0001234567"), \
+         patch("vertical_engines.wealth.attribution.ipca_rail.resolve_cik", new=AsyncMock(return_value=_mock_cik("0001234567"))), \
          patch("vertical_engines.wealth.attribution.ipca_rail.latest_period_for_cik", return_value=date(2026, 3, 31)):
         result = await run_ipca_rail(req, db)
 
@@ -135,7 +148,7 @@ async def test_ref_period_none_falls_back_to_option_a():
     db.execute = mock_execute
 
     with patch("vertical_engines.wealth.attribution.ipca_rail.load_latest_ipca_fit", return_value=fit), \
-         patch("vertical_engines.wealth.attribution.ipca_rail.resolve_fund_cik", return_value="0001234567"), \
+         patch("vertical_engines.wealth.attribution.ipca_rail.resolve_cik", new=AsyncMock(return_value=_mock_cik("0001234567"))), \
          patch("vertical_engines.wealth.attribution.ipca_rail.latest_period_for_cik", return_value=date(2026, 3, 31)), \
          patch("vertical_engines.wealth.attribution.ipca_rail._run_ipca_rail_option_a", new_callable=AsyncMock) as mock_opt_a:
         mock_opt_a.return_value = None
@@ -174,7 +187,7 @@ async def test_no_holdings_match_falls_back_to_option_a():
     db.execute = mock_execute
 
     with patch("vertical_engines.wealth.attribution.ipca_rail.load_latest_ipca_fit", return_value=fit), \
-         patch("vertical_engines.wealth.attribution.ipca_rail.resolve_fund_cik", return_value="0001234567"), \
+         patch("vertical_engines.wealth.attribution.ipca_rail.resolve_cik", new=AsyncMock(return_value=_mock_cik("0001234567"))), \
          patch("vertical_engines.wealth.attribution.ipca_rail.latest_period_for_cik", return_value=date(2026, 3, 31)), \
          patch("vertical_engines.wealth.attribution.ipca_rail._run_ipca_rail_option_a", new_callable=AsyncMock) as mock_opt_a:
         mock_opt_a.return_value = None
@@ -225,7 +238,7 @@ async def test_kill_switch_passes_on_small_positive_oos_r2():
     db.execute = mock_execute
 
     with patch("vertical_engines.wealth.attribution.ipca_rail.load_latest_ipca_fit", return_value=fit), \
-         patch("vertical_engines.wealth.attribution.ipca_rail.resolve_fund_cik", return_value="0001234567"), \
+         patch("vertical_engines.wealth.attribution.ipca_rail.resolve_cik", new=AsyncMock(return_value=_mock_cik("0001234567"))), \
          patch("vertical_engines.wealth.attribution.ipca_rail.latest_period_for_cik", return_value=date(2026, 3, 31)):
         result = await run_ipca_rail(req, db)
 
@@ -317,12 +330,12 @@ async def test_symmetric_option_a_fallback(failure_scenario):
     ]
 
     if failure_scenario == "no_cik":
-        patches_list.append(patch(f"{_P}.resolve_fund_cik", AsyncMock(return_value=None)))
+        patches_list.append(patch(f"{_P}.resolve_cik", AsyncMock(return_value=_mock_cik(None))))
     elif failure_scenario == "no_period":
-        patches_list.append(patch(f"{_P}.resolve_fund_cik", AsyncMock(return_value="0001234567")))
+        patches_list.append(patch(f"{_P}.resolve_cik", AsyncMock(return_value=_mock_cik("0001234567"))))
         patches_list.append(patch(f"{_P}.latest_period_for_cik", AsyncMock(return_value=None)))
     elif failure_scenario == "no_ref_period":
-        patches_list.append(patch(f"{_P}.resolve_fund_cik", AsyncMock(return_value="0001234567")))
+        patches_list.append(patch(f"{_P}.resolve_cik", AsyncMock(return_value=_mock_cik("0001234567"))))
         patches_list.append(patch(f"{_P}.latest_period_for_cik", AsyncMock(return_value=date(2026, 3, 31))))
 
     db = AsyncMock()

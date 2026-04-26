@@ -1,7 +1,10 @@
-"""PR-Q11 Phase 3 — OpenFIGI source tests.
+"""PR-Q11 Phase 3 — OpenFIGI source integration tests.
 
-Tests run against local docker-compose PostgreSQL (``make up``).
-Skipped cleanly if DATABASE_URL is unreachable.
+Tests run against local docker-compose PostgreSQL (``make up``) with
+``instruments_universe`` populated. Marked as integration: CI's default
+``-m "not integration"`` filter skips them. Run locally with::
+
+    pytest backend/tests/jobs/test_identity_resolver_openfigi.py -m integration
 """
 from __future__ import annotations
 
@@ -12,6 +15,9 @@ import asyncpg
 import pytest
 
 from app.core.config import settings
+
+pytestmark = pytest.mark.integration
+
 from app.core.jobs.identity_resolver import (
     OPENFIGI_BATCH_SIZE,
     OPENFIGI_RATE_LIMIT_REQUESTS,
