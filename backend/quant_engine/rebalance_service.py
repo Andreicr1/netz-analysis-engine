@@ -129,7 +129,7 @@ def determine_cascade_action(
     # warning → ok and breach → ok both emit cvar_recovery.
     # breach → warning stays silent (granular transition; ok-recovery is the
     # institutional event of record).
-    if trigger_status == "ok" and previous_trigger_status in ("warning", "breach"):
+    if trigger_status == "ok" and previous_trigger_status in ("warning", "breach", "degraded"):
         return "cvar_recovery", (
             f"CVaR returned to compliance from {previous_trigger_status}"
         )
@@ -138,7 +138,7 @@ def determine_cascade_action(
     if trigger_status == "ok":
         return None, None
 
-    if trigger_status == "warning" and previous_trigger_status in (None, "ok"):
+    if trigger_status == "warning" and previous_trigger_status in (None, "ok", "degraded"):
         return "cvar_breach", (
             f"CVaR utilization at {cvar_utilization * 100:.1f}% "
             f"(warning threshold: {profile_config['warning_pct'] * 100:.0f}%)"
