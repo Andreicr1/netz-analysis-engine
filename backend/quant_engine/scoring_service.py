@@ -448,6 +448,18 @@ def _compute_fi_score(
     )
 
 
+def _cash_fallback(key: str, pm: dict[str, float]) -> float:
+    """Cash component fallback with opacity penalty (S07-F06).
+
+    Mirrors equity/FI fallback semantics: peer_median - 5.0 when available,
+    else neutral midpoint 45.0. Floored at 0.
+    """
+    val = pm.get(key)
+    if val is None:
+        return 45.0
+    return max(0.0, val - 5.0)
+
+
 def _compute_cash_score(
     cash: CashMetrics,
     config: dict[str, Any] | None,
@@ -477,7 +489,7 @@ def _compute_cash_score(
             synthesized.append("yield_vs_risk_free")
     else:
         synthesized.append("yield_vs_risk_free")
-        components["yield_vs_risk_free"] = pm.get("yield_vs_risk_free", 45.0)
+        components["yield_vs_risk_free"] = _cash_fallback("yield_vs_risk_free", pm)
 
     # nav_stability: deviation from $1.00 par value
     nav = float(cash.nav_per_share_mmf) if cash.nav_per_share_mmf is not None else None
@@ -487,7 +499,7 @@ def _compute_cash_score(
         components["nav_stability"] = stability * 100
     else:
         synthesized.append("nav_stability")
-        components["nav_stability"] = pm.get("nav_stability", 45.0)
+        components["nav_stability"] = _cash_fallback("nav_stability", pm)
 
     # liquidity_quality: weekly liquid assets %
     wl = float(cash.pct_weekly_liquid) if cash.pct_weekly_liquid is not None else None
@@ -501,7 +513,7 @@ def _compute_cash_score(
             synthesized.append("liquidity_quality")
     else:
         synthesized.append("liquidity_quality")
-        components["liquidity_quality"] = pm.get("liquidity_quality", 45.0)
+        components["liquidity_quality"] = _cash_fallback("liquidity_quality", pm)
 
     # maturity_discipline: lower WAM = less interest rate risk = better
     wam = float(cash.weighted_avg_maturity_days) if cash.weighted_avg_maturity_days is not None else None
@@ -511,7 +523,7 @@ def _compute_cash_score(
         components["maturity_discipline"] = wam_score
     else:
         synthesized.append("maturity_discipline")
-        components["maturity_discipline"] = pm.get("maturity_discipline", 45.0)
+        components["maturity_discipline"] = _cash_fallback("maturity_discipline", pm)
 
     # fee_efficiency: same logic as equity/FI
     fee_val, fee_synth = _compute_fee_efficiency_with_provenance(expense_ratio_pct, pm)
