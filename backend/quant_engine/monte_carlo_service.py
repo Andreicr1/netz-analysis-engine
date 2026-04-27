@@ -74,7 +74,7 @@ def _compute_statistic(
     simulated_returns: np.ndarray,
     statistic: str,
     risk_free_rate: float,
-) -> np.ndarray:
+) -> tuple[np.ndarray, int]:
     """Compute the chosen statistic for each simulation path.
 
     Parameters
@@ -86,9 +86,16 @@ def _compute_statistic(
     risk_free_rate : float
         Annualized risk-free rate.
 
+    Returns
+    -------
+    tuple[np.ndarray, int]
+        (statistic_values, zero_variance_count). The count is only
+        meaningful for statistic="sharpe"; 0 for other statistics.
+
     """
     n_sims = simulated_returns.shape[0]
     results = np.empty(n_sims)
+    zero_var_count = 0
 
     if statistic == "max_drawdown":
         for i in range(n_sims):
@@ -111,12 +118,13 @@ def _compute_statistic(
                 results[i] = mean_excess / std_excess * np.sqrt(252)
             else:
                 results[i] = 0.0
+                zero_var_count += 1
 
     else:
         msg = f"Unknown statistic: {statistic}"
         raise ValueError(msg)
 
-    return results
+    return results, zero_var_count
 
 
 def _historical_statistic(
@@ -223,7 +231,7 @@ def run_monte_carlo(
         daily_returns, n_simulations, primary_horizon, block_size=21, rng=rng,
     )
 
-    sim_stats = _compute_statistic(paths, statistic, risk_free_rate)
+    sim_stats, primary_zero_var_count = _compute_statistic(paths, statistic, risk_free_rate)
 
     # Percentile distribution
     pctl_keys = ["1st", "5th", "10th", "25th", "50th", "75th", "90th", "95th", "99th"]
@@ -242,7 +250,7 @@ def run_monte_carlo(
         h_paths = paths[:, :h] if h <= primary_horizon else _block_bootstrap_paths(
             daily_returns, n_simulations, h, block_size=21, rng=rng,
         )
-        h_stats = _compute_statistic(h_paths, statistic, risk_free_rate)
+        h_stats, _ = _compute_statistic(h_paths, statistic, risk_free_rate)
 
         label = f"{h // 252}Y" if h >= 252 else f"{h}D"
         confidence_bars.append({
@@ -258,6 +266,17 @@ def run_monte_carlo(
             "mean": round(float(np.mean(h_stats)), 8),
         })
 
+    # ── S05-F02 fix: detect mass zero-variance Sharpe collapse ────────
+    # Per-path zero-variance is acceptable on rare numerical edge cases,
+    # but if a substantial fraction of paths produced zero-variance Sharpe,
+    # the input was effectively flat-NAV and the result is uninformative.
+    _ZERO_VARIANCE_MASS_THRESHOLD = 0.5
+    is_mass_zero_var = (
+        statistic == "sharpe"
+        and n_simulations > 0
+        and primary_zero_var_count / n_simulations > _ZERO_VARIANCE_MASS_THRESHOLD
+    )
+
     return MonteCarloResult(
         n_simulations=n_simulations,
         statistic=statistic,
@@ -267,4 +286,11 @@ def run_monte_carlo(
         std=round(float(np.std(sim_stats, ddof=1)), 8),
         historical_value=round(hist_value, 8),
         confidence_bars=confidence_bars,
+        degraded=is_mass_zero_var,
+        degraded_reason=(
+            f"zero_variance_collapse: {primary_zero_var_count}/{n_simulations} "
+            f"paths produced zero-variance Sharpe (threshold "
+            f"{_ZERO_VARIANCE_MASS_THRESHOLD:.0%}); "
+            f"input returns may be flat or numerically degenerate"
+        ) if is_mass_zero_var else None,
     )

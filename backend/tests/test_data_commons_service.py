@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from quant_engine.data_commons_service import (
+    DataCommonsAPIError,
     DataCommonsService,
     DemographicProfile,
     EconomicObservation,
@@ -75,19 +76,19 @@ class TestFetchEconomicIndicators:
         assert result[0].value == 4.2
 
     @pytest.mark.asyncio
-    async def test_returns_empty_on_error(self) -> None:
+    async def test_raises_on_api_error(self) -> None:
+        """API failure → DataCommonsAPIError, NOT silent [] (F03 fix)."""
         svc = DataCommonsService(api_key="test-key")
 
         mock_dc = _mock_client()
         mock_dc.observation.fetch.side_effect = Exception("API error")
 
         with patch.object(svc, "_get_client", return_value=mock_dc):
-            result = await svc.fetch_economic_indicators(
-                entity_dcids=["geoId/06"],
-                variables=["Count_Person"],
-            )
-
-        assert result == []
+            with pytest.raises(DataCommonsAPIError, match="observation fetch failed"):
+                await svc.fetch_economic_indicators(
+                    entity_dcids=["geoId/06"],
+                    variables=["Count_Person"],
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -131,18 +132,16 @@ class TestFetchDemographicProfile:
         assert result.unemployment_rate == 4.2
 
     @pytest.mark.asyncio
-    async def test_returns_nulls_on_error(self) -> None:
+    async def test_raises_on_api_error(self) -> None:
+        """API failure → DataCommonsAPIError, NOT silent nulls (F03 fix)."""
         svc = DataCommonsService(api_key="test-key")
 
         mock_dc = _mock_client()
         mock_dc.node.fetch_entity_names.side_effect = Exception("Network error")
 
         with patch.object(svc, "_get_client", return_value=mock_dc):
-            result = await svc.fetch_demographic_profile("geoId/06")
-
-        assert isinstance(result, DemographicProfile)
-        assert result.population is None
-        assert result.median_income is None
+            with pytest.raises(DataCommonsAPIError):
+                await svc.fetch_demographic_profile("geoId/06")
 
 
 # ---------------------------------------------------------------------------
@@ -227,13 +226,13 @@ class TestFetchGeographicHierarchy:
         assert result[0].name == "Alameda County"
 
     @pytest.mark.asyncio
-    async def test_returns_empty_on_error(self) -> None:
+    async def test_raises_on_api_error(self) -> None:
+        """API failure → DataCommonsAPIError, NOT silent [] (F03 fix)."""
         svc = DataCommonsService(api_key="test-key")
 
         mock_dc = _mock_client()
         mock_dc.node.fetch_place_children.side_effect = Exception("Fail")
 
         with patch.object(svc, "_get_client", return_value=mock_dc):
-            result = await svc.fetch_geographic_hierarchy("geoId/06")
-
-        assert result == []
+            with pytest.raises(DataCommonsAPIError):
+                await svc.fetch_geographic_hierarchy("geoId/06")
