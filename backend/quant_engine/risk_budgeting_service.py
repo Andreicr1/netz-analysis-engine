@@ -20,29 +20,42 @@ import numpy as np
 
 @dataclass(frozen=True, slots=True)
 class FundRiskBudget:
-    """Per-fund risk budget decomposition."""
+    """Per-fund risk budget decomposition.
+
+    SCALE: All numeric metrics are at the **daily** scale derived from the
+    returns_matrix passed to compute_risk_budget. Callers that present these
+    to institutional consumers (DD reports, IC fact sheets) must annualize:
+      - vol-like (mctr, implied_return_vol, mean_return): multiply by sqrt(252)
+        for vol-like and 252 for return-like
+      - etl-like (mcetl, implied_return_etl): multiply by 252
+      - PCTR / PCETL: scale-invariant (sums to 1.0 by Euler), no scaling needed
+    """
 
     block_id: str
     block_name: str
     weight: float
-    mean_return: float
-    mctr: float | None = None
-    pctr: float | None = None
-    mcetl: float | None = None
-    pcetl: float | None = None
-    implied_return_vol: float | None = None
-    implied_return_etl: float | None = None
-    difference_vol: float | None = None
-    difference_etl: float | None = None
+    mean_return: float                              # daily
+    mctr: float | None = None                       # daily marginal vol contribution
+    pctr: float | None = None                       # scale-invariant
+    mcetl: float | None = None                      # daily marginal ETL contribution
+    pcetl: float | None = None                      # scale-invariant
+    implied_return_vol: float | None = None          # daily expected-return space
+    implied_return_etl: float | None = None          # daily expected-return space
+    difference_vol: float | None = None              # daily
+    difference_etl: float | None = None              # daily
 
 
 @dataclass(frozen=True, slots=True)
 class RiskBudgetResult:
-    """Portfolio-level risk budget decomposition."""
+    """Portfolio-level risk budget decomposition.
 
-    portfolio_volatility: float
-    portfolio_etl: float
-    portfolio_starr: float | None = None
+    SCALE: All numeric metrics at the **daily** scale (see FundRiskBudget).
+    Annualize at the presentation layer per institutional convention.
+    """
+
+    portfolio_volatility: float                     # daily
+    portfolio_etl: float                            # daily (signed return space, negative for loss)
+    portfolio_starr: float | None = None            # daily
     funds: list[FundRiskBudget] = field(default_factory=list)
     degraded: bool = False
     degraded_reason: str | None = None
@@ -65,6 +78,10 @@ def compute_risk_budget(
     confidence: float = 0.95,
 ) -> RiskBudgetResult:
     """Compute eVestment risk budgeting metrics.
+
+    Returns metrics at the **daily** scale derived from returns_matrix.
+    Callers must annualize at the presentation layer (sqrt(252) for vol-like,
+    252 for return-like; PCTR/PCETL are scale-invariant).
 
     Parameters
     ----------

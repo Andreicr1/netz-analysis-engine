@@ -52,6 +52,7 @@ class OptimizationResult:
 
 
 _BLOCK_TOLERANCE = 1e-4
+SQRT_252 = float(np.sqrt(252.0))
 
 
 def _verify_block_weights(
@@ -724,8 +725,16 @@ async def optimize_fund_portfolio(
     _kurt = excess_kurtosis if excess_kurtosis is not None else np.zeros(n)
 
     def _compute_cvar(w_arr: np.ndarray) -> float:
-        """Compute parametric CVaR (Cornish-Fisher)."""
-        return -parametric_cvar_cf(w_arr, mu, cov_matrix, _skew, _kurt)
+        """Compute parametric CVaR (Cornish-Fisher).
+
+        Uses ``1.0 - cvar_alpha`` to convert from confidence-level convention
+        (cvar_alpha=0.95 → 95 % confidence) to tail-probability convention
+        (alpha=0.05) expected by ``parametric_cvar_cf``.
+        """
+        return -parametric_cvar_cf(
+            w_arr, mu, cov_matrix, _skew, _kurt,
+            alpha=1.0 - cvar_alpha,
+        )
 
     # PR-A11 — cascade audit trail. The list is appended to as each phase
     # completes (or is skipped); ``_pad_skipped`` backfills the remaining
@@ -842,7 +851,6 @@ async def optimize_fund_portfolio(
     # that would break the iid distributional assumption. This docstring is
     # load-bearing for PR-A13/A13.1; changing the convention here requires
     # updating the Builder slider ranges and the preview endpoint in lockstep.
-    SQRT_252 = float(np.sqrt(252.0))
 
     if returns_scenarios is None or returns_scenarios.size == 0:
         logger.warning(
@@ -1149,12 +1157,13 @@ async def optimize_fund_portfolio(
     if current_weights is not None and turnover_cost > 0:
         t3 = cp.Variable(n, nonneg=True)
         constraints3 += [t3 >= w3 - current_weights, t3 >= current_weights - w3]
-        phase3_obj_expr = cvar_expr3 + turnover_cost * cp.sum(t3)
+        phase3_obj_expr = cvar_expr3 + (turnover_cost / SQRT_252) * cp.sum(t3)
     prob3 = cp.Problem(cp.Minimize(phase3_obj_expr), constraints3)
 
     _t_p3 = time.perf_counter()
     status3 = await _solve_problem(prob3)
     _wall_p3 = int((time.perf_counter() - _t_p3) * 1000)
+    phase3_solver = prob3.solver_stats.solver_name if prob3.solver_stats else "CLARABEL"
 
     phase3_weights: np.ndarray | None = None
     min_achievable_cvar: float | None = None
@@ -1166,7 +1175,7 @@ async def optimize_fund_portfolio(
                 logger.warning("phase3_solver_imprecise", reason=_reason3)
                 attempts.append(PhaseAttempt(
                     phase="phase_3_min_cvar", status="solver_imprecise",
-                    solver="CLARABEL", objective_value=None, wall_ms=_wall_p3,
+                    solver=phase3_solver, objective_value=None, wall_ms=_wall_p3,
                     infeasibility_reason=_reason3,
                     cvar_limit_effective=effective_cvar_limit,
                 ))
@@ -1215,7 +1224,7 @@ async def optimize_fund_portfolio(
             attempts.append(PhaseAttempt(
                 phase="phase_3_min_cvar",
                 status="succeeded",
-                solver="CLARABEL",
+                solver=phase3_solver,
                 objective_value=round(min_achievable_cvar, 6),
                 wall_ms=_wall_p3,
                 infeasibility_reason=None,
@@ -1227,14 +1236,14 @@ async def optimize_fund_portfolio(
         else:
             attempts.append(PhaseAttempt(
                 phase="phase_3_min_cvar", status="infeasible",
-                solver="CLARABEL", objective_value=None, wall_ms=_wall_p3,
+                solver=phase3_solver, objective_value=None, wall_ms=_wall_p3,
                 infeasibility_reason="zero weights after clipping",
                 cvar_limit_effective=effective_cvar_limit,
             ))
     else:
         attempts.append(PhaseAttempt(
             phase="phase_3_min_cvar", status="solver_failed",
-            solver="CLARABEL", objective_value=None, wall_ms=_wall_p3,
+            solver=phase3_solver, objective_value=None, wall_ms=_wall_p3,
             infeasibility_reason=str(status3),
             cvar_limit_effective=effective_cvar_limit,
         ))
