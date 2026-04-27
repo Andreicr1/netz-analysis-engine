@@ -276,3 +276,110 @@ class TestEdgeCases:
             result.portfolio_volatility = 0.0  # type: ignore[misc]
         with pytest.raises(AttributeError):
             result.funds[0].mctr = 0.0  # type: ignore[misc]
+
+
+# ── Regression: S04-F05 — implied_return_etl sign ───────────────────
+
+
+class TestImpliedReturnEtlSign:
+    """Regression tests for Wave 6 Session 04 F05 (Tier 1).
+
+    implied_return_etl must be in expected-return space (positive for
+    long-only portfolios with positive risk-adjusted return).
+    """
+
+    def test_implied_return_etl_is_positive_for_long_only_positive_starr(self):
+        rng = np.random.default_rng(42)
+        # High mean / low vol ratio + zero rf → guarantees positive STARR.
+        returns = rng.normal(0.002, 0.01, (252, 3))
+        weights = np.array([0.4, 0.3, 0.3])
+
+        result = compute_risk_budget(
+            weights=weights,
+            returns_matrix=returns,
+            block_ids=["a", "b", "c"],
+            block_names=["A", "B", "C"],
+            risk_free_rate=0.0,
+            confidence=0.95,
+        )
+        assert result.portfolio_starr is not None and result.portfolio_starr > 0, (
+            f"Test setup error: STARR={result.portfolio_starr} (expected positive)"
+        )
+
+        for f in result.funds:
+            assert f.implied_return_etl is not None
+            assert f.implied_return_etl > 0, (
+                f"Fund {f.block_id}: implied_return_etl={f.implied_return_etl} "
+                f"(expected positive); mcetl={f.mcetl}, starr={result.portfolio_starr}"
+            )
+        for f in result.funds:
+            assert f.implied_return_vol is not None
+            assert f.implied_return_vol > 0
+
+    def test_implied_return_etl_sign_consistent_with_implied_return_vol(self):
+        rng = np.random.default_rng(123)
+        returns = rng.normal(0.0003, 0.012, (252, 2))
+        result = compute_risk_budget(
+            weights=np.array([0.5, 0.5]),
+            returns_matrix=returns,
+            block_ids=["a", "b"],
+            block_names=["A", "B"],
+        )
+        for f in result.funds:
+            assert (f.implied_return_etl is None) == (f.implied_return_vol is None)
+            if f.implied_return_etl is not None:
+                assert np.sign(f.implied_return_etl) == np.sign(f.implied_return_vol)
+
+
+# ── Regression: S04-F11 — degraded surface on T<30 ─────────────────
+
+
+class TestDegradedSurface:
+    """Regression tests for Wave 6 Session 04 F11 (Tier 3).
+
+    Charter §3: insufficient-data short-circuit must surface
+    degraded=True + reason, not silent 0.0.
+    """
+
+    def test_t_below_30_returns_degraded(self):
+        rng = np.random.default_rng(42)
+        returns = rng.normal(0.0, 0.01, (20, 2))  # T=20 < 30
+        result = compute_risk_budget(
+            weights=np.array([0.5, 0.5]),
+            returns_matrix=returns,
+            block_ids=["a", "b"],
+            block_names=["A", "B"],
+        )
+        assert result.degraded is True
+        assert result.degraded_reason is not None
+        assert "insufficient" in result.degraded_reason.lower()
+        assert result.portfolio_volatility == 0.0
+        assert result.portfolio_etl == 0.0
+        assert result.funds == []
+
+    def test_n_zero_returns_degraded(self):
+        returns = np.zeros((100, 0))  # N=0
+        result = compute_risk_budget(
+            weights=np.array([]),
+            returns_matrix=returns,
+            block_ids=[],
+            block_names=[],
+        )
+        assert result.degraded is True
+
+    def test_sufficient_data_returns_degraded_false(self):
+        rng = np.random.default_rng(0)
+        returns = rng.normal(0.0005, 0.01, (252, 3))
+        result = compute_risk_budget(
+            weights=np.array([0.4, 0.3, 0.3]),
+            returns_matrix=returns,
+            block_ids=["a", "b", "c"],
+            block_names=["A", "B", "C"],
+        )
+        assert result.degraded is False
+        assert result.degraded_reason is None
+
+    def test_dataclass_backward_compat_default_fields(self):
+        r = RiskBudgetResult(portfolio_volatility=0.1, portfolio_etl=-0.05)
+        assert r.degraded is False
+        assert r.degraded_reason is None
