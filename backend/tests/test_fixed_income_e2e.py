@@ -388,17 +388,21 @@ class TestFIScoringCredibilityFix:
         )
 
         # Score on FI model (no expense_ratio to isolate FI components)
-        fi_score, fi_components = compute_fund_score(
+        fi_result = compute_fund_score(
             risk_adapter,
             asset_class="fixed_income",
             fi_metrics=fi_adapter,
         )
+        fi_score = fi_result.score
+        fi_components = fi_result.components
 
         # Score on equity model (the broken old way)
-        eq_score, eq_components = compute_fund_score(
+        eq_result = compute_fund_score(
             risk_adapter,
             asset_class="equity",
         )
+        eq_score = eq_result.score
+        eq_components = eq_result.components
 
         # FI model should score significantly higher
         assert fi_score > 60, (
@@ -430,12 +434,14 @@ class TestFIScoringCredibilityFix:
             information_ratio_1y=-0.2,
         )
 
-        fi_score, fi_components = compute_fund_score(
+        fi_result = compute_fund_score(
             risk_adapter,
             asset_class="fixed_income",
             fi_metrics=fi_adapter,
             expense_ratio_pct=1.5,
         )
+        fi_score = fi_result.score
+        fi_components = fi_result.components
 
         assert fi_score < 50, (
             f"Bad FI fund should score <50 even on FI model, got {fi_score}. "
@@ -451,8 +457,12 @@ class TestFIScoringCredibilityFix:
             information_ratio_1y=1.2,
         )
 
-        score1, comp1 = compute_fund_score(risk_adapter, asset_class="equity")
-        score2, comp2 = compute_fund_score(risk_adapter, asset_class="equity")
+        result1 = compute_fund_score(risk_adapter, asset_class="equity")
+        result2 = compute_fund_score(risk_adapter, asset_class="equity")
+        score1 = result1.score
+        comp1 = result1.components
+        score2 = result2.score
+        comp2 = result2.components
 
         assert score1 == score2
         assert comp1 == comp2
@@ -465,11 +475,13 @@ class TestFIScoringCredibilityFix:
             return_1y=0.10, sharpe_1y=1.0,
             max_drawdown_1y=-0.12, information_ratio_1y=0.5,
         )
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             risk_adapter,
             asset_class="fixed_income",
             fi_metrics=None,
         )
+        score = result.score
+        components = result.components
         assert "return_consistency" in components
         assert "yield_consistency" not in components
 

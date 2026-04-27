@@ -102,13 +102,13 @@ class TestREITProfile:
             downside_capture_1y=0.6,        # Good protection
             inflation_beta=2.0,             # Good inflation hedge
         )
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt, alt_profile="reit",
             expense_ratio_pct=0.005,
         )
-        assert "income_generation" in components
-        assert "diversification_value" in components
-        assert score > 50, f"Good REIT should score > 50, got {score}"
+        assert "income_generation" in result.components
+        assert "diversification_value" in result.components
+        assert result.score > 50, f"Good REIT should score > 50, got {result.score}"
 
 
 class TestCommodityProfile:
@@ -122,13 +122,13 @@ class TestCommodityProfile:
             crisis_alpha_score=0.15,        # Positive crisis alpha
             calmar_ratio_3y=1.0,            # Decent Calmar
         )
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt, alt_profile="commodity",
             expense_ratio_pct=0.005,
         )
-        assert "inflation_hedge" in components
-        assert components["inflation_hedge"] > 70, "Strong inflation hedge should score > 70"
-        assert score > 55, f"Good commodity fund should score > 55, got {score}"
+        assert "inflation_hedge" in result.components
+        assert result.components["inflation_hedge"] > 70, "Strong inflation hedge should score > 70"
+        assert result.score > 55, f"Good commodity fund should score > 55, got {result.score}"
 
 
 class TestGoldProfile:
@@ -142,13 +142,13 @@ class TestGoldProfile:
             inflation_beta=1.5,             # Moderate inflation hedge
             tracking_error_1y=0.01,         # Low tracking error vs GLD
         )
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt, alt_profile="gold",
             expense_ratio_pct=0.004,
         )
-        assert "crisis_alpha" in components
-        assert "tracking_efficiency" in components
-        assert score > 60, f"Good gold fund should score > 60, got {score}"
+        assert "crisis_alpha" in result.components
+        assert "tracking_efficiency" in result.components
+        assert result.score > 60, f"Good gold fund should score > 60, got {result.score}"
 
 
 class TestHedgeFundProfile:
@@ -162,14 +162,14 @@ class TestHedgeFundProfile:
             equity_correlation_252d=0.3,    # Low-moderate correlation
             crisis_alpha_score=0.10,        # p90+ crisis alpha
         )
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt, alt_profile="hedge",
             expense_ratio_pct=0.020,  # 2% management fee typical for HFs
         )
-        assert "alpha_generation" in components
-        assert "downside_protection" in components
-        assert components["alpha_generation"] > 70, "Strong Sortino should produce high alpha_generation"
-        assert score > 50, f"Good hedge fund should score > 50, got {score}"
+        assert "alpha_generation" in result.components
+        assert "downside_protection" in result.components
+        assert result.components["alpha_generation"] > 70, "Strong Sortino should produce high alpha_generation"
+        assert result.score > 50, f"Good hedge fund should score > 50, got {result.score}"
 
 
 class TestCTAProfile:
@@ -182,13 +182,13 @@ class TestCTAProfile:
             equity_correlation_252d=-0.1,   # Negative correlation (ideal for CTA)
             calmar_ratio_3y=1.5,            # Good risk-adjusted return
         )
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt, alt_profile="cta",
             expense_ratio_pct=0.015,
         )
-        assert "crisis_alpha" in components
+        assert "crisis_alpha" in result.components
         assert _DEFAULT_ALT_CTA_WEIGHTS["crisis_alpha"] == 0.40
-        assert score > 55, f"Good CTA should score > 55, got {score}"
+        assert result.score > 55, f"Good CTA should score > 55, got {result.score}"
 
 
 class TestGenericAltProfile:
@@ -197,13 +197,13 @@ class TestGenericAltProfile:
     def test_generic_scores_balanced(self) -> None:
         risk = _make_equity_metrics()
         alt = _make_alt_metrics()
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt, alt_profile="generic_alt",
         )
-        assert isinstance(score, float)
-        assert "diversification_value" in components
-        assert "downside_protection" in components
-        assert "crisis_alpha" in components
+        assert isinstance(result.score, float)
+        assert "diversification_value" in result.components
+        assert "downside_protection" in result.components
+        assert "crisis_alpha" in result.components
 
 
 class TestAlternativesDispatch:
@@ -212,32 +212,32 @@ class TestAlternativesDispatch:
     def test_dispatch_produces_alt_components(self) -> None:
         risk = _make_equity_metrics()
         alt = _make_alt_metrics()
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt,
         )
-        assert "diversification_value" in components
-        assert "return_consistency" not in components, "Should NOT use equity components"
-        assert "yield_consistency" not in components, "Should NOT use FI components"
-        assert "yield_vs_risk_free" not in components, "Should NOT use cash components"
+        assert "diversification_value" in result.components
+        assert "return_consistency" not in result.components, "Should NOT use equity components"
+        assert "yield_consistency" not in result.components, "Should NOT use FI components"
+        assert "yield_vs_risk_free" not in result.components, "Should NOT use cash components"
 
     def test_fallback_to_equity_if_no_alt_metrics(self) -> None:
         risk = _make_equity_metrics()
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=None,
         )
-        assert "return_consistency" in components, "Should fall back to equity"
-        assert "diversification_value" not in components
+        assert "return_consistency" in result.components, "Should fall back to equity"
+        assert "diversification_value" not in result.components
 
     def test_default_profile_is_generic(self) -> None:
         risk = _make_equity_metrics()
         alt = _make_alt_metrics()
         # No alt_profile specified => generic_alt
-        score_default, _ = compute_fund_score(
+        score_default = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt,
-        )
-        score_explicit, _ = compute_fund_score(
+        ).score
+        score_explicit = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt, alt_profile="generic_alt",
-        )
+        ).score
         assert score_default == score_explicit
 
 
@@ -276,13 +276,13 @@ class TestAlternativesVsEquityScoring:
             inflation_beta=2.0,             # Good inflation hedge
         )
 
-        equity_score, _ = compute_fund_score(
+        equity_score = compute_fund_score(
             risk, asset_class="equity", expense_ratio_pct=0.010,
-        )
-        alt_score, _ = compute_fund_score(
+        ).score
+        alt_score = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt, alt_profile="hedge",
             expense_ratio_pct=0.010,
-        )
+        ).score
 
         assert alt_score > equity_score, (
             f"Alt model should score higher than equity model for a skilled alternatives fund. "
@@ -303,8 +303,8 @@ class TestAlternativesVsEquityScoring:
             yield_proxy_12m=None,
             tracking_error_1y=None,
         )
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt,
         )
         # Most components should get the 45-5=40 penalty
-        assert score < 50, f"All-None alt fund should score < 50, got {score}"
+        assert result.score < 50, f"All-None alt fund should score < 50, got {result.score}"

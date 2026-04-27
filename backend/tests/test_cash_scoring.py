@@ -231,20 +231,22 @@ class TestScoringServiceCashDispatch:
             pct_weekly_liquid=85.0,
             weighted_avg_maturity_days=15,
         )
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="cash", cash_metrics=cash, expense_ratio_pct=0.15,
         )
-        assert "yield_vs_risk_free" in components, "Cash dispatch should use cash components"
-        assert "nav_stability" in components
-        assert "sharpe_ratio" not in components, "Cash dispatch should NOT use equity components"
+        assert "yield_vs_risk_free" in result.components, "Cash dispatch should use cash components"
+        assert "nav_stability" in result.components
+        assert "sharpe_ratio" not in result.components, "Cash dispatch should NOT use equity components"
 
     def test_cash_fallback_to_equity_if_no_metrics(self):
         risk = _RiskMetricsAdapter(return_1y=0.05, sharpe_1y=0.5, max_drawdown_1y=-0.01)
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="cash", cash_metrics=None,
         )
-        # Should fall through to equity scoring
-        assert "return_consistency" in components
+        # Should fall through to equity scoring (degraded, but still produces equity components)
+        assert result.degraded is True
+        assert "asset_class_metrics_missing:cash" in result.degraded_reasons
+        assert "return_consistency" in result.components
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -331,11 +333,11 @@ class TestCashVsEquityScoring:
             max_drawdown_1y=-0.0005,  # Near-zero drawdown
             information_ratio_1y=None,
         )
-        score_equity, comp_equity = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="equity",
         )
         # With None Sharpe, the equity model assigns opacity penalty
-        assert comp_equity["risk_adjusted_return"] == 45.0
+        assert result.components["risk_adjusted_return"] == 45.0
 
     def test_mmf_on_cash_model_uses_fundamentals(self):
         """Same MMF on cash model uses yield, NAV stability, liquidity, maturity."""
@@ -347,13 +349,13 @@ class TestCashVsEquityScoring:
             pct_weekly_liquid=85.0,
             weighted_avg_maturity_days=15,
         )
-        score_cash, comp_cash = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="cash", cash_metrics=cash, expense_ratio_pct=0.15,
         )
-        assert "yield_vs_risk_free" in comp_cash
-        assert "nav_stability" in comp_cash
-        assert comp_cash["nav_stability"] == 100.0  # Perfect $1.00
-        assert score_cash > 50.0, f"Good MMF should score >50 on cash model, got {score_cash}"
+        assert "yield_vs_risk_free" in result.components
+        assert "nav_stability" in result.components
+        assert result.components["nav_stability"] == 100.0  # Perfect $1.00
+        assert result.score > 50.0, f"Good MMF should score >50 on cash model, got {result.score}"
 
     def test_cash_model_outperforms_equity_for_mmf(self):
         """The cash model should produce more meaningful differentiation
@@ -377,12 +379,12 @@ class TestCashVsEquityScoring:
             weighted_avg_maturity_days=55,
         )
 
-        score_strong, _ = compute_fund_score(
+        score_strong = compute_fund_score(
             risk, asset_class="cash", cash_metrics=cash_strong, expense_ratio_pct=0.10,
-        )
-        score_weak, _ = compute_fund_score(
+        ).score
+        score_weak = compute_fund_score(
             risk, asset_class="cash", cash_metrics=cash_weak, expense_ratio_pct=0.50,
-        )
+        ).score
 
         spread = score_strong - score_weak
         assert spread > 15.0, (

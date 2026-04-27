@@ -1267,7 +1267,7 @@ def _score_metrics(
         else:
             alt_profile = _resolve_alt_profile_from_strategy(strategy_label)
 
-    score_val, components = compute_fund_score(
+    scoring_result = compute_fund_score(
         adapter,
         flows_momentum_score=flows,
         config=scoring_config,
@@ -1278,11 +1278,18 @@ def _score_metrics(
         alt_metrics=alt_adapter,
         alt_profile=alt_profile,
     )
-    metrics["manager_score"] = round(score_val, 2)
+    metrics["manager_score"] = round(scoring_result.score, 2)
+    components = dict(scoring_result.components)
     # Store alt_profile in score_components for frontend rendering
     if alt_profile:
         components["_alt_profile"] = alt_profile
     metrics["score_components"] = components
+    if scoring_result.degraded:
+        logger.info(
+            "scoring_degraded",
+            asset_class=asset_class,
+            reasons=scoring_result.degraded_reasons,
+        )
 
 
 REGIME_DETECTION_LOCK_ID = 900_130

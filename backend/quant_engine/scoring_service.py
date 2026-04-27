@@ -9,6 +9,7 @@ Config is injected as parameter by callers via ConfigService.get("liquid_funds",
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Protocol
 
@@ -17,6 +18,30 @@ import structlog
 from quant_engine.expense_ratio_validator import to_decimal_fraction
 
 logger = structlog.get_logger()
+
+
+@dataclass(frozen=True, slots=True)
+class ScoringResult:
+    """Structured score with provenance.
+
+    Attributes:
+        score: composite 0-100 score.
+        components: per-component sub-scores (0-100 each).
+        degraded: True when at least one component was synthesized from a
+            fallback (missing input filled with peer_median - 5.0) OR when
+            the dispatch fell through to a model that doesn't match the
+            stated asset_class.
+        degraded_reasons: structured list of reasons. Each reason is a
+            short slug + optional context. Examples:
+                - "asset_class_metrics_missing:cash"
+                - "synthesized_component:risk_adjusted_return"
+            Empty list when degraded=False.
+    """
+
+    score: float
+    components: dict[str, float] = field(default_factory=dict)
+    degraded: bool = False
+    degraded_reasons: list[str] = field(default_factory=list)
 
 
 class RiskMetrics(Protocol):
@@ -246,6 +271,22 @@ def _peaked_score(value: float | None, target: float, half_range: float) -> floa
     return max(0.0, 100.0 * (1.0 - distance / half_range))
 
 
+def _normalize_with_provenance(
+    value: float | None,
+    min_val: float,
+    max_val: float,
+    peer_median: float | None = None,
+) -> tuple[float, bool]:
+    """Same as _normalize but returns (score, was_synthesized)."""
+    if value is None or not math.isfinite(value):
+        if peer_median is not None:
+            return max(0.0, min(100.0, peer_median - 5.0)), True
+        return 45.0, True
+    if max_val == min_val:
+        return 50.0, False
+    return max(0.0, min(100.0, (value - min_val) / (max_val - min_val) * 100)), False
+
+
 def _normalize(
     value: float | None,
     min_val: float,
@@ -259,13 +300,8 @@ def _normalize(
         opaque/short-history funds vs. transparent peers with mediocre scores.
       - If no peer_median, falls back to 45.0 (below midpoint, slight penalty).
     """
-    if value is None or not math.isfinite(value):
-        if peer_median is not None:
-            return max(0.0, min(100.0, peer_median - 5.0))
-        return 45.0
-    if max_val == min_val:
-        return 50.0
-    return max(0.0, min(100.0, (value - min_val) / (max_val - min_val) * 100))
+    score, _ = _normalize_with_provenance(value, min_val, max_val, peer_median)
+    return score
 
 
 def _resolve_sharpe_input(
@@ -312,24 +348,43 @@ def _compute_fee_efficiency(
     return max(0.0, fee_pm - 5.0) if fee_pm is not None else 45.0
 
 
+def _compute_fee_efficiency_with_provenance(
+    expense_ratio_pct: float | None,
+    peer_medians: dict[str, float] | None = None,
+) -> tuple[float, bool]:
+    """Fee efficiency with synthesis tracking."""
+    pm = peer_medians or {}
+    er_fraction = to_decimal_fraction(expense_ratio_pct)
+    if er_fraction is not None and math.isfinite(float(er_fraction)):
+        er_human_pct = float(er_fraction) * 100.0
+        return max(0.0, 100.0 - er_human_pct * 50.0), False
+    fee_pm = pm.get("fee_efficiency")
+    score = max(0.0, fee_pm - 5.0) if fee_pm is not None else 45.0
+    return score, True
+
+
 def _compute_fi_score(
     fi: FIMetrics,
     config: dict[str, Any] | None,
     expense_ratio_pct: float | None,
     peer_medians: dict[str, float] | None,
-) -> tuple[float, dict[str, float]]:
-    """Compute FI-specific composite score. Returns (score, components).
+) -> ScoringResult:
+    """Compute FI-specific composite score.
 
     Five components: yield_consistency, duration_management, spread_capture,
     duration_adjusted_drawdown, fee_efficiency.
     """
     pm = peer_medians or {}
     components: dict[str, float] = {}
+    synthesized: list[str] = []
 
     # yield_consistency: trailing 12m income return proxy
     # Range: 0% yield (worst) to 8% yield (best for IG).
     yp = float(fi.yield_proxy_12m) if fi.yield_proxy_12m is not None else None
-    components["yield_consistency"] = _normalize(yp, 0.0, 0.08, pm.get("yield_consistency"))
+    val, was_synth = _normalize_with_provenance(yp, 0.0, 0.08, pm.get("yield_consistency"))
+    components["yield_consistency"] = val
+    if was_synth:
+        synthesized.append("yield_consistency")
 
     # duration_management: empirical duration vs target center.
     # Config-driven: duration_center and duration_half_range.
@@ -344,23 +399,32 @@ def _compute_fi_score(
         deviation = abs(dur - dur_center) / max(dur_half_range, 0.1)
         components["duration_management"] = max(0.0, min(100.0, (1 - deviation) * 100))
     else:
+        synthesized.append("duration_management")
         components["duration_management"] = pm.get("duration_management", 45.0)
 
     # spread_capture: credit beta as proxy for spread capture skill.
     # Peaked at credit_beta = 1.0; symmetric ±1.0 half-range.
     # Higher and lower betas penalized equally — moderate exposure is the institutional ideal.
     cb = float(fi.credit_beta) if fi.credit_beta is not None else None
+    if cb is None or not math.isfinite(cb):
+        synthesized.append("spread_capture")
     components["spread_capture"] = _peaked_score(cb, target=1.0, half_range=1.0)
 
     # duration_adjusted_drawdown: drawdown per unit of duration.
     # Range: -5.0 (terrible) to 0.0 (no drawdown). Higher is better.
     dad = float(fi.duration_adj_drawdown_1y) if fi.duration_adj_drawdown_1y is not None else None
-    components["duration_adjusted_drawdown"] = _normalize(
+    val, was_synth = _normalize_with_provenance(
         dad, -5.0, 0.0, pm.get("duration_adjusted_drawdown"),
     )
+    components["duration_adjusted_drawdown"] = val
+    if was_synth:
+        synthesized.append("duration_adjusted_drawdown")
 
     # fee_efficiency: same logic as equity
-    components["fee_efficiency"] = _compute_fee_efficiency(expense_ratio_pct, pm)
+    fee_val, fee_synth = _compute_fee_efficiency_with_provenance(expense_ratio_pct, pm)
+    components["fee_efficiency"] = fee_val
+    if fee_synth:
+        synthesized.append("fee_efficiency")
 
     weights = resolve_scoring_weights(config, asset_class="fixed_income")
 
@@ -372,7 +436,14 @@ def _compute_fi_score(
         )
 
     score = sum(components[k] * w for k, w in weights.items())
-    return round(score, 2), {k: round(v, 2) for k, v in components.items()}
+    rounded_components = {k: round(v, 2) for k, v in components.items()}
+    degraded_reasons = [f"synthesized_component:{name}" for name in synthesized]
+    return ScoringResult(
+        score=round(score, 2),
+        components=rounded_components,
+        degraded=len(synthesized) > 0,
+        degraded_reasons=degraded_reasons,
+    )
 
 
 def _compute_cash_score(
@@ -380,14 +451,15 @@ def _compute_cash_score(
     config: dict[str, Any] | None,
     expense_ratio_pct: float | None,
     peer_medians: dict[str, float] | None,
-) -> tuple[float, dict[str, float]]:
-    """Compute Cash/MMF-specific composite score. Returns (score, components).
+) -> ScoringResult:
+    """Compute Cash/MMF-specific composite score.
 
     Five components: yield_vs_risk_free, nav_stability, liquidity_quality,
     maturity_discipline, fee_efficiency.
     """
     pm = peer_medians or {}
     components: dict[str, float] = {}
+    synthesized: list[str] = []
 
     # yield_vs_risk_free: absolute spread over policy rate (handles negative rates).
     # 0 pp → 50, 5 pp → 100, -5 pp → 0. Continuous across the zero boundary.
@@ -395,10 +467,14 @@ def _compute_cash_score(
     ffr = float(cash.fed_funds_rate_at_calc) if cash.fed_funds_rate_at_calc is not None else None
     if yld is not None and ffr is not None and math.isfinite(ffr):
         spread_pp = (yld - ffr) * 100.0  # percentage points
-        components["yield_vs_risk_free"] = _normalize(
+        val, was_synth = _normalize_with_provenance(
             spread_pp, -5.0, 5.0, pm.get("yield_vs_risk_free"),
         )
+        components["yield_vs_risk_free"] = val
+        if was_synth:
+            synthesized.append("yield_vs_risk_free")
     else:
+        synthesized.append("yield_vs_risk_free")
         components["yield_vs_risk_free"] = pm.get("yield_vs_risk_free", 45.0)
 
     # nav_stability: deviation from $1.00 par value
@@ -408,16 +484,21 @@ def _compute_cash_score(
         stability = max(0.0, 1.0 - deviation * 1000)  # 0.001 deviation = 0 score
         components["nav_stability"] = stability * 100
     else:
+        synthesized.append("nav_stability")
         components["nav_stability"] = pm.get("nav_stability", 45.0)
 
     # liquidity_quality: weekly liquid assets %
     wl = float(cash.pct_weekly_liquid) if cash.pct_weekly_liquid is not None else None
     if wl is not None:
         # Range 30% (SEC 2a-7 regulatory min) to 100%
-        components["liquidity_quality"] = _normalize(
+        val, was_synth = _normalize_with_provenance(
             wl, 30.0, 100.0, pm.get("liquidity_quality"),
         )
+        components["liquidity_quality"] = val
+        if was_synth:
+            synthesized.append("liquidity_quality")
     else:
+        synthesized.append("liquidity_quality")
         components["liquidity_quality"] = pm.get("liquidity_quality", 45.0)
 
     # maturity_discipline: lower WAM = less interest rate risk = better
@@ -427,10 +508,14 @@ def _compute_cash_score(
         wam_score = max(0.0, (1.0 - wam / 60.0)) * 100
         components["maturity_discipline"] = wam_score
     else:
+        synthesized.append("maturity_discipline")
         components["maturity_discipline"] = pm.get("maturity_discipline", 45.0)
 
     # fee_efficiency: same logic as equity/FI
-    components["fee_efficiency"] = _compute_fee_efficiency(expense_ratio_pct, pm)
+    fee_val, fee_synth = _compute_fee_efficiency_with_provenance(expense_ratio_pct, pm)
+    components["fee_efficiency"] = fee_val
+    if fee_synth:
+        synthesized.append("fee_efficiency")
 
     weights = resolve_scoring_weights(config, asset_class="cash")
 
@@ -442,7 +527,14 @@ def _compute_cash_score(
         )
 
     score = sum(components[k] * w for k, w in weights.items())
-    return round(score, 2), {k: round(v, 2) for k, v in components.items()}
+    rounded_components = {k: round(v, 2) for k, v in components.items()}
+    degraded_reasons = [f"synthesized_component:{name}" for name in synthesized]
+    return ScoringResult(
+        score=round(score, 2),
+        components=rounded_components,
+        degraded=len(synthesized) > 0,
+        degraded_reasons=degraded_reasons,
+    )
 
 
 def _compute_alternatives_score(
@@ -451,14 +543,15 @@ def _compute_alternatives_score(
     config: dict[str, Any] | None,
     expense_ratio_pct: float | None,
     peer_medians: dict[str, float] | None,
-) -> tuple[float, dict[str, float]]:
-    """Compute Alternatives composite score. Returns (score, components).
+) -> ScoringResult:
+    """Compute Alternatives composite score.
 
     Profile-specific weights determine which components matter most.
     All components are computed for all alt funds; weights select relevance.
     """
     pm = peer_medians or {}
     components: dict[str, float] = {}
+    synthesized: list[str] = []
 
     # diversification_value: 1 - abs(equity_correlation_252d)
     # Empirical p50 div_value = 0.23 (median alt corr = 0.77).
@@ -466,8 +559,12 @@ def _compute_alternatives_score(
     eq_corr = float(alt.equity_correlation_252d) if alt.equity_correlation_252d is not None else None
     if eq_corr is not None:
         div_value = 1.0 - abs(eq_corr)
-        components["diversification_value"] = _normalize(div_value, 0.0, 0.50, pm.get("diversification_value"))
+        val, was_synth = _normalize_with_provenance(div_value, 0.0, 0.50, pm.get("diversification_value"))
+        components["diversification_value"] = val
+        if was_synth:
+            synthesized.append("diversification_value")
     else:
+        synthesized.append("diversification_value")
         components["diversification_value"] = pm.get("diversification_value", 45.0)
 
     # downside_protection: 1 - downside_capture_1y
@@ -475,46 +572,69 @@ def _compute_alternatives_score(
     dc = float(alt.downside_capture_1y) if alt.downside_capture_1y is not None else None
     if dc is not None:
         protection = 1.0 - dc
-        components["downside_protection"] = _normalize(protection, -1.0, 1.0, pm.get("downside_protection"))
+        val, was_synth = _normalize_with_provenance(protection, -1.0, 1.0, pm.get("downside_protection"))
+        components["downside_protection"] = val
+        if was_synth:
+            synthesized.append("downside_protection")
     else:
+        synthesized.append("downside_protection")
         components["downside_protection"] = pm.get("downside_protection", 45.0)
 
     # crisis_alpha: excess return vs benchmark during drawdown periods.
     # Empirical p10=-0.034, p50=+0.009, p90=+0.050.
     # Range [-0.06, 0.08] so p50 → score ~49.
     ca = float(alt.crisis_alpha_score) if alt.crisis_alpha_score is not None else None
-    components["crisis_alpha"] = _normalize(ca, -0.06, 0.08, pm.get("crisis_alpha"))
+    val, was_synth = _normalize_with_provenance(ca, -0.06, 0.08, pm.get("crisis_alpha"))
+    components["crisis_alpha"] = val
+    if was_synth:
+        synthesized.append("crisis_alpha")
 
     # inflation_hedge: inflation beta (regression of returns vs CPI changes).
     # Empirical p10=-11.03, p50=-5.84, p90=-1.82 (all negative).
     # Range [-12.0, 0.0] so p50 → score ~51.
     ib = float(alt.inflation_beta) if alt.inflation_beta is not None else None
-    components["inflation_hedge"] = _normalize(ib, -12.0, 0.0, pm.get("inflation_hedge"))
+    val, was_synth = _normalize_with_provenance(ib, -12.0, 0.0, pm.get("inflation_hedge"))
+    components["inflation_hedge"] = val
+    if was_synth:
+        synthesized.append("inflation_hedge")
 
     # income_generation: yield_proxy_12m (reused from FI for REITs)
     # Range: 0% to 10%.
     yp = float(alt.yield_proxy_12m) if alt.yield_proxy_12m is not None else None
-    components["income_generation"] = _normalize(yp, 0.0, 0.10, pm.get("income_generation"))
+    val, was_synth = _normalize_with_provenance(yp, 0.0, 0.10, pm.get("income_generation"))
+    components["income_generation"] = val
+    if was_synth:
+        synthesized.append("income_generation")
 
     # alpha_generation: sortino_1y (not Sharpe -- Sharpe penalizes upside vol).
     # Empirical p10=0.34, p50=2.53, p90=3.48.
     # Range [0.0, 5.0] so p50 → score ~51.
     sortino = float(alt.sortino_1y) if alt.sortino_1y is not None else None
-    components["alpha_generation"] = _normalize(sortino, 0.0, 5.0, pm.get("alpha_generation"))
+    val, was_synth = _normalize_with_provenance(sortino, 0.0, 5.0, pm.get("alpha_generation"))
+    components["alpha_generation"] = val
+    if was_synth:
+        synthesized.append("alpha_generation")
 
     # risk_adjusted_return: calmar_ratio_3y (return / max drawdown).
     # Empirical p10=0.32, p50=0.75, p90=1.35.
     # Range [0.0, 1.5] so p50 → score 50.
     calmar = float(alt.calmar_ratio_3y) if alt.calmar_ratio_3y is not None else None
-    components["risk_adjusted_return"] = _normalize(calmar, 0.0, 1.5, pm.get("risk_adjusted_return"))
+    val, was_synth = _normalize_with_provenance(calmar, 0.0, 1.5, pm.get("risk_adjusted_return"))
+    components["risk_adjusted_return"] = val
+    if was_synth:
+        synthesized.append("risk_adjusted_return")
 
     # drawdown_control: based on max_drawdown_3y directly (lower max DD → higher score).
     # Score 100 at max DD = 0%, score 0 at max DD = -50%.
     max_dd = float(alt.max_drawdown_3y) if alt.max_drawdown_3y is not None else None
     if max_dd is not None and math.isfinite(max_dd):
         drawdown_pct = abs(max_dd) * 100.0
-        components["drawdown_control"] = _normalize(-drawdown_pct, -50.0, 0.0, pm.get("drawdown_control"))
+        val, was_synth = _normalize_with_provenance(-drawdown_pct, -50.0, 0.0, pm.get("drawdown_control"))
+        components["drawdown_control"] = val
+        if was_synth:
+            synthesized.append("drawdown_control")
     else:
+        synthesized.append("drawdown_control")
         components["drawdown_control"] = 45.0
 
     # tracking_efficiency: lower tracking error = better (for gold passive exposure)
@@ -525,10 +645,14 @@ def _compute_alternatives_score(
         te_score = max(0.0, min(100.0, (1.0 - te / 0.05) * 100))
         components["tracking_efficiency"] = te_score
     else:
+        synthesized.append("tracking_efficiency")
         components["tracking_efficiency"] = pm.get("tracking_efficiency", 45.0)
 
     # fee_efficiency: shared formula
-    components["fee_efficiency"] = _compute_fee_efficiency(expense_ratio_pct, pm)
+    fee_val, fee_synth = _compute_fee_efficiency_with_provenance(expense_ratio_pct, pm)
+    components["fee_efficiency"] = fee_val
+    if fee_synth:
+        synthesized.append("fee_efficiency")
 
     weights = resolve_alt_profile_weights(profile, config)
 
@@ -543,7 +667,122 @@ def _compute_alternatives_score(
     # Only return components that carry weight in this profile.
     # Prevents nonsensical display (e.g., "Income Generation: 38" on a CTA fund).
     active_components = {k: round(v, 2) for k, v in components.items() if weights.get(k, 0) > 0}
-    return round(score, 2), active_components
+    # Filter degraded reasons to active components only
+    active_reasons = [
+        r for r in (f"synthesized_component:{name}" for name in synthesized)
+        if r.split(":", 1)[1] in active_components or not r.startswith("synthesized_component:")
+    ]
+    return ScoringResult(
+        score=round(score, 2),
+        components=active_components,
+        degraded=len(active_reasons) > 0,
+        degraded_reasons=active_reasons,
+    )
+
+
+def _compute_equity_score(
+    metrics: RiskMetrics,
+    flows_momentum_score: float | None,
+    config: dict[str, Any] | None,
+    expense_ratio_pct: float | None,
+    insider_sentiment_score: float | None,
+    peer_medians: dict[str, float] | None,
+) -> ScoringResult:
+    """Compute equity composite score with provenance tracking."""
+    pm = peer_medians or {}
+    components: dict[str, float] = {}
+    synthesized: list[str] = []
+
+    # S4-QW1: use ``is not None`` instead of truthy checks.
+    ret_1y = float(metrics.return_1y) if metrics.return_1y is not None else None
+    val, was_synth = _normalize_with_provenance(ret_1y, -0.20, 0.40, pm.get("return_consistency"))
+    components["return_consistency"] = val
+    if was_synth:
+        synthesized.append("return_consistency")
+
+    sharpe = _resolve_sharpe_input(metrics, config)
+    val, was_synth = _normalize_with_provenance(sharpe, -1.0, 3.0, pm.get("risk_adjusted_return"))
+    components["risk_adjusted_return"] = val
+    if was_synth:
+        synthesized.append("risk_adjusted_return")
+
+    dd = float(metrics.max_drawdown_1y) if metrics.max_drawdown_1y is not None else None
+    val, was_synth = _normalize_with_provenance(dd, -0.50, 0.0, pm.get("drawdown_control"))
+    components["drawdown_control"] = val
+    if was_synth:
+        synthesized.append("drawdown_control")
+
+    ir = float(metrics.information_ratio_1y) if metrics.information_ratio_1y is not None else None
+    val, was_synth = _normalize_with_provenance(ir, -1.0, 2.0, pm.get("information_ratio"))
+    components["information_ratio"] = val
+    if was_synth:
+        synthesized.append("information_ratio")
+
+    if flows_momentum_score is not None:
+        components["flows_momentum"] = _clamp_component_score(
+            flows_momentum_score, "flows_momentum",
+        )
+    else:
+        synthesized.append("flows_momentum")
+        components["flows_momentum"] = 45.0
+
+    # Fee efficiency — shared with FI path
+    fee_val, fee_synth = _compute_fee_efficiency_with_provenance(expense_ratio_pct, pm)
+    components["fee_efficiency"] = fee_val
+    if fee_synth:
+        synthesized.append("fee_efficiency")
+
+    weights = resolve_scoring_weights(config)
+
+    # Opt-in insider sentiment (activated when config includes "insider_sentiment" weight > 0)
+    if weights.get("insider_sentiment", 0) > 0:
+        if insider_sentiment_score is not None:
+            components["insider_sentiment"] = _clamp_component_score(
+                insider_sentiment_score, "insider_sentiment",
+            )
+        else:
+            synthesized.append("insider_sentiment")
+            components["insider_sentiment"] = 45.0  # missing-data fallback
+
+    missing = set(weights.keys()) - components.keys()
+    if missing:
+        raise ValueError(
+            f"compute_fund_score: weights reference components not provided: "
+            f"{sorted(missing)}. Caller must pass {{key}}_score kwargs for each."
+        )
+
+    score = sum(components[k] * w for k, w in weights.items())
+    rounded_components = {k: round(v, 2) for k, v in components.items()}
+    degraded_reasons = [f"synthesized_component:{name}" for name in synthesized]
+    return ScoringResult(
+        score=round(score, 2),
+        components=rounded_components,
+        degraded=len(synthesized) > 0,
+        degraded_reasons=degraded_reasons,
+    )
+
+
+def _equity_score_with_class_mismatch(
+    metrics: RiskMetrics,
+    flows_momentum_score: float | None,
+    config: dict[str, Any] | None,
+    expense_ratio_pct: float | None,
+    insider_sentiment_score: float | None,
+    peer_medians: dict[str, float] | None,
+    class_mismatch: str,
+) -> ScoringResult:
+    """Equity scoring with degraded flag for asset-class mismatch (F05 fix)."""
+    result = _compute_equity_score(
+        metrics, flows_momentum_score, config, expense_ratio_pct,
+        insider_sentiment_score, peer_medians,
+    )
+    reasons = [f"asset_class_metrics_missing:{class_mismatch}"] + list(result.degraded_reasons)
+    return ScoringResult(
+        score=result.score,
+        components=result.components,
+        degraded=True,
+        degraded_reasons=reasons,
+    )
 
 
 def compute_fund_score(
@@ -558,8 +797,8 @@ def compute_fund_score(
     cash_metrics: CashMetrics | None = None,
     alt_metrics: AltMetrics | None = None,
     alt_profile: str | None = None,
-) -> tuple[float, dict[str, float]]:
-    """Compute composite score from risk metrics. Returns (score, components).
+) -> ScoringResult:
+    """Compute composite score from risk metrics. Returns ScoringResult.
 
     Args:
         config: Scoring config dict from ConfigService.get("liquid_funds", "scoring").
@@ -575,79 +814,46 @@ def compute_fund_score(
         asset_class: "equity" (default), "fixed_income", "cash", or "alternatives".
                Determines scoring model.
         fi_metrics: Fixed income metrics. Required when asset_class="fixed_income".
-               Falls back to equity scoring if None.
         cash_metrics: Cash/MMF metrics. Required when asset_class="cash".
-               Falls back to equity scoring if None.
         alt_metrics: Alternatives metrics. Required when asset_class="alternatives".
-               Falls back to equity scoring if None.
         alt_profile: Alternatives profile name (reit, commodity, gold, hedge, cta,
                generic_alt). Determines weight distribution across components.
 
     """
-    # Dispatch to Alternatives scoring when asset_class is alternatives AND alt_metrics provided
-    if asset_class == "alternatives" and alt_metrics is not None:
+    # Dispatch to Alternatives scoring
+    if asset_class == "alternatives":
+        if alt_metrics is None:
+            return _equity_score_with_class_mismatch(
+                metrics, flows_momentum_score, config, expense_ratio_pct,
+                insider_sentiment_score, peer_medians,
+                class_mismatch="alternatives",
+            )
         return _compute_alternatives_score(
             alt_metrics, alt_profile or "generic_alt", config, expense_ratio_pct, peer_medians,
         )
 
-    # Dispatch to Cash scoring when asset_class is cash AND cash_metrics provided
-    if asset_class == "cash" and cash_metrics is not None:
+    # Dispatch to Cash scoring
+    if asset_class == "cash":
+        if cash_metrics is None:
+            return _equity_score_with_class_mismatch(
+                metrics, flows_momentum_score, config, expense_ratio_pct,
+                insider_sentiment_score, peer_medians,
+                class_mismatch="cash",
+            )
         return _compute_cash_score(cash_metrics, config, expense_ratio_pct, peer_medians)
 
-    # Dispatch to FI scoring when asset_class is fixed_income AND fi_metrics provided
-    if asset_class == "fixed_income" and fi_metrics is not None:
+    # Dispatch to FI scoring
+    if asset_class == "fixed_income":
+        if fi_metrics is None:
+            return _equity_score_with_class_mismatch(
+                metrics, flows_momentum_score, config, expense_ratio_pct,
+                insider_sentiment_score, peer_medians,
+                class_mismatch="fixed_income",
+            )
         return _compute_fi_score(fi_metrics, config, expense_ratio_pct, peer_medians)
 
-    pm = peer_medians or {}
-    components: dict[str, float] = {}
-
-    # S4-QW1: use ``is not None`` instead of truthy checks.
-    # ``Decimal("0.0")`` and ``float(0.0)`` are both falsy in Python, so the
-    # historical ``if metrics.return_1y:`` idiom treated a fund that
-    # **legitimately** returned exactly 0 % as "missing data" and assigned
-    # the peer-median minus 5 opacity penalty. The fund then fell several
-    # ranks below peers for a non-existent data gap. Strict ``is not None``
-    # distinguishes "value available and equal to zero" from "value
-    # unavailable".
-    ret_1y = float(metrics.return_1y) if metrics.return_1y is not None else None
-    components["return_consistency"] = _normalize(ret_1y, -0.20, 0.40, pm.get("return_consistency"))
-
-    sharpe = _resolve_sharpe_input(metrics, config)
-    components["risk_adjusted_return"] = _normalize(sharpe, -1.0, 3.0, pm.get("risk_adjusted_return"))
-
-    dd = float(metrics.max_drawdown_1y) if metrics.max_drawdown_1y is not None else None
-    components["drawdown_control"] = _normalize(dd, -0.50, 0.0, pm.get("drawdown_control"))
-
-    ir = float(metrics.information_ratio_1y) if metrics.information_ratio_1y is not None else None
-    components["information_ratio"] = _normalize(ir, -1.0, 2.0, pm.get("information_ratio"))
-
-    components["flows_momentum"] = (
-        _clamp_component_score(flows_momentum_score, "flows_momentum")
-        if flows_momentum_score is not None
-        else 45.0
+    # Equity (default)
+    return _compute_equity_score(
+        metrics, flows_momentum_score, config, expense_ratio_pct,
+        insider_sentiment_score, peer_medians,
     )
-
-    # Fee efficiency — shared with FI path
-    components["fee_efficiency"] = _compute_fee_efficiency(expense_ratio_pct, pm)
-
-    weights = resolve_scoring_weights(config)
-
-    # Opt-in insider sentiment (activated when config includes "insider_sentiment" weight > 0)
-    if weights.get("insider_sentiment", 0) > 0:
-        if insider_sentiment_score is not None:
-            components["insider_sentiment"] = _clamp_component_score(
-                insider_sentiment_score, "insider_sentiment",
-            )
-        else:
-            components["insider_sentiment"] = 45.0  # missing-data fallback
-
-    missing = set(weights.keys()) - components.keys()
-    if missing:
-        raise ValueError(
-            f"compute_fund_score: weights reference components not provided: "
-            f"{sorted(missing)}. Caller must pass {{key}}_score kwargs for each."
-        )
-
-    score = sum(components[k] * w for k, w in weights.items())
-
-    return round(score, 2), {k: round(v, 2) for k, v in components.items()}

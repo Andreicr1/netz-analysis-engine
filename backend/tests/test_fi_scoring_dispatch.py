@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from quant_engine.scoring_service import (
+    ScoringResult,
     _DEFAULT_FI_SCORING_WEIGHTS,
     _DEFAULT_SCORING_WEIGHTS,
     compute_fund_score,
@@ -63,7 +64,9 @@ class TestEquityPathUnchanged:
 
     def test_equity_components_produced(self) -> None:
         metrics = _make_equity_metrics()
-        score, components = compute_fund_score(metrics, asset_class="equity")
+        result = compute_fund_score(metrics, asset_class="equity")
+        score = result.score
+        components = result.components
         assert "return_consistency" in components
         assert "risk_adjusted_return" in components
         assert "drawdown_control" in components
@@ -77,8 +80,8 @@ class TestEquityPathUnchanged:
     def test_equity_score_same_without_asset_class_param(self) -> None:
         """Default asset_class='equity' produces same result as explicit."""
         metrics = _make_equity_metrics()
-        score_default, _ = compute_fund_score(metrics)
-        score_explicit, _ = compute_fund_score(metrics, asset_class="equity")
+        score_default = compute_fund_score(metrics).score
+        score_explicit = compute_fund_score(metrics, asset_class="equity").score
         assert score_default == score_explicit
 
 
@@ -98,10 +101,12 @@ class TestFIScoring:
             yield_proxy_12m=0.05,
             duration_adj_drawdown_1y=-0.005,  # excellent: -0.5% per unit duration
         )
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             equity_metrics, asset_class="fixed_income", fi_metrics=fi,
             expense_ratio_pct=0.005,  # 0.5% ER
         )
+        score = result.score
+        components = result.components
         assert score > 70, f"Good IG fund should score > 70, got {score}"
         assert "yield_consistency" in components
         assert "duration_management" in components
@@ -118,9 +123,9 @@ class TestFIScoring:
             yield_proxy_12m=0.02,
             duration_adj_drawdown_1y=-3.0,  # terrible: -3% per unit duration
         )
-        score, _ = compute_fund_score(
+        score = compute_fund_score(
             equity_metrics, asset_class="fixed_income", fi_metrics=fi,
-        )
+        ).score
         assert score < 50, f"Poor FI fund should score < 50, got {score}"
 
 
@@ -143,14 +148,14 @@ class TestFIvsEquityComparison:
             duration_adj_drawdown_1y=-0.005,
         )
 
-        equity_score, _ = compute_fund_score(
+        equity_score = compute_fund_score(
             equity_metrics, asset_class="equity",
             expense_ratio_pct=0.005,
-        )
-        fi_score, _ = compute_fund_score(
+        ).score
+        fi_score = compute_fund_score(
             equity_metrics, asset_class="fixed_income", fi_metrics=fi,
             expense_ratio_pct=0.005,
-        )
+        ).score
 
         assert fi_score > equity_score, (
             f"FI model should score higher than equity model for a skilled FI fund. "
@@ -172,10 +177,12 @@ class TestConfigOverride:
         }
         equity_metrics = _make_equity_metrics()
         fi = _make_fi_metrics()
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             equity_metrics, asset_class="fixed_income", fi_metrics=fi,
             config=custom_config,
         )
+        score = result.score
+        components = result.components
         assert isinstance(score, float)
         assert "yield_consistency" in components
 
@@ -184,9 +191,10 @@ class TestFallbackToEquity:
     def test_fi_asset_class_without_fi_metrics_falls_back(self) -> None:
         """If asset_class=fixed_income but fi_metrics=None, use equity scoring."""
         metrics = _make_equity_metrics()
-        score, components = compute_fund_score(
+        result = compute_fund_score(
             metrics, asset_class="fixed_income", fi_metrics=None,
         )
+        components = result.components
         # Should produce equity components, not FI
         assert "return_consistency" in components
         assert "yield_consistency" not in components
