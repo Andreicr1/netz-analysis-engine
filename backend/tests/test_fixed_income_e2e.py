@@ -375,7 +375,7 @@ class TestFIScoringCredibilityFix:
             empirical_duration=6.0,
             credit_beta=1.2,
             yield_proxy_12m=0.05,  # 5% yield
-            duration_adj_drawdown_1y=-0.8,  # excellent: -0.8% per unit duration
+            duration_adj_drawdown_1y=-0.008,  # excellent: -0.8% per unit duration (decimal scale post-Q61)
         )
 
         # Same fund's equity metrics are mediocre:
@@ -425,7 +425,7 @@ class TestFIScoringCredibilityFix:
             empirical_duration=10.0,  # high duration
             credit_beta=3.5,  # excessive credit risk
             yield_proxy_12m=0.02,  # low yield
-            duration_adj_drawdown_1y=-2.5,  # terrible
+            duration_adj_drawdown_1y=-0.025,  # terrible: -2.5% per unit duration (decimal scale post-Q61)
         )
         risk_adapter = _RiskMetricsAdapter(
             return_1y=-0.05,
