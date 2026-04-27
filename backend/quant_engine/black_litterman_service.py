@@ -120,6 +120,19 @@ def compute_bl_posterior_multi_view(
             f"tau must be a positive finite scalar (typical: 0.025–0.10); got {tau}"
         )
 
+    # ── PR-Q44 (S05-F11 Tier 1): validate mu_prior + sigma finite ───────
+    mu_prior = np.asarray(mu_prior, dtype=np.float64)
+    if not np.all(np.isfinite(mu_prior)):
+        raise ValueError(
+            f"mu_prior contains non-finite values "
+            f"({int(np.sum(~np.isfinite(mu_prior)))} of {mu_prior.size}); "
+            f"caller must validate inputs before BL posterior computation"
+        )
+    if not np.all(np.isfinite(sigma)):
+        raise ValueError(
+            "sigma contains non-finite values; caller must validate covariance"
+        )
+
     n = sigma.shape[0]
 
     if views:
@@ -191,12 +204,26 @@ def compute_bl_posterior_multi_view(
     # Solve via linear systems — no np.linalg.inv in this module (PR-Q19 Fix 5).
     # sigma^{-1} via solve is numerically superior for near-singular covariance
     # (e.g. 12 funds in same Vanguard share-class family, cond ≈ 1e15).
-    tau_sigma_inv_mu = np.linalg.solve(tau * sigma, mu_prior)         # (τΣ)⁻¹ · μ
-    tau_sigma_inv_I = np.linalg.solve(tau * sigma, np.eye(n))         # (τΣ)⁻¹
+    try:
+        tau_sigma_inv_mu = np.linalg.solve(tau * sigma, mu_prior)         # (τΣ)⁻¹ · μ
+        tau_sigma_inv_I = np.linalg.solve(tau * sigma, np.eye(n))         # (τΣ)⁻¹
 
-    M = tau_sigma_inv_I + P_stack.T @ np.linalg.solve(Omega_reg, P_stack)
-    rhs = tau_sigma_inv_mu + P_stack.T @ np.linalg.solve(Omega_reg, Q_stack)
-    mu_post = np.linalg.solve(M, rhs)
+        M = tau_sigma_inv_I + P_stack.T @ np.linalg.solve(Omega_reg, P_stack)
+        rhs = tau_sigma_inv_mu + P_stack.T @ np.linalg.solve(Omega_reg, Q_stack)
+        mu_post = np.linalg.solve(M, rhs)
+    except np.linalg.LinAlgError as e:
+        raise ValueError(
+            f"BL posterior computation failed: singular or ill-conditioned matrix "
+            f"(prior covariance, view covariance, or posterior precision). "
+            f"Common cause: flat-NAV asset producing rank-deficient sigma. "
+            f"Original error: {e}"
+        ) from e
+
+    if not np.all(np.isfinite(mu_post)):
+        raise ValueError(
+            "BL posterior produced non-finite output despite finite inputs; "
+            "likely numerical instability in Σ or Ω inversion"
+        )
 
     logger.info(
         "bl_posterior_multi_view",
