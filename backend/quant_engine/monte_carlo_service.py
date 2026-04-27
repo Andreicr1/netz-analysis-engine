@@ -12,6 +12,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
+import structlog
+
+logger = structlog.get_logger()
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +29,8 @@ class MonteCarloResult:
     std: float = 0.0
     historical_value: float = 0.0
     confidence_bars: list[dict[str, object]] = field(default_factory=list)
+    degraded: bool = False
+    degraded_reason: str | None = None
 
 
 def _block_bootstrap_paths(
@@ -170,14 +175,45 @@ def run_monte_carlo(
         Random seed for reproducibility.
 
     """
-    if len(daily_returns) < 42:
+    n = len(daily_returns)
+    if n < 42:
         return MonteCarloResult(
             n_simulations=0,
             statistic=statistic,
+            degraded=True,
+            degraded_reason=f"insufficient_history: T={n} (min 42)",
         )
 
     if horizons is None:
         horizons = [252, 756, 1260, 1764, 2520]
+
+    # ── S05-F04 fix: T-to-horizon ratio guard ────────────────────────
+    # Block bootstrap with T close to block_size and horizon >> T
+    # produces percentile bands cycling the same few monthly windows
+    # rather than genuine diversification.  Calibrate guard at:
+    #   T < min(max_horizon * 0.1, 252)
+    # 10% of horizon is conservative for monthly-block bootstrap;
+    # 252 cap allows short funds to still produce 1Y projections.
+    max_horizon = max(horizons)
+    min_t_required = min(int(max_horizon * 0.1), 252)
+    if n < min_t_required:
+        logger.warning(
+            "monte_carlo_t_to_horizon_ratio_insufficient",
+            T=n,
+            max_horizon=max_horizon,
+            min_t_required=min_t_required,
+            ratio_pct=round(100 * n / max_horizon, 2),
+        )
+        return MonteCarloResult(
+            n_simulations=0,
+            statistic=statistic,
+            degraded=True,
+            degraded_reason=(
+                f"insufficient_history_for_horizon: T={n}, max_horizon={max_horizon}; "
+                f"need T >= {min_t_required} (10% of horizon, capped at 252) "
+                f"for non-degenerate block bootstrap"
+            ),
+        )
 
     rng = np.random.RandomState(seed)
 
