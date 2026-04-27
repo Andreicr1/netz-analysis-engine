@@ -411,10 +411,12 @@ def _compute_fi_score(
     components["spread_capture"] = _peaked_score(cb, target=1.0, half_range=1.0)
 
     # duration_adjusted_drawdown: drawdown per unit of duration.
-    # Range: -5.0 (terrible) to 0.0 (no drawdown). Higher is better.
+    # Bounds at decimal scale ([-0.05, 0]) — max_drawdown_1y is stored as a
+    # decimal fraction (-0.10 = -10%); dad ranges roughly [-0.05, 0] for
+    # realistic FI funds (10% drawdown over 2y duration → -0.05).
     dad = float(fi.duration_adj_drawdown_1y) if fi.duration_adj_drawdown_1y is not None else None
     val, was_synth = _normalize_with_provenance(
-        dad, -5.0, 0.0, pm.get("duration_adjusted_drawdown"),
+        dad, -0.05, 0.0, pm.get("duration_adjusted_drawdown"),
     )
     components["duration_adjusted_drawdown"] = val
     if was_synth:
