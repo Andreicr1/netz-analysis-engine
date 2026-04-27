@@ -62,6 +62,17 @@ def compute_composite_nav(
     if weight_sum <= 0:
         return []
 
+    # ── F08 fix: weights must sum to ~1.0 per §3.4 contract ─────────
+    # A composite benchmark by definition allocates 100% across constituents.
+    # Tolerance 1e-4 absorbs float rounding; anything beyond is a caller
+    # input bug that would silently scale the composite return series.
+    if abs(weight_sum - 1.0) > 1e-4:
+        raise ValueError(
+            f"block_weights must sum to 1.0 (within 1e-4); got {weight_sum:.6f}. "
+            f"§3.4 contract: composite benchmark weights are by definition "
+            f"a unit allocation. Caller must normalize or correct input."
+        )
+
     # ── F01 fix: enforce latest-common-inception start date ─────────
     # A fixed-weight composite cannot exist before all constituents have
     # data.  Earlier dates would require phantom 100% weight on the

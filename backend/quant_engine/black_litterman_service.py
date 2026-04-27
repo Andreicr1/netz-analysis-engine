@@ -388,6 +388,12 @@ def compute_bl_returns(
             p_row[long_idx] = 1.0
             p_row[short_idx] = -1.0
         else:
+            logger.warning(
+                "bl_legacy_unknown_view_type_skipped",
+                view_index=i,
+                view_type=vtype,
+                note="legacy compute_bl_returns; production uses compute_bl_posterior_multi_view",
+            )
             continue
 
         # Idzorek-style omega mapping:
@@ -426,7 +432,7 @@ def compute_bl_returns(
     # extreme tilts.
     try:
         prior_view = P @ pi                              # (K,)
-        view_cov = P @ sigma @ P.T                       # (K, K)
+        view_cov = P @ (tau_eff * sigma) @ P.T              # (K, K) — τΣ, not Σ
         view_sigma = np.sqrt(np.maximum(np.diag(view_cov), 0.0))
         residual = np.abs(Q - prior_view)
         threshold = 3.0 * view_sigma
