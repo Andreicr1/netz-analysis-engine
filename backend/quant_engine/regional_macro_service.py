@@ -124,7 +124,7 @@ REGION_SERIES: dict[str, list[SeriesSpec]] = {
         SeriesSpec("UNRATE", "labor", "Unemployment Rate", "monthly", invert=True),
         SeriesSpec("JTSJOL", "labor", "JOLTS Openings", "monthly"),
         SeriesSpec("SAHMREALTIME", "labor", "Sahm Rule", "monthly", invert=True),
-        SeriesSpec("CFNAI", "activity", "Chicago Fed National Activity Index", "monthly"),
+        SeriesSpec("CFNAI", "growth", "Chicago Fed National Activity Index", "monthly"),
         SeriesSpec("UMCSENT", "sentiment", "Michigan Consumer Sentiment", "monthly"),
     ],
     "EUROPE": [
@@ -881,7 +881,7 @@ def score_global_indicators(
     energy_price = _avg_score(["DCOILWTICO", "DCOILBRENTEU", "DHHNGSP"])
     energy_reserves = _avg_score(["WCSSTUS1", "WCESTUS1"])
     # Low reserves + high prices = stress
-    energy_stress = round((energy_price * 0.6 + (100.0 - energy_reserves) * 0.4), 2)
+    energy_stress = round(((100.0 - energy_price) * 0.6 + (100.0 - energy_reserves) * 0.4), 2)
 
     # Commodity stress: per-series invert from registry
     commodity = _avg_score(["PCOPPUSDM", "GOLDAMGBD228NLBM", "PFERTINDEXM"])
