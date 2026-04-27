@@ -292,7 +292,13 @@ class RegimeResult:
     regime: str
     description: str | None = None
     reasons: dict[str, str] = field(default_factory=dict)
+    degraded: bool = False
+    degraded_reason: str | None = None
 
+
+# Minimum base-weight coverage to trust non-defensive classification (F11).
+# Below this threshold AND stress < 50 → clamp to RISK_OFF.
+INSUFFICIENT_COVERAGE_THRESHOLD = 0.40
 
 # Asymmetric severity ranking for hysteresis.
 # Higher = more severe. CRISIS entry should be immediate;
@@ -601,10 +607,14 @@ def classify_regime_multi_signal(
                 f"RISK_ON: single-signal {label}={sub_score:.0f}/100 "
                 "(degraded confidence — only 1 signal available)"
             )
+        reasons["_degraded"] = "true"
+        reasons["_degraded_reason"] = "single_signal_degraded_confidence"
         return regime, reasons, []
 
     if len(signals) == 0:
         reasons["decision"] = "RISK_OFF: no signals available — defensive default"
+        reasons["_degraded"] = "true"
+        reasons["_degraded_reason"] = "no_signals_available"
         return "RISK_OFF", reasons, []
 
     # Step 1: renormalize base weights for available signals
@@ -661,6 +671,26 @@ def classify_regime_multi_signal(
     else:
         regime = "RISK_ON"
         reasons["decision"] = f"RISK_ON: composite stress {stress_score}/100 — benign conditions"
+
+    # F11: clamp insufficient base-weight coverage to defensive RISK_OFF.
+    # weight_sum holds the pre-renormalization sum of base weights for available
+    # signals. If coverage is too thin AND stress isn't already CRISIS-level,
+    # renormalization silently amplifies thin evidence into optimistic RISK_ON.
+    # Exempt INFLATION: CPI override is a structural check independent of
+    # financial signal coverage — it should not be downgraded by thin coverage.
+    if weight_sum < INSUFFICIENT_COVERAGE_THRESHOLD and stress_score < 50.0 and regime != "INFLATION":
+        regime = "RISK_OFF"
+        reasons["insufficient_signal_coverage"] = (
+            f"base_weight_sum={weight_sum:.2f} < {INSUFFICIENT_COVERAGE_THRESHOLD}; "
+            f"clamped to RISK_OFF (defensive default — too few signals to classify reliably)"
+        )
+        reasons["decision"] = (
+            f"RISK_OFF: insufficient signal coverage "
+            f"(base_weight_sum={weight_sum:.2f} < {INSUFFICIENT_COVERAGE_THRESHOLD}, "
+            f"stress={stress_score}/100 < 50 — defensive clamp)"
+        )
+        reasons["_degraded"] = "true"
+        reasons["_degraded_reason"] = "insufficient_signal_coverage"
 
     # ── Build structured signal breakdown ──
     base_weight_map = {label: w for label, _, w, _ in base_signals}
@@ -745,6 +775,8 @@ def detect_regime(
             regime=default,
             description=defn["description"] if defn is not None else None,
             reasons={"decision": "insufficient data, using default"},
+            degraded=True,
+            degraded_reason="insufficient_data",
         )
 
     clean = returns[np.isfinite(returns)] if returns.size else returns
@@ -766,6 +798,8 @@ def detect_regime(
             regime=default,
             description=defn["description"] if defn is not None else None,
             reasons={"decision": "insufficient data after non-finite filter, using default"},
+            degraded=True,
+            degraded_reason="insufficient_clean_data",
         )
 
     vol = float(np.std(clean) * np.sqrt(trading_days_per_year))
@@ -776,6 +810,8 @@ def detect_regime(
             regime=default,
             description=defn["description"] if defn is not None else None,
             reasons={"decision": "non-finite volatility computed, using default"},
+            degraded=True,
+            degraded_reason="non_finite_volatility",
         )
 
     regime = classify_regime_from_volatility(
@@ -1282,7 +1318,9 @@ async def get_current_regime(
     """
     inputs = await build_regime_inputs(db, as_of_date=as_of_date)
 
-    if inputs.get("vix") is not None or inputs.get("hy_oas") is not None or inputs.get("energy_shock") is not None:
+    # F03: admit classification with ANY fresh signal, not only VIX/HY/energy_shock.
+    has_any_signal = any(v is not None for v in inputs.values())
+    if has_any_signal:
         regime, reasons, _ = classify_regime_multi_signal(
             vix=inputs.get("vix"),
             yield_curve_spread=inputs.get("yield_curve_spread"),
@@ -1299,6 +1337,10 @@ async def get_current_regime(
             credit_impulse=inputs.get("credit_impulse"),
             permits_roc=inputs.get("permits_roc"),
         )
+        # Extract reserved degraded keys before building RegimeRead
+        is_degraded = reasons.pop("_degraded", "false") == "true"
+        degraded_reason = reasons.pop("_degraded_reason", None)
+
         stmt = (
             select(MacroData.obs_date)
             .where(MacroData.series_id.in_(REGIME_SERIES_STALENESS.keys()))
@@ -1306,7 +1348,13 @@ async def get_current_regime(
             .limit(1)
         )
         as_of_row = (await db.execute(stmt)).scalar_one_or_none()
-        return RegimeRead(regime=regime, as_of_date=as_of_row, reasons=reasons)
+        return RegimeRead(
+            regime=regime,
+            as_of_date=as_of_row,
+            reasons=reasons,
+            degraded=is_degraded,
+            degraded_reason=degraded_reason,
+        )
 
     logger.warning(
         "regime_default_fallback",
@@ -1321,4 +1369,6 @@ async def get_current_regime(
     return RegimeRead(
         regime=fallback_regime,
         reasons={"source": "caller_fallback", "fallback": fallback_regime},
+        degraded=True,
+        degraded_reason="no_signals_available",
     )

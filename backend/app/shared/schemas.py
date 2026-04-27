@@ -22,6 +22,8 @@ class RegimeRead(BaseModel):
     as_of_date: date | None = None
     profiles: dict[str, str] | None = None
     reasons: dict[str, str] | None = None
+    degraded: bool = False
+    degraded_reason: str | None = None
 
 
 @dataclass
