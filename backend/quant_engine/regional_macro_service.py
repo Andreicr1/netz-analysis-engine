@@ -98,6 +98,7 @@ class SeriesSpec:
     label: str
     frequency: str  # "daily", "weekly", "monthly", "quarterly"
     invert: bool = False  # True = higher value means worse conditions
+    units: str = "lin"  # FRED transform: lin, pch, pc1, ch1, pca, cch, cca, log
 
 
 # Limit per frequency for 10yr lookback
@@ -112,10 +113,10 @@ FREQUENCY_LIMITS: dict[str, int] = {
 REGION_SERIES: dict[str, list[SeriesSpec]] = {
     "US": [
         SeriesSpec("A191RL1Q225SBEA", "growth", "Real GDP Growth", "quarterly"),
-        SeriesSpec("INDPRO", "growth", "Industrial Production", "monthly"),
-        SeriesSpec("PAYEMS", "growth", "Nonfarm Payrolls", "monthly"),
-        SeriesSpec("CPIAUCSL", "inflation", "CPI All Urban", "monthly", invert=True),
-        SeriesSpec("PCEPILFE", "inflation", "Core PCE", "monthly", invert=True),
+        SeriesSpec("INDPRO", "growth", "Industrial Production", "monthly", units="pc1"),
+        SeriesSpec("PAYEMS", "growth", "Nonfarm Payrolls", "monthly", units="pc1"),
+        SeriesSpec("CPIAUCSL", "inflation", "CPI All Urban", "monthly", invert=True, units="pc1"),
+        SeriesSpec("PCEPILFE", "inflation", "Core PCE", "monthly", invert=True, units="pc1"),
         SeriesSpec("DFF", "monetary", "Fed Funds Rate", "daily", invert=True),
         SeriesSpec("DGS10", "monetary", "10Y Treasury", "daily"),
         SeriesSpec("DGS2", "monetary", "2Y Treasury", "daily"),
@@ -128,19 +129,19 @@ REGION_SERIES: dict[str, list[SeriesSpec]] = {
         SeriesSpec("UMCSENT", "sentiment", "Michigan Consumer Sentiment", "monthly"),
     ],
     "EUROPE": [
-        SeriesSpec("CLVMNACSCAB1GQEA19", "growth", "Euro Area Real GDP", "quarterly"),
-        SeriesSpec("CP0000EZ19M086NEST", "inflation", "Eurostat HICP EA19", "monthly", invert=True),
+        SeriesSpec("CLVMNACSCAB1GQEA19", "growth", "Euro Area Real GDP", "quarterly", units="pc1"),
+        SeriesSpec("CP0000EZ19M086NEST", "inflation", "Eurostat HICP EA19", "monthly", invert=True, units="pc1"),
         SeriesSpec("ECBDFR", "monetary", "ECB Deposit Facility Rate", "daily", invert=True),
         SeriesSpec("IRLTLT01DEM156N", "monetary", "German 10Y Bund", "monthly"),
         SeriesSpec("BAMLHE00EHYIEY", "financial_conditions", "Euro HY Effective Yield", "daily", invert=True),
         SeriesSpec("CSCICP02EZM460S", "sentiment", "Consumer Confidence EA19", "monthly"),
     ],
     "ASIA": [
-        SeriesSpec("JPNRGDPEXP", "growth", "Japan Real GDP", "quarterly"),
+        SeriesSpec("JPNRGDPEXP", "growth", "Japan Real GDP", "quarterly", units="pc1"),
         SeriesSpec("CHNLOLITOAASTSAM", "growth", "China CLI Amplitude-Adjusted", "monthly"),
         SeriesSpec("JPNLOLITOAASTSAM", "growth", "Japan CLI Amplitude-Adjusted", "monthly"),
-        SeriesSpec("JPNCPIALLMINMEI", "inflation", "Japan CPI", "monthly", invert=True),
-        SeriesSpec("CHNCPIALLMINMEI", "inflation", "China CPI", "monthly", invert=True),
+        SeriesSpec("JPNCPIALLMINMEI", "inflation", "Japan CPI", "monthly", invert=True, units="pc1"),
+        SeriesSpec("CHNCPIALLMINMEI", "inflation", "China CPI", "monthly", invert=True, units="pc1"),
         SeriesSpec("IRLTLT01JPM156N", "monetary", "10Y JGB Yield", "monthly"),
         SeriesSpec("BAMLEMRACRPIASIAOAS", "financial_conditions", "Asia EM Corp OAS", "daily", invert=True),
     ],
@@ -148,8 +149,8 @@ REGION_SERIES: dict[str, list[SeriesSpec]] = {
         SeriesSpec("BRALOLITOAASTSAM", "growth", "Brazil CLI Amplitude-Adjusted", "monthly"),
         SeriesSpec("INDLOLITOAASTSAM", "growth", "India CLI Amplitude-Adjusted", "monthly"),
         SeriesSpec("MEXLOLITONOSTSAM", "growth", "Mexico CLI Normalized", "monthly"),
-        SeriesSpec("BRACPIALLMINMEI", "inflation", "Brazil CPI", "monthly", invert=True),
-        SeriesSpec("INDCPIALLMINMEI", "inflation", "India CPI", "monthly", invert=True),
+        SeriesSpec("BRACPIALLMINMEI", "inflation", "Brazil CPI", "monthly", invert=True, units="pc1"),
+        SeriesSpec("INDCPIALLMINMEI", "inflation", "India CPI", "monthly", invert=True, units="pc1"),
         SeriesSpec("INTDSRBRM193N", "monetary", "Brazil SELIC", "monthly", invert=True),
         SeriesSpec("BAMLEMCBPIOAS", "financial_conditions", "EM Corp OAS", "daily", invert=True),
     ],
@@ -276,6 +277,7 @@ def build_fetch_configs(
                 "limit": FREQUENCY_LIMITS.get(s.frequency, 120),
                 "observation_start": observation_start,
                 "sort_order": "asc",
+                "units": s.units,
             })
         batches[region] = configs
 
@@ -304,6 +306,7 @@ def build_fetch_configs(
             "limit": FREQUENCY_LIMITS.get(s.frequency, 120),
             "observation_start": observation_start,
             "sort_order": "asc",
+            "units": s.units,
         })
     if credit_configs:
         batches["CREDIT"] = credit_configs
