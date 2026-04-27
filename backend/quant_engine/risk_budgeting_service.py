@@ -44,6 +44,8 @@ class RiskBudgetResult:
     portfolio_etl: float
     portfolio_starr: float | None = None
     funds: list[FundRiskBudget] = field(default_factory=list)
+    degraded: bool = False
+    degraded_reason: str | None = None
 
 
 def _portfolio_etl(returns: np.ndarray, confidence: float = 0.95) -> float:
@@ -83,7 +85,12 @@ def compute_risk_budget(
     T, N = returns_matrix.shape
 
     if T < 30 or N < 1:
-        return RiskBudgetResult(portfolio_volatility=0.0, portfolio_etl=0.0)
+        return RiskBudgetResult(
+            portfolio_volatility=0.0,
+            portfolio_etl=0.0,
+            degraded=True,
+            degraded_reason=f"insufficient_observations: T={T} (min 30), N={N} (min 1)",
+        )
 
     w = weights.copy()
 
@@ -134,7 +141,7 @@ def compute_risk_budget(
     # Implied Return (vol) = STARR * MCTR_i (re-using portfolio STARR)
     # Implied Return (etl) = STARR * MCETL_i
     implied_vol = port_starr * mctr  # (N,)
-    implied_etl = port_starr * mcetl  # (N,)
+    implied_etl = port_starr * np.abs(mcetl)  # (N,) — abs converts negative risk marginal to expected-return space
 
     # Per-fund mean returns
     fund_means = np.mean(returns_matrix, axis=0)  # (N,)
