@@ -378,10 +378,10 @@ def classify_regime_multi_signal(
     CPI override: inflation above threshold triggers INFLATION regime
     regardless of stress score.
 
-    Profile A base weights (40% financial / 60% real-economy).
+    Profile A base weights (30% financial / 70% real-economy).
     Dynamic amplification via _amplify_weights() boosts extreme signals.
 
-    === FINANCIAL SIGNALS (40%) — react within days ===
+    === FINANCIAL SIGNALS (30%) — react within days ===
         VIX (10%):              Implied vol. LT avg ~19, ramp 18→35.
         HY OAS (12%):           US HY credit spread. Normal ~3.0, stress >5.0.
         Energy Shock (12%):     Composite of WTI Z-score (1Y) and WTI RoC (3m),
@@ -391,7 +391,7 @@ def classify_regime_multi_signal(
         DXY Z-score (8%):       Dollar strength surprise → global liquidity crunch.
         BAA spread (5%):        Corporate credit risk → real economy stress.
 
-    === REAL-ECONOMY SIGNALS (60%) — structural, weeks-to-months lag ===
+    === REAL-ECONOMY SIGNALS (70%) — structural, weeks-to-months lag ===
         CFNAI (18%):            Chicago Fed National Activity Index. Composite
                                 of 85 indicators (production, employment,
                                 consumption, sales). 0 = trend growth, below
@@ -430,10 +430,10 @@ def classify_regime_multi_signal(
     # ── Multi-factor stress scoring ──
     # Each signal produces a sub-score 0-100 via _ramp().
     # Weighted sum → composite stress score (0-100).
-    # Two layers: financial (55%) + real economy (45%).
+    # Two layers: financial (30%) + real economy (70%).
     signals: list[tuple[str, float, float, str]] = []  # (label, sub_score, weight, reason)
 
-    # ═══ FINANCIAL SIGNALS (55%) ═══
+    # ═══ FINANCIAL SIGNALS (30%) ═══
 
     # VIX (10%): implied vol. LT avg ~19, ramp 18→35
     if vix is not None:
@@ -450,7 +450,7 @@ def classify_regime_multi_signal(
         s = _ramp(dxy_zscore, calm=0.0, panic=2.0)
         signals.append(("dxy", s, 0.08, f"DXY_z={dxy_zscore:+.2f}σ (stress={s:.0f}/100)"))
 
-    # ═══ SLOW SIGNALS (45%) — structural, weeks-to-months lag ═══
+    # ═══ SLOW SIGNALS (70%) — structural, weeks-to-months lag ═══
 
     # Energy Shock Composite (10%): fuses WTI symmetric Z-score (1Y) and WTI
     # RoC (3m) into a single signal via max(). The Z-score is symmetric so a
@@ -1155,7 +1155,7 @@ async def build_regime_inputs(
             if crude_z is not None
             else 0.0
         )
-        roc_score = _ramp(crude_roc, calm=0.0, panic=50.0) if crude_roc is not None else 0.0
+        roc_score = _ramp(abs(crude_roc), calm=0.0, panic=50.0) if crude_roc is not None else 0.0
         energy_shock = max(z_score, roc_score)
 
     # ── CFNAI ──
