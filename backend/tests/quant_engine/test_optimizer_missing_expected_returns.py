@@ -36,6 +36,7 @@ async def test_optimize_portfolio_succeeds_with_complete_expected_returns():
                 BlockConstraint("a", 0.0, 1.0),
                 BlockConstraint("b", 0.0, 1.0),
             ],
+            max_single_fund_weight=1.0,
         ),
     )
     assert result.status in ("optimal", "optimal_inaccurate")
