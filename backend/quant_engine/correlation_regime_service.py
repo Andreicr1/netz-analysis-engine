@@ -454,8 +454,8 @@ def compute_correlation_regime(
         avg_corr = 0.0
         avg_corr_base = 0.0
 
-    # Regime shift
-    regime_shift = (avg_corr - avg_corr_base) > cfg["contagion_threshold"]
+    # Regime shift — PR-Q36 F03: symmetric detection (both contagion and dispersion)
+    regime_shift = abs(avg_corr - avg_corr_base) > cfg["contagion_threshold"]
 
     # Convert correlation matrix to nested tuples
     corr_tuples = tuple(

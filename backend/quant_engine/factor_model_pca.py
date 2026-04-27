@@ -34,8 +34,21 @@ def compute_residual_pca(
     """Compute PCA on residuals for diagnostic purposes.
 
     Diagnostic only — never feeds back into covariance estimation.
+
+    PR-Q36 F09: returns empty diagnostic when T < 2 to avoid division
+    by zero in ``S**2 / (T - 1)``.
     """
     T, N = residual_series.shape
+
+    # PR-Q36 F09: guard against T < 2 (single-observation panel)
+    if T < 2:
+        n_comp = min(n_components, N)
+        return PCADiagnostic(
+            explained_variance_ratio=np.zeros(n_comp, dtype=np.float64),
+            cumulative_variance=0.0,
+            top_loadings=[],
+        )
+
     n_comp = min(n_components, T - 1, N)
 
     # Demean residuals
