@@ -33,20 +33,20 @@ def _block_bootstrap_paths(
     n_simulations: int,
     horizon: int,
     block_size: int = 21,
-    rng: np.random.RandomState | None = None,
+    rng: np.random.Generator | None = None,
 ) -> np.ndarray:
     """Generate bootstrapped return paths via block bootstrap.
 
     Returns (n_simulations, horizon) array of simulated daily returns.
     """
     if rng is None:
-        rng = np.random.RandomState()
+        rng = np.random.default_rng()
 
     n = len(daily_returns)
     n_blocks = (horizon + block_size - 1) // block_size
 
     # Pre-compute all block start indices
-    starts = rng.randint(0, n - block_size + 1, size=(n_simulations, n_blocks))
+    starts = rng.integers(0, n - block_size + 1, size=(n_simulations, n_blocks))
 
     paths = np.empty((n_simulations, n_blocks * block_size))
     for b in range(n_blocks):
@@ -179,7 +179,7 @@ def run_monte_carlo(
     if horizons is None:
         horizons = [252, 756, 1260, 1764, 2520]
 
-    rng = np.random.RandomState(seed)
+    rng = np.random.default_rng(seed)
 
     # Primary simulation at the longest horizon
     primary_horizon = max(horizons)

@@ -17,7 +17,7 @@ from quant_engine.monte_carlo_service import (
 
 def _make_daily_returns(n_days: int = 504, seed: int = 42) -> np.ndarray:
     """Generate synthetic daily returns (~2 years)."""
-    rng = np.random.RandomState(seed)
+    rng = np.random.default_rng(seed)
     return rng.normal(0.0003, 0.01, n_days)
 
 
@@ -35,7 +35,7 @@ class TestBlockBootstrap:
         daily = _make_daily_returns()
         paths = _block_bootstrap_paths(
             daily, n_simulations=10, horizon=63, block_size=21,
-            rng=np.random.RandomState(0),
+            rng=np.random.default_rng(0),
         )
         original_set = set(daily.tolist())
         for i in range(paths.shape[0]):
@@ -47,7 +47,7 @@ class TestBlockBootstrap:
         daily = _make_daily_returns()
         paths = _block_bootstrap_paths(
             daily, n_simulations=1, horizon=42, block_size=21,
-            rng=np.random.RandomState(7),
+            rng=np.random.default_rng(7),
         )
         path = paths[0]
         # First block of 21 should appear contiguously in daily
