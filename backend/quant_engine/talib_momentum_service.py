@@ -162,7 +162,7 @@ def compute_flow_momentum(
         if nav_arr[i] >= nav_arr[i - 1]:
             flow_obv[i] = flow_obv[i - 1] + flow_arr[i]
         else:
-            flow_obv[i] = flow_obv[i - 1] - flow_arr[i]
+            flow_obv[i] = flow_obv[i - 1] - abs(flow_arr[i])  # F02 fix: take magnitude on NAV-down so outflows always subtract (no double-negation)
 
     # Linear slope of OBV over the last `period` days
     tail = flow_obv[-period:]
