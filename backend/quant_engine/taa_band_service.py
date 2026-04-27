@@ -258,12 +258,12 @@ def resolve_effective_bands(
 
     # ── Read smoothed centers from regime state ──
     smoothed_centers: dict[str, float] = taa_regime_state.get("smoothed_centers", {})
-    raw_regime: str = taa_regime_state.get("raw_regime", "RISK_ON")
+    raw_regime: str = taa_regime_state.get("raw_regime", "RISK_OFF")
     stress_score: float | None = taa_regime_state.get("stress_score")
 
     # Get half-widths from config for the current regime
     regime_bands = config.get("regime_bands", {})
-    regime_config = regime_bands.get(raw_regime, regime_bands.get("RISK_ON", {}))
+    regime_config = regime_bands.get(raw_regime, regime_bands.get("RISK_OFF", {}))
     half_widths: dict[str, float] = {
         ac: band_cfg.get("half_width", 0.05)
         for ac, band_cfg in regime_config.items()
@@ -378,7 +378,7 @@ def get_regime_centers_for_regime(
     """
     cfg = config or DEFAULT_TAA_BANDS
     regime_bands = cfg.get("regime_bands", {})
-    band_config = regime_bands.get(regime, regime_bands.get("RISK_ON", {}))
+    band_config = regime_bands.get(regime, regime_bands.get("RISK_OFF", {}))
     return {
         ac: float(band_cfg["center"])
         for ac, band_cfg in band_config.items()

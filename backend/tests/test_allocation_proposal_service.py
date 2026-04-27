@@ -299,11 +299,11 @@ class TestExtractors:
 
     def test_extract_regime_from_review_without_regime(self):
         report = {"type": "weekly", "score_deltas": []}
-        assert extract_regime_from_review(report) == "RISK_ON"
+        assert extract_regime_from_review(report) == "RISK_OFF"
 
     def test_extract_regime_from_review_none_regime(self):
         report = {"regime": None}
-        assert extract_regime_from_review(report) == "RISK_ON"
+        assert extract_regime_from_review(report) == "RISK_OFF"
 
     def test_extract_regional_scores(self):
         snapshot = {

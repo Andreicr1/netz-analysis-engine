@@ -429,11 +429,11 @@ class TestRegimeCenters:
         assert abs(centers["equity"] - 0.25) < 1e-6
         assert abs(centers["cash"] - 0.25) < 1e-6
 
-    def test_unknown_regime_falls_back_to_risk_on(self):
-        """Unknown regime should fall back to RISK_ON."""
+    def test_unknown_regime_falls_back_to_risk_off(self):
+        """Unknown regime should fall back to RISK_OFF (defensive)."""
         centers = get_regime_centers_for_regime("UNKNOWN_REGIME")
-        risk_on = get_regime_centers_for_regime("RISK_ON")
-        assert centers == risk_on
+        risk_off = get_regime_centers_for_regime("RISK_OFF")
+        assert centers == risk_off
 
 
 # ---------------------------------------------------------------------------
