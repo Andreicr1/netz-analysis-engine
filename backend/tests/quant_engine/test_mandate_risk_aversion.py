@@ -95,3 +95,76 @@ def test_invariant_explicit_override_in_range_wins():
     assert resolve_risk_aversion(3.0, "aggressive") == 3.0
     assert resolve_risk_aversion(RA_MIN, "aggressive") == RA_MIN
     assert resolve_risk_aversion(RA_MAX, "aggressive") == RA_MAX
+
+
+# ── Regression tests for S04-F04 (Tier 1) ──────────────────────────────────
+
+
+def test_zero_override_falls_through_to_mandate():
+    """A zero risk_aversion override must NOT clamp to RA_MIN; it must fall
+    through to the mandate label. Conservative → 4.5, not 0.5."""
+    assert resolve_risk_aversion(0.0, "conservative") == 4.5
+
+
+def test_zero_override_no_mandate_returns_default():
+    """Zero override + no mandate → DEFAULT_RISK_AVERSION (2.5)."""
+    assert resolve_risk_aversion(0.0, None) == DEFAULT_RISK_AVERSION
+
+
+def test_negative_override_falls_through_to_mandate():
+    """Any negative risk_aversion override must fall through to mandate."""
+    assert resolve_risk_aversion(-1.0, "conservative") == 4.5
+    assert resolve_risk_aversion(-100.0, "aggressive") == 1.5
+
+
+def test_negative_override_no_mandate_returns_default():
+    assert resolve_risk_aversion(-1.0, None) == DEFAULT_RISK_AVERSION
+
+
+def test_negative_override_unknown_mandate_returns_default():
+    assert resolve_risk_aversion(-1.0, "made_up_mandate") == DEFAULT_RISK_AVERSION
+
+
+# ── Existing-behavior preservation (must continue to pass) ─────────────────
+
+
+def test_finite_in_range_override_returned_as_is():
+    """Positive in-range override is returned unchanged."""
+    assert resolve_risk_aversion(2.5, "conservative") == 2.5
+    assert resolve_risk_aversion(0.7, "aggressive") == 0.7
+
+
+def test_positive_below_min_clamps_to_min():
+    """Positive below RA_MIN clamps to RA_MIN (intended behavior, unchanged)."""
+    assert resolve_risk_aversion(0.3, "conservative") == RA_MIN
+    assert resolve_risk_aversion(0.1, None) == RA_MIN
+
+
+def test_above_max_clamps_to_max():
+    """Above RA_MAX clamps to RA_MAX (unchanged)."""
+    assert resolve_risk_aversion(15.0, "conservative") == RA_MAX
+    assert resolve_risk_aversion(100.0, None) == RA_MAX
+
+
+def test_nan_override_falls_through_to_mandate():
+    assert resolve_risk_aversion(float("nan"), "conservative") == 4.5
+    assert resolve_risk_aversion(float("nan"), None) == DEFAULT_RISK_AVERSION
+
+
+def test_inf_override_falls_through_to_mandate():
+    assert resolve_risk_aversion(float("inf"), "conservative") == 4.5
+    assert resolve_risk_aversion(float("-inf"), "conservative") == 4.5
+
+
+def test_no_override_returns_mandate():
+    assert resolve_risk_aversion(None, "conservative") == 4.5
+    assert resolve_risk_aversion(None, "moderate") == 2.5
+    assert resolve_risk_aversion(None, "aggressive") == 1.5
+
+
+def test_no_override_no_mandate_returns_default():
+    assert resolve_risk_aversion(None, None) == DEFAULT_RISK_AVERSION
+
+
+def test_unknown_mandate_returns_default():
+    assert resolve_risk_aversion(None, "speculative") == DEFAULT_RISK_AVERSION

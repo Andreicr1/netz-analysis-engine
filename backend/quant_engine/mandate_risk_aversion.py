@@ -82,23 +82,23 @@ def resolve_risk_aversion(
                 value=risk_aversion,
             )
             # Fall through to mandate
-        else:
-            if risk_aversion < RA_MIN or risk_aversion > RA_MAX:
-                clamped = max(RA_MIN, min(RA_MAX, risk_aversion))
-                logger.warning(
-                    "risk_aversion_out_of_range_clamped",
-                    value=risk_aversion,
-                    clamped_to=clamped,
-                    range=(RA_MIN, RA_MAX),
-                )
-                return float(clamped)
-            if risk_aversion > 0:
-                return float(risk_aversion)
+        elif risk_aversion <= 0:
             logger.warning(
                 "non_positive_risk_aversion_discarded",
                 value=risk_aversion,
             )
             # Fall through to mandate
+        elif risk_aversion < RA_MIN or risk_aversion > RA_MAX:
+            clamped = max(RA_MIN, min(RA_MAX, risk_aversion))
+            logger.warning(
+                "risk_aversion_out_of_range_clamped",
+                value=risk_aversion,
+                clamped_to=clamped,
+                range=(RA_MIN, RA_MAX),
+            )
+            return float(clamped)
+        else:
+            return float(risk_aversion)
 
     if mandate:
         key = _normalise_mandate(mandate)
