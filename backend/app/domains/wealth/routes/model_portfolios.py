@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import math
 import uuid
+import zlib
 from datetime import date
 from decimal import Decimal
 from typing import Any, Final
@@ -4725,10 +4726,19 @@ async def trigger_monte_carlo(
             detail=f"Insufficient NAV data: {len(nav_rows)} rows (need >= 42)",
         )
 
+    # F14 fix: filter Nones rather than substituting 0.0; pass deterministic seed.
     daily_returns = np.array([
-        r.daily_return if r.daily_return is not None else 0.0
-        for r in nav_rows
+        r.daily_return for r in nav_rows
+        if r.daily_return is not None
     ])
+    if len(nav_rows) >= 2:
+        seed_payload = (
+            f"{portfolio_id}|{len(nav_rows)}|"
+            f"{nav_rows[0].nav_date}|{nav_rows[-1].nav_date}"
+        )
+    else:
+        seed_payload = f"{portfolio_id}|{len(nav_rows)}"
+    mc_seed = int(zlib.crc32(seed_payload.encode("utf-8"))) & 0x7FFFFFFF
 
     from quant_engine.monte_carlo_service import run_monte_carlo
 
@@ -4737,6 +4747,7 @@ async def trigger_monte_carlo(
         n_simulations=1000,
         statistic="return",
         horizons=[252, 756, 1260],
+        seed=mc_seed,
     )
 
     response = {

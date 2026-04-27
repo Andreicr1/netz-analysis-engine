@@ -3,6 +3,7 @@
 import hashlib
 import json
 import uuid
+import zlib
 from datetime import UTC, date, datetime
 
 import numpy as np
@@ -857,16 +858,28 @@ async def run_monte_carlo_endpoint(
             detail=f"Insufficient NAV data: {len(nav_rows)} rows (need ≥ 42)",
         )
 
+    # F14 fix: filter Nones rather than substituting 0.0 (which biases the
+    # bootstrap toward zero-return days). Pass deterministic seed so the
+    # endpoint is reproducible across re-fetches.
     daily_returns = np.array([
-        r.daily_return if r.daily_return is not None else 0.0
-        for r in nav_rows
+        r.daily_return for r in nav_rows
+        if r.daily_return is not None
     ])
+    if len(nav_rows) >= 2:
+        seed_payload = (
+            f"{entity_id}|{len(nav_rows)}|"
+            f"{nav_rows[0].nav_date}|{nav_rows[-1].nav_date}"
+        )
+    else:
+        seed_payload = f"{entity_id}|{len(nav_rows)}"
+    mc_seed = int(zlib.crc32(seed_payload.encode("utf-8"))) & 0x7FFFFFFF
 
     result = run_monte_carlo(
         daily_returns=daily_returns,
         n_simulations=body.n_simulations,
         horizons=body.horizons,
         statistic=body.statistic,
+        seed=mc_seed,
     )
 
     response_dict = {

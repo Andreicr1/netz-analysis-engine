@@ -306,10 +306,32 @@ _REGIME_SEVERITY: dict[str, int] = {
 }
 
 
+def _threshold_key_for(regime: str) -> str:
+    """Map regime name to its entry-threshold key in the regime_thresholds dict."""
+    _mapping = {
+        "RISK_OFF": "risk_off_entry",
+        "INFLATION": "inflation_entry",
+        "CRISIS": "crisis_entry",
+    }
+    return _mapping.get(regime, "")
+
+
+# Default stress-score entry thresholds matching classify_regime_multi_signal cutoffs.
+# Callers can override via the regime_thresholds parameter.
+DEFAULT_REGIME_SCORE_THRESHOLDS: dict[str, float] = {
+    "risk_off_entry": 25.0,
+    "crisis_entry": 50.0,
+}
+
+
 def apply_regime_hysteresis(
     prev_regime: str | None,
     new_regime: str,
     severity_jump_threshold: int = 1,
+    *,
+    new_stress_score: float | None = None,
+    de_escalation_buffer: float = 5.0,
+    regime_thresholds: dict[str, float] | None = None,
 ) -> str:
     """Asymmetric regime stickiness — immediate escalation, slow de-escalation.
 
@@ -318,10 +340,17 @@ def apply_regime_hysteresis(
     Behavior:
       * Escalation (new severity > prev): always honor immediately. CRISIS
         entry never blocked.
-      * De-escalation (new severity < prev): only honor if the severity drop
-        meets `severity_jump_threshold`. Default 1 = drop one notch per
-        evaluation.
-      * Same severity: pass through.
+      * De-escalation (new severity < prev): only honor if (a) the severity
+        drop meets ``severity_jump_threshold`` AND (b) the stress score has
+        dropped below the entry threshold of the previous regime by at least
+        ``de_escalation_buffer`` points.  The score buffer prevents
+        noise-driven flipping when the score oscillates around a regime
+        threshold (e.g. 24.9 → 25.1 → 24.9 around the RISK_OFF cutoff).
+      * Same severity / same regime: pass through.
+
+    When ``new_stress_score`` or ``regime_thresholds`` is None the score
+    buffer is skipped and the function falls back to severity-rank-only
+    logic (legacy behavior preserved for backward compat).
 
     Args:
         prev_regime: prior regime label (None on cold start → no hysteresis).
@@ -329,6 +358,15 @@ def apply_regime_hysteresis(
         severity_jump_threshold: minimum severity decrease to honor a
             de-escalation. 1 = honor any drop; 2 = require dropping two
             severity ranks in a single step (rare).
+        new_stress_score: composite stress score (0-100) from the current
+            classification run.  Pass this to enable the score buffer.
+        de_escalation_buffer: minimum distance below the prev-regime entry
+            threshold required to honor de-escalation.  Default 5 points
+            is calibrated for the 0-100 stress-score scale used by
+            classify_regime_multi_signal.
+        regime_thresholds: mapping of regime entry-threshold keys
+            (``risk_off_entry``, ``crisis_entry``, ``inflation_entry``) to
+            stress-score values.  See ``DEFAULT_REGIME_SCORE_THRESHOLDS``.
 
     Returns:
         Effective regime label after applying hysteresis.
@@ -336,14 +374,44 @@ def apply_regime_hysteresis(
     """
     if prev_regime is None or prev_regime == new_regime:
         return new_regime
+
     prev_sev = _REGIME_SEVERITY.get(prev_regime, 0)
     new_sev = _REGIME_SEVERITY.get(new_regime, 0)
-    if new_sev >= prev_sev:
-        return new_regime  # escalation or same severity → honor immediately
-    # De-escalation: only honor if drop is large enough.
-    if (prev_sev - new_sev) >= severity_jump_threshold:
+
+    # Escalation (severity increase): immediate, no buffer.
+    if new_sev > prev_sev:
         return new_regime
-    return prev_regime
+
+    # Same severity (different label — shouldn't happen with current map, but safe).
+    if new_sev == prev_sev:
+        return new_regime
+
+    # ── De-escalation path ──
+    if (prev_sev - new_sev) < severity_jump_threshold:
+        return prev_regime  # severity drop too small
+
+    # Severity-jump satisfied; now apply stress-score buffer if available.
+    if new_stress_score is None or regime_thresholds is None:
+        return new_regime  # legacy: trust severity-jump alone
+
+    entry_threshold = regime_thresholds.get(_threshold_key_for(prev_regime))
+    if entry_threshold is None:
+        return new_regime  # no threshold for this regime → severity-only
+
+    if new_stress_score >= (entry_threshold - de_escalation_buffer):
+        # Score still inside the buffer zone → keep prev_regime (sticky).
+        logger.debug(
+            "regime_hysteresis_buffer_hold",
+            prev_regime=prev_regime,
+            new_regime=new_regime,
+            stress_score=new_stress_score,
+            entry_threshold=entry_threshold,
+            buffer=de_escalation_buffer,
+            required_below=entry_threshold - de_escalation_buffer,
+        )
+        return prev_regime
+
+    return new_regime
 
 
 def classify_regime_multi_signal(
@@ -1214,7 +1282,12 @@ async def get_current_regime(
     """
     inputs = await build_regime_inputs(db, as_of_date=as_of_date)
 
-    if inputs.get("vix") is not None or inputs.get("hy_oas") is not None or inputs.get("energy_shock") is not None:
+    # F03: admit classification with ANY fresh signal, not only VIX/HY/energy_shock.
+    # Real-economy-only datasets (e.g. CFNAI + ICSA + sahm_rule fresh while
+    # market signals stale) previously fell through to fallback even though
+    # classify_regime_multi_signal can score with only slow signals.
+    has_any_signal = any(v is not None for v in inputs.values())
+    if has_any_signal:
         regime, reasons, _ = classify_regime_multi_signal(
             vix=inputs.get("vix"),
             yield_curve_spread=inputs.get("yield_curve_spread"),
