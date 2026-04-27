@@ -50,8 +50,21 @@ def to_decimal_fraction(value: Any) -> float | None:
     * ``NaN`` / ``±inf`` → ``None`` (defensive — upstream sometimes
       emits these when a division collapses).
     * ``abs(value) > 100`` → assume basis points, divide by 10 000.
-    * ``abs(value) > 1.0`` → assume whole percent, divide by 100.
-    * Otherwise → already a decimal fraction, keep as-is.
+    * ``abs(value) > MAX_REASONABLE_EXPENSE_RATIO`` (0.15) → assume
+      whole percent, divide by 100.
+    * Otherwise (``[0, 0.15]``) → already a decimal fraction, keep
+      as-is.
+
+    **Band-ambiguity note (PR-Q57, S07-F03):** inputs in ``(0.15, 1.0]``
+    are now classified as whole percent rather than fraction. This fixes
+    the dominant defect class (N-CEN exports emitting ``0.5`` for 0.5 %)
+    but introduces a narrow ambiguity: a value like ``0.10`` intended as
+    a decimal fraction (= 10 %) would instead be treated as the whole
+    percent 0.10 % (= 0.001 fraction). In practice XBRL canonical
+    fractions in this range are extremely rare (virtually all lie below
+    0.05), and the false-positive cost (treating 10 % as 0.10 %) is far
+    lower than the false-negative cost (treating 0.5 % as 50 %, which
+    collapsed fee_efficiency to 0 for ~60 % of index/ETF funds).
 
     After conversion the result is clamped into the
     ``[MIN_REASONABLE_EXPENSE_RATIO, MAX_REASONABLE_EXPENSE_RATIO]``
@@ -73,7 +86,7 @@ def to_decimal_fraction(value: Any) -> float | None:
     if abs_v > 100.0:
         fraction = v / 10_000.0  # basis points → fraction
         source_scale = "bps"
-    elif abs_v > 1.0:
+    elif abs_v > MAX_REASONABLE_EXPENSE_RATIO:
         fraction = v / 100.0     # whole percent → fraction
         source_scale = "percent"
     else:
