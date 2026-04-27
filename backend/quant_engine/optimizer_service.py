@@ -260,8 +260,16 @@ async def optimize_portfolio(
             sharpe_ratio=0.0, status="empty",
         )
 
+    # Validate expected returns completeness (match optimize_fund_portfolio)
+    missing = set(block_ids) - expected_returns.keys()
+    if missing:
+        raise ValueError(
+            f"expected_returns missing {len(missing)} block(s) of {len(block_ids)}: "
+            f"{sorted(missing)[:5]}{'...' if len(missing) > 5 else ''}"
+        )
+
     # Build expected returns vector
-    mu = np.array([expected_returns.get(bid, 0.0) for bid in block_ids])
+    mu = np.array([expected_returns[bid] for bid in block_ids])
 
     # Decision variable
     w = cp.Variable(n, nonneg=True)
@@ -1381,7 +1389,15 @@ async def optimize_portfolio_pareto(
         )
 
     seed = derive_seed(profile, calc_date)
-    mu = np.array([expected_returns.get(bid, 0.0) for bid in block_ids])
+
+    # Validate expected returns completeness (match optimize_fund_portfolio)
+    missing = set(block_ids) - expected_returns.keys()
+    if missing:
+        raise ValueError(
+            f"expected_returns missing {len(missing)} block(s) of {len(block_ids)}: "
+            f"{sorted(missing)[:5]}{'...' if len(missing) > 5 else ''}"
+        )
+    mu = np.array([expected_returns[bid] for bid in block_ids])
 
     # Compute skewness and excess kurtosis from diagonal approximation
     # (No cross-asset moments available without raw returns — use zero as conservative)
