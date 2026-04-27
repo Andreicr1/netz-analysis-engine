@@ -1250,7 +1250,20 @@ async def optimize_fund_portfolio(
         winner_return = phase2_expected_return
         winner_status = "optimal"
     else:
-        assert phase3_weights is not None  # all-None case returned _empty_result above
+        # S04-F07: Phase 1 solved but CVaR > limit, Phase 2 not usable,
+        # Phase 3 solver glitch → phase3_weights is None. Return graceful
+        # failure instead of crashing on AssertionError.
+        if phase3_weights is None:
+            logger.warning(
+                "cascade_winner_selection_phase3_unavailable",
+                phase1_weights_valid=(phase1_weights is not None),
+                phase1_usable=bool(_phase1_usable),
+                phase2_usable=bool(_phase2_usable),
+                effective_cvar_limit=effective_cvar_limit,
+            )
+            return _empty_result(
+                "phase_1_outside_cvar_phase_3_unavailable", "CLARABEL",
+            )
         assert min_achievable_cvar is not None
         winner_w = phase3_weights
         winner_phase = "phase_3_min_cvar"
