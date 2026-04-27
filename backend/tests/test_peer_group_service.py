@@ -160,6 +160,7 @@ class TestEdgeCases:
         )
         assert result.peer_count == 0
         assert len(result.rankings) == 7
+        assert result.degraded is True
 
     def test_fund_metric_none(self):
         """Fund with None metric should still produce ranking (value=None)."""

@@ -34,6 +34,8 @@ class PeerGroupResult:
     strategy_label: str
     peer_count: int = 0
     rankings: list[PeerRanking] = field(default_factory=list)
+    degraded: bool = False
+    degraded_reason: str | None = None
 
 
 # Metrics where higher values are better (ascending rank)
@@ -51,21 +53,31 @@ _HIGHER_IS_BETTER_DEFAULTS: dict[str, bool] = {
     "manager_score": True,
 }
 
+MIN_PEER_COHORT_SIZE = 10  # institutional norm for fund peer benchmarking
+# (worker-side guard in risk_calc uses MIN_PEERS=5 — see Q60 PR body)
+
 
 def _percentile_rank(value: float, peers: np.ndarray, higher_is_better: bool) -> float:
-    """Compute percentile rank (0-100).
+    """Compute percentile rank (0-100) using the mid-rank convention for ties.
 
     For higher_is_better=True, higher percentile means better performance.
     For higher_is_better=False (e.g. max_drawdown), lower value → higher percentile.
+
+    Tie handling: each tied value contributes 0.5 to the rank (the
+    institutional / Morningstar peer-percentile convention). All-tied
+    cohorts therefore rank at the median (50.0) rather than 100.0.
     """
     if len(peers) == 0:
         return 50.0
 
     if higher_is_better:
-        rank = float(np.sum(peers <= value)) / len(peers) * 100
+        below = float(np.sum(peers < value))
+        equal = float(np.sum(peers == value))
     else:
-        rank = float(np.sum(peers >= value)) / len(peers) * 100
+        below = float(np.sum(peers > value))
+        equal = float(np.sum(peers == value))
 
+    rank = (below + 0.5 * equal) / len(peers) * 100.0
     return round(rank, 2)
 
 
@@ -111,14 +123,24 @@ def compute_peer_rankings(
 
     hib = {**_HIGHER_IS_BETTER_DEFAULTS, **(higher_is_better or {})}
 
-    if len(peer_metrics) < 1:
+    if len(peer_metrics) < MIN_PEER_COHORT_SIZE:
         return PeerGroupResult(
             strategy_label=strategy_label,
-            peer_count=0,
+            peer_count=len(peer_metrics),
             rankings=[
-                PeerRanking(metric_name=m, value=fund_metrics.get(m))
+                PeerRanking(
+                    metric_name=m,
+                    value=fund_metrics.get(m),
+                    percentile=50.0,
+                    quartile=2,
+                )
                 for m in metrics_to_rank
             ],
+            degraded=True,
+            degraded_reason=(
+                f"insufficient_peer_cohort: N={len(peer_metrics)} "
+                f"(min {MIN_PEER_COHORT_SIZE} required; ranking suppressed to median)"
+            ),
         )
 
     rankings: list[PeerRanking] = []
