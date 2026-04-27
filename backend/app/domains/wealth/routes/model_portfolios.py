@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import math
 import uuid
+import zlib
 from datetime import date
 from decimal import Decimal
 from typing import Any, Final
@@ -4669,6 +4670,26 @@ async def get_nav_history(
 # ══════════════════════════════════════════════���════════════════════════
 
 
+def _build_mc_inputs(
+    nav_rows: list,
+    entity_id: str,
+) -> tuple[np.ndarray, int]:
+    """Build daily_returns array (None-filtered) + deterministic seed."""
+    daily_returns = np.array([
+        r.daily_return for r in nav_rows
+        if r.daily_return is not None
+    ])
+    if len(nav_rows) >= 2:
+        seed_payload = (
+            f"{entity_id}|{len(nav_rows)}|"
+            f"{nav_rows[0].nav_date}|{nav_rows[-1].nav_date}"
+        )
+    else:
+        seed_payload = f"{entity_id}|{len(nav_rows)}"
+    mc_seed = int(zlib.crc32(seed_payload.encode("utf-8"))) & 0x7FFFFFFF
+    return daily_returns, mc_seed
+
+
 @router.post(
     "/{portfolio_id}/monte-carlo",
     status_code=status.HTTP_202_ACCEPTED,
@@ -4725,10 +4746,7 @@ async def trigger_monte_carlo(
             detail=f"Insufficient NAV data: {len(nav_rows)} rows (need >= 42)",
         )
 
-    daily_returns = np.array([
-        r.daily_return if r.daily_return is not None else 0.0
-        for r in nav_rows
-    ])
+    daily_returns, mc_seed = _build_mc_inputs(nav_rows, str(portfolio_id))
 
     from quant_engine.monte_carlo_service import run_monte_carlo
 
@@ -4737,6 +4755,7 @@ async def trigger_monte_carlo(
         n_simulations=1000,
         statistic="return",
         horizons=[252, 756, 1260],
+        seed=mc_seed,
     )
 
     response = {

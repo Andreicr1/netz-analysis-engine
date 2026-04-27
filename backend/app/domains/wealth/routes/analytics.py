@@ -3,6 +3,7 @@
 import hashlib
 import json
 import uuid
+import zlib
 from datetime import UTC, date, datetime
 
 import numpy as np
@@ -795,6 +796,26 @@ async def get_factor_analysis(
 # ---------------------------------------------------------------------------
 
 
+def _build_mc_inputs(
+    nav_rows: list,
+    entity_id: str,
+) -> tuple[np.ndarray, int]:
+    """Build daily_returns array (None-filtered) + deterministic seed."""
+    daily_returns = np.array([
+        r.daily_return for r in nav_rows
+        if r.daily_return is not None
+    ])
+    if len(nav_rows) >= 2:
+        seed_payload = (
+            f"{entity_id}|{len(nav_rows)}|"
+            f"{nav_rows[0].nav_date}|{nav_rows[-1].nav_date}"
+        )
+    else:
+        seed_payload = f"{entity_id}|{len(nav_rows)}"
+    mc_seed = int(zlib.crc32(seed_payload.encode("utf-8"))) & 0x7FFFFFFF
+    return daily_returns, mc_seed
+
+
 @router.post(
     "/monte-carlo",
     response_model=MonteCarloResponse,
@@ -857,16 +878,14 @@ async def run_monte_carlo_endpoint(
             detail=f"Insufficient NAV data: {len(nav_rows)} rows (need ≥ 42)",
         )
 
-    daily_returns = np.array([
-        r.daily_return if r.daily_return is not None else 0.0
-        for r in nav_rows
-    ])
+    daily_returns, mc_seed = _build_mc_inputs(nav_rows, str(entity_id))
 
     result = run_monte_carlo(
         daily_returns=daily_returns,
         n_simulations=body.n_simulations,
         horizons=body.horizons,
         statistic=body.statistic,
+        seed=mc_seed,
     )
 
     response_dict = {
