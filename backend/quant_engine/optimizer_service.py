@@ -51,6 +51,41 @@ class OptimizationResult:
 # source of truth for Mean-Variance λ (see S3 consolidation, 2026-04-08).
 
 
+_BLOCK_TOLERANCE = 1e-4
+
+
+def _verify_block_weights(
+    opt_weights: np.ndarray,
+    block_ids: list[str],
+    block_bounds: dict[str, "BlockConstraint"],
+    max_single_fund_weight: float,
+) -> str | None:
+    """Verify post-solve block weights against bounds and concentration cap.
+
+    Returns a violation reason string if any weight exceeds bounds beyond
+    ``_BLOCK_TOLERANCE``, or ``None`` if all weights are within tolerance.
+    Parity with ``optimize_fund_portfolio._verify_weight_constraints``.
+    """
+    tol = _BLOCK_TOLERANCE
+    for i, bid in enumerate(block_ids):
+        w_i = float(opt_weights[i])
+        if bid in block_bounds:
+            bc = block_bounds[bid]
+            if w_i < bc.min_weight - tol or w_i > bc.max_weight + tol:
+                return (
+                    f"block_{bid} weight {w_i:.6f} outside "
+                    f"[{bc.min_weight:.4f}, {bc.max_weight:.4f}] "
+                    f"(tolerance {tol:.0e})"
+                )
+        if w_i > max_single_fund_weight + tol:
+            return (
+                f"block_{bid} weight {w_i:.6f} exceeds "
+                f"max_single_fund_weight={max_single_fund_weight:.4f} "
+                f"(tolerance {tol:.0e})"
+            )
+    return None
+
+
 def _safe_volatility(weights: np.ndarray, cov: np.ndarray) -> float:
     """sqrt of weights @ cov @ weights, floored at 0 to absorb tiny
     negative eigenvalues from numerical noise (PSD check tolerates them
@@ -346,6 +381,22 @@ async def optimize_portfolio(
             sharpe_ratio=0.0, status="infeasible: zero weights after clipping",
         )
     opt_weights /= total
+
+    # Post-solve constraint verification (parity with optimize_fund_portfolio
+    # _verify_weight_constraints; required because SCS optimal_inaccurate can
+    # return weights violating block bounds beyond renormalization tolerance).
+    violation = _verify_block_weights(
+        opt_weights, block_ids, block_bounds, constraints.max_single_fund_weight,
+    )
+    if violation is not None:
+        return OptimizationResult(
+            weights={},
+            expected_return=0.0,
+            portfolio_volatility=0.0,
+            sharpe_ratio=0.0,
+            status="solver_imprecise",
+            solver_info=violation,
+        )
 
     port_ret = float(mu @ opt_weights)
     port_vol = _safe_volatility(opt_weights, cov_matrix)
@@ -1426,7 +1477,7 @@ async def optimize_portfolio_pareto(
     # Per-block bounds
     block_map = _build_block_map(constraints.blocks)
     xl = np.array([block_map[bid].min_weight if bid in block_map else 0.0 for bid in block_ids])
-    xu = np.array([block_map[bid].max_weight if bid in block_map else 1.0 for bid in block_ids])
+    xu = np.array([block_map[bid].max_weight if bid in block_map else constraints.max_single_fund_weight for bid in block_ids])
 
     # ESG scores array
     esg_arr = None
