@@ -201,7 +201,7 @@ def compute_regime_tilted_weights(
         AllocationProposalResult with per-block proposals and rationale.
 
     """
-    regime_tilt = REGIME_TILTS.get(global_regime, REGIME_TILTS["RISK_ON"])
+    regime_tilt = REGIME_TILTS.get(global_regime, REGIME_TILTS["RISK_OFF"])
     regional_scores = regional_scores or {}
 
     # Build reverse lookup: block_id → region
@@ -305,13 +305,14 @@ def compute_regime_tilted_weights(
 def extract_regime_from_review(report_json: dict[str, Any]) -> str:
     """Extract the global regime from a MacroReview's report_json.
 
-    Falls back to RISK_ON if regime data is unavailable.
+    Falls back to RISK_OFF if regime data is unavailable (defensive default
+    consistent with regime_service's RISK_OFF convention).
     """
     regime_data = report_json.get("regime")
     if isinstance(regime_data, dict):
-        result = regime_data.get("global", "RISK_ON")
-        return str(result) if result is not None else "RISK_ON"
-    return "RISK_ON"
+        result = regime_data.get("global", "RISK_OFF")
+        return str(result) if result is not None else "RISK_OFF"
+    return "RISK_OFF"
 
 
 def extract_regional_scores_from_snapshot(
