@@ -13,7 +13,6 @@ from typing import Any
 import pytest
 
 from quant_engine.scoring_service import (
-    ScoringResult,
     _clamp_component_score,
     _compute_alternatives_score,
     _compute_cash_score,
