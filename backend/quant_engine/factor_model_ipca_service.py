@@ -16,6 +16,9 @@ from quant_engine.ipca.preprocessing import rank_transform
 
 logger = structlog.get_logger()
 
+# PR-Q36 F04: require ≥3 valid CV folds before treating a K's mean OOS R² as reliable
+MIN_FOLDS_FOR_K_SELECTION = 3
+
 
 @dataclass(frozen=True)
 class IPCAConfig:
@@ -194,23 +197,45 @@ def fit_universe(
             f"all folds failed (likely numerical instability or insufficient data)"
         )
 
-    # Pick best K from those that had at least one valid fold
+    # PR-Q36 F04: require minimum folds before treating a K's score as reliable
     candidates = {
         k: float(np.mean(scores))
         for k, scores in k_results.items()
-        if scores
+        if len(scores) >= MIN_FOLDS_FOR_K_SELECTION
     }
-    best_k = max(candidates, key=lambda k: candidates[k])
-    best_oos_r2 = candidates[best_k]
+
+    if candidates:
+        best_k = max(candidates, key=lambda k: candidates[k])
+        best_oos_r2 = candidates[best_k]
+        insufficient_folds = False
+    else:
+        # Fall back to smallest K with any valid fold
+        fallback_candidates = {
+            k: float(np.mean(scores))
+            for k, scores in k_results.items()
+            if scores
+        }
+        best_k = min(fallback_candidates.keys())
+        best_oos_r2 = fallback_candidates[best_k]
+        insufficient_folds = True
+        logger.warning(
+            "ipca_k_selection_insufficient_folds",
+            min_required=MIN_FOLDS_FOR_K_SELECTION,
+            max_folds_observed=max(len(s) for s in k_results.values() if s),
+            fallback_k=best_k,
+        )
 
     # Final fit on all data with best K
     final_fit = fit_ipca(aligned_returns, aligned_chars, K=best_k, max_iter=max_iter)
 
     # Fix 5 (BUG-I4): stop clamping oos_r2 at 0 — pass-through raw value
     # Fix 7 (BUG-I9): non-converged final fit also marks degraded
-    is_degraded = (best_oos_r2 <= 0.0) or not final_fit.converged
+    # PR-Q36 F04: insufficient folds also marks degraded
+    is_degraded = (best_oos_r2 <= 0.0) or not final_fit.converged or insufficient_folds
     degraded_reason = None
-    if best_oos_r2 <= 0.0:
+    if insufficient_folds:
+        degraded_reason = "ipca_k_selection_insufficient_folds"
+    elif best_oos_r2 <= 0.0:
         degraded_reason = "oos_r2_negative_useless_fit"
     elif not final_fit.converged:
         degraded_reason = "final_fit_did_not_converge"
