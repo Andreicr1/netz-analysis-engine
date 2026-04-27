@@ -85,6 +85,15 @@ _DEMOGRAPHIC_VARIABLES = [
 ]
 
 
+class DataCommonsAPIError(Exception):
+    """Raised when Data Commons API call fails (network, rate limit, 5xx).
+
+    Distinct from valid empty response (entity has no data for the
+    requested variable). Callers should distinguish to avoid Charter \u00a73
+    silent corruption \u2014 empty data displayed as fact when API was down.
+    """
+
+
 class DataCommonsService:
     """Data Commons API client using the official Python library.
 
@@ -148,8 +157,12 @@ class DataCommonsService:
                             })
             return records
         except Exception as e:
-            logger.warning("data_commons observation fetch failed", error=str(e))
-            return []
+            logger.warning(
+                "data_commons_observation_fetch_failed",
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise DataCommonsAPIError(f"observation fetch failed: {e}") from e
 
     def _resolve_entity_sync(self, name: str, entity_type: str = "State") -> str | None:
         """Sync resolve a place name to a DCID."""
@@ -197,11 +210,12 @@ class DataCommonsService:
             return results
         except Exception as e:
             logger.warning(
-                "data_commons geo hierarchy failed",
+                "data_commons_geo_hierarchy_failed",
                 parent=parent_dcid,
                 error=str(e),
+                error_type=type(e).__name__,
             )
-            return []
+            raise DataCommonsAPIError(f"geo hierarchy fetch failed: {e}") from e
 
     def _fetch_demographic_profile_sync(self, geo_dcid: str) -> dict[str, Any]:
         """Sync fetch demographic profile for a geography."""
@@ -239,16 +253,16 @@ class DataCommonsService:
                 "median_income": values.get("Median_Income_Household"),
                 "unemployment_rate": values.get("UnemploymentRate_Person"),
             }
+        except DataCommonsAPIError:
+            raise
         except Exception as e:
-            logger.warning("data_commons demographic profile failed", geo=geo_dcid, error=str(e))
-            return {
-                "geo_dcid": geo_dcid,
-                "geo_name": "",
-                "population": None,
-                "median_age": None,
-                "median_income": None,
-                "unemployment_rate": None,
-            }
+            logger.warning(
+                "data_commons_demographic_profile_failed",
+                geo=geo_dcid,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise DataCommonsAPIError(f"demographic profile fetch failed: {e}") from e
 
     # ── Public async methods ──────────────────────────────────────
 
