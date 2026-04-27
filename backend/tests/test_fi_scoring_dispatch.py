@@ -17,7 +17,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from quant_engine.scoring_service import (
-    ScoringResult,
     _DEFAULT_FI_SCORING_WEIGHTS,
     _DEFAULT_SCORING_WEIGHTS,
     compute_fund_score,
