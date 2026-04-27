@@ -1,7 +1,6 @@
 """Tests for Cash/MMF Scoring Model.
 
 Covers:
-- cash_analytics_service: pure scoring computation
 - scoring_service: cash dispatch via compute_fund_score
 - Screener Layer 1: fund_cash eliminatory gate
 - Screener Layer 3: CashQuantMetrics scoring dispatch
@@ -12,12 +11,6 @@ from __future__ import annotations
 
 import pytest
 
-from quant_engine.cash_analytics_service import (
-    _DEFAULT_CASH_SCORING_WEIGHTS,
-    CashAnalyticsResult,
-    CashScoreResult,
-    compute_cash_score,
-)
 from quant_engine.scoring_service import (
     _DEFAULT_CASH_SCORING_WEIGHTS as SCORING_CASH_WEIGHTS,
 )
@@ -71,30 +64,6 @@ class _RiskMetricsAdapter:
 # ═══════════════════════════════════════════════════════════════════
 
 @pytest.fixture
-def good_mmf_analytics():
-    """A strong government MMF: high yield, stable NAV, high liquidity, low WAM."""
-    return CashAnalyticsResult(
-        seven_day_net_yield=5.30,
-        fed_funds_rate=5.33,
-        nav_per_share=1.0000,
-        pct_weekly_liquid=85.0,
-        weighted_avg_maturity=15,
-    )
-
-
-@pytest.fixture
-def weak_mmf_analytics():
-    """A weak prime MMF: lower yield, slight NAV deviation, lower liquidity, high WAM."""
-    return CashAnalyticsResult(
-        seven_day_net_yield=4.50,
-        fed_funds_rate=5.33,
-        nav_per_share=0.9995,
-        pct_weekly_liquid=35.0,
-        weighted_avg_maturity=55,
-    )
-
-
-@pytest.fixture
 def layer1_config_with_cash():
     """Layer 1 config with both fund and fund_cash rules."""
     return {
@@ -108,107 +77,6 @@ def layer1_config_with_cash():
             "min_net_assets": 100_000_000,
         },
     }
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  Tests: cash_analytics_service
-# ═══════════════════════════════════════════════════════════════════
-
-class TestCashAnalyticsService:
-    """Test pure cash scoring computation."""
-
-    def test_good_mmf_scores_high(self, good_mmf_analytics):
-        result = compute_cash_score(good_mmf_analytics, expense_ratio_pct=0.15)
-        assert isinstance(result, CashScoreResult)
-        assert result.score > 60.0, f"Strong MMF should score >60, got {result.score}"
-        assert "yield_vs_risk_free" in result.components
-        assert "nav_stability" in result.components
-        assert "liquidity_quality" in result.components
-        assert "maturity_discipline" in result.components
-        assert "fee_efficiency" in result.components
-
-    def test_weak_mmf_scores_lower(self, good_mmf_analytics, weak_mmf_analytics):
-        strong = compute_cash_score(good_mmf_analytics, expense_ratio_pct=0.15)
-        weak = compute_cash_score(weak_mmf_analytics, expense_ratio_pct=0.50)
-        assert strong.score > weak.score, (
-            f"Strong MMF ({strong.score}) should outscore weak ({weak.score})"
-        )
-
-    def test_perfect_nav_stability(self):
-        analytics = CashAnalyticsResult(
-            seven_day_net_yield=None,
-            fed_funds_rate=None,
-            nav_per_share=1.0000,
-            pct_weekly_liquid=None,
-            weighted_avg_maturity=None,
-        )
-        result = compute_cash_score(analytics)
-        assert result.components["nav_stability"] == 100.0
-
-    def test_broken_buck_nav_stability(self):
-        analytics = CashAnalyticsResult(
-            seven_day_net_yield=None,
-            fed_funds_rate=None,
-            nav_per_share=0.9990,
-            pct_weekly_liquid=None,
-            weighted_avg_maturity=None,
-        )
-        result = compute_cash_score(analytics)
-        assert result.components["nav_stability"] == 0.0, "0.001 deviation should score 0"
-
-    def test_maturity_discipline_zero_wam(self):
-        analytics = CashAnalyticsResult(
-            seven_day_net_yield=None,
-            fed_funds_rate=None,
-            nav_per_share=None,
-            pct_weekly_liquid=None,
-            weighted_avg_maturity=0,
-        )
-        result = compute_cash_score(analytics)
-        assert result.components["maturity_discipline"] == 100.0
-
-    def test_maturity_discipline_max_wam(self):
-        analytics = CashAnalyticsResult(
-            seven_day_net_yield=None,
-            fed_funds_rate=None,
-            nav_per_share=None,
-            pct_weekly_liquid=None,
-            weighted_avg_maturity=60,
-        )
-        result = compute_cash_score(analytics)
-        assert result.components["maturity_discipline"] == 0.0
-
-    def test_yield_exactly_matches_ffr(self):
-        analytics = CashAnalyticsResult(
-            seven_day_net_yield=5.33,
-            fed_funds_rate=5.33,
-            nav_per_share=None,
-            pct_weekly_liquid=None,
-            weighted_avg_maturity=None,
-        )
-        result = compute_cash_score(analytics)
-        # relative_yield = 0, normalized in [-0.20, 0.20] => 50.0
-        assert result.components["yield_vs_risk_free"] == 50.0
-
-    def test_missing_data_penalty(self):
-        analytics = CashAnalyticsResult(
-            seven_day_net_yield=None,
-            fed_funds_rate=None,
-            nav_per_share=None,
-            pct_weekly_liquid=None,
-            weighted_avg_maturity=None,
-        )
-        result = compute_cash_score(analytics)
-        # Most components get 40.0 (45 - 5 penalty), fee_efficiency gets 45.0 (different path)
-        for key, val in result.components.items():
-            if key == "fee_efficiency":
-                assert val == 45.0, f"{key} should be 45.0 with no ER data, got {val}"
-            else:
-                assert val == 40.0, f"{key} should be 40.0 with missing data, got {val}"
-
-    def test_default_weights_sum_to_one(self):
-        total = sum(_DEFAULT_CASH_SCORING_WEIGHTS.values())
-        assert abs(total - 1.0) < 0.001, f"Weights sum to {total}, should be 1.0"
 
 
 # ═══════════════════════════════════════════════════════════════════

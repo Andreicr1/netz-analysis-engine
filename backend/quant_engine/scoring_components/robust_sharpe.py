@@ -121,8 +121,10 @@ def _jackknife_se(excess_returns: "np.ndarray[tuple[int, ...], np.dtype[np.float
     if loo.size < 3:
         return float("nan")
     var_pop = float(np.var(loo, ddof=0))
-    # Prompt convention (spec §1 hint): SE = sqrt((T-1)/T * var_pop).
-    return float(np.sqrt((T - 1) / T * var_pop))
+    # Quenouille jackknife (Efron-Tibshirani §11.5):
+    #   SE = sqrt((T-1) * var_pop), where var_pop = pop variance of the
+    #   leave-one-out replicates around their mean.
+    return float(np.sqrt((T - 1) * var_pop))
 
 
 def robust_sharpe(
