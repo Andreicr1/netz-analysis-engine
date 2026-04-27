@@ -120,14 +120,14 @@ class QuantAnalyzer:
 
         from quant_engine.scoring_service import RiskMetrics, compute_fund_score
 
-        score_val, components = compute_fund_score(
+        result = compute_fund_score(
             cast(RiskMetrics, risk),
             flows_momentum_score=50.0,
             config=self._config.get("scoring"),
         )
         return {
-            "manager_score": score_val,
-            "components": components,
+            "manager_score": result.score,
+            "components": result.components,
         }
 
     def _compute_peer_comparison(

@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 
 from quant_engine.scoring_service import (
+    ScoringResult,
     _clamp_component_score,
     _compute_alternatives_score,
     _compute_cash_score,
@@ -213,13 +214,13 @@ def test_BUG_S4_spread_capture_peaked_at_one() -> None:
 
     # Verify in context: FI scoring with credit_beta = 1.0 should yield 100
     fi = _StubFIMetrics(credit_beta=1.0)
-    _, components = _compute_fi_score(fi, None, 0.005, None)
-    assert components["spread_capture"] == 100.0
+    result = _compute_fi_score(fi, None, 0.005, None)
+    assert result.components["spread_capture"] == 100.0
 
     # High credit_beta (2.5) should score low
     fi_high = _StubFIMetrics(credit_beta=2.5)
-    _, components_high = _compute_fi_score(fi_high, None, 0.005, None)
-    assert components_high["spread_capture"] < 50.0
+    result_high = _compute_fi_score(fi_high, None, 0.005, None)
+    assert result_high.components["spread_capture"] < 50.0
 
 
 # ── Fix 8 (BUG-S6) — External component scores not bounded ──────────
@@ -228,9 +229,9 @@ def test_BUG_S4_spread_capture_peaked_at_one() -> None:
 def test_BUG_S6_flows_momentum_clamped_to_100() -> None:
     """flows_momentum_score=500 must be clamped to 100, not passed through."""
     m = _StubRiskMetrics()
-    score, components = compute_fund_score(m, flows_momentum_score=500.0)
-    assert components["flows_momentum"] == 100.0, (
-        f"Expected clamped to 100, got {components['flows_momentum']}"
+    result = compute_fund_score(m, flows_momentum_score=500.0)
+    assert result.components["flows_momentum"] == 100.0, (
+        f"Expected clamped to 100, got {result.components['flows_momentum']}"
     )
 
 
@@ -246,8 +247,8 @@ def test_BUG_S6_non_finite_score_raises() -> None:
 def test_BUG_S7_zero_rate_continuous_score() -> None:
     """ffr=0.0 with yld=0.01 must produce a continuous score, not collapsed fallback."""
     cash = _StubCashMetrics(seven_day_net_yield=0.01, fed_funds_rate_at_calc=0.0)
-    _, components = _compute_cash_score(cash, None, 0.005, None)
-    score = components["yield_vs_risk_free"]
+    result = _compute_cash_score(cash, None, 0.005, None)
+    score = result.components["yield_vs_risk_free"]
     # Spread = 1.0 pp → normalized on [-5, 5] → (1+5)/10 * 100 = 60
     assert 55.0 < score < 65.0, f"Expected ~60 for 1pp spread, got {score}"
 
@@ -255,8 +256,8 @@ def test_BUG_S7_zero_rate_continuous_score() -> None:
 def test_BUG_S7_negative_rate_preserves_spread_sign() -> None:
     """ffr=-0.005 with yld=+0.001 must score above 50 (positive spread)."""
     cash = _StubCashMetrics(seven_day_net_yield=0.001, fed_funds_rate_at_calc=-0.005)
-    _, components = _compute_cash_score(cash, None, 0.005, None)
-    score = components["yield_vs_risk_free"]
+    result = _compute_cash_score(cash, None, 0.005, None)
+    score = result.components["yield_vs_risk_free"]
     # Spread = (0.001 - (-0.005)) * 100 = 0.6 pp → above midpoint
     assert score > 50.0, f"Expected > 50 for positive spread over negative rate, got {score}"
 
@@ -267,26 +268,26 @@ def test_BUG_S7_negative_rate_preserves_spread_sign() -> None:
 def test_BUG_S9_fi_missing_data_consistent_with_equity() -> None:
     """FI missing-data fallback must be 45.0, not 40.0 (45 - 5)."""
     fi = _StubFIMetrics(empirical_duration=None)
-    _, components = _compute_fi_score(fi, None, 0.005, None)
-    assert components["duration_management"] == 45.0, (
-        f"Expected 45.0 for missing FI data, got {components['duration_management']}"
+    result = _compute_fi_score(fi, None, 0.005, None)
+    assert result.components["duration_management"] == 45.0, (
+        f"Expected 45.0 for missing FI data, got {result.components['duration_management']}"
     )
 
 
 def test_BUG_S9_cash_missing_data_consistent() -> None:
     """Cash missing-data fallback must be 45.0, not 40.0."""
     cash = _StubCashMetrics(nav_per_share_mmf=None)
-    _, components = _compute_cash_score(cash, None, 0.005, None)
-    assert components["nav_stability"] == 45.0, (
-        f"Expected 45.0 for missing cash data, got {components['nav_stability']}"
+    result = _compute_cash_score(cash, None, 0.005, None)
+    assert result.components["nav_stability"] == 45.0, (
+        f"Expected 45.0 for missing cash data, got {result.components['nav_stability']}"
     )
 
 
 def test_BUG_S9_alt_missing_data_consistent() -> None:
     """Alt missing-data fallback must be 45.0, not 40.0."""
     alt = _StubAltMetrics(equity_correlation_252d=None)
-    _, components = _compute_alternatives_score(alt, "hedge", None, 0.005, None)
-    assert components.get("diversification_value", 45.0) == 45.0
+    result = _compute_alternatives_score(alt, "hedge", None, 0.005, None)
+    assert result.components.get("diversification_value", 45.0) == 45.0
 
 
 # ── Fix 11 (BUG-S11) — flows_momentum default 50 vs 45 ──────────────
@@ -295,9 +296,9 @@ def test_BUG_S9_alt_missing_data_consistent() -> None:
 def test_BUG_S11_flows_momentum_omitted_defaults_to_45() -> None:
     """Omitted flows_momentum_score must default to 45.0 (missing-data), not 50."""
     m = _StubRiskMetrics()
-    _, components = compute_fund_score(m)
-    assert components["flows_momentum"] == 45.0, (
-        f"Expected 45.0 for omitted flows_momentum, got {components['flows_momentum']}"
+    result = compute_fund_score(m)
+    assert result.components["flows_momentum"] == 45.0, (
+        f"Expected 45.0 for omitted flows_momentum, got {result.components['flows_momentum']}"
     )
 
 
@@ -311,18 +312,18 @@ def test_BUG_S10_drawdown_control_uses_max_drawdown_not_calmar() -> None:
     alt_low_dd = _StubAltMetrics(calmar_ratio_3y=0.8, max_drawdown_3y=-0.05)
     alt_high_dd = _StubAltMetrics(calmar_ratio_3y=0.8, max_drawdown_3y=-0.40)
 
-    _, comps_low = _compute_alternatives_score(alt_low_dd, "commodity", None, 0.005, None)
-    _, comps_high = _compute_alternatives_score(alt_high_dd, "commodity", None, 0.005, None)
+    result_low = _compute_alternatives_score(alt_low_dd, "commodity", None, 0.005, None)
+    result_high = _compute_alternatives_score(alt_high_dd, "commodity", None, 0.005, None)
 
     # Different max_drawdown → different drawdown_control (despite same calmar)
-    assert comps_low["drawdown_control"] > comps_high["drawdown_control"], (
+    assert result_low.components["drawdown_control"] > result_high.components["drawdown_control"], (
         f"Lower drawdown ({-0.05}) should score higher than {-0.40}, "
-        f"got {comps_low['drawdown_control']} vs {comps_high['drawdown_control']}"
+        f"got {result_low.components['drawdown_control']} vs {result_high.components['drawdown_control']}"
     )
 
 
 def test_BUG_S10_missing_max_drawdown_falls_to_45() -> None:
     """Missing max_drawdown_3y must produce 45.0, not inherit calmar score."""
     alt = _StubAltMetrics(calmar_ratio_3y=1.2, max_drawdown_3y=None)
-    _, comps = _compute_alternatives_score(alt, "commodity", None, 0.005, None)
-    assert comps["drawdown_control"] == 45.0
+    result = _compute_alternatives_score(alt, "commodity", None, 0.005, None)
+    assert result.components["drawdown_control"] == 45.0

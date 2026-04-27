@@ -52,13 +52,13 @@ class TestFeeEfficiency:
     def test_fee_efficiency_with_low_er(self):
         """expense_ratio_pct=0.00035 (0.035%) → fee_efficiency near 98.25."""
         metrics = _make_metrics()
-        _, components = compute_fund_score(metrics, expense_ratio_pct=0.00035)
+        components = compute_fund_score(metrics, expense_ratio_pct=0.00035).components
         assert abs(components["fee_efficiency"] - 98.25) < 0.01
 
     def test_fee_efficiency_with_high_er(self):
         """expense_ratio_pct=0.0152 (1.52%) → fee_efficiency near 24.0."""
         metrics = _make_metrics()
-        _, components = compute_fund_score(metrics, expense_ratio_pct=0.0152)
+        components = compute_fund_score(metrics, expense_ratio_pct=0.0152).components
         assert abs(components["fee_efficiency"] - 24.0) < 0.01
 
     def test_fee_efficiency_none_penalty(self):
@@ -69,25 +69,25 @@ class TestFeeEfficiency:
         fees are never disadvantaged against those that don't.
         """
         metrics = _make_metrics()
-        _, components = compute_fund_score(metrics, expense_ratio_pct=None)
+        components = compute_fund_score(metrics, expense_ratio_pct=None).components
         assert components["fee_efficiency"] == 45.0
 
     def test_fee_efficiency_2pct_is_zero(self):
         """expense_ratio_pct=0.02 (2.0%) → fee_efficiency == 0.0."""
         metrics = _make_metrics()
-        _, components = compute_fund_score(metrics, expense_ratio_pct=0.02)
+        components = compute_fund_score(metrics, expense_ratio_pct=0.02).components
         assert components["fee_efficiency"] == 0.0
 
     def test_fee_efficiency_zero_er_is_100(self):
         """expense_ratio_pct=0.0 → fee_efficiency == 100.0."""
         metrics = _make_metrics()
-        _, components = compute_fund_score(metrics, expense_ratio_pct=0.0)
+        components = compute_fund_score(metrics, expense_ratio_pct=0.0).components
         assert components["fee_efficiency"] == 100.0
 
     def test_fee_efficiency_above_2pct_clamped_to_zero(self):
         """expense_ratio_pct=0.03 (3.0%) → fee_efficiency == 0.0 (clamped by max(0, ...))."""
         metrics = _make_metrics()
-        _, components = compute_fund_score(metrics, expense_ratio_pct=0.03)
+        components = compute_fund_score(metrics, expense_ratio_pct=0.03).components
         assert components["fee_efficiency"] == 0.0
 
 
@@ -95,9 +95,9 @@ class TestInsiderSentiment:
     def test_insider_sentiment_opt_in_only(self):
         """Without insider_sentiment weight in config, param is ignored."""
         metrics = _make_metrics()
-        _, components = compute_fund_score(
+        components = compute_fund_score(
             metrics, insider_sentiment_score=80.0,
-        )
+        ).components
         assert "insider_sentiment" not in components
 
     def test_insider_sentiment_with_weight(self):
@@ -114,9 +114,9 @@ class TestInsiderSentiment:
                 "insider_sentiment": 0.05,
             },
         }
-        _, components = compute_fund_score(
+        components = compute_fund_score(
             metrics, config=config, insider_sentiment_score=80.0,
-        )
+        ).components
         assert "insider_sentiment" in components
         assert components["insider_sentiment"] == 80.0
 
@@ -134,9 +134,9 @@ class TestInsiderSentiment:
                 "insider_sentiment": 0.05,
             },
         }
-        _, components = compute_fund_score(
+        components = compute_fund_score(
             metrics, config=config, insider_sentiment_score=None,
-        )
+        ).components
         # When insider_sentiment weight > 0 but score is None, component is
         # present with missing-data fallback (45.0) — not silently absent.
         assert components["insider_sentiment"] == 45.0
@@ -157,13 +157,13 @@ class TestBackwardCompat:
     def test_positional_flows_momentum(self):
         """compute_fund_score(metrics, 50.0, None) still works."""
         metrics = _make_metrics()
-        score, components = compute_fund_score(metrics, 50.0, None)
-        assert isinstance(score, float)
-        assert "flows_momentum" in components
-        assert components["flows_momentum"] == 50.0
+        result = compute_fund_score(metrics, 50.0, None)
+        assert isinstance(result.score, float)
+        assert "flows_momentum" in result.components
+        assert result.components["flows_momentum"] == 50.0
 
     def test_score_range(self):
         """Score is between 0 and 100."""
         metrics = _make_metrics()
-        score, _ = compute_fund_score(metrics)
+        score = compute_fund_score(metrics).score
         assert 0.0 <= score <= 100.0

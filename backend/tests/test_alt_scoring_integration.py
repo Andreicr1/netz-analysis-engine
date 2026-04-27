@@ -211,23 +211,23 @@ class TestREITFundE2E:
             sortino_1y=0.7,
         )
 
-        equity_score, eq_comps = compute_fund_score(
+        equity_result = compute_fund_score(
             risk, asset_class="equity", expense_ratio_pct=0.008,
         )
-        alt_score, alt_comps = compute_fund_score(
+        alt_result = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt, alt_profile="reit",
             expense_ratio_pct=0.008,
         )
 
-        assert alt_score > equity_score, (
+        assert alt_result.score > equity_result.score, (
             f"REIT with strong income/diversification should score higher on alt model. "
-            f"Alt={alt_score}, Equity={equity_score}"
+            f"Alt={alt_result.score}, Equity={equity_result.score}"
         )
-        assert "income_generation" in alt_comps
-        assert "inflation_hedge" in alt_comps
+        assert "income_generation" in alt_result.components
+        assert "inflation_hedge" in alt_result.components
         # REIT profile weights
         for k in _DEFAULT_ALT_REIT_WEIGHTS:
-            assert k in alt_comps, f"REIT profile should include {k}"
+            assert k in alt_result.components, f"REIT profile should include {k}"
 
 
 # ── Commodity E2E: inflation_hedge component ─────────────────────────
@@ -246,17 +246,17 @@ class TestCommodityFundE2E:
             downside_capture_1y=0.5,
         )
 
-        score, comps = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt, alt_profile="commodity",
             expense_ratio_pct=0.005,
         )
 
-        assert "inflation_hedge" in comps
+        assert "inflation_hedge" in result.components
         # With beta=3.5, inflation_hedge should score very high
-        assert comps["inflation_hedge"] > 70, (
-            f"inflation_beta=3.5 should produce inflation_hedge > 70, got {comps['inflation_hedge']}"
+        assert result.components["inflation_hedge"] > 70, (
+            f"inflation_beta=3.5 should produce inflation_hedge > 70, got {result.components['inflation_hedge']}"
         )
-        assert score > 50
+        assert result.score > 50
 
 
 # ── CTA E2E: crisis_alpha dominates ──────────────────────────────────
@@ -274,17 +274,17 @@ class TestCTAFundE2E:
             inflation_beta=0.5,             # Weak inflation hedge (irrelevant for CTA)
         )
 
-        score, comps = compute_fund_score(
+        result = compute_fund_score(
             risk, asset_class="alternatives", alt_metrics=alt, alt_profile="cta",
             expense_ratio_pct=0.015,
         )
 
-        assert "crisis_alpha" in comps
+        assert "crisis_alpha" in result.components
         assert _DEFAULT_ALT_CTA_WEIGHTS["crisis_alpha"] == 0.40
         # Only crisis_alpha, diversification, risk_adjusted_return, fee_efficiency
-        assert "income_generation" not in comps, "CTA should not show income_generation"
-        assert "inflation_hedge" not in comps, "CTA should not show inflation_hedge"
-        assert score > 55, f"Strong CTA should score > 55, got {score}"
+        assert "income_generation" not in result.components, "CTA should not show income_generation"
+        assert "inflation_hedge" not in result.components, "CTA should not show inflation_hedge"
+        assert result.score > 55, f"Strong CTA should score > 55, got {result.score}"
 
 
 # ── ELITE Validation ─────────────────────────────────────────────────
@@ -315,17 +315,13 @@ class TestELITECrossAssetValidation:
 
         scores = {}
 
-        s, _ = compute_fund_score(risk, asset_class="equity")
-        scores["equity"] = s
+        scores["equity"] = compute_fund_score(risk, asset_class="equity").score
 
-        s, _ = compute_fund_score(risk, asset_class="fixed_income", fi_metrics=fi)
-        scores["fixed_income"] = s
+        scores["fixed_income"] = compute_fund_score(risk, asset_class="fixed_income", fi_metrics=fi).score
 
-        s, _ = compute_fund_score(risk, asset_class="cash", cash_metrics=cash)
-        scores["cash"] = s
+        scores["cash"] = compute_fund_score(risk, asset_class="cash", cash_metrics=cash).score
 
-        s, _ = compute_fund_score(risk, asset_class="alternatives", alt_metrics=alt, alt_profile="hedge")
-        scores["alternatives"] = s
+        scores["alternatives"] = compute_fund_score(risk, asset_class="alternatives", alt_metrics=alt, alt_profile="hedge").score
 
         for model, score in scores.items():
             assert 0 <= score <= 100, f"{model} score {score} out of range"
@@ -335,7 +331,7 @@ class TestELITECrossAssetValidation:
         """A 'good' fund in each class should score reasonably (> 40)."""
         # Good equity fund
         risk_eq = _make_equity_metrics(return_1y=0.15, sharpe_1y=1.5, max_drawdown_1y=-0.08)
-        s_eq, _ = compute_fund_score(risk_eq, asset_class="equity")
+        s_eq = compute_fund_score(risk_eq, asset_class="equity").score
 
         # Good alt fund
         risk_alt = _make_equity_metrics(return_1y=0.08, sharpe_1y=0.9)
@@ -343,7 +339,7 @@ class TestELITECrossAssetValidation:
             equity_correlation_252d=0.1, crisis_alpha_score=0.15,
             calmar_ratio_3y=1.5, sortino_1y=2.0, downside_capture_1y=0.3,
         )
-        s_alt, _ = compute_fund_score(risk_alt, asset_class="alternatives", alt_metrics=alt, alt_profile="hedge")
+        s_alt = compute_fund_score(risk_alt, asset_class="alternatives", alt_metrics=alt, alt_profile="hedge").score
 
         # Good cash fund
         cash = MagicMock()
@@ -353,7 +349,7 @@ class TestELITECrossAssetValidation:
         cash.pct_weekly_liquid = 70.0
         cash.weighted_avg_maturity_days = 15
         risk_cash = _make_equity_metrics()
-        s_cash, _ = compute_fund_score(risk_cash, asset_class="cash", cash_metrics=cash)
+        s_cash = compute_fund_score(risk_cash, asset_class="cash", cash_metrics=cash).score
 
         for label, score in [("equity", s_eq), ("alternatives", s_alt), ("cash", s_cash)]:
             assert score > 40, f"Good {label} fund should score > 40, got {score}"
