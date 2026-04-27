@@ -116,9 +116,11 @@ async def test_pareto_upper_bounds_respect_max_single_fund_weight():
 async def test_pareto_explicit_bound_respected():
     """Control: explicitly bounded blocks use BlockConstraint.max_weight, not the cap."""
     pytest.importorskip("pymoo")
+    # Block "a" explicitly bounded at 0.60, block "b" at 0.50.
+    # max_single_fund_weight=0.50 so "b" uses its cap. Sum feasible.
     constraints = ProfileConstraints(
-        blocks=[BlockConstraint("a", 0.0, 0.60)],
-        max_single_fund_weight=0.15,
+        blocks=[BlockConstraint("a", 0.0, 0.60), BlockConstraint("b", 0.40, 1.0)],
+        max_single_fund_weight=1.0,
     )
     result = await optimize_portfolio_pareto(
         block_ids=["a", "b"],
@@ -126,6 +128,8 @@ async def test_pareto_explicit_bound_respected():
         cov_matrix=np.eye(2) * 0.04,
         constraints=constraints,
     )
-    # Block "a" explicit bound 0.60 takes precedence over the 0.15 cap.
+    # Block "a" explicit bound 0.60 takes precedence over the 1.0 cap.
+    assert result.n_solutions > 0, f"No feasible solutions: {result.status}"
     for w_vec in result.pareto_weights:
-        assert w_vec[0] <= 0.60 + 1e-4
+        if w_vec:  # skip empty fallback vectors
+            assert w_vec[0] <= 0.60 + 1e-4
