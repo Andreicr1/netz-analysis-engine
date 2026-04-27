@@ -51,22 +51,36 @@ class TestComputeCompositeNav:
         assert result[0].daily_return == pytest.approx(0.016, abs=1e-8)
         assert result[0].nav == pytest.approx(1016.0, abs=1e-8)
 
-    def test_missing_block_renormalized(self) -> None:
-        """If a block has no data for a day, return is renormalized."""
+    def test_missing_block_returns_empty(self) -> None:
+        """If a required block has no data at all, composite is undefined (Q45)."""
         block_weights = {"a": 0.5, "b": 0.5}
         benchmark_navs = {
             "a": [
                 {"nav_date": date(2024, 1, 2), "return_1d": 0.04},
             ],
-            # "b" has no data for this date
+            # "b" entirely absent — composite undefined
         }
         result = compute_composite_nav(block_weights, benchmark_navs, inception_nav=1000.0)
+        assert result == []
 
-        # Only block "a" is active: R_raw = 0.5 * 0.04 = 0.02
-        # Renormalize: R = 0.02 * (1.0 / 0.5) = 0.04
-        assert len(result) == 1
-        assert result[0].daily_return == pytest.approx(0.04, abs=1e-8)
-        assert result[0].nav == pytest.approx(1040.0, abs=1e-8)
+    def test_day_level_renormalization_above_floor(self) -> None:
+        """Block present for all dates but missing on single day: renormalized
+        if active_weight >= 50% floor (Q45 day-level fix)."""
+        block_weights = {"a": 0.6, "b": 0.4}
+        benchmark_navs = {
+            "a": [
+                {"nav_date": date(2024, 1, 2), "return_1d": 0.01},
+                {"nav_date": date(2024, 1, 3), "return_1d": 0.04},
+            ],
+            "b": [
+                {"nav_date": date(2024, 1, 2), "return_1d": 0.005},
+                # Missing 2024-01-03 — 60% active, above 50% floor
+            ],
+        }
+        result = compute_composite_nav(block_weights, benchmark_navs, inception_nav=1000.0)
+        assert len(result) == 2
+        # Day 2: 60% active → renormalized: 0.6*0.04 / 0.6 = 0.04
+        assert result[1].daily_return == pytest.approx(0.04, abs=1e-8)
 
     def test_empty_inputs_return_empty(self) -> None:
         """Empty weights or empty NAVs return empty list."""
