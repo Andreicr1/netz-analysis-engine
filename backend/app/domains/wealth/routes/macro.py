@@ -447,8 +447,15 @@ async def _generate_allocation_proposals(
     report_json = review.report_json or {}
     global_regime = extract_regime_from_review(report_json)
 
-    # If regime data wasn't embedded in report, read from snapshot
-    if global_regime == "RISK_ON" and not report_json.get("regime"):
+    # If regime data wasn't embedded in report, read from snapshot.
+    # Q73 fix (Codex catch #10): trigger is "missing regime data", regardless
+    # of which fallback label extract_regime_from_review returned. Pre-Q50-Q53
+    # the trigger was `global_regime == "RISK_ON"` — relying on RISK_ON as a
+    # sentinel for missing data. Q50-Q53 changed the default to RISK_OFF for
+    # Charter §3 defensive correctness, breaking this snapshot trigger so the
+    # latest MacroRegimeSnapshot was never loaded for missing-regime reviews.
+    # Decoupled: check missing data directly, regime-label-agnostic.
+    if not report_json.get("regime"):
         regime_stmt = (
             select(MacroRegimeSnapshot)
             .order_by(MacroRegimeSnapshot.as_of_date.desc())
