@@ -67,32 +67,38 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
     config_l2 = (await config_svc.get("liquid_funds", "screening_layer2", org_id)).value
     config_l3 = (await config_svc.get("liquid_funds", "screening_layer3", org_id)).value
 
-    # 3. Load all watchlisted instruments
+    # 3. Load watchlist-tagged instruments (evaluation targets)
     result = await db.execute(
         select(Instrument).where(
             Instrument.is_active.is_(True),
             Instrument.approval_status == "watchlist",
         ),
     )
-    instruments = result.scalars().all()
+    watchlist_instruments = result.scalars().all()
 
-    if not instruments:
+    if not watchlist_instruments:
         logger.info("watchlist_check_empty", reason="no watchlisted instruments")
         return {"status": "completed", "total_screened": 0}
 
-    # Load latest fund_risk_metrics for each instrument (global table, no RLS)
+    # 3b. Load full active universe for peer cohort baseline
+    universe_result = await db.execute(
+        select(Instrument).where(Instrument.is_active.is_(True)),
+    )
+    universe_instruments = universe_result.scalars().all()
+
+    # Load latest fund_risk_metrics for full universe (global table, no RLS)
     from app.domains.wealth.models.risk import FundRiskMetrics
 
-    instrument_ids = [i.instrument_id for i in instruments]
+    universe_ids = [i.instrument_id for i in universe_instruments]
     rm_res = await db.execute(
         select(FundRiskMetrics)
-        .where(FundRiskMetrics.instrument_id.in_(instrument_ids))
+        .where(FundRiskMetrics.instrument_id.in_(universe_ids))
         .distinct(FundRiskMetrics.instrument_id)
         .order_by(FundRiskMetrics.instrument_id, FundRiskMetrics.calc_date.desc()),
     )
     risk_metrics_by_id = {rm.instrument_id: rm for rm in rm_res.scalars().all()}
 
-    # Build per-instrument metric dicts for cohort peer_values
+    # Build per-instrument metric dicts for cohort peer_values (FULL universe)
     from app.domains.wealth.services.screener_peer_values_builder import (
         METRIC_NAMES_BY_TYPE,
         build_per_instrument_peer_values,
@@ -113,7 +119,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
             return None
 
     metric_dicts_by_id: dict[uuid.UUID, dict[str, float | None]] = {}
-    for i in instruments:
+    for i in universe_instruments:
         rm = risk_metrics_by_id.get(i.instrument_id)
         attrs = dict(i.attributes) if i.attributes else {}
         asset_class = attrs.get("asset_class", "")
@@ -148,18 +154,19 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
         else:
             metric_dicts_by_id[i.instrument_id] = {
                 "sharpe_ratio": _safe_float(rm.sharpe_1y),
-                "max_drawdown": _safe_float(rm.max_drawdown_1y),
+                "max_drawdown": _safe_float(rm.max_drawdown_1y, scale=100),
                 "pct_positive_months": _safe_float(getattr(rm, "pct_positive_months", None)),
                 "annual_volatility_pct": _safe_float(rm.volatility_1y, scale=100),
             }
 
+    # Build cohort dicts from FULL universe (true market-relative rank)
     inst_dicts_for_cohorts = [
         {
             "instrument_id": i.instrument_id,
             "instrument_type": i.instrument_type,
             "attributes": dict(i.attributes) if i.attributes else {},
         }
-        for i in instruments
+        for i in universe_instruments
     ]
 
     peer_values_by_id = build_per_instrument_peer_values(
@@ -214,7 +221,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
             data_period_days=0,
         )
 
-    # Extract scalar data before crossing async/thread boundary
+    # Extract scalar data before crossing async/thread boundary (watchlist subset only)
     instrument_dicts = [
         {
             "instrument_id": i.instrument_id,
@@ -228,11 +235,11 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
             ),
             "peer_values": peer_values_by_id.get(i.instrument_id, {}),
         }
-        for i in instruments
+        for i in watchlist_instruments
     ]
 
     # 4. Fetch previous screening outcomes for comparison
-    instrument_ids = [i.instrument_id for i in instruments]
+    instrument_ids = [i.instrument_id for i in watchlist_instruments]
     prev_results = await db.execute(
         select(ScreeningResult.instrument_id, ScreeningResult.overall_status).where(
             ScreeningResult.instrument_id.in_(instrument_ids),
