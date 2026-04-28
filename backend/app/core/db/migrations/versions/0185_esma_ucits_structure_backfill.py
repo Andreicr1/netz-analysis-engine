@@ -54,11 +54,27 @@ def downgrade() -> None:
     ).scalar()
 
     if has_marker:
+        # Step 1 — narrow undo: only rows still at original 'UCITS' value.
+        # If structure was deliberately corrected post-0185 (e.g. to 'SICAV'
+        # by a future enrichment process or manual edit), the corrected
+        # value is preserved — only the now-stale marker is cleaned up in
+        # step 2 below.
         op.execute(
             """
             UPDATE instruments_universe
             SET attributes = (attributes - 'structure' - '_q77_added_structure')
             WHERE (attributes->>'_q77_added_structure')::bool = true
+              AND attributes->>'structure' = 'UCITS'
+            """
+        )
+        # Step 2 — cleanup stale markers from rows whose structure was
+        # corrected post-0185. Marker tracked the original backfill; once
+        # the value diverges from 'UCITS', the marker is no longer relevant.
+        op.execute(
+            """
+            UPDATE instruments_universe
+            SET attributes = attributes - '_q77_added_structure'
+            WHERE attributes ? '_q77_added_structure'
             """
         )
     else:
