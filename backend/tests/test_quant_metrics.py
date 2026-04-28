@@ -149,10 +149,10 @@ class TestComputeBondMetrics:
         assert result is not None
         assert result.duration_efficiency == 0.0
 
-    def test_missing_attributes_default_zero(self):
+    def test_missing_attributes_returns_none(self):
+        """S08-F05: empty attributes → None (insufficient data), not zero-defaults."""
         result = compute_bond_metrics({})
-        assert result is not None
-        assert result.spread_vs_benchmark_bps == 0.0
+        assert result is None
 
     def test_invalid_numeric_returns_none(self):
         attrs = {"coupon_rate_pct": "not_a_number"}
@@ -160,7 +160,8 @@ class TestComputeBondMetrics:
         assert result is None
 
     def test_data_source_preserved(self):
-        attrs = {"data_source": "yahoo"}
+        """data_source alone (no required fields) → None post-F05 guard."""
+        attrs = {"data_source": "yahoo", "coupon_rate_pct": 3.0}
         result = compute_bond_metrics(attrs)
         assert result is not None
         assert result.data_source == "yahoo"
