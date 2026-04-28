@@ -277,9 +277,14 @@ def determine_status(
         return "WATCHLIST"
 
     if previous_status == "PASS":
-        # Must fall below threshold - buffer to demote
+        # Must fall below threshold - buffer to demote.
+        # F09 fix: apply hysteresis buffer symmetrically when choosing between
+        # WATCHLIST and FAIL — a PASS-history fund at score < (watchlist - hysteresis)
+        # earns FAIL (genuine catastrophic drop), but anywhere above that buffer
+        # stays at WATCHLIST first (matching how WATCHLIST funds at the same
+        # score don't drop direct to FAIL).
         if score < pass_threshold - hysteresis:
-            return "WATCHLIST" if score >= watchlist_threshold else "FAIL"
+            return "WATCHLIST" if score >= watchlist_threshold - hysteresis else "FAIL"
         return "PASS"
 
     # First screening or previous FAIL — no hysteresis
