@@ -234,13 +234,22 @@ def compute_quant_metrics(
 def compute_bond_metrics(attributes: dict[str, Any]) -> BondQuantMetrics | None:
     """Compute bond screening metrics from JSONB attributes.
 
-    Args:
-        attributes: Bond instrument JSONB attributes dict.
-
-    Returns:
-        BondQuantMetrics or None if insufficient data.
-
+    Returns None if all required enrichment fields are missing — caller
+    treats None as insufficient data → WATCHLIST rather than deterministic
+    FAIL on zero-default metrics that look like real observations.
     """
+    # S08-F05 fix: explicit insufficient-data guard.  Without at least one
+    # required enrichment field populated the bond cannot be screened.
+    required_fields = (
+        "coupon_rate_pct",
+        "outstanding_usd",
+        "face_value_usd",
+        "duration_years",
+        "benchmark_yield_pct",
+    )
+    if not any(attributes.get(field) is not None for field in required_fields):
+        return None
+
     try:
         coupon = float(attributes.get("coupon_rate_pct", 0) or 0)
         outstanding = float(attributes.get("outstanding_usd", 0) or 0)
