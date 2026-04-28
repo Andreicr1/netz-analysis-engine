@@ -175,9 +175,9 @@ class LayerEvaluator:
             field_name = criterion[8:]  # strip "allowed_"
             actual_val = attributes.get(field_name, "")
             if isinstance(expected, list):
-                passed = str(actual_val) in [str(e) for e in expected]
+                passed = str(actual_val).lower() in [str(e).lower() for e in expected]
             else:
-                passed = str(actual_val) == str(expected)
+                passed = str(actual_val).lower() == str(expected).lower()
             return CriterionResult(
                 criterion=criterion,
                 expected=str(expected),
@@ -228,20 +228,20 @@ class LayerEvaluator:
 
     @staticmethod
     def _get_numeric(attributes: dict[str, Any], field_name: str) -> float | None:
-        """Try to extract a numeric value from attributes.
+        """Extract a numeric value from attributes by exact field name.
 
-        Handles both direct numeric values and string representations
-        (e.g., aum_usd stored as text in JSONB for precision).
+        Q68 / S08-F10: removed the legacy ``_usd`` / ``_pct`` suffix fallback
+        chain that could silently pick wrong-unit attributes for ambiguous
+        future criteria.  Config criteria must use the exact column suffix
+        (e.g. ``min_aum_usd``, ``min_yield_pct``).
         """
-        # Try multiple field name patterns
-        for key in (field_name, f"{field_name}_usd", f"{field_name}_pct"):
-            val = attributes.get(key)
-            if val is not None:
-                try:
-                    return float(val)
-                except (ValueError, TypeError):
-                    continue
-        return None
+        val = attributes.get(field_name)
+        if val is None:
+            return None
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return None
 
 
 def determine_status(

@@ -18,21 +18,27 @@ def test_lower_is_better_tied_cohort_ranks_at_median() -> None:
     Note: all-identical peers (e.g. [0,0,0,0,0]) trigger the lo==hi
     variance guard and return None, so we use a cohort with spread
     but a tied majority to exercise mid-rank.
+
+    Q68: explicit lower_is_better — "max_drawdown_pct" removed from default
+    frozenset (dead key, see S08-F06).
     """
     metrics = {"max_drawdown_pct": 3.0}
     peers = {"max_drawdown_pct": [1.0, 3.0, 3.0, 3.0, 5.0]}
     weights = {"max_drawdown_pct": 1.0}
-    score = composite_score(metrics, peers, weights)
+    score = composite_score(metrics, peers, weights, lower_is_better=frozenset({"max_drawdown_pct"}))
     assert score == pytest.approx(0.50)
 
 
 def test_partial_tie_lower_is_better() -> None:
     """Lower-is-better, peers [1, 2, 2], value=2 → mid-rank.
-    count_less=1, count_equal=2 → (1 + 1.0)/3 ≈ 0.667, inverted to 0.333."""
+    count_less=1, count_equal=2 → (1 + 1.0)/3 ≈ 0.667, inverted to 0.333.
+
+    Q68: explicit lower_is_better (S08-F06 removed "max_drawdown_pct" from default).
+    """
     metrics = {"max_drawdown_pct": 2.0}
     peers = {"max_drawdown_pct": [1.0, 2.0, 2.0]}
     weights = {"max_drawdown_pct": 1.0}
-    score = composite_score(metrics, peers, weights)
+    score = composite_score(metrics, peers, weights, lower_is_better=frozenset({"max_drawdown_pct"}))
     assert score == pytest.approx(0.333, abs=0.01)
 
 
@@ -77,11 +83,14 @@ def test_no_tie_higher_is_better_unchanged() -> None:
 
 def test_no_tie_lower_is_better_unchanged() -> None:
     """Fund between peers with no ties, lower-is-better → same result pre/post fix.
-    fund=1.5 in peers [1, 2, 3, 5] → rank=0.25, inverted to 0.75."""
+    fund=1.5 in peers [1, 2, 3, 5] → rank=0.25, inverted to 0.75.
+
+    Q68: explicit lower_is_better (S08-F06 removed "max_drawdown_pct" from default).
+    """
     metrics = {"max_drawdown_pct": 1.5}
     peers = {"max_drawdown_pct": [1.0, 2.0, 3.0, 5.0]}
     weights = {"max_drawdown_pct": 1.0}
-    score = composite_score(metrics, peers, weights)
+    score = composite_score(metrics, peers, weights, lower_is_better=frozenset({"max_drawdown_pct"}))
     assert score == pytest.approx(0.75)
 
 
@@ -94,9 +103,11 @@ def test_mid_rank_matches_peer_group_service_convention() -> None:
     Symmetric tied cohort → 50th percentile in both.
     peer_group_service post-Q60 returns 50.0 (0-100 scale).
     composite_score returns 0.50 (0-1 scale) — equivalent semantics.
+
+    Q68: explicit lower_is_better (S08-F06 removed "max_drawdown_pct" from default).
     """
     metrics = {"max_drawdown_pct": 3.0}
     peers = {"max_drawdown_pct": [1.0, 3.0, 3.0, 3.0, 5.0]}
     weights = {"max_drawdown_pct": 1.0}
-    score = composite_score(metrics, peers, weights)
+    score = composite_score(metrics, peers, weights, lower_is_better=frozenset({"max_drawdown_pct"}))
     assert score == pytest.approx(0.50)
