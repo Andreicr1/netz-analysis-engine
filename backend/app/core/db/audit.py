@@ -49,12 +49,19 @@ async def write_audit_event(
     after: dict[str, Any] | None = None,
     access_level: str = "internal",
     organization_id: uuid.UUID | None = None,
+    allow_global: bool = False,
 ) -> None:
     """Write an audit event to the audit_events table.
 
     The caller must have an active RLS session (organization_id is set
     via SET LOCAL by get_db_with_rls). If organization_id is not passed
     explicitly, it is read from the current RLS context.
+
+    For events emitted by global pipelines (factor model, macro
+    ingestion, benchmark ingest) where no tenant context exists, pass
+    ``allow_global=True`` to opt into a NULL organization_id row. Without
+    the flag, missing context raises ValueError so tenant-scoped callers
+    can never silently produce orphan audit events.
     """
     # Resolve organization_id from RLS context if not provided
     if organization_id is None:
@@ -64,6 +71,13 @@ async def write_audit_event(
         org_str = row.scalar()
         if org_str:
             organization_id = uuid.UUID(org_str)
+
+    if organization_id is None and not allow_global:
+        raise ValueError(
+            f"audit event {action!r} on {entity_type}/{entity_id} has no "
+            "organization_id (RLS context empty). Pass allow_global=True "
+            "if this is a global pipeline event.",
+        )
 
     event = AuditEvent(
         organization_id=organization_id,

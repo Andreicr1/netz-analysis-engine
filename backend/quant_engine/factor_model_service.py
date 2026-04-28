@@ -151,7 +151,10 @@ async def build_fundamental_factor_returns(
         bench_levels = bench_levels.ffill(limit=_FACTOR_FFILL_LIMIT)
 
         # Compute simple returns from filled levels.
-        bench_returns = bench_levels.pct_change()
+        # PR-Q92: fill_method=None (pad default deprecated in pandas 2.x).
+        # Levels are already ffill-ed above with limit=_FACTOR_FFILL_LIMIT;
+        # pct_change should not fill again.
+        bench_returns = bench_levels.pct_change(fill_method=None)
     else:
         bench_returns = pd.DataFrame()
         authoritative_bench = pd.DataFrame()
@@ -204,7 +207,10 @@ async def build_fundamental_factor_returns(
         # PR-Q15 Fix 1: forward-fill macro LEVELS before computing returns.
         macro_levels = macro_levels.ffill(limit=_FACTOR_FFILL_LIMIT)
         # PR-Q15 Fix 6: simple returns (pct_change), not log returns.
-        macro_returns = macro_levels.pct_change()
+        # PR-Q92: fill_method=None (pad default deprecated in pandas 2.x).
+        # Levels are already ffill-ed above, so we don't want pct_change
+        # to fill again — pass None explicitly to silence the warning.
+        macro_returns = macro_levels.pct_change(fill_method=None)
     else:
         macro_returns = pd.DataFrame()
 
@@ -340,6 +346,7 @@ async def build_fundamental_factor_returns(
                     "lookback_start": start_date.isoformat(),
                     "lookback_end": end_date.isoformat(),
                 },
+                allow_global=True,
             )
         except Exception as audit_err:
             # Audit failure must not break estimation — log and continue
@@ -381,6 +388,7 @@ async def build_fundamental_factor_returns(
                     "last_dropped": last_drop,
                     "ffill_limit_days": _FACTOR_FFILL_LIMIT,
                 },
+                allow_global=True,
             )
         except Exception as audit_err:
             logger.warning("factor_data_gap_audit_failed", err=str(audit_err))
