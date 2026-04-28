@@ -66,6 +66,10 @@ def to_decimal_fraction(value: Any) -> float | None:
     lower than the false-negative cost (treating 0.5 % as 50 %, which
     collapsed fee_efficiency to 0 for ~60 % of index/ETF funds).
 
+    Q71 follow-up: emits ``expense_ratio_ambiguous_percent_or_fraction`` warning
+    log when input falls in this band, restoring observability that pre-Q57
+    provided via ``expense_ratio_clamped_above_max``.
+
     After conversion the result is clamped into the
     ``[MIN_REASONABLE_EXPENSE_RATIO, MAX_REASONABLE_EXPENSE_RATIO]``
     interval. Values outside the interval emit a warning log and are
@@ -89,6 +93,24 @@ def to_decimal_fraction(value: Any) -> float | None:
     elif abs_v > MAX_REASONABLE_EXPENSE_RATIO:
         fraction = v / 100.0     # whole percent → fraction
         source_scale = "percent"
+        # Q71 fix: emit observability for the (0.15, 1.0] ambiguous band.
+        # Per Q57 design, we treat these as whole percent (dominant N-CEN case).
+        # But a value of e.g. 0.20 could ALSO be a malformed XBRL fraction (= 20% ER).
+        # Pre-Q57 the malformed-fraction case clamped to MAX_REASONABLE_EXPENSE_RATIO
+        # with warning; post-Q57 we silently divide by 100. Restore the warning
+        # so production audit can detect ingestion-source data quality issues.
+        if abs_v <= 1.0:
+            logger.warning(
+                "expense_ratio_ambiguous_percent_or_fraction",
+                raw=value,
+                interpreted_as_percent=fraction,
+                note=(
+                    "Input in (0.15, 1.0] band — assumed whole percent per Q57 "
+                    "convention. If source was XBRL fraction, value would have "
+                    "represented a high-fee outlier (>15%) and would have been "
+                    "clamped pre-Q57. Verify upstream source convention."
+                ),
+            )
     else:
         fraction = v             # already a fraction
         source_scale = "fraction"
