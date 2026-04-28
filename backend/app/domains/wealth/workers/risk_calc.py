@@ -1532,7 +1532,10 @@ async def _compute_and_persist_taa_state(
 
         # Get regime half widths
         regime_bands = (taa_config or {}).get("regime_bands", {})
-        regime_cfg = regime_bands.get(regime, regime_bands.get("RISK_ON", {}))
+        # Q74 fix (Codex #9): align with taa_band_service RISK_OFF fallback
+        # (post-Q50-Q53 defensive). Mixed centers/widths from unexpected
+        # raw_regime values produced inconsistent effective constraints.
+        regime_cfg = regime_bands.get(regime, regime_bands.get("RISK_OFF", {}))
         half_widths: dict[str, float] = {
             ac: cfg.get("half_width", 0.05)
             for ac, cfg in regime_cfg.items()

@@ -439,11 +439,16 @@ def _compute_fi_score(
 
     score = sum(components[k] * w for k, w in weights.items())
     rounded_components = {k: round(v, 2) for k, v in components.items()}
-    degraded_reasons = [f"synthesized_component:{name}" for name in synthesized]
+    # Q74 fix (Codex #4): only flag degraded for synthesized components that
+    # carry weight > 0 — zero-weight components don't affect composite.
+    weighted_synthesized = [
+        name for name in synthesized if weights.get(name, 0.0) > 0.0
+    ]
+    degraded_reasons = [f"synthesized_component:{name}" for name in weighted_synthesized]
     return ScoringResult(
         score=round(score, 2),
         components=rounded_components,
-        degraded=len(synthesized) > 0,
+        degraded=len(weighted_synthesized) > 0,
         degraded_reasons=degraded_reasons,
     )
 
@@ -542,11 +547,15 @@ def _compute_cash_score(
 
     score = sum(components[k] * w for k, w in weights.items())
     rounded_components = {k: round(v, 2) for k, v in components.items()}
-    degraded_reasons = [f"synthesized_component:{name}" for name in synthesized]
+    # Q74 fix (Codex #4): only flag degraded for weighted synthesized components.
+    weighted_synthesized = [
+        name for name in synthesized if weights.get(name, 0.0) > 0.0
+    ]
+    degraded_reasons = [f"synthesized_component:{name}" for name in weighted_synthesized]
     return ScoringResult(
         score=round(score, 2),
         components=rounded_components,
-        degraded=len(synthesized) > 0,
+        degraded=len(weighted_synthesized) > 0,
         degraded_reasons=degraded_reasons,
     )
 
@@ -767,11 +776,15 @@ def _compute_equity_score(
 
     score = sum(components[k] * w for k, w in weights.items())
     rounded_components = {k: round(v, 2) for k, v in components.items()}
-    degraded_reasons = [f"synthesized_component:{name}" for name in synthesized]
+    # Q74 fix (Codex #4): only flag degraded for weighted synthesized components.
+    weighted_synthesized = [
+        name for name in synthesized if weights.get(name, 0.0) > 0.0
+    ]
+    degraded_reasons = [f"synthesized_component:{name}" for name in weighted_synthesized]
     return ScoringResult(
         score=round(score, 2),
         components=rounded_components,
-        degraded=len(synthesized) > 0,
+        degraded=len(weighted_synthesized) > 0,
         degraded_reasons=degraded_reasons,
     )
 
