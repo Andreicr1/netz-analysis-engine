@@ -18,6 +18,7 @@ Idempotent: WHERE clause filters rows already populated.
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0185_esma_ucits_structure_backfill"
@@ -36,11 +37,38 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Narrow scope: only undo rows we explicitly added the marker to in
-    # migration 0189. Pre-existing or post-migration external sources of
-    # structure='UCITS' are preserved.
-    op.execute("""
-        UPDATE instruments_universe
-        SET attributes = (attributes - 'structure' - '_q77_added_structure')
-        WHERE (attributes->>'_q77_added_structure')::bool = true
-    """)
+    # Dual-mode rollback to handle two deployment scenarios:
+    # (a) DB passed through 0189 → marker present → narrow undo (preserves
+    #     pre-existing edge cases — see PR-Q82 PR body for the 3 known cases).
+    # (b) DB never reached 0189 (e.g. environment at 0186-0188 rolling back
+    #     to 0184) → marker absent → broad undo (original 0185 behavior).
+    # The marker check is idempotent: 0189.upgrade() is conservative and tags
+    # all UCITS rows with structure='UCITS', so presence/absence is a reliable
+    # signal of whether 0189 was ever applied to this database.
+    bind = op.get_bind()
+    has_marker = bind.execute(
+        sa.text(
+            "SELECT EXISTS(SELECT 1 FROM instruments_universe "
+            "WHERE attributes ? '_q77_added_structure')"
+        )
+    ).scalar()
+
+    if has_marker:
+        op.execute(
+            """
+            UPDATE instruments_universe
+            SET attributes = (attributes - 'structure' - '_q77_added_structure')
+            WHERE (attributes->>'_q77_added_structure')::bool = true
+            """
+        )
+    else:
+        # Broad fallback — original 0185 downgrade. Safe in pre-0189
+        # environments where no Q82 marker semantics exist yet.
+        op.execute(
+            """
+            UPDATE instruments_universe
+            SET attributes = attributes - 'structure'
+            WHERE attributes->>'fund_subtype' = 'ucits'
+              AND attributes->>'structure' = 'UCITS'
+            """
+        )
