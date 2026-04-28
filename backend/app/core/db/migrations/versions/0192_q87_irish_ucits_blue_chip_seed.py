@@ -272,13 +272,19 @@ def upgrade() -> None:
             f"{ticker_sql}, '{ac}', '{geo}', '{currency}', '{inv_geo}', "
             f"true, '{attrs}'::jsonb, NOW(), NOW())"
         )
+    # ON CONFLICT (instrument_id): instrument_id is PK (always present in any
+    # schema). gen_random_uuid() never produces collision with existing rows,
+    # so effectively a no-op idempotency wrapper — but syntactically valid in
+    # both local DB (with manual uq_iu_isin) and CI fresh DB (without).
+    # Original ON CONFLICT (isin) failed in CI because uq_iu_isin is not
+    # defined in any migration — exists only via legacy manual setup locally.
     op.execute(
         "INSERT INTO instruments_universe "
         "(instrument_id, instrument_type, name, isin, ticker, "
         "asset_class, geography, currency, investment_geography, "
         "is_active, attributes, created_at, updated_at) VALUES\n"
         + ",\n".join(inst_values)
-        + "\nON CONFLICT (isin) DO NOTHING"
+        + "\nON CONFLICT (instrument_id) DO NOTHING"
     )
 
 
