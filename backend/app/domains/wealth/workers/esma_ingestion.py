@@ -234,22 +234,45 @@ async def run_esma_ingestion() -> dict:
             await db.commit()
             ticker_count = sum(1 for r in resolutions if r.is_tradeable)
 
-            # Update yahoo_ticker on esma_funds for resolved ISINs
-            resolved_map = {
-                r.isin: r.yahoo_ticker
-                for r in resolutions
-                if r.yahoo_ticker
-            }
-            if resolved_map:
-                for lei_val, ticker in resolved_map.items():
-                    await db.execute(
-                        text(
-                            "UPDATE esma_funds SET yahoo_ticker = :ticker, "
-                            "ticker_resolved_at = :now WHERE lei = :lei",
-                        ),
-                        {"ticker": ticker, "now": now, "lei": lei_val},
-                    )
-                await db.commit()
+            # Propagate best ticker per fund using exchange suffix priority
+            # (PR-Q85: replaces arbitrary first-listing selection)
+            await db.execute(
+                text("""
+                    UPDATE esma_funds AS ef
+                    SET yahoo_ticker = best.yahoo_ticker,
+                        ticker_resolved_at = :now
+                    FROM (
+                        SELECT DISTINCT ON (fund_lei)
+                            fund_lei, yahoo_ticker
+                        FROM esma_isin_ticker_map
+                        WHERE is_tradeable = true
+                          AND fund_lei IS NOT NULL
+                          AND yahoo_ticker IS NOT NULL
+                        ORDER BY fund_lei,
+                            CASE
+                                WHEN yahoo_ticker LIKE '%.L'  THEN 1
+                                WHEN yahoo_ticker LIKE '%.PA' THEN 2
+                                WHEN yahoo_ticker LIKE '%.AS' THEN 3
+                                WHEN yahoo_ticker LIKE '%.MI' THEN 4
+                                WHEN yahoo_ticker LIKE '%.MC' THEN 5
+                                WHEN yahoo_ticker LIKE '%.BR' THEN 6
+                                WHEN yahoo_ticker LIKE '%.VI' THEN 7
+                                WHEN yahoo_ticker LIKE '%.SW' THEN 8
+                                WHEN yahoo_ticker LIKE '%.OL' THEN 9
+                                WHEN yahoo_ticker LIKE '%.CO' THEN 10
+                                WHEN yahoo_ticker LIKE '%.HE' THEN 11
+                                WHEN yahoo_ticker LIKE '%.F'  THEN 12
+                                WHEN yahoo_ticker LIKE '%.LX' THEN 13
+                                ELSE 99
+                            END,
+                            yahoo_ticker
+                    ) AS best
+                    WHERE ef.lei = best.fund_lei
+                      AND ef.yahoo_ticker IS DISTINCT FROM best.yahoo_ticker
+                """),
+                {"now": now},
+            )
+            await db.commit()
 
             summary = {
                 "status": "completed",

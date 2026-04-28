@@ -360,11 +360,11 @@ async def _fetch_aum(
         )
         return _degraded(ticker, "yahoo_fetch_error")
 
-    total_assets = info.get("totalAssets")
     raw_currency = info.get("currency", "USD")
     currency = _CURRENCY_NORMALIZE.get(raw_currency, raw_currency)
 
-    if not total_assets or not isinstance(total_assets, (int, float)) or total_assets <= 0:
+    aum_native, aum_method = _extract_aum(info)
+    if aum_native is None:
         logger.debug(
             "esma_aum_sync.fund_degraded",
             lei=lei,
@@ -386,27 +386,58 @@ async def _fetch_aum(
         return _degraded(
             ticker,
             f"fx_unavailable_{currency}",
-            aum_native=float(total_assets),
+            aum_native=aum_native,
             currency=currency,
         )
 
-    aum_usd = round(float(total_assets) * fx_rate, 2)
+    aum_usd = round(aum_native * fx_rate, 2)
     logger.debug(
         "esma_aum_sync.fund_aum_fetched",
         lei=lei,
         ticker=ticker,
         aum_usd=aum_usd,
+        aum_method=aum_method,
         currency_native=currency,
         fx_rate=round(fx_rate, 6),
     )
     return {
         "ticker": ticker,
         "aum_usd": aum_usd,
-        "aum_native": float(total_assets),
+        "aum_native": aum_native,
         "aum_native_currency": currency,
+        "aum_method": aum_method,
         "aum_degraded": False,
         "aum_degraded_reason": None,
     }
+
+
+def _extract_aum(info: dict[str, Any]) -> tuple[float | None, str]:
+    """Extract AUM from Yahoo info dict with fallback to nav x shares.
+
+    Returns (aum, method). method in {'totalAssets', 'nav_x_shares', 'unavailable'}.
+    """
+    total_assets = info.get("totalAssets")
+    if (
+        total_assets is not None
+        and isinstance(total_assets, (int, float))
+        and total_assets > 0
+    ):
+        return float(total_assets), "totalAssets"
+
+    # Fallback: derive from navPrice x sharesOutstanding (typical for .L ETFs)
+    nav = info.get("navPrice") or info.get("regularMarketPrice")
+    shares = info.get("sharesOutstanding")
+    if (
+        nav is not None
+        and shares is not None
+        and isinstance(nav, (int, float))
+        and isinstance(shares, (int, float))
+        and nav > 0
+        and shares > 0
+    ):
+        return float(nav) * float(shares), "nav_x_shares"
+
+    return None, "unavailable"
 
 
 def _degraded(
@@ -473,6 +504,7 @@ async def _batch_update(
                     "aum_native": u["aum_native"],
                     "aum_native_currency": u["aum_native_currency"],
                     "aum_source": "yahoo_finance",
+                    "aum_method": u.get("aum_method", "totalAssets"),
                     "aum_fetched_at": now_str,
                     "aum_degraded": False,
                     "aum_degraded_reason": None,
