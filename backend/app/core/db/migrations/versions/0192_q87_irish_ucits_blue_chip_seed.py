@@ -28,8 +28,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0191_q87_irish_ucits_blue_chip_seed"
-down_revision: str | None = "0190_screening_runs_allow_watchlist"
+revision: str = "0192_q87_irish_ucits_blue_chip_seed"
+down_revision: str | None = "0191_q85_reprioritize_esma_tickers"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
