@@ -445,6 +445,7 @@ async def _sync_esma_funds(db: AsyncSession) -> dict[str, Any]:
             jsonb_build_object(
                 'fund_lei', ef.lei,
                 'fund_subtype', 'ucits',
+                'structure', 'UCITS',
                 'strategy_label', ef.strategy_label,
                 'domicile', ef.domicile,
                 'esma_manager_id', ef.esma_manager_id,
