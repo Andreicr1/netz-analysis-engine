@@ -38,7 +38,7 @@ from quant_engine.return_statistics_service import (
     compute_sharpe_ratio,
     compute_sortino_ratio,
 )
-from quant_engine.scoring_components import robust_sharpe as _robust_sharpe_mod
+from quant_engine.scoring_components import robust_sharpe as _robust_sharpe
 from quant_engine.scoring_service import compute_fund_score
 from quant_engine.talib_momentum_service import (
     compute_flow_momentum,
@@ -593,7 +593,7 @@ def _compute_metrics_from_returns(
     # Uses daily returns over the 3y window when available, else the full
     # series, with periods_per_year=252 to match the daily sharpe_1y scale.
     cf_window = returns[-(3 * 252):] if len(returns) >= 3 * 252 else returns
-    cf_result = _robust_sharpe_mod.robust_sharpe(
+    cf_result = _robust_sharpe(
         cf_window,
         rf_rate=risk_free_rate / 252.0,
         periods_per_year=252,
