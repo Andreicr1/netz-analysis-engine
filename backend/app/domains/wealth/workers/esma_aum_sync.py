@@ -49,6 +49,17 @@ _yahoo_gate: ExternalProviderGate[Any] = ExternalProviderGate(
     ),
 )
 
+# Isolated gate for Q87 priority batch — smaller threshold so a bad run
+# fails fast without poisoning the main gate's circuit state.
+_q87_priority_gate: ExternalProviderGate[Any] = ExternalProviderGate(
+    GateConfig(
+        name="yahoo_aum_priority_q87",
+        timeout_s=30.0,
+        failure_threshold=5,
+        recovery_after_s=60.0,
+    ),
+)
+
 # Thread pool for blocking yfinance calls
 _io_executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=4,
@@ -242,14 +253,59 @@ async def _do_sync(
         currencies=list(fx_rates.keys()),
     )
 
-    # 2. Query UCITS candidates needing AUM refresh
+    loop = asyncio.get_event_loop()
+
+    # ── Phase 1: priority batch — Q87 manual-seed funds FIRST ──
+    # These are explicit institutional blue-chips that must clear before
+    # the main batch risks tripping the Yahoo circuit breaker.
+    priority_result = await db.execute(
+        text("""
+            SELECT ticker,
+                   attributes->>'fund_lei' AS lei
+            FROM instruments_universe
+            WHERE attributes->>'fund_subtype' = 'ucits'
+              AND (attributes->>'_q87_manual_seed')::bool = true
+              AND ticker IS NOT NULL
+              AND (
+                  (attributes->>'aum_fetched_at')::timestamptz
+                      < NOW() - INTERVAL '7 days'
+                  OR attributes->>'aum_fetched_at' IS NULL
+              )
+            ORDER BY ticker
+        """),
+    )
+    priority_candidates = priority_result.fetchall()
+
+    priority_updates: list[dict[str, Any]] = []
+    priority_populated = 0
+    priority_degraded = 0
+    if priority_candidates:
+        logger.info(
+            "esma_aum_sync.priority_batch_start",
+            count=len(priority_candidates),
+        )
+        priority_updates, priority_populated, priority_degraded = (
+            await _process_candidates(
+                priority_candidates, loop, gate=_q87_priority_gate, label="priority_q87",
+            )
+        )
+        logger.info(
+            "esma_aum_sync.priority_batch_complete",
+            populated=priority_populated,
+            degraded=priority_degraded,
+        )
+
+    # ── Phase 2: main batch — remaining UCITS funds ──
+    # Gate may trip mid-batch; acceptable for non-priority funds since they
+    # have no institutional commitment yet.
     limit_clause = f"LIMIT {int(limit)}" if limit else ""
-    result = await db.execute(
+    main_result = await db.execute(
         text(f"""
             SELECT ticker,
                    attributes->>'fund_lei' AS lei
             FROM instruments_universe
             WHERE attributes->>'fund_subtype' = 'ucits'
+              AND COALESCE((attributes->>'_q87_manual_seed')::bool, false) = false
               AND ticker IS NOT NULL
               AND (
                   (attributes->>'aum_fetched_at')::timestamptz
@@ -260,30 +316,67 @@ async def _do_sync(
             {limit_clause}
         """),
     )
-    candidates = result.fetchall()
-    total_candidates = len(candidates)
+    main_candidates = main_result.fetchall()
 
-    logger.info("esma_aum_sync.candidates", total=total_candidates)
+    main_updates: list[dict[str, Any]] = []
+    main_populated = 0
+    main_degraded = 0
+    if main_candidates:
+        logger.info(
+            "esma_aum_sync.main_batch_start",
+            count=len(main_candidates),
+        )
+        main_updates, main_populated, main_degraded = (
+            await _process_candidates(
+                main_candidates, loop, gate=_yahoo_gate, label="main",
+            )
+        )
 
-    if not total_candidates:
-        elapsed = round(time.monotonic() - t0, 1)
-        return _summary(0, 0, 0, 0, elapsed)
+    # ── Merge + persist ──
+    all_updates = priority_updates + main_updates
+    total_candidates = len(priority_candidates) + len(main_candidates)
+    aum_populated = priority_populated + main_populated
+    degraded_count = priority_degraded + main_degraded
 
-    # 3. Process with bounded concurrency
+    now_str = datetime.now(timezone.utc).isoformat()
+    updated_rows = await _batch_update(db, all_updates, now_str)
+
+    elapsed = round(time.monotonic() - t0, 1)
+    logger.info(
+        "esma_aum_sync.complete",
+        total_processed=total_candidates,
+        priority_populated=priority_populated,
+        priority_degraded=priority_degraded,
+        main_populated=main_populated,
+        main_degraded=main_degraded,
+        updated_rows=updated_rows,
+        duration_seconds=elapsed,
+    )
+    return _summary(total_candidates, aum_populated, degraded_count, updated_rows, elapsed)
+
+
+async def _process_candidates(
+    candidates: list[Any],
+    loop: asyncio.AbstractEventLoop,
+    *,
+    gate: ExternalProviderGate[Any],
+    label: str,
+) -> tuple[list[dict[str, Any]], int, int]:
+    """Process a batch of candidates using the given gate.
+
+    Returns (updates, aum_populated, degraded_count).
+    """
     sem = asyncio.Semaphore(_MAX_CONCURRENT)
-    loop = asyncio.get_event_loop()
-
-    aum_populated = 0
-    degraded_count = 0
-    updates: list[dict[str, Any]] = []
 
     async def _process_one(ticker: str, lei: str | None) -> dict[str, Any]:
         async with sem:
-            return await _fetch_aum(ticker, lei or "", loop)
+            return await _fetch_aum(ticker, lei or "", loop, gate=gate)
 
-    # Batch for progress logging
+    updates: list[dict[str, Any]] = []
+    aum_populated = 0
+    degraded_count = 0
+
     coroutines = [_process_one(r.ticker, r.lei) for r in candidates]
-
     for batch_start in range(0, len(coroutines), _LOG_BATCH_SIZE):
         batch = coroutines[batch_start : batch_start + _LOG_BATCH_SIZE]
         batch_results = await asyncio.gather(*batch, return_exceptions=True)
@@ -300,26 +393,14 @@ async def _do_sync(
 
         logger.info(
             "esma_aum_sync.batch_progress",
-            processed=min(batch_start + len(batch), total_candidates),
-            remaining=max(0, total_candidates - batch_start - len(batch)),
+            label=label,
+            processed=min(batch_start + len(batch), len(candidates)),
+            remaining=max(0, len(candidates) - batch_start - len(batch)),
             aum_populated=aum_populated,
             degraded=degraded_count,
         )
 
-    # 4. Batch UPDATE instruments_universe
-    now_str = datetime.now(timezone.utc).isoformat()
-    updated_rows = await _batch_update(db, updates, now_str)
-
-    elapsed = round(time.monotonic() - t0, 1)
-    logger.info(
-        "esma_aum_sync.complete",
-        total_processed=total_candidates,
-        aum_populated=aum_populated,
-        degraded=degraded_count,
-        updated_rows=updated_rows,
-        duration_seconds=elapsed,
-    )
-    return _summary(total_candidates, aum_populated, degraded_count, updated_rows, elapsed)
+    return updates, aum_populated, degraded_count
 
 
 # ---------------------------------------------------------------------------
@@ -331,15 +412,18 @@ async def _fetch_aum(
     ticker: str,
     lei: str,
     loop: asyncio.AbstractEventLoop,
+    *,
+    gate: ExternalProviderGate[Any] | None = None,
 ) -> dict[str, Any]:
     """Fetch Yahoo info for *ticker*, convert totalAssets to USD."""
+    _gate = gate or _yahoo_gate
     try:
         async def _info_coro() -> Any:
             return await loop.run_in_executor(
                 _io_executor, _sync_fetch_info, ticker,
             )
 
-        info: dict[str, Any] = await _yahoo_gate.call(
+        info: dict[str, Any] = await _gate.call(
             op_key=f"info:{ticker}",
             coro_factory=_info_coro,
         )
