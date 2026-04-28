@@ -44,7 +44,7 @@ _yahoo_gate: ExternalProviderGate[Any] = ExternalProviderGate(
     GateConfig(
         name="yahoo_aum",
         timeout_s=30.0,
-        failure_threshold=20,
+        failure_threshold=10,
         recovery_after_s=60.0,
     ),
 )
@@ -436,7 +436,16 @@ async def _batch_update(
     updates: list[dict[str, Any]],
     now_str: str,
 ) -> int:
-    """Write AUM results back to instruments_universe.attributes."""
+    """Write AUM results back to instruments_universe.attributes.
+
+    Split write paths:
+    - Successful fetches: overwrite all AUM fields + bump aum_fetched_at.
+    - Degraded fetches: only update aum_degraded/aum_degraded_reason/aum_last_attempt_at.
+      Preserves prior aum_usd + aum_fetched_at so the 7-day retry window stays open.
+
+    Each row UPDATE is wrapped in a SAVEPOINT so a single-row failure
+    does not abort the outer transaction (PostgreSQL semantics).
+    """
     update_sql = text("""
         UPDATE instruments_universe
         SET attributes = attributes || CAST(:attrs AS jsonb),
@@ -449,22 +458,37 @@ async def _batch_update(
     for i in range(0, len(updates), _UPDATE_CHUNK):
         chunk = updates[i : i + _UPDATE_CHUNK]
         for u in chunk:
-            attrs = {
-                "aum_usd": u["aum_usd"],
-                "aum_native": u["aum_native"],
-                "aum_native_currency": u["aum_native_currency"],
-                "aum_source": "yahoo_finance",
-                "aum_fetched_at": now_str,
-                "aum_degraded": u["aum_degraded"],
-                "aum_degraded_reason": u["aum_degraded_reason"],
-            }
+            is_degraded = u.get("aum_degraded", False)
+
+            if is_degraded:
+                # Preserve last good AUM — only track failure metadata
+                attrs: dict[str, Any] = {
+                    "aum_degraded": True,
+                    "aum_degraded_reason": u["aum_degraded_reason"],
+                    "aum_last_attempt_at": now_str,
+                }
+            else:
+                attrs = {
+                    "aum_usd": u["aum_usd"],
+                    "aum_native": u["aum_native"],
+                    "aum_native_currency": u["aum_native_currency"],
+                    "aum_source": "yahoo_finance",
+                    "aum_fetched_at": now_str,
+                    "aum_degraded": False,
+                    "aum_degraded_reason": None,
+                    "aum_last_attempt_at": now_str,
+                }
+
+            sp = await db.begin_nested()  # SAVEPOINT
             try:
                 await db.execute(
                     update_sql,
                     {"ticker": u["ticker"], "attrs": json.dumps(attrs)},
                 )
+                await sp.commit()  # RELEASE SAVEPOINT
                 total += 1
             except Exception as e:
+                await sp.rollback()  # ROLLBACK TO SAVEPOINT
                 logger.warning(
                     "esma_aum_sync.update_failed",
                     ticker=u["ticker"],
