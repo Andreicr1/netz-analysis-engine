@@ -16,7 +16,7 @@ import os
 from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.db.engine import async_session_factory as async_session
@@ -211,6 +211,7 @@ async def run_esma_ingestion() -> dict:
                 values = [
                     {
                         "isin": r.isin,
+                        "fund_lei": r.isin,  # r.isin IS the LEI (isins = [f.lei ...])
                         "yahoo_ticker": r.yahoo_ticker,
                         "exchange": r.exchange,
                         "resolved_via": r.resolved_via,
@@ -224,6 +225,9 @@ async def run_esma_ingestion() -> dict:
                     index_elements=["isin"],
                     set_={
                         "yahoo_ticker": stmt.excluded.yahoo_ticker,
+                        "fund_lei": func.coalesce(
+                            EsmaIsinTickerMap.fund_lei, stmt.excluded.fund_lei,
+                        ),
                         "exchange": stmt.excluded.exchange,
                         "resolved_via": stmt.excluded.resolved_via,
                         "is_tradeable": stmt.excluded.is_tradeable,
