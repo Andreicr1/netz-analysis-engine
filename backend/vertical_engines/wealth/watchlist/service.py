@@ -125,20 +125,29 @@ class WatchlistService:
             curr_er = current_attrs.get("expense_ratio_pct")
             prev_er = prev_attrs.get("expense_ratio_pct")
             if curr_er is not None and prev_er is not None:
-                delta = float(curr_er) - float(prev_er)
-                if delta > 0.0005:
-                    prev_human = float(prev_er) * 100.0
-                    curr_human = float(curr_er) * 100.0
-                    delta_bps = delta * 10000.0
-                    alerts.append(TransitionAlert(
-                        instrument_id=instrument_id,
-                        instrument_name=instrument_name,
-                        previous_outcome=f"ER {prev_human:.2f}%",
-                        new_outcome=f"ER {curr_human:.2f}%",
-                        direction="enrichment_change",
-                        message=f"Expense ratio increased by {delta_bps:.1f}bps ({prev_human:.2f}% → {curr_human:.2f}%)",
-                        detected_at=now,
-                    ))
+                try:
+                    curr_er_f = float(curr_er)
+                    prev_er_f = float(prev_er)
+                except (ValueError, TypeError):
+                    # Non-numeric expense_ratio_pct (e.g. "N/A", "" from sparse
+                    # ingestion) — skip fee delta check, continue to strategy_label.
+                    curr_er_f = None
+                    prev_er_f = None
+                if curr_er_f is not None and prev_er_f is not None:
+                    delta = curr_er_f - prev_er_f
+                    if delta > 0.0005:
+                        prev_human = prev_er_f * 100.0
+                        curr_human = curr_er_f * 100.0
+                        delta_bps = delta * 10000.0
+                        alerts.append(TransitionAlert(
+                            instrument_id=instrument_id,
+                            instrument_name=instrument_name,
+                            previous_outcome=f"ER {prev_human:.2f}%",
+                            new_outcome=f"ER {curr_human:.2f}%",
+                            direction="enrichment_change",
+                            message=f"Expense ratio increased by {delta_bps:.1f}bps ({prev_human:.2f}% → {curr_human:.2f}%)",
+                            detected_at=now,
+                        ))
 
             # Strategy label change detection
             curr_strat = current_attrs.get("strategy_label")

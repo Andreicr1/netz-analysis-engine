@@ -308,8 +308,12 @@ def composite_score(
 
     """
     if lower_is_better is None:
+        # Note: max_drawdown is stored as a NEGATIVE value (more-negative = worse).
+        # The natural sort order (and percentile rank) already puts the worst
+        # drawdown at the LOWEST percentile, so NO inversion is needed. Adding
+        # "max_drawdown" or "max_drawdown_pct" here would break correctness.
         lower_is_better = frozenset({
-            "max_drawdown_pct", "pe_ratio_ttm", "debt_to_equity",
+            "pe_ratio_ttm", "debt_to_equity",
             "annual_volatility_pct",
         })
 
