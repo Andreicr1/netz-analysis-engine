@@ -705,7 +705,7 @@ async def trigger_screening(
         else:
             metric_dicts_by_id[inst.instrument_id] = {
                 "sharpe_ratio": _safe_float(rm.sharpe_1y),
-                "max_drawdown": _safe_float(rm.max_drawdown_1y),
+                "max_drawdown": _safe_float(rm.max_drawdown_1y, scale=100),
                 "pct_positive_months": _safe_float(getattr(rm, "pct_positive_months", None)),
                 "annual_volatility_pct": _safe_float(rm.volatility_1y, scale=100),
             }
