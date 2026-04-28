@@ -78,6 +78,17 @@ def upgrade() -> None:
             WHERE (attributes->>'_q87_manual_seed')::bool = true
         )
     """)
+    # nav_timeseries FK has no ON DELETE CASCADE (see 0011 migration). In
+    # environments where instrument_ingestion (lock 900_010) ran after Q87
+    # merge, it fetched daily NAV for the seeded tickers via Yahoo Finance.
+    # Delete those rows before the instruments_universe parent delete.
+    op.execute("""
+        DELETE FROM nav_timeseries
+        WHERE instrument_id IN (
+            SELECT instrument_id FROM instruments_universe
+            WHERE (attributes->>'_q87_manual_seed')::bool = true
+        )
+    """)
     op.execute(
         "DELETE FROM instruments_universe "
         "WHERE (attributes->>'_q87_manual_seed')::bool = true"
