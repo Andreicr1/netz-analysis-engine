@@ -456,6 +456,7 @@ async def _sync_esma_funds(db: AsyncSession) -> dict[str, Any]:
                     ef.fund_name
                 ),
                 'inception_date', NULL,
+                'is_ucits_etf', (ef.fund_name ~* '\m(etf|exchange.traded)\M'),
                 'source', 'universe_sync'
             )
         FROM esma_funds ef
