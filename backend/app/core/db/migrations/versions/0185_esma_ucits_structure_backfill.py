@@ -36,9 +36,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Narrow scope: only undo rows we explicitly added the marker to in
+    # migration 0189. Pre-existing or post-migration external sources of
+    # structure='UCITS' are preserved.
     op.execute("""
         UPDATE instruments_universe
-        SET attributes = attributes - 'structure'
-        WHERE attributes->>'fund_subtype' = 'ucits'
-          AND attributes->>'structure' = 'UCITS'
+        SET attributes = (attributes - 'structure' - '_q77_added_structure')
+        WHERE (attributes->>'_q77_added_structure')::bool = true
     """)
