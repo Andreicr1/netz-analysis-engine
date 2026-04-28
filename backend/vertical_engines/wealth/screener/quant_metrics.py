@@ -332,8 +332,11 @@ def composite_score(
         clipped = float(np.clip(value, lo, hi))
         peers_clipped = np.clip(peers_arr, lo, hi)
 
-        # Percentile rank
-        rank = float(np.searchsorted(np.sort(peers_clipped), clipped)) / len(peers_clipped)
+        # Mid-rank for ties (institutional / Morningstar / post-Q60 convention)
+        peers_sorted = np.sort(peers_clipped)
+        count_less = float(np.searchsorted(peers_sorted, clipped, side="left"))
+        count_equal = float(np.searchsorted(peers_sorted, clipped, side="right")) - count_less
+        rank = (count_less + 0.5 * count_equal) / len(peers_clipped)
 
         if metric in lower_is_better:
             rank = 1.0 - rank
