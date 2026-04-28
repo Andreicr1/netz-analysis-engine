@@ -22,6 +22,7 @@ from app.core.config.config_service import ConfigService
 from app.core.db.engine import async_session_factory
 from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.instrument import Instrument
+from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.screening_result import ScreeningResult, ScreeningRun
 
 logger = structlog.get_logger(__name__)
@@ -67,11 +68,16 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
     config_l2 = (await config_svc.get("liquid_funds", "screening_layer2", org_id)).value
     config_l3 = (await config_svc.get("liquid_funds", "screening_layer3", org_id)).value
 
-    # 3. Load watchlist-tagged instruments (evaluation targets)
+    # 3. Load watchlist-tagged instruments (evaluation targets).
+    # approval_status lives on InstrumentOrg (org-scoped); Instrument is the
+    # global catalog. RLS on instruments_org filters by organization_id
+    # automatically via set_rls_context above.
     result = await db.execute(
-        select(Instrument).where(
+        select(Instrument)
+        .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
+        .where(
             Instrument.is_active.is_(True),
-            Instrument.approval_status == "watchlist",
+            InstrumentOrg.approval_status == "watchlist",
         ),
     )
     watchlist_instruments = result.scalars().all()
