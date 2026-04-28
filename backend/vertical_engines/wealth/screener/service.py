@@ -294,21 +294,33 @@ class ScreenerService:
         l2_results: list[CriterionResult],
         attributes: dict[str, Any],
     ) -> bool:
-        """Check if Layer 2 failures are within watchlist margin (10%)."""
+        """Check if ALL Layer 2 failures are within watchlist margin (10%).
+
+        Returns True only when every failed criterion is numeric, parseable, and
+        within 10% of its threshold. Non-numeric failures (boolean, geography,
+        allowed/excluded list mismatch) block the watchlist promotion explicitly
+        — they represent hard institutional mandate violations that cannot be
+        "marginally" satisfied.
+
+        Returns False if any failure is outside margin OR non-numeric OR has a
+        zero-expected divisor.
+        """
+        has_failure = False
         for result in l2_results:
             if result.passed:
                 continue
-            # Check if the failure is within 10% of the threshold
+            has_failure = True
             try:
                 actual = float(result.actual)
                 expected = float(result.expected)
-                if expected != 0:
-                    margin = abs(actual - expected) / abs(expected)
-                    if margin <= 0.10:
-                        return True
             except (ValueError, TypeError):
-                continue
-        return False
+                return False
+            if expected == 0:
+                return False
+            margin = abs(actual - expected) / abs(expected)
+            if margin > 0.10:
+                return False
+        return has_failure
 
     @staticmethod
     def _analysis_type(instrument_type: str) -> str:
