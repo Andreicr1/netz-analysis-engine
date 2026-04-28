@@ -47,7 +47,7 @@ def layer1_config():
         "fund": {
             "min_aum_usd": 100_000_000,
             "min_track_record_years": 3,
-            "allowed_domiciles": ["IE", "LU", "KY", "US", "GB"],
+            "allowed_domicile": ["IE", "LU", "KY", "US", "GB"],
         },
         "bond": {
             "min_credit_rating": "BBB-",
@@ -55,7 +55,7 @@ def layer1_config():
         },
         "equity": {
             "min_market_cap_usd": 1_000_000_000,
-            "allowed_exchanges": ["NYSE", "NASDAQ", "LSE"],
+            "allowed_exchange": ["NYSE", "NASDAQ", "LSE"],
         },
     }
 
@@ -120,8 +120,8 @@ def passing_fund_attrs():
     return {
         "aum_usd": "200000000",
         "track_record_years": "5",
-        "domiciles": "IE",
-        "structures": "UCITS",
+        "domicile": "IE",
+        "structure": "UCITS",
         "manager_name": "BlackRock",
         "inception_date": "2019-01-01",
     }
@@ -156,7 +156,7 @@ class TestLayerEvaluator:
         assert any("aum" in r.criterion for r in failed)
 
     def test_layer1_fund_fails_domicile(self, layer1_config, passing_fund_attrs):
-        attrs = {**passing_fund_attrs, "domiciles": "XX"}
+        attrs = {**passing_fund_attrs, "domicile": "XX"}
         evaluator = LayerEvaluator(layer1_config)
         results = evaluator.evaluate_layer1("fund", attrs, layer1_config)
         failed = [r for r in results if not r.passed]
@@ -178,13 +178,13 @@ class TestLayerEvaluator:
         assert any("credit_rating" in r.criterion for r in failed)
 
     def test_layer1_equity_passes(self, layer1_config):
-        attrs = {"market_cap_usd": "5000000000", "exchanges": "NYSE"}
+        attrs = {"market_cap_usd": "5000000000", "exchange": "NYSE"}
         evaluator = LayerEvaluator(layer1_config)
         results = evaluator.evaluate_layer1("equity", attrs, layer1_config)
         assert all(r.passed for r in results)
 
     def test_layer1_equity_fails_market_cap(self, layer1_config):
-        attrs = {"market_cap_usd": "500000000", "exchanges": "NYSE"}
+        attrs = {"market_cap_usd": "500000000", "exchange": "NYSE"}
         evaluator = LayerEvaluator(layer1_config)
         results = evaluator.evaluate_layer1("equity", attrs, layer1_config)
         failed = [r for r in results if not r.passed]
