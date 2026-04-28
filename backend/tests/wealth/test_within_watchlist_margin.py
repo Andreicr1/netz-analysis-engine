@@ -100,3 +100,35 @@ def test_just_inside_margin_grants_watchlist() -> None:
     """9% miss (just inside margin) → WATCHLIST."""
     results = [_r("min_aum_usd", "100000000", "91000000", False)]  # 9% miss
     assert ScreenerService._within_watchlist_margin(results, {}) is True
+
+
+# ── Q69 hotfix (Codex P1): NaN / inf rejection ─────────────────────────
+
+
+def test_nan_actual_blocks_watchlist() -> None:
+    """Q69: float('nan') for actual → conservative FAIL.
+    Pre-fix: nan parses, `nan > 0.10` is False → loop falls through →
+    has_failure=True → returned True (WATCHLIST). Post-fix: math.isfinite
+    rejects, returns False (FAIL).
+    """
+    results = [_r("min_aum_usd", "100000000", "nan", False)]
+    assert ScreenerService._within_watchlist_margin(results, {}) is False
+
+
+def test_nan_expected_blocks_watchlist() -> None:
+    """Q69: NaN expected (malformed config) → FAIL."""
+    results = [_r("min_aum_usd", "nan", "95000000", False)]
+    assert ScreenerService._within_watchlist_margin(results, {}) is False
+
+
+def test_inf_actual_blocks_watchlist() -> None:
+    """Q69: float('inf') → FAIL (margin would be inf > 0.10 True, but
+    isfinite check is more defensive and catches both -inf / +inf)."""
+    results = [_r("min_aum_usd", "100000000", "inf", False)]
+    assert ScreenerService._within_watchlist_margin(results, {}) is False
+
+
+def test_negative_inf_actual_blocks_watchlist() -> None:
+    """Q69: -inf rejected by isfinite."""
+    results = [_r("min_aum_usd", "100000000", "-inf", False)]
+    assert ScreenerService._within_watchlist_margin(results, {}) is False
