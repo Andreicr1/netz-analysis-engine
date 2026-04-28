@@ -59,6 +59,18 @@ SIGNAL_METADATA: dict[str, dict[str, str]] = {
     "permits":        {"label": "Building Permits", "unit": "%",    "category": "real_economy", "fred_series": "PERMIT"},
 }
 
+# Q74 (Codex #8): scoring fields gated in get_current_regime.
+# cpi_yoy is an INFLATION override input but doesn't independently score
+# the stress dimension — admitting it alone would force the internal RISK_OFF
+# default instead of letting the caller fallback to a richer source.
+_REGIME_SCORING_INPUTS: frozenset[str] = frozenset({
+    # Financial signals
+    "vix", "hy_oas", "energy_shock", "yield_curve_spread",
+    "dxy_zscore", "baa_spread", "fed_funds_delta_6m",
+    # Slow signals
+    "cfnai", "icsa_zscore", "sahm_rule", "credit_impulse", "permits_roc",
+})
+
 _RAW_VALUE_RE = re.compile(r"[-+]?\d+\.?\d*")
 
 
@@ -1282,12 +1294,14 @@ async def get_current_regime(
     """
     inputs = await build_regime_inputs(db, as_of_date=as_of_date)
 
-    # F03: admit classification with ANY fresh signal, not only VIX/HY/energy_shock.
-    # Real-economy-only datasets (e.g. CFNAI + ICSA + sahm_rule fresh while
-    # market signals stale) previously fell through to fallback even though
-    # classify_regime_multi_signal can score with only slow signals.
-    has_any_signal = any(v is not None for v in inputs.values())
-    if has_any_signal:
+    # Q74 fix (Codex #8): gate on SCORING fields only.
+    # cpi_yoy alone is an INFLATION override, not a stress-scoring field —
+    # admitting it would force classify's internal RISK_OFF default instead
+    # of letting the caller fallback to a richer regime source.
+    has_scoring_signal = any(
+        inputs.get(field) is not None for field in _REGIME_SCORING_INPUTS
+    )
+    if has_scoring_signal:
         regime, reasons, _ = classify_regime_multi_signal(
             vix=inputs.get("vix"),
             yield_curve_spread=inputs.get("yield_curve_spread"),
