@@ -625,9 +625,18 @@ async def trigger_screening(
     db.add(run)
     await db.flush()
 
-    # Batch-fetch latest risk metrics for FI attribute injection
+    # Batch-fetch latest risk metrics for quant_metrics + peer_values injection
     from app.domains.wealth.models.risk import FundRiskMetrics
-    from vertical_engines.wealth.screener.quant_metrics import FIQuantMetrics
+    from app.domains.wealth.services.screener_peer_values_builder import (
+        METRIC_NAMES_BY_TYPE,
+        build_per_instrument_peer_values,
+    )
+    from vertical_engines.wealth.screener.quant_metrics import (
+        AltQuantMetrics,
+        CashQuantMetrics,
+        FIQuantMetrics,
+        QuantMetrics,
+    )
 
     inst_ids = [row[0].instrument_id for row in rows]
     risk_metrics_map: dict[uuid.UUID, Any] = {}
@@ -641,34 +650,148 @@ async def trigger_screening(
         for rm in rm_res.scalars().all():
             risk_metrics_map[rm.instrument_id] = rm
 
+    # Load previous screening results for hysteresis
+    prev_status_res = await db.execute(
+        select(ScreeningResult).where(
+            ScreeningResult.instrument_id.in_(inst_ids),
+            ScreeningResult.is_current.is_(True),
+        ),
+    )
+    prev_status_map = {sr.instrument_id: sr.overall_status for sr in prev_status_res.scalars()}
+
+    def _safe_float(val: object, scale: float = 1.0) -> float | None:
+        if val is None:
+            return None
+        try:
+            return float(val) * scale
+        except (ValueError, TypeError):
+            return None
+
+    # Build metric dicts for peer cohort building
+    metric_dicts_by_id: dict[uuid.UUID, dict[str, float | None]] = {}
+    for row in rows:
+        inst = row[0]
+        rm = risk_metrics_map.get(inst.instrument_id)
+        attrs = dict(inst.attributes) if inst.attributes else {}
+        asset_class = attrs.get("asset_class", "")
+        if rm is None:
+            metric_dicts_by_id[inst.instrument_id] = {}
+            continue
+        if asset_class == "fixed_income":
+            metric_dicts_by_id[inst.instrument_id] = {
+                "empirical_duration": _safe_float(rm.empirical_duration),
+                "credit_beta": _safe_float(rm.credit_beta),
+                "yield_proxy_12m": _safe_float(rm.yield_proxy_12m),
+                "duration_adj_drawdown": _safe_float(rm.duration_adj_drawdown_1y),
+                "sharpe_ratio": _safe_float(rm.sharpe_1y),
+            }
+        elif asset_class == "cash":
+            metric_dicts_by_id[inst.instrument_id] = {
+                "yield_vs_risk_free": _safe_float(getattr(rm, "yield_vs_risk_free", None)),
+                "nav_stability": _safe_float(getattr(rm, "nav_stability", None)),
+                "liquidity_quality": _safe_float(getattr(rm, "liquidity_quality", None)),
+                "maturity_discipline": _safe_float(getattr(rm, "maturity_discipline", None)),
+                "fee_efficiency": _safe_float(getattr(rm, "fee_efficiency", None)),
+            }
+        elif asset_class == "alternatives":
+            metric_dicts_by_id[inst.instrument_id] = {
+                "diversification_value": _safe_float(getattr(rm, "diversification_value", None)),
+                "downside_protection": _safe_float(getattr(rm, "downside_protection", None)),
+                "crisis_alpha": _safe_float(getattr(rm, "crisis_alpha", None)),
+                "inflation_hedge": _safe_float(getattr(rm, "inflation_hedge", None)),
+                "risk_adjusted_return": _safe_float(rm.sharpe_1y),
+                "fee_efficiency": _safe_float(getattr(rm, "fee_efficiency", None)),
+            }
+        else:
+            metric_dicts_by_id[inst.instrument_id] = {
+                "sharpe_ratio": _safe_float(rm.sharpe_1y),
+                "max_drawdown": _safe_float(rm.max_drawdown_1y),
+                "pct_positive_months": _safe_float(getattr(rm, "pct_positive_months", None)),
+                "annual_volatility_pct": _safe_float(rm.volatility_1y, scale=100),
+            }
+
+    # Build per-instrument peer_values
+    inst_dicts_for_cohorts = [
+        {
+            "instrument_id": row[0].instrument_id,
+            "instrument_type": row[0].instrument_type,
+            "attributes": dict(row[0].attributes) if row[0].attributes else {},
+        }
+        for row in rows
+    ]
+    peer_values_by_id = build_per_instrument_peer_values(
+        instruments=inst_dicts_for_cohorts,
+        instrument_metrics_by_id=metric_dicts_by_id,
+        metric_names_by_type=METRIC_NAMES_BY_TYPE,
+    )
+
+    def _build_quant_metrics(
+        rm: object, attrs: dict,
+    ) -> QuantMetrics | FIQuantMetrics | CashQuantMetrics | AltQuantMetrics | None:
+        if rm is None:
+            return None
+        asset_class = attrs.get("asset_class", "")
+        if asset_class == "fixed_income":
+            if rm.empirical_duration is None and rm.credit_beta is None:
+                return None
+            return FIQuantMetrics(
+                empirical_duration=float(rm.empirical_duration or 0),
+                credit_beta=float(rm.credit_beta or 0),
+                yield_proxy_12m=float(rm.yield_proxy_12m or 0),
+                duration_adj_drawdown=float(rm.duration_adj_drawdown_1y or 0),
+                sharpe_ratio=float(rm.sharpe_1y or 0),
+                annual_return_pct=float(rm.return_1y or 0) * 100,
+                data_period_days=0,
+            )
+        if asset_class == "cash":
+            return CashQuantMetrics(
+                yield_vs_risk_free=float(getattr(rm, "yield_vs_risk_free", 0) or 0),
+                nav_stability=float(getattr(rm, "nav_stability", 0) or 0),
+                liquidity_quality=float(getattr(rm, "liquidity_quality", 0) or 0),
+                maturity_discipline=float(getattr(rm, "maturity_discipline", 0) or 0),
+                fee_efficiency=float(getattr(rm, "fee_efficiency", 0) or 0),
+                data_source="fund_risk_metrics",
+            )
+        if asset_class == "alternatives":
+            return AltQuantMetrics(
+                diversification_value=float(getattr(rm, "diversification_value", 0) or 0),
+                downside_protection=float(getattr(rm, "downside_protection", 0) or 0),
+                crisis_alpha=float(getattr(rm, "crisis_alpha", 0) or 0),
+                inflation_hedge=float(getattr(rm, "inflation_hedge", 0) or 0),
+                risk_adjusted_return=float(rm.sharpe_1y or 0),
+                fee_efficiency=float(getattr(rm, "fee_efficiency", 0) or 0),
+                alt_profile="generic_alt",
+            )
+        return QuantMetrics(
+            sharpe_ratio=float(rm.sharpe_1y or 0),
+            annual_volatility_pct=float(rm.volatility_1y or 0) * 100,
+            max_drawdown_pct=float(rm.max_drawdown_1y or 0) * 100,
+            pct_positive_months=float(getattr(rm, "pct_positive_months", 0) or 0),
+            annual_return_pct=float(rm.return_1y or 0) * 100,
+            data_period_days=0,
+        )
+
     # Extract instrument data for screening (cross async boundary safely)
     instrument_dicts = []
     for row in rows:
         inst = row[0]
         attrs = dict(inst.attributes) if inst.attributes else {}
+        rm = risk_metrics_map.get(inst.instrument_id)
         inst_dict: dict[str, Any] = {
             "instrument_id": inst.instrument_id,
             "instrument_type": inst.instrument_type,
             "attributes": attrs,
             "block_id": row.org_block_id,
+            "quant_metrics": _build_quant_metrics(rm, attrs),
+            "peer_values": peer_values_by_id.get(inst.instrument_id, {}),
+            "previous_status": prev_status_map.get(inst.instrument_id),
         }
 
-        # Inject FI metrics from fund_risk_metrics into attributes + quant_metrics
-        rm = risk_metrics_map.get(inst.instrument_id)
+        # Inject FI metrics into attributes for Layer 2 attribute checks
         if rm and attrs.get("asset_class") == "fixed_income":
             attrs["empirical_duration"] = float(rm.empirical_duration) if rm.empirical_duration is not None else None
             attrs["duration_r2"] = float(rm.empirical_duration_r2) if rm.empirical_duration_r2 is not None else None
             attrs["credit_beta"] = float(rm.credit_beta) if rm.credit_beta is not None else None
-            if rm.empirical_duration is not None and rm.credit_beta is not None:
-                inst_dict["quant_metrics"] = FIQuantMetrics(
-                    empirical_duration=float(rm.empirical_duration),
-                    credit_beta=float(rm.credit_beta),
-                    yield_proxy_12m=float(rm.yield_proxy_12m) if rm.yield_proxy_12m is not None else 0.0,
-                    duration_adj_drawdown=float(rm.duration_adj_drawdown_1y) if rm.duration_adj_drawdown_1y is not None else 0.0,
-                    sharpe_ratio=float(rm.sharpe_1y) if rm.sharpe_1y is not None else 0.0,
-                    annual_return_pct=float(rm.return_1y or 0) * 100,
-                    data_period_days=int(rm.data_points or 0),
-                )
 
         instrument_dicts.append(inst_dict)
 

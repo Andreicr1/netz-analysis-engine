@@ -26,6 +26,12 @@ from quant_engine.return_statistics_service import (
 
 logger = structlog.get_logger(__name__)
 
+# S08-F01: Minimum fraction of configured weight that must be observable
+# before composite_score returns a real score. Below this threshold the
+# composite is dominated by 1-2 metrics and loses its multi-dimensional
+# screening intent. Funds below coverage land in WATCHLIST (caller gets None).
+MIN_COVERAGE_RATIO = 0.50
+
 # Extreme-return cut-off historically applied by the screener. Daily
 # returns above ~50% are almost always corporate-action artefacts (splits,
 # mergers, dividends booked as price moves) rather than real performance.
@@ -329,5 +335,12 @@ def composite_score(
     if total_weight == 0:
         return None
 
-    # Normalize by actual weight used (handle missing metrics gracefully)
+    # S08-F01: minimum coverage gate — prevent thin-data silent promotion
+    configured_total = sum(weights.values())
+    if configured_total > 0:
+        coverage_ratio = total_weight / configured_total
+        if coverage_ratio < MIN_COVERAGE_RATIO:
+            return None
+
+    # Normalize by actual weight used (handle missing metrics gracefully above coverage threshold)
     return round(score / total_weight, 4)
