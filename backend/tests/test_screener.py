@@ -411,9 +411,9 @@ class TestQuantMetrics:
         assert result.duration_efficiency > 0
 
     def test_compute_bond_metrics_missing_data(self):
+        """S08-F05: empty attributes → None (insufficient data), not zero-defaults."""
         result = compute_bond_metrics({})
-        assert result is not None  # Returns zeros, not None
-        assert result.spread_vs_benchmark_bps == 0
+        assert result is None
 
     def test_composite_score_basic(self):
         metrics = {"sharpe_ratio": 1.2, "max_drawdown": -15.0}
