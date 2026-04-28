@@ -33,6 +33,7 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         run_brochure_extract,
     )
     from app.domains.wealth.workers.drift_check import run_drift_check
+    from app.domains.wealth.workers.esma_aum_sync import run_esma_aum_sync
     from app.domains.wealth.workers.esma_ingestion import run_esma_ingestion
     from app.domains.wealth.workers.fast_track_eviction import run_fast_track_eviction
     from app.domains.wealth.workers.imf_ingestion import run_imf_ingestion
@@ -72,6 +73,7 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         "nport_ingestion": (run_nport_ingestion, "global", _HEAVY),
         "nport_fund_discovery": (run_nport_fund_discovery, "global", _HEAVY),
 
+        "esma_aum_sync": (run_esma_aum_sync, "global", _HEAVY),
         "esma_ingestion": (run_esma_ingestion, "global", _HEAVY),
         "sec_refresh": (run_sec_refresh, "global", _HEAVY),
         "sec_13f_ingestion": (run_sec_13f_ingestion, "global", _HEAVY),
