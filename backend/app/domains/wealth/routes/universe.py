@@ -625,7 +625,7 @@ async def fast_approve(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> FastApproveResponse:
     """Approve liquid funds directly from the screener in one click.
 
@@ -683,10 +683,13 @@ async def fast_approve(
             approved.append(str(iid))
             continue
 
-        # Create new instruments_org row with approved status
+        # Create new instruments_org row with approved status.
+        # PR-Q93: org_id is already uuid.UUID (returned by get_org_id);
+        # the previous uuid.UUID(org_id) cast crashed with
+        # "'UUID' object has no attribute 'replace'".
         new_org = InstrumentOrg(
             instrument_id=iid,
-            organization_id=uuid.UUID(org_id),
+            organization_id=org_id,
             block_id=body.block_id,
             approval_status="approved",
         )
