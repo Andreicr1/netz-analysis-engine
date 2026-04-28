@@ -103,7 +103,8 @@ def to_decimal_fraction(value: Any) -> float | None:
             logger.warning(
                 "expense_ratio_ambiguous_percent_or_fraction",
                 raw=value,
-                interpreted_as_percent=fraction,
+                interpreted_as_percent=v,
+                interpreted_as_fraction=fraction,
                 note=(
                     "Input in (0.15, 1.0] band — assumed whole percent per Q57 "
                     "convention. If source was XBRL fraction, value would have "
