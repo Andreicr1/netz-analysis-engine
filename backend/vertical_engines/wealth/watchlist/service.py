@@ -62,6 +62,9 @@ class WatchlistService:
                     instrument_type=inst["instrument_type"],
                     attributes=inst.get("attributes", {}),
                     block_id=inst.get("block_id"),
+                    quant_metrics=inst.get("quant_metrics"),
+                    peer_values=inst.get("peer_values"),
+                    previous_status=previous_outcome,
                 )
             except Exception:
                 logger.warning(

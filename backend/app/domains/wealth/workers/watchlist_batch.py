@@ -80,14 +80,153 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
         logger.info("watchlist_check_empty", reason="no watchlisted instruments")
         return {"status": "completed", "total_screened": 0}
 
+    # Load latest fund_risk_metrics for each instrument (global table, no RLS)
+    from app.domains.wealth.models.risk import FundRiskMetrics
+
+    instrument_ids = [i.instrument_id for i in instruments]
+    rm_res = await db.execute(
+        select(FundRiskMetrics)
+        .where(FundRiskMetrics.instrument_id.in_(instrument_ids))
+        .distinct(FundRiskMetrics.instrument_id)
+        .order_by(FundRiskMetrics.instrument_id, FundRiskMetrics.calc_date.desc()),
+    )
+    risk_metrics_by_id = {rm.instrument_id: rm for rm in rm_res.scalars().all()}
+
+    # Build per-instrument metric dicts for cohort peer_values
+    from app.domains.wealth.services.screener_peer_values_builder import (
+        METRIC_NAMES_BY_TYPE,
+        build_per_instrument_peer_values,
+    )
+    from vertical_engines.wealth.screener.quant_metrics import (
+        AltQuantMetrics,
+        CashQuantMetrics,
+        FIQuantMetrics,
+        QuantMetrics,
+    )
+
+    def _safe_float(val: object, scale: float = 1.0) -> float | None:
+        if val is None:
+            return None
+        try:
+            return float(val) * scale
+        except (ValueError, TypeError):
+            return None
+
+    metric_dicts_by_id: dict[uuid.UUID, dict[str, float | None]] = {}
+    for i in instruments:
+        rm = risk_metrics_by_id.get(i.instrument_id)
+        attrs = dict(i.attributes) if i.attributes else {}
+        asset_class = attrs.get("asset_class", "")
+        if rm is None:
+            metric_dicts_by_id[i.instrument_id] = {}
+            continue
+        if asset_class == "fixed_income":
+            metric_dicts_by_id[i.instrument_id] = {
+                "empirical_duration": _safe_float(rm.empirical_duration),
+                "credit_beta": _safe_float(rm.credit_beta),
+                "yield_proxy_12m": _safe_float(rm.yield_proxy_12m),
+                "duration_adj_drawdown": _safe_float(rm.duration_adj_drawdown_1y),
+                "sharpe_ratio": _safe_float(rm.sharpe_1y),
+            }
+        elif asset_class == "cash":
+            metric_dicts_by_id[i.instrument_id] = {
+                "yield_vs_risk_free": _safe_float(getattr(rm, "yield_vs_risk_free", None)),
+                "nav_stability": _safe_float(getattr(rm, "nav_stability", None)),
+                "liquidity_quality": _safe_float(getattr(rm, "liquidity_quality", None)),
+                "maturity_discipline": _safe_float(getattr(rm, "maturity_discipline", None)),
+                "fee_efficiency": _safe_float(getattr(rm, "fee_efficiency", None)),
+            }
+        elif asset_class == "alternatives":
+            metric_dicts_by_id[i.instrument_id] = {
+                "diversification_value": _safe_float(getattr(rm, "diversification_value", None)),
+                "downside_protection": _safe_float(getattr(rm, "downside_protection", None)),
+                "crisis_alpha": _safe_float(getattr(rm, "crisis_alpha", None)),
+                "inflation_hedge": _safe_float(getattr(rm, "inflation_hedge", None)),
+                "risk_adjusted_return": _safe_float(rm.sharpe_1y),
+                "fee_efficiency": _safe_float(getattr(rm, "fee_efficiency", None)),
+            }
+        else:
+            metric_dicts_by_id[i.instrument_id] = {
+                "sharpe_ratio": _safe_float(rm.sharpe_1y),
+                "max_drawdown": _safe_float(rm.max_drawdown_1y),
+                "pct_positive_months": _safe_float(getattr(rm, "pct_positive_months", None)),
+                "annual_volatility_pct": _safe_float(rm.volatility_1y, scale=100),
+            }
+
+    inst_dicts_for_cohorts = [
+        {
+            "instrument_id": i.instrument_id,
+            "instrument_type": i.instrument_type,
+            "attributes": dict(i.attributes) if i.attributes else {},
+        }
+        for i in instruments
+    ]
+
+    peer_values_by_id = build_per_instrument_peer_values(
+        instruments=inst_dicts_for_cohorts,
+        instrument_metrics_by_id=metric_dicts_by_id,
+        metric_names_by_type=METRIC_NAMES_BY_TYPE,
+    )
+
+    def _build_quant_metrics(
+        rm: object, attrs: dict,
+    ) -> QuantMetrics | FIQuantMetrics | CashQuantMetrics | AltQuantMetrics | None:
+        if rm is None:
+            return None
+        asset_class = attrs.get("asset_class", "")
+        if asset_class == "fixed_income":
+            if rm.empirical_duration is None and rm.credit_beta is None:
+                return None
+            return FIQuantMetrics(
+                empirical_duration=float(rm.empirical_duration or 0),
+                credit_beta=float(rm.credit_beta or 0),
+                yield_proxy_12m=float(rm.yield_proxy_12m or 0),
+                duration_adj_drawdown=float(rm.duration_adj_drawdown_1y or 0),
+                sharpe_ratio=float(rm.sharpe_1y or 0),
+                annual_return_pct=float(rm.return_1y or 0) * 100,
+                data_period_days=0,
+            )
+        if asset_class == "cash":
+            return CashQuantMetrics(
+                yield_vs_risk_free=float(getattr(rm, "yield_vs_risk_free", 0) or 0),
+                nav_stability=float(getattr(rm, "nav_stability", 0) or 0),
+                liquidity_quality=float(getattr(rm, "liquidity_quality", 0) or 0),
+                maturity_discipline=float(getattr(rm, "maturity_discipline", 0) or 0),
+                fee_efficiency=float(getattr(rm, "fee_efficiency", 0) or 0),
+                data_source="fund_risk_metrics",
+            )
+        if asset_class == "alternatives":
+            return AltQuantMetrics(
+                diversification_value=float(getattr(rm, "diversification_value", 0) or 0),
+                downside_protection=float(getattr(rm, "downside_protection", 0) or 0),
+                crisis_alpha=float(getattr(rm, "crisis_alpha", 0) or 0),
+                inflation_hedge=float(getattr(rm, "inflation_hedge", 0) or 0),
+                risk_adjusted_return=float(rm.sharpe_1y or 0),
+                fee_efficiency=float(getattr(rm, "fee_efficiency", 0) or 0),
+                alt_profile="generic_alt",
+            )
+        return QuantMetrics(
+            sharpe_ratio=float(rm.sharpe_1y or 0),
+            annual_volatility_pct=float(rm.volatility_1y or 0) * 100,
+            max_drawdown_pct=float(rm.max_drawdown_1y or 0) * 100,
+            pct_positive_months=float(getattr(rm, "pct_positive_months", 0) or 0),
+            annual_return_pct=float(rm.return_1y or 0) * 100,
+            data_period_days=0,
+        )
+
     # Extract scalar data before crossing async/thread boundary
     instrument_dicts = [
         {
             "instrument_id": i.instrument_id,
             "instrument_type": i.instrument_type,
             "attributes": dict(i.attributes) if i.attributes else {},
-            "block_id": i.block_id,
+            "block_id": getattr(i, "block_id", None),
             "name": i.name,
+            "quant_metrics": _build_quant_metrics(
+                risk_metrics_by_id.get(i.instrument_id),
+                dict(i.attributes) if i.attributes else {},
+            ),
+            "peer_values": peer_values_by_id.get(i.instrument_id, {}),
         }
         for i in instruments
     ]
@@ -136,6 +275,9 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
                 instrument_type=inst["instrument_type"],
                 attributes=inst.get("attributes", {}),
                 block_id=inst.get("block_id"),
+                quant_metrics=inst.get("quant_metrics"),
+                peer_values=inst.get("peer_values"),
+                previous_status=previous_outcomes.get(inst["instrument_id"]),
             )
             for inst in instrument_dicts
         ],
