@@ -64,7 +64,7 @@ def test_boolean_failure_blocks_watchlist() -> None:
 def test_allowed_list_failure_blocks_watchlist() -> None:
     """Allowed list mismatch is non-numeric → FAIL."""
     results = [
-        _r("allowed_domiciles", "['IE', 'LU']", "KY", False),
+        _r("allowed_domicile", "['IE', 'LU']", "KY", False),
         _r("min_aum_usd", "100000000", "95000000", False),
     ]
     assert ScreenerService._within_watchlist_margin(results, {}) is False

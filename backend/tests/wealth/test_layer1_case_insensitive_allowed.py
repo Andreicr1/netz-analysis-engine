@@ -5,13 +5,13 @@ from __future__ import annotations
 from vertical_engines.wealth.screener.layer_evaluator import LayerEvaluator
 
 
-def test_allowed_domiciles_case_insensitive_lowercase_attribute() -> None:
+def test_allowed_domicile_case_insensitive_lowercase_attribute() -> None:
     """Lowercase domicile attribute ('ie') matches uppercase allowed list ['IE']."""
     evaluator = LayerEvaluator({})
     result = evaluator._evaluate_criterion(
-        criterion="allowed_domiciles",
+        criterion="allowed_domicile",
         expected=["IE", "LU", "KY"],
-        attributes={"domiciles": "ie"},
+        attributes={"domicile": "ie"},
         instrument_type="fund",
         layer=1,
     )
@@ -19,13 +19,13 @@ def test_allowed_domiciles_case_insensitive_lowercase_attribute() -> None:
     assert result.passed is True
 
 
-def test_allowed_structures_case_insensitive() -> None:
+def test_allowed_structure_case_insensitive() -> None:
     """Lowercase structure 'ucits' matches uppercase allowed ['UCITS', 'CIS']."""
     evaluator = LayerEvaluator({})
     result = evaluator._evaluate_criterion(
-        criterion="allowed_structures",
+        criterion="allowed_structure",
         expected=["UCITS", "CIS"],
-        attributes={"structures": "ucits"},
+        attributes={"structure": "ucits"},
         instrument_type="fund",
         layer=1,
     )
@@ -33,13 +33,13 @@ def test_allowed_structures_case_insensitive() -> None:
     assert result.passed is True
 
 
-def test_allowed_exchanges_uppercase_attribute_unchanged() -> None:
+def test_allowed_exchange_uppercase_attribute_unchanged() -> None:
     """Uppercase attribute (production canonical) still passes — no regression."""
     evaluator = LayerEvaluator({})
     result = evaluator._evaluate_criterion(
-        criterion="allowed_exchanges",
+        criterion="allowed_exchange",
         expected=["NYSE", "NASDAQ"],
-        attributes={"exchanges": "NASDAQ"},
+        attributes={"exchange": "NASDAQ"},
         instrument_type="fund",
         layer=1,
     )
@@ -51,9 +51,9 @@ def test_allowed_value_not_in_list_still_fails() -> None:
     """Genuinely-not-allowed value (case-insensitive) still fails."""
     evaluator = LayerEvaluator({})
     result = evaluator._evaluate_criterion(
-        criterion="allowed_domiciles",
+        criterion="allowed_domicile",
         expected=["IE", "LU"],
-        attributes={"domiciles": "us"},
+        attributes={"domicile": "us"},
         instrument_type="fund",
         layer=1,
     )
