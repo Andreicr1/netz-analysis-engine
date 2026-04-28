@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -314,6 +315,11 @@ class ScreenerService:
                 actual = float(result.actual)
                 expected = float(result.expected)
             except (ValueError, TypeError):
+                return False
+            # Q69 hotfix (Codex P1): reject NaN / inf — float("nan") parses
+            # silently but `nan > 0.10` is False, which would have promoted
+            # malformed numeric failures to WATCHLIST instead of FAIL.
+            if not (math.isfinite(actual) and math.isfinite(expected)):
                 return False
             if expected == 0:
                 return False
