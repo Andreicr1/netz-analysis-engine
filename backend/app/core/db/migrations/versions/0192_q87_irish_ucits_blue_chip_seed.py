@@ -165,6 +165,20 @@ def _inv_geography(name: str) -> str:
 
 
 def upgrade() -> None:
+    # ── 0. esma_managers — seed 4 sponsor IDs (FK requirement for esma_funds) ──
+    # Without this, fresh CI/staging environments fail the esma_funds INSERT
+    # with FK violation (esma_managers populated only when ESMA Solr ingest
+    # has run, which doesn't happen in test environments).
+    op.execute("""
+        INSERT INTO esma_managers (esma_id, company_name, country, data_fetched_at)
+        VALUES
+          ('C21345', 'BlackRock Asset Management Ireland Limited', 'IE', NOW()),
+          ('C23431', 'Vanguard Group (Ireland) Limited', 'IE', NOW()),
+          ('C716',   'State Street Global Advisors Europe Limited', 'IE', NOW()),
+          ('C51403', 'Invesco Investment Management Limited', 'IE', NOW())
+        ON CONFLICT (esma_id) DO NOTHING
+    """)
+
     # ── 1. esma_funds — one row per LEI ──
     fund_values = []
     for lei, name, mgr, ticker in _FUNDS:
@@ -290,6 +304,17 @@ def downgrade() -> None:
         "DELETE FROM esma_funds "
         "WHERE classification_source = 'manual_seed'"
     )
+    # Remove seed managers only if no remaining funds reference them.
+    # Real ESMA Solr ingest may have populated these same IDs — do not delete
+    # if other funds (esma_solr) still reference them.
+    op.execute("""
+        DELETE FROM esma_managers
+        WHERE esma_id IN ('C21345', 'C23431', 'C716', 'C51403')
+          AND NOT EXISTS (
+            SELECT 1 FROM esma_funds
+            WHERE esma_funds.esma_manager_id = esma_managers.esma_id
+          )
+    """)
 
 
 def _json_str(s: str) -> str:
