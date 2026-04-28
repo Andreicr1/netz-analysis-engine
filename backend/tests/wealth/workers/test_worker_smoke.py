@@ -138,7 +138,7 @@ async def test_universe_sync_smoke(seeded_test_org):
     entrypoint imports cleanly and enters execution (no AttributeError/
     ImportError on the first call).
     """
-    from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
+    from sqlalchemy.exc import DBAPIError, ProgrammingError
 
     from app.domains.wealth.workers.universe_sync import run_universe_sync
 
@@ -150,10 +150,14 @@ async def test_universe_sync_smoke(seeded_test_org):
     ):
         try:
             result = await run_universe_sync()
-        except (DBAPIError, IntegrityError, ProgrammingError):
-            # Data-dependent SQL failure mid-execution — worker is NOT dead,
-            # just encountering stale/inconsistent data in a later phase.
-            # The entrypoint works (imports OK, lock acquired, phases started).
+        except ProgrammingError:
+            # Column-missing / ORM-mismatch errors are exactly the silent-dead-worker
+            # pattern this suite is designed to detect — MUST propagate.
+            raise
+        except DBAPIError:
+            # Data-dependent SQL failure mid-execution (IntegrityError on seed data,
+            # InFailedSQLTransactionError cascade from a failed phase). Worker is NOT
+            # dead — it imports, acquires lock, and enters phases successfully.
             return
 
     assert isinstance(result, dict)

@@ -30,6 +30,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Remap watchlist rows to 'batch' (closest semantic equivalent) before
+    # re-adding narrow constraint — preserves audit trail vs DELETE.
+    op.execute("UPDATE screening_runs SET run_type = 'batch' WHERE run_type = 'watchlist'")
     op.execute("ALTER TABLE screening_runs DROP CONSTRAINT IF EXISTS chk_run_type")
     op.execute("""
         ALTER TABLE screening_runs
