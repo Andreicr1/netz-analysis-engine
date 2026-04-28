@@ -145,12 +145,31 @@ class TestLayer1:
         results = evaluator.evaluate_layer1("fund", {}, criteria)
         assert len(results) == 0
 
-    def test_numeric_field_with_usd_suffix(self, evaluator):
-        criteria = {"fund": {"min_aum": 100}}
+    def test_numeric_field_exact_suffix_match(self, evaluator):
+        """Q68 / S08-F10: criterion key must EXACTLY match the attribute key.
+        Pre-Q68 the _get_numeric helper had a fallback chain (field, field_usd,
+        field_pct) that silently picked the first match, causing unit-pollution
+        risk for ambiguous future criteria. Fallback removed — config criterion
+        names must use the explicit suffix that matches the attribute key.
+        """
+        criteria = {"fund": {"min_aum_usd": 100}}
         results = evaluator.evaluate_layer1(
             "fund", {"aum_usd": 200}, criteria,
         )
         assert results[0].passed is True
+
+    def test_numeric_field_unsuffixed_criterion_with_suffixed_attribute_fails(
+        self, evaluator,
+    ):
+        """Q68 / S08-F10 contract: unsuffixed criterion against suffixed
+        attribute returns actual='N/A' → FAIL. Pre-Q68 silently fell back
+        via the _usd / _pct chain. Post-Q68 caller must use exact suffix."""
+        criteria = {"fund": {"min_aum": 100}}  # unsuffixed criterion
+        results = evaluator.evaluate_layer1(
+            "fund", {"aum_usd": 200}, criteria,  # suffixed attribute
+        )
+        assert results[0].passed is False
+        assert results[0].actual == "N/A"
 
 
 # ── Layer 2 — mandate fit ────────────────────────────────────────
