@@ -114,8 +114,8 @@ REGION_SERIES: dict[str, list[SeriesSpec]] = {
     "US": [
         SeriesSpec("A191RL1Q225SBEA", "growth", "Real GDP Growth", "quarterly"),
         SeriesSpec("INDPRO", "growth", "Industrial Production", "monthly", units="pc1"),
-        SeriesSpec("PAYEMS", "growth", "Nonfarm Payrolls", "monthly", units="pc1"),
-        SeriesSpec("CPIAUCSL", "inflation", "CPI All Urban", "monthly", invert=True, units="pc1"),
+        SeriesSpec("PAYEMS", "growth", "Nonfarm Payrolls", "monthly"),
+        SeriesSpec("CPIAUCSL", "inflation", "CPI All Urban", "monthly", invert=True),
         SeriesSpec("PCEPILFE", "inflation", "Core PCE", "monthly", invert=True, units="pc1"),
         SeriesSpec("DFF", "monetary", "Fed Funds Rate", "daily", invert=True),
         SeriesSpec("DGS10", "monetary", "10Y Treasury", "daily"),
