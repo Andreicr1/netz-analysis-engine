@@ -81,6 +81,9 @@ class _FakeSession:
     async def flush(self):
         pass
 
+    async def rollback(self):
+        pass
+
     def add(self, obj):
         pass
 
@@ -256,3 +259,45 @@ async def test_alert_sweeper_writes_audit_per_alert():
 
     # Commit must have been called exactly once (atomic)
     assert session.commits == 1
+
+
+# ── Test 6: lock released on DB exception (P1 hotfix) ─────────────
+
+
+@pytest.mark.asyncio
+async def test_alert_sweeper_lock_released_on_db_exception():
+    """P1: If write_audit_event raises, rollback restores session state
+    so pg_advisory_unlock succeeds — lock is NOT leaked."""
+    org_id = uuid.uuid4()
+    past = datetime.now(UTC) - timedelta(hours=2)
+    alert = _make_alert(auto_dismiss_at=past)
+    session = _FakeSession(candidates=[alert])
+
+    # Track whether unlock was called
+    unlock_called = False
+    original_execute = session.execute
+
+    async def tracking_execute(stmt, params=None):
+        nonlocal unlock_called
+        sql = str(stmt)
+        if "pg_advisory_unlock" in sql:
+            unlock_called = True
+        return await original_execute(stmt, params)
+
+    session.execute = tracking_execute
+
+    # Make write_audit_event raise
+    mock_audit_bomb = AsyncMock(side_effect=RuntimeError("audit write failed"))
+
+    with (
+        patch.object(mod, "async_session_factory", _make_session_factory(session)),
+        patch.object(mod, "write_audit_event", mock_audit_bomb),
+    ):
+        with pytest.raises(RuntimeError, match="audit write failed"):
+            await mod.run_alert_sweeper(org_id)
+
+    # Critical: lock must have been released despite the exception
+    assert unlock_called, (
+        "pg_advisory_unlock must be called even when _execute_sweep raises — "
+        "rollback restores session state before finally block runs"
+    )

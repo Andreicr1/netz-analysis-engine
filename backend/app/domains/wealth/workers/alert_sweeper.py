@@ -44,6 +44,9 @@ async def run_alert_sweeper(org_id: uuid.UUID) -> dict:
 
         try:
             return await _execute_sweep(db, org_id)
+        except Exception:
+            await db.rollback()
+            raise
         finally:
             await db.execute(
                 text(f"SELECT pg_advisory_unlock({ALERT_SWEEPER_LOCK_ID})"),
