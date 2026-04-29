@@ -1,6 +1,7 @@
 """Alert sweeper worker — auto-dismiss stale portfolio alerts past TTL.
 
-Runs hourly. Uses pg_try_advisory_lock to prevent concurrent runs.
+Runs hourly. Uses pg_try_advisory_xact_lock (transaction-scoped) to prevent
+concurrent runs. Lock auto-releases on commit/rollback — no manual unlock.
 Dismisses alerts where auto_dismiss_at < now() and dismissed_at IS NULL.
 Emits write_audit_event per alert (allow_global=False, tenant-scoped).
 
@@ -29,32 +30,38 @@ ALERT_SWEEPER_LOCK_ID = 900_102
 async def run_alert_sweeper(org_id: uuid.UUID) -> dict:
     """Auto-dismiss portfolio alerts past auto_dismiss_at.
 
+    Uses pg_try_advisory_xact_lock (Stability Charter section 3): lock is
+    automatically released on commit or rollback — no manual unlock needed,
+    no orphaned lock risk.
+
     Returns dict with status and count of dismissed alerts.
     """
     async with async_session_factory() as db:
         await set_rls_context(db, org_id)
 
+        # Acquire xact lock — non-blocking, auto-released on commit/rollback
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({ALERT_SWEEPER_LOCK_ID})"),
+            text("SELECT pg_try_advisory_xact_lock(:lock_id)"),
+            {"lock_id": ALERT_SWEEPER_LOCK_ID},
         )
         acquired = lock_result.scalar()
         if not acquired:
             logger.info("alert_sweeper_skipped", reason="lock held")
             return {"status": "skipped", "reason": "lock held", "dismissed": 0}
 
-        try:
-            return await _execute_sweep(db, org_id)
-        except Exception:
-            await db.rollback()
-            raise
-        finally:
-            await db.execute(
-                text(f"SELECT pg_advisory_unlock({ALERT_SWEEPER_LOCK_ID})"),
-            )
+        count = await _execute_sweep(db, org_id)
+        await db.commit()
+
+        logger.info("alert_sweeper_dismissed", count=count)
+        return {"status": "completed", "dismissed": count}
 
 
-async def _execute_sweep(db: AsyncSession, org_id: uuid.UUID) -> dict:
-    """Sweep expired alerts within advisory lock."""
+async def _execute_sweep(db: AsyncSession, org_id: uuid.UUID) -> int:
+    """Sweep expired alerts within advisory lock.
+
+    Does NOT commit — caller commits once after all mutations and audit
+    events are written (Q92 atomicity: audit + dismiss in same transaction).
+    """
     now = datetime.now(UTC)
 
     result = await db.execute(
@@ -68,7 +75,7 @@ async def _execute_sweep(db: AsyncSession, org_id: uuid.UUID) -> dict:
 
     if not candidates:
         logger.info("alert_sweeper_no_expired")
-        return {"status": "completed", "dismissed": 0}
+        return 0
 
     for alert in candidates:
         alert.dismissed_at = now
@@ -88,8 +95,4 @@ async def _execute_sweep(db: AsyncSession, org_id: uuid.UUID) -> dict:
             allow_global=False,
         )
 
-    await db.commit()
-    await set_rls_context(db, org_id)
-
-    logger.info("alert_sweeper_dismissed", count=len(candidates))
-    return {"status": "completed", "dismissed": len(candidates)}
+    return len(candidates)
