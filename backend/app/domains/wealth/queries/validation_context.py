@@ -148,20 +148,31 @@ async def build_validation_db_context(
         )
         strategic_targets[str(block_id)] = float(target_w or 0.0)
 
-    # 4. NAV latest dates for staleness check (only for instruments in the run)
+    # 4. NAV latest dates for staleness check (only for instruments in the run).
+    #    PR-Q116 hotfix #5 — Codex P2: bound to ``as_of_date`` when supplied,
+    #    so backdated runs are evaluated against the run date and not against
+    #    forward-looking NAVs ingested afterwards (which would let
+    #    ``no_stale_nav`` pass on data the optimizer never saw).
     nav_latest_date: dict[str, str] = {}
     if instrument_ids:
+        nav_params: dict[str, object] = {
+            "ids": [uuid.UUID(iid) for iid in instrument_ids],
+        }
+        as_of_clause = ""
+        if as_of_date is not None:
+            as_of_clause = " AND nav_date <= :as_of"
+            nav_params["as_of"] = as_of_date
         nav_rows = await db.execute(
             text(
-                """
+                f"""
                 SELECT CAST(instrument_id AS TEXT),
                        CAST(MAX(nav_date) AS TEXT) AS latest_date
                   FROM nav_timeseries
-                 WHERE instrument_id = ANY(:ids)
+                 WHERE instrument_id = ANY(:ids){as_of_clause}
                  GROUP BY instrument_id
                 """
             ),
-            {"ids": [uuid.UUID(iid) for iid in instrument_ids]},
+            nav_params,
         )
         for iid, latest in nav_rows.all():
             if latest is not None:
