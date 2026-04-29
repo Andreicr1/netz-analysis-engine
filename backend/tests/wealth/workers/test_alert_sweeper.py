@@ -4,8 +4,11 @@ Validates:
   1. Expired alerts are dismissed (dismissed_at set, dismissed_by="system:alert_sweeper")
   2. Future auto_dismiss_at alerts are not touched
   3. Already-dismissed alerts are not re-dismissed
-  4. Lock held → returns {"status": "skipped", "dismissed": 0}
+  4. Lock held -> returns {"status": "skipped", "dismissed": 0}
   5. One audit event per expired alert
+  6. xact lock released on DB exception (auto via rollback)
+  7. Concurrent run blocked (second caller returns 0)
+  8. No session-scoped lock orphan (no pg_advisory_unlock used)
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ import pytest
 
 from app.domains.wealth.workers import alert_sweeper as mod
 
-# ── Helpers ────────────────────────────────────────────────────────────
+# -- Helpers ----------------------------------------------------------------
 
 
 class _FakeResult:
@@ -52,6 +55,7 @@ class _FakeSession:
         self._candidates = candidates or []
         self.executed_sql: list[str] = []
         self.commits = 0
+        self.rollbacks = 0
         self.rls_org_ids: list[str] = []
 
     async def execute(self, stmt, params=None):
@@ -63,13 +67,10 @@ class _FakeSession:
                 self.rls_org_ids.append(params.get("oid", ""))
             return _FakeResult()
 
-        if "pg_try_advisory_lock" in sql:
+        if "pg_try_advisory_xact_lock" in sql:
             return _FakeResult(scalar_value=self._lock_acquired)
 
-        if "pg_advisory_unlock" in sql:
-            return _FakeResult(scalar_value=True)
-
-        # SELECT on portfolio_alerts — return candidates
+        # SELECT on portfolio_alerts -- return candidates
         if "portfolio_alerts" in sql.lower() or "PortfolioAlert" in sql:
             return _FakeResult(scalars_value=self._candidates)
 
@@ -82,7 +83,7 @@ class _FakeSession:
         pass
 
     async def rollback(self):
-        pass
+        self.rollbacks += 1
 
     def add(self, obj):
         pass
@@ -117,12 +118,12 @@ def _make_alert(
     return alert
 
 
-# ── Test 1: dismisses expired alerts ───────────────────────────────
+# -- Test 1: dismisses expired alerts --------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_alert_sweeper_dismisses_expired():
-    """Alert with auto_dismiss_at in the past → dismissed_at set."""
+    """Alert with auto_dismiss_at in the past -> dismissed_at set."""
     org_id = uuid.uuid4()
     past = datetime.now(UTC) - timedelta(hours=2)
     alert = _make_alert(auto_dismiss_at=past)
@@ -143,12 +144,12 @@ async def test_alert_sweeper_dismisses_expired():
     mock_write_audit.assert_called_once()
 
 
-# ── Test 2: skips future auto_dismiss_at ───────────────────────────
+# -- Test 2: skips future auto_dismiss_at ----------------------------------
 
 
 @pytest.mark.asyncio
 async def test_alert_sweeper_skips_future():
-    """Alert with auto_dismiss_at in the future → not dismissed.
+    """Alert with auto_dismiss_at in the future -> not dismissed.
 
     The SELECT WHERE clause filters these out, so the session returns
     an empty candidate list.
@@ -170,12 +171,12 @@ async def test_alert_sweeper_skips_future():
     mock_write_audit.assert_not_called()
 
 
-# ── Test 3: skips already-dismissed alerts ─────────────────────────
+# -- Test 3: skips already-dismissed alerts --------------------------------
 
 
 @pytest.mark.asyncio
 async def test_alert_sweeper_skips_already_dismissed():
-    """Alert with dismissed_at already set → not returned by SELECT.
+    """Alert with dismissed_at already set -> not returned by SELECT.
 
     The WHERE clause uses dismissed_at IS NULL, so already-dismissed
     alerts are never in the candidate list.
@@ -197,12 +198,12 @@ async def test_alert_sweeper_skips_already_dismissed():
     mock_write_audit.assert_not_called()
 
 
-# ── Test 4: lock held → skipped ────────────────────────────────────
+# -- Test 4: lock held -> skipped -----------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_alert_sweeper_lock_held_returns_skipped():
-    """Lock already held → returns skipped status, no unlock call."""
+    """Lock already held -> returns skipped status."""
     org_id = uuid.uuid4()
     session = _FakeSession(lock_acquired=False)
 
@@ -212,18 +213,19 @@ async def test_alert_sweeper_lock_held_returns_skipped():
     assert result["status"] == "skipped"
     assert result["dismissed"] == 0
 
+    # No unlock calls (xact lock, not session lock)
     unlock_sqls = [
         sql for sql in session.executed_sql if "pg_advisory_unlock" in sql
     ]
-    assert len(unlock_sqls) == 0, "Lock was never acquired — unlock must not be called"
+    assert len(unlock_sqls) == 0, "xact lock auto-releases -- no manual unlock"
 
 
-# ── Test 5: one audit event per expired alert ──────────────────────
+# -- Test 5: one audit event per expired alert -----------------------------
 
 
 @pytest.mark.asyncio
 async def test_alert_sweeper_writes_audit_per_alert():
-    """3 expired alerts → 3 write_audit_event calls."""
+    """3 expired alerts -> 3 write_audit_event calls."""
     org_id = uuid.uuid4()
     past = datetime.now(UTC) - timedelta(hours=1)
     alerts = [_make_alert(auto_dismiss_at=past) for _ in range(3)]
@@ -261,30 +263,18 @@ async def test_alert_sweeper_writes_audit_per_alert():
     assert session.commits == 1
 
 
-# ── Test 6: lock released on DB exception (P1 hotfix) ─────────────
+# -- Test 6: xact lock released on DB exception ---------------------------
 
 
 @pytest.mark.asyncio
 async def test_alert_sweeper_lock_released_on_db_exception():
-    """P1: If write_audit_event raises, rollback restores session state
-    so pg_advisory_unlock succeeds — lock is NOT leaked."""
+    """P1 fix: If write_audit_event raises, the exception propagates and
+    the async context manager exits -- xact lock is auto-released on
+    session close/rollback. No manual unlock needed."""
     org_id = uuid.uuid4()
     past = datetime.now(UTC) - timedelta(hours=2)
     alert = _make_alert(auto_dismiss_at=past)
     session = _FakeSession(candidates=[alert])
-
-    # Track whether unlock was called
-    unlock_called = False
-    original_execute = session.execute
-
-    async def tracking_execute(stmt, params=None):
-        nonlocal unlock_called
-        sql = str(stmt)
-        if "pg_advisory_unlock" in sql:
-            unlock_called = True
-        return await original_execute(stmt, params)
-
-    session.execute = tracking_execute
 
     # Make write_audit_event raise
     mock_audit_bomb = AsyncMock(side_effect=RuntimeError("audit write failed"))
@@ -296,8 +286,81 @@ async def test_alert_sweeper_lock_released_on_db_exception():
         with pytest.raises(RuntimeError, match="audit write failed"):
             await mod.run_alert_sweeper(org_id)
 
-    # Critical: lock must have been released despite the exception
-    assert unlock_called, (
-        "pg_advisory_unlock must be called even when _execute_sweep raises — "
-        "rollback restores session state before finally block runs"
+    # No manual unlock call -- xact lock auto-releases
+    unlock_sqls = [
+        sql for sql in session.executed_sql if "pg_advisory_unlock" in sql
+    ]
+    assert len(unlock_sqls) == 0, (
+        "pg_try_advisory_xact_lock auto-releases on commit/rollback -- "
+        "no manual pg_advisory_unlock should be called"
+    )
+
+    # Commit must NOT have been called (exception before commit)
+    assert session.commits == 0
+
+
+# -- Test 7: concurrent runs blocked (second returns 0) -------------------
+
+
+@pytest.mark.asyncio
+async def test_alert_sweeper_concurrent_runs_blocked():
+    """Second concurrent run gets lock_acquired=False, returns 0 dismissed."""
+    org_id = uuid.uuid4()
+
+    # First run acquires lock successfully
+    session1 = _FakeSession(lock_acquired=True, candidates=[])
+    with patch.object(mod, "async_session_factory", _make_session_factory(session1)):
+        result1 = await mod.run_alert_sweeper(org_id)
+    assert result1["status"] == "completed"
+
+    # Second run finds lock held
+    session2 = _FakeSession(lock_acquired=False)
+    with patch.object(mod, "async_session_factory", _make_session_factory(session2)):
+        result2 = await mod.run_alert_sweeper(org_id)
+    assert result2["status"] == "skipped"
+    assert result2["dismissed"] == 0
+
+
+# -- Test 8: no session lock orphan (no pg_advisory_unlock used) -----------
+
+
+@pytest.mark.asyncio
+async def test_alert_sweeper_no_session_lock_orphan():
+    """Post-run: verify no advisory lock operations use session-scoped
+    pg_advisory_lock/pg_advisory_unlock -- only xact variant used."""
+    org_id = uuid.uuid4()
+    past = datetime.now(UTC) - timedelta(hours=1)
+    alert = _make_alert(auto_dismiss_at=past)
+    session = _FakeSession(candidates=[alert])
+
+    mock_write_audit = AsyncMock()
+
+    with (
+        patch.object(mod, "async_session_factory", _make_session_factory(session)),
+        patch.object(mod, "write_audit_event", mock_write_audit),
+    ):
+        await mod.run_alert_sweeper(org_id)
+
+    # Collect all lock-related SQL
+    lock_sqls = [
+        sql
+        for sql in session.executed_sql
+        if "advisory" in sql.lower()
+    ]
+
+    # Must only contain xact variant
+    for sql in lock_sqls:
+        assert "xact_lock" in sql, (
+            f"Expected pg_try_advisory_xact_lock, got: {sql}"
+        )
+
+    # No session-scoped lock/unlock
+    session_lock_sqls = [
+        sql
+        for sql in session.executed_sql
+        if "pg_advisory_lock(" in sql or "pg_advisory_unlock" in sql
+    ]
+    assert len(session_lock_sqls) == 0, (
+        f"Session-scoped advisory lock/unlock detected -- must use xact variant: "
+        f"{session_lock_sqls}"
     )
