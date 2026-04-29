@@ -33,6 +33,45 @@ Each section below is a self-contained PR remediation prompt. Dispatch sequentia
 
 ---
 
+## PRE-FLIGHT — MANDATORY FOR EVERY DISPATCHED AGENT
+
+> **Added 2026-04-29 after Sprint 1 P0 regression incident** (Q115 silently reverted by Q111 admin-rebase-merge; recovered via PR-Q122).
+>
+> See anti-pattern doc: `feedback_obsolete_pr_branch_pattern.md` — sub-pattern "obsolete-base direct-push reversion via gh pr merge --rebase --admin".
+
+Before making any code change, every agent MUST run:
+
+```bash
+git fetch origin --prune
+git checkout -b <work-branch> origin/main   # ALWAYS branch from origin/main, never from a stale local main
+git log --oneline -5                          # confirm branch tip is current main HEAD
+```
+
+Before pushing the final commit, every agent MUST run:
+
+```bash
+git fetch origin
+git pull --rebase origin main                 # rebase against current main (catches direct pushes since branch creation)
+# If conflicts: resolve, run full test suite again, then push.
+git push origin <work-branch>
+```
+
+**Why this is mandatory:**
+
+- Sprint 1 P0 (2026-04-29 14:16 UTC): Q115 had been direct-pushed to main as commit `e564cedf`. Five worktree branches (Q110-Q114) were created from `5c7290a9` (the commit BEFORE Q115). When Q111 was admin-rebase-merged onto post-Q115 main, the resulting tree silently reverted Q115's `state_machine.py` and tests — even though Q111's commit did not modify those files. Subsequent PRs (Q110, Q113) compounded the regression.
+- Q92 invariant `I-Audit-Tenant-1` was violated again until PR-Q122 cherry-pick recovery shipped.
+
+**Operational rules:**
+
+1. Every dispatched agent MUST branch from `origin/main` at start of session, NOT from any pre-existing local branch or worktree snapshot.
+2. Every dispatched agent MUST `git pull --rebase origin main` immediately before final push. If there are conflicts, resolve them and re-run the full file-scoped test suite before pushing.
+3. The orchestrator (Andrei + Opus 4.7) MUST verify before admin-merge that the PR branch's recent merge-base with `main` is `≤ 24h old`. If older, request the implementer agent to rebase.
+4. **Never use `gh pr merge --admin` to bypass `mergeStateStatus: BEHIND`.** A BEHIND state means the branch must rebase first.
+
+This pre-flight is institutional. Skipping it = repeating the Sprint 1 incident.
+
+---
+
 ## PR-Q110 — C-01 + C-02 state machine bundle (Crit)
 
 ```text
