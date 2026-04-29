@@ -402,7 +402,7 @@ def project_cvar_for_candidates(
 
         if projected is not None and abs(current_cvar) > 1e-8:
             # improvement: how much of the gap did we close? (positive = better)
-            improvement = round((current_cvar - projected) / abs(current_cvar), 4)
+            improvement = round((projected - current_cvar) / abs(current_cvar), 4)
 
         result.append(
             replace(
