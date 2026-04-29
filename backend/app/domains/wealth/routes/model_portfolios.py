@@ -80,6 +80,7 @@ from app.domains.wealth.schemas.portfolio import (
     PositionDetail,
 )
 from app.shared.enums import Role
+from vertical_engines.wealth.model_portfolio.block_bounds import resolve_block_bounds
 from vertical_engines.wealth.model_portfolio.state_machine import (
     ACTION_ACTIVATE,
     ACTION_APPROVE,
@@ -1924,18 +1925,14 @@ def _build_propose_block_constraints(
 
     constraints: list[Any] = []
     for bid in canonical_block_ids:
-        if bid in excluded_block_ids:
-            constraints.append(
-                block_constraint_cls(block_id=bid, min_weight=0.0, max_weight=0.0),
-            )
-            continue
         omin, omax = overrides_by_block.get(bid, (None, None))
+        min_w, max_w = resolve_block_bounds(
+            override_min=omin,
+            override_max=omax,
+            excluded_from_portfolio=bid in excluded_block_ids,
+        )
         constraints.append(
-            block_constraint_cls(
-                block_id=bid,
-                min_weight=omin if omin is not None else 0.0,
-                max_weight=omax if omax is not None else 1.0,
-            ),
+            block_constraint_cls(block_id=bid, min_weight=min_w, max_weight=max_w),
         )
     return constraints, sorted(overrides_by_block.keys())
 
@@ -1947,6 +1944,7 @@ async def _run_construction_async(
     portfolio_id: uuid.UUID | None = None,
     cvar_limit_override: float | None = None,
     propose_mode: bool = False,
+    effective_date: date | None = None,
 ) -> dict[str, Any]:
     """Run optimizer-driven portfolio construction (fully async).
 
@@ -2059,7 +2057,10 @@ async def _run_construction_async(
     universe_funds = [f for f in universe_funds if f["instrument_id"] in _kept_strs]
 
     # ── 3. Query strategic allocation for this profile ──
-    today = date.today()
+    # PR-Q116 hotfix #6 — accept ``effective_date`` from the caller so the
+    # validation gate can pin the same allocation snapshot the optimizer
+    # used (avoids midnight-cross drift between phases).
+    today = effective_date or date.today()
     alloc_stmt = (
         select(StrategicAllocation)
         .where(
