@@ -343,15 +343,21 @@ def project_cvar_historical(
     # Portfolio daily returns with new weights
     port_daily = combined @ new_weights  # (T,)
 
-    # Historical CVaR
-    sorted_ret = np.sort(port_daily)
-    cutoff = max(int(len(sorted_ret) * alpha), 1)
-    daily_cvar = float(-np.mean(sorted_ret[:cutoff]))
-
-    # Annualize (sqrt(252) for volatility-based scaling)
-    annual_cvar = daily_cvar * np.sqrt(252)
-
-    return float(round(-annual_cvar, 6))  # negative = loss convention
+    # Historical CVaR — annualization strategy depends on data length
+    if len(port_daily) >= 252:
+        # Rolling 252-day cumulative returns for proper annual CVaR
+        annual_returns = np.convolve(port_daily, np.ones(252), mode="valid")
+        sorted_annual = np.sort(annual_returns)
+        cutoff = max(int(len(sorted_annual) * alpha), 1)
+        annual_cvar = float(-np.mean(sorted_annual[:cutoff]))
+        return float(round(-annual_cvar, 6))  # negative = loss convention
+    else:
+        # Fallback: sqrt(252) heuristic for short histories
+        sorted_ret = np.sort(port_daily)
+        cutoff = max(int(len(sorted_ret) * alpha), 1)
+        daily_cvar = float(-np.mean(sorted_ret[:cutoff]))
+        annual_cvar = daily_cvar * np.sqrt(252)
+        return float(round(-annual_cvar, 6))  # negative = loss convention
 
 
 def project_cvar_for_candidates(
@@ -775,6 +781,15 @@ def build_advice(
         # Only keep profiles where the current portfolio would pass
         alt_profiles = [a for a in alt_profiles if a.current_cvar_would_pass]
 
+    # Determine if rolling CVaR path was used (not heuristic) for any candidate.
+    # Rolling path requires min(portfolio_days, candidate_days) >= 252.
+    n_port_days = portfolio_daily_returns.shape[0]
+    min_cand_days = min(
+        (len(v) for v in candidate_returns.values()),
+        default=0,
+    )
+    cvar_is_heuristic = min(n_port_days, min_cand_days) < 252
+
     return ConstructionAdvice(
         portfolio_id=portfolio_id,
         profile=profile,
@@ -785,5 +800,5 @@ def build_advice(
         candidates=ranked,
         minimum_viable_set=mvs,
         alternative_profiles=alt_profiles,
-        projected_cvar_is_heuristic=True,
+        projected_cvar_is_heuristic=cvar_is_heuristic,
     )
