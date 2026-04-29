@@ -442,13 +442,13 @@ async def _read_esma_funds(
         text(
             f"""
             SELECT
-                isin                 AS pk,
+                lei                  AS pk,
                 fund_name,
                 fund_type,
                 strategy_label       AS current_label
             FROM esma_funds
             WHERE is_institutional = true
-            ORDER BY isin
+            ORDER BY lei
             {limit_clause}
             """,
         ),
