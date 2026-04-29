@@ -218,10 +218,11 @@ class TestBuildValidationDbContext:
                     (iid,) for iid in _INSTRUMENT_IDS[:4]
                 ]
             elif call_count == 3:
-                # Block constraints query
+                # Block constraints query — 5 columns:
+                # (block_id, override_min, override_max, excluded, target_w)
                 result.all.return_value = [
-                    ("na_equity_large", 0.30, 0.70, 0.50),
-                    ("fi_treasury", 0.20, 0.40, 0.30),
+                    ("na_equity_large", 0.30, 0.70, False, 0.50),
+                    ("fi_treasury", 0.20, 0.40, False, 0.30),
                 ]
             elif call_count == 4:
                 # NAV latest dates query

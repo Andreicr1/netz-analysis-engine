@@ -16,6 +16,7 @@ from datetime import date
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from vertical_engines.wealth.model_portfolio.block_bounds import resolve_block_bounds
 from vertical_engines.wealth.model_portfolio.validation_gate import (
     ValidationDbContext,
 )
@@ -87,32 +88,33 @@ async def build_validation_db_context(
     )
     approved_instrument_ids = frozenset(row[0] for row in approved_rows.all())
 
-    # 3. Block constraints: strategic_allocation (min/max from drift bands,
-    #    falling back to override bounds, then to ±5pp default around target).
-    #    The optimizer-facing bounds were dropped in PR-A26.2 so we derive
-    #    from the approved drift bands which the realize-mode loader uses.
+    # 3. Block constraints: strategic_allocation — resolve bounds via the
+    #    shared helper that _build_propose_block_constraints also uses.
+    #    PR-Q116 hotfix: previous COALESCE chain fell back to
+    #    target_weight * 0.5/1.5 which was tighter than propose-mode's
+    #    default [0, 1], causing false block failures.
     block_rows = await db.execute(
         text(
             """
             SELECT sa.block_id,
-                   COALESCE(sa.drift_min, sa.override_min, sa.target_weight * 0.5) AS min_w,
-                   COALESCE(sa.drift_max, sa.override_max,
-                            LEAST(sa.target_weight * 1.5, 1.0)) AS max_w,
+                   sa.override_min,
+                   sa.override_max,
+                   COALESCE(sa.excluded_from_portfolio, false) AS excluded,
                    COALESCE(sa.target_weight, 0.0) AS target_w
               FROM strategic_allocation sa
              WHERE sa.organization_id = :org
                AND sa.profile = :profile
-               AND COALESCE(sa.excluded_from_portfolio, false) = false
             """
         ),
         {"org": org_str, "profile": profile},
     )
     block_constraints: dict[str, tuple[float, float]] = {}
     strategic_targets: dict[str, float] = {}
-    for block_id, min_w, max_w, target_w in block_rows.all():
-        block_constraints[str(block_id)] = (
-            float(min_w or 0.0),
-            float(max_w or 1.0),
+    for block_id, override_min, override_max, excluded, target_w in block_rows.all():
+        block_constraints[str(block_id)] = resolve_block_bounds(
+            override_min=float(override_min) if override_min is not None else None,
+            override_max=float(override_max) if override_max is not None else None,
+            excluded_from_portfolio=bool(excluded),
         )
         strategic_targets[str(block_id)] = float(target_w or 0.0)
 
