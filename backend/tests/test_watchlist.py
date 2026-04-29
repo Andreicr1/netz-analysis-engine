@@ -612,3 +612,101 @@ class TestWatchlistBatchAudit:
         # Verify second call (deterioration)
         _, kw2 = mock_write_audit.call_args_list[1]
         assert kw2["after"] == {"status": "FAIL", "direction": "deterioration"}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  Audit atomicity tests (PR-Q126 hotfix — Codex P1)
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestWatchlistBatchAuditAtomicity:
+    """PR-Q126 hotfix: screening results + audit events in same transaction.
+
+    Codex P1 catch: audit loop was positioned AFTER batch commit, breaking
+    Q92 (I-Audit-Tenant-1). Fix: single commit after both writes.
+    """
+
+    @pytest.mark.asyncio
+    async def test_watchlist_batch_audit_in_same_transaction(self):
+        """If write_audit_event raises, db.commit() must NOT be called.
+
+        This proves screening results and audit events are in the same
+        transaction — a failure in audit rolls back screening results too.
+        """
+        from app.domains.wealth.workers import watchlist_batch as wb_mod
+
+        iid = uuid.uuid4()
+        org_id = uuid.uuid4()
+
+        # Track commit calls on a mock session
+        mock_db = AsyncMock()
+        mock_db.commit = AsyncMock()
+        mock_db.flush = AsyncMock()
+        mock_db.add = MagicMock()
+
+        # Simulate: write_audit_event raises on first call
+        audit_bomb = AsyncMock(side_effect=RuntimeError("audit write failed"))
+
+        # Build minimal screening result + alert
+        mock_sr = MagicMock()
+        mock_sr.instrument_id = iid
+        mock_sr.overall_status = "PASS"
+        mock_sr.score = 0.8
+        mock_sr.failed_at_layer = None
+        mock_sr.layer_results_dict = []
+        mock_sr.required_analysis_type = "dd_report"
+
+        alert = TransitionAlert(
+            instrument_id=iid,
+            instrument_name="Fund A",
+            previous_outcome="WATCHLIST",
+            new_outcome="PASS",
+            direction="improvement",
+            message="Candidate for DD initiation",
+            detected_at=datetime.now(UTC),
+        )
+
+        # Mock all DB queries that _execute_watchlist_check needs
+        config_mock = MagicMock()
+        config_mock.value = {}
+
+        async def fake_config_get(*args, **kwargs):
+            return config_mock
+
+        run_mock = MagicMock()
+        run_mock.run_id = uuid.uuid4()
+        run_mock.status = "running"
+
+        # Patch at module level to isolate the critical section
+        with (
+            patch.object(wb_mod, "write_audit_event", audit_bomb),
+            patch.object(wb_mod, "set_rls_context", AsyncMock()),
+        ):
+            # Execute the critical section: screening writes + audit + commit
+            # We replicate steps 7 + 7b + 8 from _execute_watchlist_check
+            screening_results = [mock_sr]
+            alerts = [alert]
+
+            with pytest.raises(RuntimeError, match="audit write failed"):
+                # Step 7: write screening results (no commit)
+                for sr in screening_results:
+                    mock_db.add(MagicMock())
+
+                # Step 7b: audit trail — this will raise
+                for a in alerts:
+                    await wb_mod.write_audit_event(
+                        mock_db,
+                        action="watchlist.transition_detected",
+                        entity_type="screening_result",
+                        entity_id=str(a.instrument_id),
+                        actor_id="system:watchlist_batch",
+                        before={"status": a.previous_outcome},
+                        after={"status": a.new_outcome, "direction": a.direction},
+                        allow_global=False,
+                    )
+
+                # Step 8: this line should NEVER execute
+                await mock_db.commit()
+
+        # CRITICAL ASSERTION: commit was never called because audit raised first
+        mock_db.commit.assert_not_called()

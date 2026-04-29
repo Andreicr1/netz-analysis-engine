@@ -284,3 +284,58 @@ async def test_drift_check_writes_audit_event():
     assert kwargs["actor_id"] == "system:drift_check"
     assert kwargs["allow_global"] is False
     assert kwargs["after"]["trigger"] == "drift"
+
+
+# ── Test: audit atomicity (PR-Q126 hotfix — Codex P1) ──────────────
+
+
+@pytest.mark.asyncio
+async def test_drift_check_audit_atomic():
+    """PR-Q126: if write_audit_event raises, db.commit() is NOT called.
+
+    Proves rebalance event + audit event are in the same transaction.
+    The drift_check code already has correct ordering (audit before commit),
+    so this test pins the invariant against future regressions.
+    """
+    org_id = uuid.uuid4()
+    session = _FakeSession()
+    # Override commit to track whether it was called AFTER the audit failure
+    commit_called_after_audit = False
+    original_commit = session.commit
+
+    async def tracking_commit():
+        nonlocal commit_called_after_audit
+        commit_called_after_audit = True
+        await original_commit()
+
+    session.commit = tracking_commit
+
+    report = _make_fake_report(rebalance=True)
+
+    fake_event = MagicMock()
+    fake_event.event_id = uuid.uuid4()
+
+    # write_audit_event raises on first call
+    audit_bomb = AsyncMock(side_effect=RuntimeError("audit write failed"))
+
+    with (
+        patch.object(mod, "async_session", _make_session_factory(session)),
+        patch.object(
+            mod, "compute_drift", new_callable=AsyncMock, return_value=report,
+        ),
+        patch.object(
+            mod, "create_system_rebalance_event",
+            new_callable=AsyncMock,
+            return_value=fake_event,
+        ),
+        patch.object(mod, "write_audit_event", audit_bomb),
+    ):
+        with pytest.raises(RuntimeError, match="audit write failed"):
+            await mod.run_drift_check(org_id)
+
+    # The audit bomb fires before db.commit() in the same iteration.
+    # Since the exception propagates, commit must NOT have been reached.
+    assert not commit_called_after_audit, (
+        "db.commit() must not be called when write_audit_event raises — "
+        "rebalance event and audit event must be in the same transaction"
+    )
