@@ -3221,6 +3221,8 @@ def _run_stress(
                 "end_date": str(s.end_date),
                 "portfolio_return": s.portfolio_return,
                 "max_drawdown": s.max_drawdown,
+                "degraded": s.degraded,
+                "degraded_reason": s.degraded_reason,
             }
             for s in result.scenarios
         ],

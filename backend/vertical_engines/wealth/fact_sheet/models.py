@@ -71,8 +71,10 @@ class StressRow:
     name: str
     start_date: date
     end_date: date
-    portfolio_return: float
-    max_drawdown: float
+    portfolio_return: float | None = None
+    max_drawdown: float | None = None
+    degraded: bool = False
+    degraded_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
