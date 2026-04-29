@@ -19,6 +19,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.config_service import ConfigService
+from app.core.db.audit import write_audit_event
 from app.core.db.engine import async_session_factory
 from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.instrument import Instrument
@@ -324,6 +325,19 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
 
         await db.commit()
         await set_rls_context(db, org_id)
+
+    # 7b. Audit trail for transition alerts
+    for alert in alerts:
+        await write_audit_event(
+            db,
+            action="watchlist.transition_detected",
+            entity_type="screening_result",
+            entity_id=str(alert.instrument_id),
+            actor_id="system:watchlist_batch",
+            before={"status": alert.previous_outcome},
+            after={"status": alert.new_outcome, "direction": alert.direction},
+            allow_global=False,
+        )
 
     # 8. Mark run completed
     run.status = "completed"

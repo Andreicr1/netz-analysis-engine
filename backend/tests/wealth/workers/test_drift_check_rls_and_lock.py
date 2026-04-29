@@ -237,3 +237,50 @@ async def test_drift_check_skips_when_lock_busy():
     assert result == {}
     unlock_sqls = [sql for sql in session.executed_sql if "pg_advisory_unlock" in sql]
     assert len(unlock_sqls) == 0, "Lock was never acquired — unlock must not be called"
+
+
+# ── Test: audit event on rebalance trigger ──────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_drift_check_writes_audit_event():
+    """PR-Q126: write_audit_event called when drift rebalance is triggered."""
+    org_id = uuid.uuid4()
+    session = _FakeSession()
+
+    report = _make_fake_report(rebalance=True)
+    report.blocks_breaching = 2
+
+    fake_event = MagicMock()
+    fake_event.event_id = uuid.uuid4()
+
+    mock_write_audit = AsyncMock()
+
+    with (
+        patch.object(mod, "async_session", _make_session_factory(session)),
+        patch.object(
+            mod, "compute_drift", new_callable=AsyncMock, return_value=report,
+        ),
+        patch.object(
+            mod, "create_system_rebalance_event",
+            new_callable=AsyncMock,
+            return_value=fake_event,
+        ),
+        patch.object(mod, "write_audit_event", mock_write_audit),
+    ):
+        result = await mod.run_drift_check(org_id)
+
+    assert isinstance(result, dict)
+    # write_audit_event must be called once per profile that triggers rebalance.
+    # All 3 profiles trigger because report.rebalance_recommended = True.
+    assert mock_write_audit.call_count == len(mod.PROFILES)
+
+    # Verify the first call's kwargs match the expected pattern.
+    call_kwargs = mock_write_audit.call_args_list[0]
+    # positional arg 0 is the session
+    _, kwargs = call_kwargs
+    assert kwargs["action"] == "model_portfolio.rebalance_triggered"
+    assert kwargs["entity_type"] == "rebalance_event"
+    assert kwargs["actor_id"] == "system:drift_check"
+    assert kwargs["allow_global"] is False
+    assert kwargs["after"]["trigger"] == "drift"

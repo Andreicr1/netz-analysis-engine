@@ -17,6 +17,7 @@ import uuid
 import structlog
 from sqlalchemy import text
 
+from app.core.db.audit import write_audit_event
 from app.core.db.engine import async_session_factory as async_session
 from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.services.quant_queries import compute_drift, create_system_rebalance_event
@@ -97,6 +98,23 @@ async def run_drift_check(org_id: uuid.UUID) -> dict[str, str]:
                         ),
                         cvar_before=None,
                         actor_source="system",
+                    )
+                    await write_audit_event(
+                        db,
+                        action="model_portfolio.rebalance_triggered",
+                        entity_type="rebalance_event",
+                        entity_id=str(event.event_id),
+                        actor_id="system:drift_check",
+                        before=None,
+                        after={
+                            "profile": profile,
+                            "trigger": "drift",
+                            "drift_pct": float(report.max_drift_pct),
+                            "blocks_breaching": sum(
+                                1 for b in report.blocks if b.status != "ok"
+                            ),
+                        },
+                        allow_global=False,
                     )
                     logger.info(
                         "Drift rebalance event created",
