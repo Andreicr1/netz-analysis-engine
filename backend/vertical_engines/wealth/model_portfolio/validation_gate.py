@@ -50,6 +50,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from typing import Any, Final, Literal
 
 Severity = Literal["block", "warn"]
@@ -166,13 +167,38 @@ def _check_no_stale_nav(
 ) -> ValidationCheck:
     weights = run_payload.get("weights_proposed") or {}
     instrument_ids = [str(iid) for iid in weights]
-    as_of_date = run_payload.get("as_of_date")
+    as_of_date_raw = run_payload.get("as_of_date")
+
+    if not as_of_date_raw:
+        return ValidationCheck(
+            id="no_stale_nav",
+            label="NAV data is fresh",
+            severity="block",
+            passed=True,
+            value=0,
+            threshold=db.nav_staleness_threshold_days,
+            explanation="as_of_date missing from payload; staleness check skipped.",
+        )
+
+    as_of = (
+        date.fromisoformat(as_of_date_raw)
+        if isinstance(as_of_date_raw, str)
+        else as_of_date_raw
+    )
+    cutoff = as_of - timedelta(days=db.nav_staleness_threshold_days)
+
     stale_count = 0
-    if as_of_date:
-        for iid in instrument_ids:
-            latest = db.nav_latest_date.get(iid)
-            if latest is None:
-                stale_count += 1
+    for iid in instrument_ids:
+        latest = db.nav_latest_date.get(iid)
+        if latest is None:
+            stale_count += 1
+            continue
+        latest_date = (
+            date.fromisoformat(latest) if isinstance(latest, str) else latest
+        )
+        if latest_date < cutoff:
+            stale_count += 1
+
     passed = stale_count == 0
     return ValidationCheck(
         id="no_stale_nav",
@@ -180,10 +206,12 @@ def _check_no_stale_nav(
         severity="block",
         passed=passed,
         value=stale_count,
-        threshold=0,
+        threshold=db.nav_staleness_threshold_days,
         explanation=(
-            f"{stale_count} instrument(s) have NAV data older than "
-            f"{db.nav_staleness_threshold_days} days or missing entirely."
+            f"{stale_count} instrument(s) with NAV older than "
+            f"{db.nav_staleness_threshold_days}d as of {as_of}"
+            if not passed
+            else "All NAV data within staleness threshold."
         ),
     )
 
