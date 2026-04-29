@@ -19,8 +19,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import NamedTuple
 
-import pytest
-
 
 class _Row(NamedTuple):
     """Minimal representation of a pending rebalance_events row."""
