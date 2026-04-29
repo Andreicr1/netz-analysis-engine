@@ -162,14 +162,35 @@ class TestRealizeModeBlockBounds:
         )
         assert result == (0.0, 1.0)
 
-    def test_override_wins_in_both_modes(self) -> None:
-        """Overrides set + drift set → overrides take priority in both."""
-        for mode_fn in (_propose_bounds_for, _realize_bounds_for):
-            result = mode_fn(
-                override_min=0.15, override_max=0.35,
-                drift_min=0.10, drift_max=0.50,
-            )
-            assert result == (0.15, 0.35), f"{mode_fn.__name__} returned {result}"
+    def test_override_wins_in_propose_only(self) -> None:
+        """Overrides take priority in propose mode; in realize mode they are
+        ignored (the realize optimizer builds constraints from drift bands
+        only — see ``_run_construction_async`` in routes/model_portfolios.py).
+        Validation must mirror that to avoid enforcing stricter bounds than
+        the optimizer actually used (Codex P1 false block pass/fail)."""
+        propose = _propose_bounds_for(
+            override_min=0.15, override_max=0.35,
+            drift_min=0.10, drift_max=0.50,
+        )
+        assert propose == (0.15, 0.35)
+
+        realize = _realize_bounds_for(
+            override_min=0.15, override_max=0.35,
+            drift_min=0.10, drift_max=0.50,
+        )
+        assert realize == (0.10, 0.50), (
+            f"realize must ignore overrides and use drift bands, got {realize}"
+        )
+
+    def test_realize_ignores_overrides_when_drift_null(self) -> None:
+        """Realize must ignore overrides even when drift bands are NULL —
+        it falls back to (0, 1) just like the optimizer's missing-drift path
+        (``alloc_dicts`` defaults `min_weight=0.0`, `max_weight=1.0`)."""
+        result = _realize_bounds_for(
+            override_min=0.15, override_max=0.35,
+            drift_min=None, drift_max=None,
+        )
+        assert result == (0.0, 1.0)
 
     def test_excluded_wins_over_drift_in_realize(self) -> None:
         """Excluded blocks are (0, 0) even with drift bounds."""
