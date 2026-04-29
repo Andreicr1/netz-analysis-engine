@@ -1,4 +1,4 @@
-"""PR-Q128: migration 0196 dedupe DELETE tiebreak + event_type scoping.
+"""PR-Q128: migration 0196 dedupe DELETE tiebreak + event_type scoping + RLS bypass.
 
 Validates that the DELETE ... USING pattern in 0196 correctly deduplicates
 pending rebalance_events even when multiple duplicates share the exact
@@ -9,14 +9,19 @@ UUID) -- survives.
 Also validates that ONLY drift_rebalance events are affected — manual and
 other event_type pending rows must be preserved unconditionally.
 
+Includes structural tests verifying the migration disables/re-enables RLS
+around the cleanup DELETE (rebalance_events has FORCE ROW LEVEL SECURITY).
+
 This is a pure-logic test that simulates the SQL predicate in Python,
 avoiding the need for a live database.
 """
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import NamedTuple
 
 
@@ -309,4 +314,62 @@ def test_migration_index_scoped_to_drift_rebalance():
     # Must NOT have a generic 'pending' only filter
     assert "uq_rebalance_event_pending_per_profile" not in source, (
         "Old generic index name must not be present"
+    )
+
+
+# -- Test: RLS disabled during cleanup (structural) -------------------------
+
+
+_MIGRATION_PATH = Path(__file__).resolve().parents[2] / (
+    "app/core/db/migrations/versions/0196_q128_rebalance_pending_dedupe.py"
+)
+
+
+def test_migration_0196_disables_rls_during_cleanup():
+    """Migration must DISABLE RLS before DELETE and re-ENABLE + FORCE after."""
+    source = _MIGRATION_PATH.read_text(encoding="utf-8")
+
+    assert "DISABLE ROW LEVEL SECURITY" in source, (
+        "Migration must DISABLE RLS before cleanup DELETE"
+    )
+    assert "ENABLE ROW LEVEL SECURITY" in source, (
+        "Migration must re-ENABLE RLS after cleanup"
+    )
+    assert "FORCE ROW LEVEL SECURITY" in source, (
+        "Migration must restore FORCE RLS (set by migration 0003)"
+    )
+
+    # DISABLE must appear before DELETE
+    disable_pos = source.index("DISABLE ROW LEVEL SECURITY")
+    delete_pos = source.index("DELETE FROM rebalance_events")
+    assert disable_pos < delete_pos, (
+        "DISABLE RLS must appear before the DELETE statement"
+    )
+
+    # ENABLE must appear after DELETE
+    enable_pos = source.index("ENABLE ROW LEVEL SECURITY")
+    assert enable_pos > delete_pos, (
+        "ENABLE RLS must appear after the DELETE statement"
+    )
+
+
+def test_migration_0196_rls_in_finally_block():
+    """RLS restore must be in a finally block so it runs even on failure."""
+    source = _MIGRATION_PATH.read_text(encoding="utf-8")
+
+    # Extract upgrade function body
+    upgrade_match = re.search(
+        r"def upgrade\(\).*?(?=\ndef |\Z)", source, re.DOTALL
+    )
+    assert upgrade_match, "Could not find upgrade() function"
+    upgrade_body = upgrade_match.group()
+
+    assert "try:" in upgrade_body, "upgrade() must use try block"
+    assert "finally:" in upgrade_body, "upgrade() must use finally block"
+
+    # ENABLE RLS must be inside the finally block (after "finally:")
+    finally_pos = upgrade_body.index("finally:")
+    enable_in_finally = "ENABLE ROW LEVEL SECURITY" in upgrade_body[finally_pos:]
+    assert enable_in_finally, (
+        "ENABLE RLS must be inside the finally block"
     )
