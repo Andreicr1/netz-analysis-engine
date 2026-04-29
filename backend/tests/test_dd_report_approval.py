@@ -69,6 +69,7 @@ def _mock_db_with_report(report):
     (current_setting → returns ORG_ID via scalar()).
     """
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()  # AsyncSession.add() is synchronous
 
     report_result = MagicMock()
     report_result.scalar_one_or_none.return_value = report

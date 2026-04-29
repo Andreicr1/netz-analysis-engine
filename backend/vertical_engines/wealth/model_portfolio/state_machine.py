@@ -34,7 +34,7 @@ from datetime import datetime
 from typing import Any, Final
 
 import structlog
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.audit import write_audit_event
@@ -325,6 +325,7 @@ async def transition(
         .values(
             state=to_state,
             state_changed_by=actor_id,
+            state_changed_at=func.now(),
         ),
     )
 

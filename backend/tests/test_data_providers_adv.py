@@ -43,6 +43,12 @@ def _make_db_session_factory(session: AsyncMock | None = None) -> Any:
     """
     mock_session = session or AsyncMock()
 
+    # Prevent RuntimeWarning: result.scalars().all() must be sync MagicMock
+    if session is None:
+        empty_result = MagicMock()
+        empty_result.scalars.return_value.all.return_value = []
+        mock_session.execute = AsyncMock(return_value=empty_result)
+
     @asynccontextmanager
     async def _begin():
         yield

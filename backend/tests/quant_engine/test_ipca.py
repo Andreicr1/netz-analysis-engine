@@ -15,9 +15,9 @@ def _generate_synthetic_panel(T=100, N=50, K=3, L=6, seed=42):
     np.random.seed(seed)
     # Generate characteristics Z: (N*T) x L
     # We create MultiIndex
-    dates = pd.date_range("2010-01-31", periods=T, freq="M")
+    dates = pd.date_range("2010-01-31", periods=T, freq="ME")
     instruments = [f"fund_{i}" for i in range(N)]
-    
+
     idx = pd.MultiIndex.from_product([instruments, dates], names=["instrument_id", "month"])
     
     Z = np.random.randn(len(idx), L)
@@ -220,7 +220,7 @@ def test_ipca_heterogeneous_scale_rank_transform():
     """
     np.random.seed(99)
     T, N, K, L = 100, 50, 2, 6
-    dates = pd.date_range("2010-01-31", periods=T, freq="M")
+    dates = pd.date_range("2010-01-31", periods=T, freq="ME")
     instruments = [f"fund_{i}" for i in range(N)]
     idx = pd.MultiIndex.from_product([instruments, dates], names=["instrument_id", "month"])
 

@@ -345,8 +345,11 @@ def project_cvar_historical(
 
     # Historical CVaR — annualization strategy depends on data length
     if len(port_daily) >= 252:
-        # Rolling 252-day cumulative returns for proper annual CVaR
-        annual_returns = np.convolve(port_daily, np.ones(252), mode="valid")
+        # Rolling 252-day compound returns for proper annual CVaR
+        annual_returns = np.array([
+            np.prod(1 + port_daily[i:i + 252]) - 1
+            for i in range(len(port_daily) - 252 + 1)
+        ])
         sorted_annual = np.sort(annual_returns)
         cutoff = max(int(len(sorted_annual) * alpha), 1)
         annual_cvar = float(-np.mean(sorted_annual[:cutoff]))
