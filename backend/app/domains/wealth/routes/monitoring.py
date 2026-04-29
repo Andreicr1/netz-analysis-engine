@@ -32,7 +32,7 @@ router = APIRouter(prefix="/monitoring", tags=["monitoring"])
 )
 async def get_monitoring_alerts(
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> AlertBatchRead:
     """Return monitoring alerts for the current organization.
 

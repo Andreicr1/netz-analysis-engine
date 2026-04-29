@@ -136,7 +136,7 @@ async def create_backtest(
     body: BacktestRequest,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> BacktestRunRead:
     _validate_profile(body.profile)
 

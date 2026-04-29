@@ -250,7 +250,7 @@ async def trigger_dd_report(
     body: DDReportCreate | None = None,
     db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(require_role(Role.INVESTMENT_TEAM)),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> DDReportSummary:
     """Trigger async DD Report generation.
 
@@ -441,7 +441,7 @@ async def regenerate_dd_report(
     body: DDReportRegenerate | None = None,
     db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(require_role(Role.INVESTMENT_TEAM)),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> DDReportSummary:
     """Force regeneration of specific chapters or entire report."""
     result = await db.execute(
@@ -728,7 +728,7 @@ async def stream_dd_report(
     report_id: uuid.UUID,
     request: Request,
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> Any:
     """SSE stream providing real-time DD Report generation progress.
 
