@@ -308,6 +308,50 @@ async def test_preview_upstream_failure_returns_422(
     assert body["detail"]["operator_signal"]["message_key"] == "dedup_collapsed_too_far"
 
 
+@pytest.mark.asyncio
+async def test_preview_construction_error_returns_422(
+    client: AsyncClient,
+) -> None:
+    """ValueError from empty positive-target block must surface as 422 (PR-Q114 P1)."""
+    from app.domains.wealth.routes.portfolios import builder as builder_mod
+
+    mock_portfolio = type("P", (), {"id": uuid.uuid4(), "profile": "moderate"})()
+
+    async def _fake_execute(*_a: Any, **_kw: Any) -> Any:
+        class _Res:
+            def scalar_one_or_none(self) -> Any:
+                return mock_portfolio
+        return _Res()
+
+    class _FakeSession:
+        async def __aenter__(self) -> "_FakeSession":
+            return self
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+        async def execute(self, *_a: Any, **_kw: Any) -> Any:
+            return await _fake_execute()
+
+    async def _raise_value_error(*_a: Any, **_kw: Any) -> Any:
+        raise ValueError("No approved funds for block fixed_income (target weight 0.40)")
+
+    portfolio_id = str(uuid.uuid4())
+    with (
+        patch.object(builder_mod, "async_session_factory", return_value=_FakeSession()),
+        patch.object(builder_mod, "_set_rls_org", new=AsyncMock(return_value=None)),
+        patch.object(builder_mod, "_compute_preview", new=_raise_value_error),
+    ):
+        resp = await client.post(
+            f"/api/v1/portfolios/{portfolio_id}/preview-cvar",
+            headers=_dev_header(),
+            json={"cvar_limit": 0.025},
+        )
+    assert resp.status_code == 422
+    body = resp.json()
+    assert body["detail"]["operator_signal"]["kind"] == "construction_error"
+    assert body["detail"]["operator_signal"]["binding"] == "allocation_blocks"
+    assert "No approved funds" in body["detail"]["operator_signal"]["message_key"]
+
+
 # ── DTO round-trip ────────────────────────────────────────────────────
 
 

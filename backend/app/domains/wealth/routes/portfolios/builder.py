@@ -646,6 +646,23 @@ async def preview_cvar(
                 },
             },
         ) from exc
+    except ValueError as exc:
+        logger.warning(
+            "preview_cvar_construction_error",
+            portfolio_id=str(portfolio_uuid),
+            cvar_limit=body.cvar_limit,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "operator_signal": {
+                    "kind": "construction_error",
+                    "binding": "allocation_blocks",
+                    "message_key": str(exc),
+                },
+            },
+        ) from exc
     except asyncio.TimeoutError as exc:
         logger.error(
             "preview_cvar_timeout",

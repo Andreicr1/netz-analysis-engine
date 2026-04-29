@@ -110,6 +110,18 @@ class TestPortfolioBuilder:
         assert len(result.funds) == 2
         assert abs(result.total_weight - 1.0) < 1e-6
 
+    def test_construct_zero_target_block_skipped(self):
+        """Zero-weight block with no candidates must be silently skipped (PR-Q114 P1)."""
+        funds = [
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "Eq A", "block_id": "equity", "manager_score": 90},
+        ]
+        # alternatives has target 0 and no approved funds — should not raise
+        block_weights = {"equity": 0.6, "alternatives": 0.0}
+        result = construct("moderate", funds, block_weights)
+        assert result.validate_weights()
+        assert len(result.funds) == 1
+        assert abs(result.total_weight - 1.0) < 1e-6
+
     def test_construct_empty_allocation(self):
         funds = [
             {"instrument_id": str(uuid.uuid4()), "fund_name": "A", "block_id": "eq", "manager_score": 80},

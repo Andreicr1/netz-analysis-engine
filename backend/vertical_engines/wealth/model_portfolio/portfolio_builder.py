@@ -127,6 +127,11 @@ def construct(
     for block_id, block_weight in block_weights.items():
         block_funds = funds_by_block.get(block_id, [])
         if not block_funds:
+            if block_weight <= 0:
+                # Zero-target block with no candidates = zero contribution.
+                # Skip silently — common when strategic_targets normalises
+                # NULL target_weight to 0.
+                continue
             logger.error(
                 "portfolio_construction_empty_block",
                 profile=profile,
