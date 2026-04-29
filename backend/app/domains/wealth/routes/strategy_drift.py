@@ -169,6 +169,22 @@ async def _do_drift_scan(
         if key not in metrics_by_instrument:
             metrics_by_instrument[key] = []
 
+    # 2b. Load previous statuses for hysteresis (C-12)
+    prev_status_stmt = (
+        select(
+            StrategyDriftAlert.instrument_id,
+            StrategyDriftAlert.status,
+        )
+        .where(
+            StrategyDriftAlert.instrument_id.in_(instrument_ids),
+            StrategyDriftAlert.is_current == True,  # noqa: E712
+        )
+    )
+    prev_result = await db.execute(prev_status_stmt)
+    previous_statuses: dict[str, str] = {
+        str(row.instrument_id): row.status for row in prev_result.all()
+    }
+
     # 3. Run scan in thread
     from vertical_engines.wealth.monitoring.strategy_drift_scanner import scan_all_strategy_drift
 
@@ -176,6 +192,8 @@ async def _do_drift_scan(
         scan_all_strategy_drift,
         metrics_by_instrument,
         instrument_names,
+        None,  # config — use defaults
+        previous_statuses=previous_statuses,
     )
 
     # 4. Persist results — mark previous alerts as not current, insert new
@@ -458,6 +476,18 @@ async def get_instrument_drift(
     # Extract to plain dicts for thread-safe processing
     metrics_dicts = [_metrics_row_to_dict(r) for r in metrics_rows]
 
+    # Load previous status for hysteresis (C-12)
+    prev_stmt = (
+        select(StrategyDriftAlert.status)
+        .where(
+            StrategyDriftAlert.instrument_id == instrument_id,
+            StrategyDriftAlert.is_current == True,  # noqa: E712
+        )
+        .limit(1)
+    )
+    prev_result = await db.execute(prev_stmt)
+    prev_status = prev_result.scalar()
+
     from vertical_engines.wealth.monitoring.strategy_drift_scanner import scan_strategy_drift
 
     drift_result = await asyncio.to_thread(
@@ -466,6 +496,7 @@ async def get_instrument_drift(
         str(instrument_id),
         inst_name,
         {"recent_window_days": recent_days, "baseline_window_days": baseline_days},
+        previous_status=prev_status,
     )
 
     return StrategyDriftRead(
