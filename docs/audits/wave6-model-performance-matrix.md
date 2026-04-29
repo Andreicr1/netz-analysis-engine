@@ -505,16 +505,78 @@ All 15 verdicts align exactly with Stage 3 triage. The 3 escalations applied ins
 
 ---
 
-## Aggregate (running, 7 sessions including S09)
+## Session 10 (2026-04-29) — Wealth Model Portfolio, Mandate Fit, Validation
+
+Highest Crit-density session in Wave 6 to date (8 Crit at Stage 1, 7 Crit at Stage 2 after C-04 downgrade). Domain: model portfolio lifecycle + validation gate + mandate fit + stress scenarios + track record.
+
+### Stage 1 discovery models
+
+| Model | Raised | TP | FP | GRAY | TP rate | FP rate | GRAY rate | Unique TP |
+|---|---|---|---|---|---|---|---|---|
+| **Opus 4.6** | 8 | 8 | 0 | 0 | 100% | 0% | 0% | 5/14 = **36%** |
+| **Gemini 3.1 Pro** | 9 | 9 | 0 | 0 | 100% | 0% | 0% | 6/14 = **43%** |
+
+**Observation:** Both models hit 100% TP rate — no FPs, no GRAYs. Coverage roughly balanced (Opus 8/14 = 57%, Gemini 9/14 = 64%). Gemini outpaced Opus in raw count and unique contribution, consistent with `reference_gemini_math_strength_heuristic.md` — Session 10 has high math density (CVaR sign flip, stress scaling, dispersion seed, block weight invariants).
+
+**Concrete unique-Gemini TPs that would have been missed by Opus alone:**
+- C-02 (TRANSITIONS missing constructed→approved edge — OD-5 override broken) — Crit
+- C-03 (CVaR improvement sign flip — advisor recommends WORST funds) — Math Crit
+- C-06 (historical stress imputes 0% for missing fund history) — Math Crit
+- C-07 (silent block dropping breaks 60/40 strategic targets) — Math High / Inst Crit
+- C-08 (mandate fit hard/soft fusion) — Inst High
+- C-11 (state_machine bypasses write_audit_event Q92 invariant) — Inst Crit
+
+**Concrete unique-Opus TPs that would have been missed by Gemini alone:**
+- C-01 (live approval path no validation gate check) — Crit
+- C-04 (empty ValidationDbContext disables 5 checks) — High (post-jury downgrade)
+- C-09 (block-severity check exception fail-open) — High
+- C-10 (executor bypasses state_machine.transition) — High
+- C-14 (CVaR sqrt(252) heuristic) — Low
+
+If only Gemini had run, 4 Crit institutional defects + 1 architectural state-machine bypass would have shipped to remediation. If only Opus had run, 5 separate findings (4 of them Crit) would have been missed. **Both essential — domain inversion vs Session 09.**
+
+### Stage 2 jury (GPT 5.5)
+
+| Verdicts | CONFIRMED | CONFIRMED-ESCALATED | CONFIRMED-DOWNGRADED | REFUTED | REFUTED-FP | GRAY |
+|---|---|---|---|---|---|---|
+| 14 | 13 | 0 | 1 (C-04 from Crit→High) | 0 | 0 | 0 |
+
+**Per-finding jury accuracy:** All 14 verdicts align with Stage 3 final classification. The single downgrade (C-04) was correctly justified — current code now includes `as_of_date` in the validation payload, invalidating part of Opus's NAV bypass mechanism. The remaining empty-context defect (5 of 16 checks blind) is real and rated High.
+
+**Direct contradiction resolution:** C-11 had Gemini saying Crit (write_audit_event invariant required), Opus marking it OK in checked-invariants (PortfolioStateTransition is sufficient domain audit). Jury confirmed Gemini's reading by citing Session 10 audit invariant I-State-1/I-Audit-Tenant-1 and CLAUDE.md §audit logging requirement. Q92's `allow_global=False` controls scoping but doesn't permit skipping the unified audit feed.
+
+**Jury accuracy:** 14/14 = **100%**. N=6 consecutive 100% sessions for GPT-5.5.
+
+**Unsolicited hypotheses:** 0 (protocol respected).
+
+### Protocol verdict for Session 10
+
+- Both Stage 1 models still essential — Session 10 confirms domain-aware dispatch needs both. Math-heavy domains favor Gemini's recall; workflow-heavy domains favor Opus. **Cannot drop either.**
+- Stage 2 jury 5.5 sustained 100% accuracy across a session with 1 DOWNGRADE + 1 direct contradiction adjudication.
+- Highest Crit-density session: 7 Crit + 5 High after Stage 2. Model portfolio lifecycle layer has the largest bug surface in Wave 6.
+- 4 cross-cutting themes in remediation: validation gate bypassable (3 escape paths), risk math wrong (3 distinct ways), audit trail layered gaps (executor + state_machine), hard/soft discipline blurred (mandate + validation).
+
+### Stage 3 remediation queue
+
+12 PR prompts produced by Stage 3 orchestration (Opus 4.7), bundled by technical proximity:
+- 6 P0 Crit PRs (Q110-Q115)
+- 5 P1 High PRs (Q116-Q120)
+- 1 P2/P3 batch (Q121: C-13 + C-14)
+
+Q110 (state machine C-01+C-02 bundle) and Q121 (RNG + CVaR heuristic batch) are intentional bundles per coherent technical scope. All other PRs are 1-finding scope.
+
+---
+
+## Aggregate (running, 8 sessions including S10)
 
 | Model | Sessions | Total raised | TP rate (avg) | Unique TP contribution (avg) | Notes |
 |---|---|---|---|---|---|
-| **Opus 4.6** | 7 | 3 + 6 + 5 + 4 + 8 + 11 + 14 = 51 | 100% + 83% + 100% + 100% + 88% + 62% + 93% = **89%** | 0% + 50% + 50% + 33% + 33% + 50% + 64% = **40%** | Integration audit (S09) showed Opus dominance on workflow-contract domain; FP rate held low (1 of 14 in S09, refuted only by PR subsumption not by FP) |
-| **Gemini 3.1 Pro** | 7 | 9 + 6 + 3 + 6 + 9 + 6 + 5 = 44 | 78% + 50% + 100% + 100% + 89% + 83% + 100% = **86%** | 57% + 0% + 17% + 56% + 42% + 20% + 7% = **28%** | Math-density advantage absent on integration domain; coverage dropped but every Gemini finding remained TP — Gemini's signal-to-noise stays high regardless of domain |
+| **Opus 4.6** | 8 | 3 + 6 + 5 + 4 + 8 + 11 + 14 + 8 = 59 | 100% + 83% + 100% + 100% + 88% + 62% + 93% + 100% = **91%** | 0% + 50% + 50% + 33% + 33% + 50% + 64% + 36% = **40%** | S10 Opus 100% TP rate, lower unique contribution than Gemini for first time post-S03 — Session 10 high math density favors Gemini's pattern recognition |
+| **Gemini 3.1 Pro** | 8 | 9 + 6 + 3 + 6 + 9 + 6 + 5 + 9 = 53 | 78% + 50% + 100% + 100% + 89% + 83% + 100% + 100% = **88%** | 57% + 0% + 17% + 56% + 42% + 20% + 7% + 43% = **30%** | Math-domain dominance in S10 (CVaR sign, stress scaling, missing-data 0%, hard/soft mandate) — confirmed `reference_gemini_math_strength_heuristic.md` |
 | **Jury 5.4** | Sessions 02-05 (default) | 8 + 6 + 9 + 14 = 37 verdicts | 100% / 100% / 100% / **78.6%** | — | Deprecated as default 2026-04-27 |
-| **Jury 5.5** | Construction Pipeline + S05-corroboration + S06 + S07 + S08 + S09 | 8 + 14 + 12 + 10 + 10 + 15 = 69 verdicts | 100% / 100% / 100% / 100% / 100% / **100%** | — | N=5 consecutive 100% sessions; capability ceiling not yet reached on Crit-tier severity adjudication |
+| **Jury 5.5** | Construction Pipeline + S05-corroboration + S06 + S07 + S08 + S09 + S10 | 8 + 14 + 12 + 10 + 10 + 15 + 14 = 83 verdicts | 100% / 100% / 100% / 100% / 100% / 100% / **100%** | — | N=6 consecutive 100% sessions; S10 had 1 DOWNGRADE + 1 direct contradiction adjudication, both correctly resolved |
 
-**Pattern stability after 7 sessions:**
+**Pattern stability after 8 sessions:**
 
 1. **Opus + Gemini are complementary, not redundant.** Domain inversion confirmed in S09: Opus dominates integration/workflow-contract domain (9 unique TPs out of 14), Gemini dominates math-density domain (S03/S04 both Gemini-dominant). Both must run in parallel — neither alone sufficient across the audit roadmap.
 
