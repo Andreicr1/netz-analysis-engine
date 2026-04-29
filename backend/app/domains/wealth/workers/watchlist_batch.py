@@ -262,13 +262,19 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
     }
 
     # 4b. Load previous attribute snapshots for enrichment change detection.
-    # Same DISTINCT ON pattern -- latest row per instrument, not is_current.
+    # JOIN ScreeningRun to filter run_type == "watchlist" — screening_batch
+    # rows lack _attribute_snapshot, so using them as baseline would silence
+    # fee/strategy changes (Codex P1 catch).
     prev_snap_results = await db.execute(
         select(
             ScreeningResult.instrument_id,
             ScreeningResult.layer_results,
         )
-        .where(ScreeningResult.instrument_id.in_(instrument_ids))
+        .join(ScreeningRun, ScreeningRun.run_id == ScreeningResult.run_id)
+        .where(
+            ScreeningResult.instrument_id.in_(instrument_ids),
+            ScreeningRun.run_type == "watchlist",
+        )
         .distinct(ScreeningResult.instrument_id)
         .order_by(ScreeningResult.instrument_id, ScreeningResult.screened_at.desc()),
     )
