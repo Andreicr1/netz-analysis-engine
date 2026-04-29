@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,11 +24,19 @@ class ClientProfile:
 
 @dataclass(frozen=True, slots=True)
 class ConstraintResult:
-    """Result of evaluating a single mandate constraint."""
+    """Result of evaluating a single mandate constraint.
+
+    severity semantics (institutional convention §3.2):
+    - "hard": regulatory / structural constraint — failure disqualifies the instrument.
+    - "soft": preference / advisory — failure generates a warning but does NOT disqualify.
+
+    Default is "hard" (presumption of hard unless explicitly tagged soft).
+    """
 
     constraint: str
     passed: bool
     reason: str
+    severity: Literal["hard", "soft"] = "hard"
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,7 +48,8 @@ class MandateFitResult:
     eligible: bool
     suitability_score: float  # 0.0-1.0
     constraint_results: tuple[ConstraintResult, ...]
-    disqualifying_reasons: tuple[str, ...]  # non-empty if not eligible
+    disqualifying_reasons: tuple[str, ...]  # non-empty if not eligible (hard failures only)
+    warnings: tuple[str, ...] = ()  # soft constraint misses — IC needs visibility
 
 
 @dataclass(frozen=True, slots=True)

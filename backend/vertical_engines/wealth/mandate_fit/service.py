@@ -67,8 +67,15 @@ class MandateFitService:
             evaluate_currency(currency, profile),
         ]
 
-        disqualifying = tuple(r.reason for r in results if not r.passed)
-        eligible = len(disqualifying) == 0
+        # Institutional hard/soft discipline: only hard failures disqualify.
+        # Soft failures surface as warnings for IC visibility.
+        hard_failures = tuple(
+            r.reason for r in results if not r.passed and r.severity == "hard"
+        )
+        soft_failures = tuple(
+            r.reason for r in results if not r.passed and r.severity == "soft"
+        )
+        eligible = len(hard_failures) == 0
         score = compute_suitability_score(results)
 
         return MandateFitResult(
@@ -77,7 +84,8 @@ class MandateFitService:
             eligible=eligible,
             suitability_score=score,
             constraint_results=tuple(results),
-            disqualifying_reasons=disqualifying,
+            disqualifying_reasons=hard_failures,
+            warnings=soft_failures,
         )
 
     def evaluate_universe(
