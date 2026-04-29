@@ -4,7 +4,8 @@ Uses pg_try_advisory_lock (non-blocking) with hardcoded lock ID 900_003.
 Re-screens all instruments with approval_status='watchlist', detects transitions,
 and publishes alerts via Redis pub/sub.
 
-Short transactions: commits every 200 results to prevent connection pool starvation.
+Atomic commit: screening results + audit events + run completion are committed
+in a single transaction (Q92 I-Audit-Tenant-1 invariant).
 """
 
 from __future__ import annotations
@@ -297,7 +298,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
         ],
     )
 
-    # 7. Write screening results in batches of 200
+    # 7. Write screening results (no intermediate commits — same txn as audit)
     for batch in _chunked(screening_results, 200):
         batch_ids = [sr.instrument_id for sr in batch]
         await db.execute(
@@ -323,10 +324,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
             )
             db.add(screening_result)
 
-        await db.commit()
-        await set_rls_context(db, org_id)
-
-    # 7b. Audit trail for transition alerts
+    # 7b. Audit trail for transition alerts (SAME transaction — Q92 atomicity)
     for alert in alerts:
         await write_audit_event(
             db,
@@ -339,7 +337,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
             allow_global=False,
         )
 
-    # 8. Mark run completed
+    # 8. Mark run completed — single atomic commit
     run.status = "completed"
     run.completed_at = datetime.now(UTC)
     await db.commit()

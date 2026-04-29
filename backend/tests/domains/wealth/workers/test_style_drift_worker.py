@@ -156,3 +156,53 @@ class TestAuditTrail:
         assert kwargs["allow_global"] is True
         assert kwargs["after"]["severity"] == "severe"
         assert kwargs["after"]["composite_drift"] == 0.35
+
+
+# ── Audit atomicity test (PR-Q126 hotfix — Codex P1) ─────────────
+
+
+class TestAuditAtomicity:
+    @pytest.mark.asyncio
+    async def test_style_drift_audit_atomic(self):
+        """PR-Q126: if write_audit_event raises inside _persist,
+        the domain INSERT is in the same transaction and also rolls back.
+
+        _persist does UPDATE + INSERT + write_audit_event with no commit.
+        The commit happens in the caller loop. If audit raises, the
+        exception propagates past the commit — proving atomicity.
+        """
+        fake_result = StyleDriftResult(
+            instrument_id="0001234567",
+            current_date=date(2026, 3, 31),
+            historical_window_quarters=4,
+            composite_drift=0.35,
+            asset_mix_drift=0.40,
+            fi_subtype_drift=0.10,
+            geography_drift=0.05,
+            issuer_category_drift=0.02,
+            status="drift_detected",
+            severity="severe",
+            drivers=["asset_mix", "fi_subtype"],
+        )
+
+        mock_db = AsyncMock()
+        # write_audit_event raises — simulating a failure
+        audit_bomb = AsyncMock(side_effect=RuntimeError("audit write failed"))
+
+        with patch.object(sdw_mod, "write_audit_event", audit_bomb):
+            with pytest.raises(RuntimeError, match="audit write failed"):
+                await sdw_mod._persist(
+                    mock_db,
+                    fake_result,
+                    cik="0001234567",
+                    fund_name="Test Fund",
+                )
+
+        # _persist does NOT call db.commit() — caller does.
+        # Since _persist raised, the caller's commit is never reached.
+        mock_db.commit.assert_not_called()
+        # The domain INSERT was issued (2 execute calls: UPDATE + INSERT),
+        # but since no commit happened, both are rolled back with the session.
+        assert mock_db.execute.call_count == 2, (
+            "UPDATE + INSERT should have been called before audit raised"
+        )
