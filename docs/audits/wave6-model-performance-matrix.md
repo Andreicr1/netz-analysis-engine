@@ -533,7 +533,12 @@ Highest Crit-density session in Wave 6 to date (8 Crit at Stage 1, 7 Crit at Sta
 - C-10 (executor bypasses state_machine.transition) — High
 - C-14 (CVaR sqrt(252) heuristic) — Low
 
-If only Gemini had run, 4 Crit institutional defects + 1 architectural state-machine bypass would have shipped to remediation. If only Opus had run, 5 separate findings (4 of them Crit) would have been missed. **Both essential — domain inversion vs Session 09.**
+**Counterfactual coverage** (per Stage 2 jury final severities):
+
+- **If only Opus had run** (Gemini's 6 unique TPs missed): **5 Crit + 1 High** would be missed (C-02 + C-03 + C-06 + C-07 + C-11 + C-08).
+- **If only Gemini had run** (Opus's 5 unique TPs missed): **1 Crit + 3 High + 1 Low** would be missed (C-01 Crit, C-04 + C-09 + C-10 High, C-14 Low).
+
+**Both essential — domain inversion vs Session 09.** Skipping Gemini on this session would have left 5 Crit findings in production. Skipping Opus would have left 1 Crit (the live-path validation gate bypass C-01) plus 3 High audit/validation defects. Codex Auto Review on PR #415 caught an earlier version of this paragraph that misattributed the scenarios — the corrected counts above match the Opus-only and Gemini-only lists above and the Stage 2 jury final severities.
 
 ### Stage 2 jury (GPT 5.5)
 

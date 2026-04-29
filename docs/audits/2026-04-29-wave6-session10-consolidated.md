@@ -46,9 +46,11 @@ Two pairs of findings span the same architectural defect from different angles:
 | Severity (worst-of) | Count | Findings |
 |---|---|---|
 | **Crit** | 8 | C-01, C-02, C-03, C-04, C-05, C-06, C-07, C-11 |
-| **High** | 4 | C-08, C-09, C-10, C-12 |
-| **Med** | 1 | C-13 |
-| **Low** | 1 | C-14 |
+| **High** | 5 | C-08, C-09, C-10, C-12, **C-13** (Math High dominates Inst Med) |
+| **Med** | 1 | **C-14** (Math Med dominates Inst Low) |
+| **Low** | 0 | — |
+
+Codex Auto Review on PR #415 flagged that the severity distribution table previously placed C-13 in Med and C-14 in Low without applying the document's stated worst-of rule. C-13 (Math High / Inst Med) and C-14 (Math Med / Inst Low) are now classified per the rule. Note: the Stage 2 jury rated C-13 final severity Med and C-14 final severity Low (those are the post-jury verdicts for remediation prioritization, separate from this pre-jury aggregation).
 
 **8 Crit findings** is the highest concentration in Wave 6 to date. Session 10 surface (model portfolio lifecycle + mandate fit + validation gate) is the bug-densest domain audited so far. Cross-cutting themes:
 
