@@ -28,10 +28,20 @@ from app.domains.wealth.models.model_portfolio_nav import ModelPortfolioNav
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.models.rebalance import RebalanceEvent
 from app.domains.wealth.schemas.portfolio import PortfolioSnapshotRead
+from app.shared.enums import Role
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/rebalancing", tags=["rebalancing"])
+
+
+def _require_ic_role(actor: Actor) -> None:
+    """Verify actor has INVESTMENT_TEAM or ADMIN role."""
+    if not actor.has_role(Role.INVESTMENT_TEAM):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Investment Committee role required",
+        )
 
 
 @router.post(
@@ -61,6 +71,8 @@ async def apply_rebalance_proposal(
     5. Mark proposal as 'applied' with audit trail
     6. Return the created PortfolioSnapshot
     """
+    _require_ic_role(actor)
+
     # ── 1. Load and validate proposal ──
     stmt = (
         select(RebalanceEvent)
