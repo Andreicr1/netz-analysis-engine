@@ -244,7 +244,11 @@ def run_stress_scenario_fund_level(
     if historical_returns is not None and len(historical_returns) >= 30:
         from quant_engine.cvar_service import compute_cvar_from_returns
 
-        shifted = historical_returns + nav_impact / len(historical_returns)
+        # PR-Q112 (S10 C-05): append shock as a single extreme observation
+        # instead of spreading nav_impact/T across all returns (which
+        # dilutes a -38% GFC shock to -0.15%/day, rendering CVaR useless).
+        shock_obs = np.array([nav_impact])
+        shifted = np.concatenate([historical_returns, shock_obs])
         cvar_stressed, _ = compute_cvar_from_returns(shifted, confidence=0.95)
         cvar_stressed = round(cvar_stressed, 6)
 
@@ -299,13 +303,16 @@ def run_stress_scenario(
         worst_block = min(block_impacts, key=block_impacts.get)  # type: ignore[arg-type]
         best_block = max(block_impacts, key=block_impacts.get)  # type: ignore[arg-type]
 
-    # Stressed CVaR: shift historical returns by nav_impact and recompute
+    # Stressed CVaR: append scenario shock as extreme observation and recompute
     cvar_stressed = None
     if historical_returns is not None and len(historical_returns) >= 30:
         from quant_engine.cvar_service import compute_cvar_from_returns
 
-        # Apply shock as a one-time shift to the return distribution
-        shifted = historical_returns + nav_impact / len(historical_returns)
+        # PR-Q112 (S10 C-05): append shock as a single extreme observation
+        # instead of spreading nav_impact/T across all returns (which
+        # dilutes a -38% GFC shock to -0.15%/day, rendering CVaR useless).
+        shock_obs = np.array([nav_impact])
+        shifted = np.concatenate([historical_returns, shock_obs])
         cvar_stressed, _ = compute_cvar_from_returns(shifted, confidence=0.95)
         cvar_stressed = round(cvar_stressed, 6)
 
