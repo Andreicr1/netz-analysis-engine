@@ -33,7 +33,13 @@ def upgrade() -> None:
               AND re_old.status = 'pending'
               AND re_new.status = 'pending'
               AND re_old.event_id != re_new.event_id
-              AND re_old.created_at < re_new.created_at
+              AND (
+                  re_old.created_at < re_new.created_at
+                  OR (
+                      re_old.created_at = re_new.created_at
+                      AND re_old.event_id < re_new.event_id
+                  )
+              )
         """)
     )
 
