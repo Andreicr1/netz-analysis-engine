@@ -150,8 +150,23 @@ async def test_ucits_with_nav_are_active():
 # Q105 — Codex P1+P2 catches on Q91 downgrade path
 # ---------------------------------------------------------------------------
 
-_MIGRATION_PATH = Path(
-    "backend/app/core/db/migrations/versions/0194_q91_ucits_data_gate.py"
+# Q105/Codex P1 fix: anchor path via __file__ so the test runs in both
+# repo-root and cwd=backend execution contexts (CI uses cwd=backend per
+# .github/workflows/ci.yml + Makefile). Original hard-coded
+# "backend/app/core/db/migrations/..." resolved to "backend/backend/..."
+# under cwd=backend and produced FileNotFoundError before any assertion.
+# Path layout: backend/tests/db/test_migration_0194_q91.py
+#   parents[0] = backend/tests/db
+#   parents[1] = backend/tests
+#   parents[2] = backend
+#   parents[3] = repo root
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_MIGRATION_PATH = (
+    _REPO_ROOT / "backend" / "app" / "core" / "db" / "migrations" / "versions"
+    / "0194_q91_ucits_data_gate.py"
+)
+assert _MIGRATION_PATH.is_file(), (
+    f"_MIGRATION_PATH must resolve regardless of cwd. Got: {_MIGRATION_PATH}"
 )
 
 
