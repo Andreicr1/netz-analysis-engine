@@ -23,8 +23,13 @@ infrastructure of the Phase 3 worker test without adding signal.
 
 from __future__ import annotations
 
+import uuid
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
+from app.domains.wealth.models.model_portfolio import PortfolioStateTransition
 from vertical_engines.wealth.model_portfolio.state_machine import (
     ACTION_ACTIVATE,
     ACTION_APPROVE,
@@ -41,6 +46,7 @@ from vertical_engines.wealth.model_portfolio.state_machine import (
     InvalidStateTransition,
     ValidationStatus,
     compute_allowed_actions,
+    transition,
 )
 
 # ── TRANSITIONS adjacency map sanity ───────────────────────────────
@@ -303,14 +309,86 @@ def test_existing_constructed_to_validated_still_works():
     assert "draft" in TRANSITIONS["constructed"]
 
 
-# NOTE: The DB-write path of the async ``transition()`` function is
-# exercised end-to-end in Phase 3 Task 3.4 (the
-# ``construction_run_executor`` worker test) using the project's real
-# Postgres test DB. A SQLite-based unit test was attempted here but
-# the project policy (per ``backend/tests/conftest.py``) is "Tests run
-# against real PostgreSQL — asyncpg requires PG", and ``aiosqlite`` is
-# intentionally not in the dev dependency set. The state machine
-# logic above (TRANSITIONS adjacency, ``compute_allowed_actions``,
-# ``InvalidStateTransition``, ``ApprovalPolicy``) is fully covered by
-# the pure-Python tests; the DB plumbing is exercised by the worker
-# test in Phase 3.
+# ── PR-Q115: write_audit_event on transition ──────────────────────
+
+
+def _mock_db_for_transition(portfolio_id, org_id, from_state="draft"):
+    """Build a mocked AsyncSession sufficient for ``transition()``."""
+    mock_portfolio = MagicMock()
+    mock_portfolio.id = portfolio_id
+    mock_portfolio.state = from_state
+    mock_portfolio.organization_id = org_id
+    mock_portfolio.state_changed_at = datetime(2026, 4, 29, tzinfo=timezone.utc)
+
+    db = AsyncMock()
+    select_result = MagicMock()
+    select_result.scalar_one_or_none.return_value = mock_portfolio
+    update_result = MagicMock()
+    db.execute = AsyncMock(side_effect=[select_result, update_result])
+    db.add = MagicMock()  # Session.add is synchronous
+    return db, mock_portfolio
+
+
+@pytest.mark.asyncio
+async def test_transition_writes_audit_event():
+    """PR-Q115: transition() must call write_audit_event with correct kwargs."""
+    pid = uuid.uuid4()
+    org_id = uuid.uuid4()
+    db, _ = _mock_db_for_transition(pid, org_id, from_state="draft")
+
+    with patch(
+        "vertical_engines.wealth.model_portfolio.state_machine.write_audit_event",
+        new_callable=AsyncMock,
+    ) as mock_audit:
+        await transition(
+            db,
+            portfolio_id=pid,
+            to_state="constructed",
+            actor_id="actor_1",
+            reason="test reason",
+        )
+
+        mock_audit.assert_called_once()
+        kwargs = mock_audit.call_args.kwargs
+        assert kwargs["action"] == "model_portfolio.state_transition"
+        assert kwargs["entity_type"] == "ModelPortfolio"
+        assert kwargs["entity_id"] == str(pid)
+        assert kwargs["allow_global"] is False
+        assert kwargs["before"] == {"state": "draft"}
+        assert kwargs["after"]["state"] == "constructed"
+        assert kwargs["after"]["actor_id"] == "actor_1"
+        assert kwargs["after"]["reason"] == "test reason"
+
+
+@pytest.mark.asyncio
+async def test_transition_writes_both_domain_and_audit_rows():
+    """PR-Q115: Both PortfolioStateTransition AND audit_events row are created."""
+    pid = uuid.uuid4()
+    org_id = uuid.uuid4()
+    db, _ = _mock_db_for_transition(pid, org_id, from_state="draft")
+
+    added_objects: list = []
+    db.add = MagicMock(side_effect=lambda obj: added_objects.append(obj))
+
+    with patch(
+        "vertical_engines.wealth.model_portfolio.state_machine.write_audit_event",
+        new_callable=AsyncMock,
+    ) as mock_audit:
+        await transition(
+            db,
+            portfolio_id=pid,
+            to_state="constructed",
+            actor_id="actor_1",
+        )
+
+        # Domain-specific row: PortfolioStateTransition was db.add()-ed
+        transition_rows = [
+            obj for obj in added_objects
+            if isinstance(obj, PortfolioStateTransition)
+        ]
+        assert len(transition_rows) == 1
+        assert transition_rows[0].from_state == "draft"
+        assert transition_rows[0].to_state == "constructed"
+
+        # Unified audit: write_audit_event also called
+        mock_audit.assert_called_once()
