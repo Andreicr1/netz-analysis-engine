@@ -724,3 +724,145 @@ class TestProportionalRedistribution:
 
         result = _redistribute_proportionally({}, {})
         assert result is None
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  PR-Q125 — state filter correctness (C-02 remediation)
+# ═══════════════════════════════════════════════════════════════════
+
+class TestStateFilterCorrectness:
+    """Verify rebalancing/alert queries use state IN ('live','paused'), not status=='active'.
+
+    C-02: The entire rebalancing/alert subsystem was blind to deployed
+    portfolios because it filtered on the legacy ``status`` column with
+    value ``"active"`` — a value that the state machine never writes.
+    The canonical deployed states are ``"live"`` and ``"paused"`` on the
+    ``state`` column.
+    """
+
+    def test_impact_analyzer_finds_live_portfolios(self):
+        """Live portfolio with deactivated instrument -> impact contains portfolio_id."""
+        from vertical_engines.wealth.rebalancing.impact_analyzer import compute_impact
+
+        instrument_id = uuid.uuid4()
+        portfolio_id = uuid.uuid4()
+
+        portfolio = MagicMock()
+        portfolio.id = portfolio_id
+        portfolio.organization_id = "org-1"
+        portfolio.state = "live"
+        portfolio.fund_selection_schema = {
+            "funds": [{"instrument_id": str(instrument_id), "weight": 0.25}],
+        }
+
+        db = MagicMock()
+        db.execute.return_value.scalars.return_value.all.return_value = [portfolio]
+
+        result = compute_impact(db, instrument_id, "org-1")
+
+        assert len(result.affected_portfolios) == 1
+        assert result.affected_portfolios[0] == portfolio_id
+        assert result.weight_gap == 0.25
+
+        # Verify the SELECT statement uses 'state' column with IN ('live','paused')
+        call_args = db.execute.call_args
+        stmt = call_args[0][0]
+        compiled = str(stmt.compile())
+        assert "model_portfolios.state" in compiled
+        assert "IN" in compiled.upper()
+        # Must NOT use the legacy 'status' column with 'active'
+        assert "'active'" not in compiled
+
+    def test_alert_engine_checks_live_portfolios(self):
+        """Live portfolio with overdue rebalance -> alert generated."""
+        from vertical_engines.wealth.monitoring.alert_engine import _check_rebalance_overdue
+
+        portfolio_id = uuid.uuid4()
+        portfolio = MagicMock()
+        portfolio.id = portfolio_id
+        portfolio.state = "live"
+        portfolio.profile = "moderate"
+        portfolio.display_name = "Test Portfolio"
+        portfolio.organization_id = "org-1"
+
+        db = MagicMock()
+        # First query returns live portfolios; second returns no rebalance events
+        query_mock = MagicMock()
+        db.query.return_value = query_mock
+        query_mock.filter.return_value = query_mock
+        query_mock.group_by.return_value = query_mock
+        query_mock.all.side_effect = [
+            [portfolio],  # portfolios query
+            [],           # latest_rebalances query (none -> overdue)
+        ]
+
+        alerts = _check_rebalance_overdue(db, "org-1")
+
+        assert len(alerts) == 1
+        assert alerts[0].alert_type == "rebalance_overdue"
+        assert alerts[0].entity_id == str(portfolio_id)
+
+        # Verify the filter used state IN ('live','paused'), not status=='active'
+        filter_call = query_mock.filter.call_args_list[0]
+        filter_exprs = filter_call[0]
+        filter_compiled = " ".join(str(expr.compile()) for expr in filter_exprs)
+        assert "model_portfolios.state" in filter_compiled
+        assert "IN" in filter_compiled.upper()
+
+    def test_regime_trigger_fires_for_live_portfolios(self):
+        """Live portfolio + regime change -> trigger fires."""
+        from vertical_engines.wealth.rebalancing.service import RebalancingService
+
+        portfolio_id = uuid.uuid4()
+        db = MagicMock()
+
+        # First call: LATERAL JOIN snapshot rows (2 consecutive stress)
+        # Second call: ModelPortfolio IDs for the profile
+        db.execute.return_value.all.side_effect = [
+            [
+                ("moderate", date(2026, 3, 16), "stress"),
+                ("moderate", date(2026, 3, 15), "stress"),
+            ],
+            [(portfolio_id,)],
+        ]
+
+        svc = RebalancingService(config={"regime_consecutive_threshold": 2})
+        results = svc.detect_regime_trigger(db, "org-1")
+
+        assert len(results) == 1
+        assert results[0].impact.trigger == "regime_change"
+        assert portfolio_id in results[0].impact.affected_portfolios
+
+        # Verify the second db.execute call (ModelPortfolio query) uses state
+        # The second call is a SQLAlchemy select, the first is raw SQL text
+        select_call = db.execute.call_args_list[1]
+        stmt = select_call[0][0]
+        compiled = str(stmt.compile())
+        assert "model_portfolios.state" in compiled
+        assert "IN" in compiled.upper()
+        assert "'active'" not in compiled
+
+    def test_paused_portfolio_also_monitored(self):
+        """Paused portfolio receives drift/alert checks — regression for in_(('live','paused'))."""
+        from vertical_engines.wealth.rebalancing.impact_analyzer import compute_impact
+
+        instrument_id = uuid.uuid4()
+        paused_portfolio_id = uuid.uuid4()
+
+        portfolio = MagicMock()
+        portfolio.id = paused_portfolio_id
+        portfolio.organization_id = "org-1"
+        portfolio.state = "paused"
+        portfolio.fund_selection_schema = {
+            "funds": [{"instrument_id": str(instrument_id), "weight": 0.40}],
+        }
+
+        db = MagicMock()
+        db.execute.return_value.scalars.return_value.all.return_value = [portfolio]
+
+        result = compute_impact(db, instrument_id, "org-1")
+
+        # Paused portfolio must be found and included in affected list
+        assert len(result.affected_portfolios) == 1
+        assert result.affected_portfolios[0] == paused_portfolio_id
+        assert result.weight_gap == 0.40

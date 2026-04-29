@@ -179,7 +179,7 @@ class RebalancingService:
                     select(ModelPortfolio.id).where(
                         ModelPortfolio.organization_id == organization_id,
                         ModelPortfolio.profile == profile,
-                        ModelPortfolio.status == "active",
+                        ModelPortfolio.state.in_(("live", "paused")),
                     ),
                 ).all()
             ]

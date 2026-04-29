@@ -41,11 +41,11 @@ def compute_impact(
     """
     from app.domains.wealth.models.model_portfolio import ModelPortfolio
 
-    # Get all active model portfolios for this org
+    # Get all live/paused model portfolios for this org
     portfolios = db.execute(
         select(ModelPortfolio).where(
             ModelPortfolio.organization_id == organization_id,
-            ModelPortfolio.status == "active",
+            ModelPortfolio.state.in_(("live", "paused")),
             ModelPortfolio.fund_selection_schema.isnot(None),
         ),
     ).scalars().all()
