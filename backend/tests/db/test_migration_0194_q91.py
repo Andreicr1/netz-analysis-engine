@@ -6,6 +6,8 @@ ESMA↔instruments_universe bridge. Read-only assertions on the live DB.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import asyncpg
 import pytest
 
@@ -141,4 +143,56 @@ async def test_ucits_with_nav_are_active():
     assert violators == 0, (
         f"{violators} UCITS instruments have NAV data but are is_active=false — "
         "universe_sync._deactivate_no_nav race not yet patched (Q92 follow-up)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Q105 — Codex P1+P2 catches on Q91 downgrade path
+# ---------------------------------------------------------------------------
+
+_MIGRATION_PATH = Path(
+    "backend/app/core/db/migrations/versions/0194_q91_ucits_data_gate.py"
+)
+
+
+def test_q105_mv_sql_down_contains_all_6_branches():
+    """Q105 invariant: _MV_SQL_DOWN must recreate all 6 universe branches
+    (registered_us, ETFs, BDCs, private_us, ucits_eu, money_market).
+    Codex P1 catch — original _MV_SQL_DOWN only had the UCITS branch."""
+    text = _MIGRATION_PATH.read_text()
+    down_idx = text.index("_MV_SQL_DOWN")
+    # Find the closing triple-quote to delimit the SQL block
+    block_start = text.index('"""', down_idx)
+    block_end = text.index('"""', block_start + 3)
+    down_block = text[block_start:block_end]
+
+    assert "sec_registered_funds rf" in down_block, "Branch 1 (registered_us) missing"
+    assert "sec_etfs e" in down_block, "Branch 2 (ETFs) missing"
+    assert "sec_bdcs b" in down_block, "Branch 3 (BDCs) missing"
+    assert "sec_manager_funds mf" in down_block, "Branch 4 (private_us) missing"
+    assert "esma_funds ef" in down_block, "Branch 5 (ucits_eu) missing"
+    assert "sec_money_market_funds mmf" in down_block, "Branch 6 (money_market) missing"
+
+    # Verify it uses the 0183 UCITS shape (LEFT JOIN esma_securities, not INNER JOIN instruments_universe)
+    assert "LEFT JOIN esma_securities es" in down_block, (
+        "UCITS branch should use LEFT JOIN esma_securities (0183 shape)"
+    )
+    assert "COALESCE(es.isin, ef.lei)" in down_block, (
+        "UCITS branch should use COALESCE(es.isin, ef.lei) for external_id (0183 shape)"
+    )
+
+
+def test_q105_bridge_down_constrains_to_q91_added_rows():
+    """Q105 invariant: _BRIDGE_DOWN must restrict removal to rows Q91
+    plausibly added (JOIN esma_funds + match fund_lei = ef.lei).
+    Codex P2 catch — original removed fund_lei from ALL UCITS rows."""
+    text = _MIGRATION_PATH.read_text()
+    bridge_down_idx = text.index("_BRIDGE_DOWN")
+    bridge_down_block = text[bridge_down_idx:bridge_down_idx + 2000]
+
+    assert "FROM esma_funds ef" in bridge_down_block, (
+        "_BRIDGE_DOWN must JOIN esma_funds to restrict rollback scope"
+    )
+    assert "iu.attributes->>'fund_lei' = ef.lei" in bridge_down_block, (
+        "_BRIDGE_DOWN must verify fund_lei matches the value Q91 would have set"
     )
