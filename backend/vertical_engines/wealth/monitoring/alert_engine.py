@@ -140,12 +140,12 @@ def _check_rebalance_overdue(db: Session, organization_id: str) -> list[Alert]:
     alerts: list[Alert] = []
     cutoff = date.today() - timedelta(days=_REBALANCE_OVERDUE_DAYS)
 
-    # 1. Get all live portfolios in a single query
+    # 1. Get all live/paused portfolios in a single query
     portfolios = (
         db.query(ModelPortfolio)
         .filter(
             ModelPortfolio.organization_id == organization_id,
-            ModelPortfolio.status == "active",
+            ModelPortfolio.state.in_(("live", "paused")),
         )
         .all()
     )
