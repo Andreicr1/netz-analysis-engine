@@ -258,6 +258,23 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
         row.instrument_id: row.overall_status for row in prev_results
     }
 
+    # 4b. Load previous attribute snapshots for enrichment change detection
+    prev_snap_results = await db.execute(
+        select(
+            ScreeningResult.instrument_id,
+            ScreeningResult.layer_results,
+        ).where(
+            ScreeningResult.instrument_id.in_(instrument_ids),
+            ScreeningResult.is_current.is_(True),
+        ),
+    )
+    previous_snapshots: dict[uuid.UUID, dict] = {}
+    for row in prev_snap_results:
+        lr = row.layer_results or {}
+        snap = lr.get("_attribute_snapshot", {})
+        if snap:
+            previous_snapshots[row.instrument_id] = snap
+
     # 5. Create screening run record (type = "watchlist")
     run = ScreeningRun(
         organization_id=org_id,
@@ -282,6 +299,14 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
         previous_outcomes,
     )
 
+    # 6b. Enrichment change detection (fee increase >5bps, strategy_label change)
+    enrichment_alerts = await asyncio.to_thread(
+        watchlist_svc.check_enrichment_changes,
+        instrument_dicts,
+        previous_snapshots,
+    )
+    alerts.extend(enrichment_alerts)
+
     # Also re-screen to get new results for DB storage
     screening_results = await asyncio.to_thread(
         lambda: [
@@ -299,6 +324,12 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
     )
 
     # 7. Write screening results (no intermediate commits — same txn as audit)
+    # Build attribute lookup for snapshot persistence
+    inst_attrs_by_id: dict[uuid.UUID, dict] = {
+        inst["instrument_id"]: inst.get("attributes", {})
+        for inst in instrument_dicts
+    }
+
     for batch in _chunked(screening_results, 200):
         batch_ids = [sr.instrument_id for sr in batch]
         await db.execute(
@@ -311,6 +342,8 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
         )
 
         for sr in batch:
+            inst_attrs = inst_attrs_by_id.get(sr.instrument_id, {})
+            base_layer_results = sr.layer_results_dict if sr.layer_results_dict else {}
             screening_result = ScreeningResult(
                 organization_id=org_id,
                 instrument_id=sr.instrument_id,
@@ -318,17 +351,28 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
                 overall_status=sr.overall_status,
                 score=sr.score,
                 failed_at_layer=sr.failed_at_layer,
-                layer_results=sr.layer_results_dict,
+                layer_results={
+                    **(base_layer_results if isinstance(base_layer_results, dict) else {}),
+                    "_attribute_snapshot": {
+                        "expense_ratio_pct": inst_attrs.get("expense_ratio_pct"),
+                        "strategy_label": inst_attrs.get("strategy_label"),
+                    },
+                },
                 required_analysis_type=sr.required_analysis_type,
                 is_current=True,
             )
             db.add(screening_result)
 
-    # 7b. Audit trail for transition alerts (SAME transaction — Q92 atomicity)
+    # 7b. Audit trail for transition + enrichment alerts (SAME transaction — Q92 atomicity)
     for alert in alerts:
+        action = (
+            "watchlist.enrichment_changed"
+            if alert.direction == "enrichment_change"
+            else "watchlist.transition_detected"
+        )
         await write_audit_event(
             db,
-            action="watchlist.transition_detected",
+            action=action,
             entity_type="screening_result",
             entity_id=str(alert.instrument_id),
             actor_id="system:watchlist_batch",
@@ -349,6 +393,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
 
     improvements = sum(1 for a in alerts if a.direction == "improvement")
     deteriorations = sum(1 for a in alerts if a.direction == "deterioration")
+    enrichment_changes = sum(1 for a in alerts if a.direction == "enrichment_change")
     stable_count = len(instrument_dicts) - improvements - deteriorations
 
     logger.info(
@@ -356,6 +401,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
         total_screened=len(instrument_dicts),
         improvements=improvements,
         deteriorations=deteriorations,
+        enrichment_changes=enrichment_changes,
         stable=stable_count,
     )
 
@@ -364,6 +410,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
         "total_screened": len(instrument_dicts),
         "improvements": improvements,
         "deteriorations": deteriorations,
+        "enrichment_changes": enrichment_changes,
         "stable": stable_count,
     }
 
