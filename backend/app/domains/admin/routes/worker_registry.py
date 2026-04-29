@@ -81,11 +81,11 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         "brochure_download": (run_brochure_download, "global", _BULK),
         "brochure_extract": (run_brochure_extract, "global", _BULK),
         "wealth_embedding": (run_wealth_embedding, "global", _BULK),
-        "drift_check": (run_drift_check, "global", _LIGHT),
         "regime_fit": (run_regime_fit, "global", _LIGHT),
         "fast_track_eviction": (run_fast_track_eviction, "global", _LIGHT),
         # ── Org-scoped workers (dispatched per active org) ────
         "instrument_ingestion": (run_instrument_ingestion, "global", _HEAVY),
+        "drift_check": (run_drift_check, "org", _LIGHT),
         "risk_calc": (run_risk_calc, "org", _HEAVY),
         "portfolio_eval": (run_portfolio_eval, "org", _LIGHT),
         "portfolio_nav_synthesizer": (run_portfolio_nav_synthesizer, "org", _LIGHT),
