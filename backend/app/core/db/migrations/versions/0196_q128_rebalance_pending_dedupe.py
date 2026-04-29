@@ -20,16 +20,17 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # Cleanup: keep latest pending per (organization_id, profile, event_type),
-    # delete older duplicates. Required before unique index creation —
-    # prod DBs may already have duplicates from pre-Q128 worker behavior.
+    # Cleanup: keep latest pending drift_rebalance per (organization_id, profile),
+    # delete older duplicates. Scoped to event_type='drift_rebalance' only —
+    # manual/scheduled pending events must NOT be touched.
     op.execute(
         sa.text("""
             DELETE FROM rebalance_events re_old
             USING rebalance_events re_new
             WHERE re_old.organization_id = re_new.organization_id
               AND re_old.profile = re_new.profile
-              AND re_old.event_type = re_new.event_type
+              AND re_old.event_type = 'drift_rebalance'
+              AND re_new.event_type = 'drift_rebalance'
               AND re_old.status = 'pending'
               AND re_new.status = 'pending'
               AND re_old.event_id != re_new.event_id
@@ -44,13 +45,15 @@ def upgrade() -> None:
     )
 
     op.create_index(
-        "uq_rebalance_event_pending_per_profile",
+        "uq_rebalance_event_pending_drift_per_profile",
         "rebalance_events",
-        ["organization_id", "profile", "event_type"],
+        ["organization_id", "profile"],
         unique=True,
-        postgresql_where=sa.text("status = 'pending'"),
+        postgresql_where=sa.text(
+            "status = 'pending' AND event_type = 'drift_rebalance'"
+        ),
     )
 
 
 def downgrade() -> None:
-    op.drop_index("uq_rebalance_event_pending_per_profile", "rebalance_events")
+    op.drop_index("uq_rebalance_event_pending_drift_per_profile", "rebalance_events")
