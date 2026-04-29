@@ -1794,9 +1794,17 @@ async def _execute_inner(
     )
 
     # ── 4. Optimizer cascade ──
+    # PR-Q116 hotfix #6 — pin a single allocation-window date for the
+    # whole run. Without this, a run that crosses midnight could see one
+    # ``date.today()`` in the optimizer and a different one in
+    # ``build_validation_db_context`` below, producing false block/TAA
+    # failures when the active strategic_allocation row changes between
+    # phases.
+    construction_effective_date = date.today()
     base_result = await _run_construction_async(
         db, profile, str(organization_id), portfolio_id=portfolio_id,
         propose_mode=propose_mode,
+        effective_date=construction_effective_date,
     )
 
     # PR-A8 — Layer 3 dedup telemetry. Surfaced as a sanitized SSE event
@@ -2048,6 +2056,7 @@ async def _execute_inner(
         instrument_ids=list(weights_proposed.keys()),
         mode="propose" if propose_mode else "realize",
         as_of_date=run.as_of_date,
+        effective_date=construction_effective_date,
     )
     validation_result = validate_construction(
         validation_payload, validation_db_context,

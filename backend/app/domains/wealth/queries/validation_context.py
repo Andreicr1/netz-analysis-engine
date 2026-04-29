@@ -37,6 +37,7 @@ async def build_validation_db_context(
     instrument_ids: list[str],
     mode: ModeType = "propose",
     as_of_date: date | None = None,
+    effective_date: date | None = None,
     nav_staleness_threshold_days: int = 10,
 ) -> ValidationDbContext:
     """Build a fully-populated ``ValidationDbContext`` from the DB.
@@ -53,7 +54,13 @@ async def build_validation_db_context(
         List of instrument UUID strings from the optimizer output
         (the keys of ``weights_proposed``).
     as_of_date
-        Construction run as-of date; used for staleness check.
+        Construction run as-of date; used for the NAV staleness check.
+    effective_date
+        Allocation-window pin shared with the optimizer (the same value
+        ``_run_construction_async`` used for ``effective_from <= today``).
+        Defaults to ``date.today()`` when omitted, but callers in the
+        executor MUST forward the optimizer's pinned date so a run that
+        crosses midnight does not see two different allocation versions.
     nav_staleness_threshold_days
         Days before a NAV observation is considered stale.
 
@@ -110,7 +117,10 @@ async def build_validation_db_context(
     #    Without this filter, historical/future rows can overwrite the
     #    active one in undefined DB order, making validation enforce
     #    different bounds than the optimizer used.
-    today = date.today()
+    #    PR-Q116 hotfix #6 — Codex P2: prefer the caller-supplied
+    #    ``effective_date`` so optimizer and validation share a single
+    #    allocation snapshot even when the run straddles midnight.
+    today = effective_date or date.today()
     block_rows = await db.execute(
         text(
             """

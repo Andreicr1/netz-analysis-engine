@@ -1944,6 +1944,7 @@ async def _run_construction_async(
     portfolio_id: uuid.UUID | None = None,
     cvar_limit_override: float | None = None,
     propose_mode: bool = False,
+    effective_date: date | None = None,
 ) -> dict[str, Any]:
     """Run optimizer-driven portfolio construction (fully async).
 
@@ -2056,7 +2057,10 @@ async def _run_construction_async(
     universe_funds = [f for f in universe_funds if f["instrument_id"] in _kept_strs]
 
     # ── 3. Query strategic allocation for this profile ──
-    today = date.today()
+    # PR-Q116 hotfix #6 — accept ``effective_date`` from the caller so the
+    # validation gate can pin the same allocation snapshot the optimizer
+    # used (avoids midnight-cross drift between phases).
+    today = effective_date or date.today()
     alloc_stmt = (
         select(StrategicAllocation)
         .where(
