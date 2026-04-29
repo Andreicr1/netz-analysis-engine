@@ -84,9 +84,31 @@ class TestPortfolioBuilder:
         assert result.validate_weights()
 
     def test_construct_empty_universe(self):
-        result = construct("moderate", [], {"equity": 1.0})
-        assert len(result.funds) == 0
-        assert result.total_weight == 0.0
+        """Empty universe with non-empty block_weights must raise ValueError."""
+        with pytest.raises(ValueError, match="No approved funds for block equity"):
+            construct("moderate", [], {"equity": 1.0})
+
+    def test_construct_raises_on_empty_block(self):
+        """60/40 strategic target with empty fixed_income block must fail loudly."""
+        funds = [
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "Eq A", "block_id": "equity", "manager_score": 90},
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "Eq B", "block_id": "equity", "manager_score": 70},
+        ]
+        block_weights = {"equity": 0.6, "fixed_income": 0.4}
+        with pytest.raises(ValueError, match="No approved funds for block fixed_income"):
+            construct("conservative", funds, block_weights)
+
+    def test_construct_with_all_blocks_populated(self):
+        """Regression — populated blocks must succeed without ValueError."""
+        funds = [
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "Eq A", "block_id": "equity", "manager_score": 90},
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "FI A", "block_id": "fixed_income", "manager_score": 85},
+        ]
+        block_weights = {"equity": 0.6, "fixed_income": 0.4}
+        result = construct("conservative", funds, block_weights)
+        assert result.validate_weights()
+        assert len(result.funds) == 2
+        assert abs(result.total_weight - 1.0) < 1e-6
 
     def test_construct_empty_allocation(self):
         funds = [

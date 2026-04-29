@@ -127,13 +127,19 @@ def construct(
     for block_id, block_weight in block_weights.items():
         block_funds = funds_by_block.get(block_id, [])
         if not block_funds:
-            logger.warning(
-                "portfolio_block_empty",
+            logger.error(
+                "portfolio_construction_empty_block",
                 profile=profile,
                 block_id=block_id,
-                block_weight=block_weight,
+                target_weight=block_weight,
             )
-            continue
+            raise ValueError(
+                f"No approved funds for block {block_id} "
+                f"(target weight {block_weight}). "
+                f"Strategic allocation cannot be honored. "
+                f"Add approved funds to instruments_org for this "
+                f"block before constructing."
+            )
 
         # Sort by manager_score descending, take top N
         block_funds.sort(key=lambda f: f.get("manager_score", 0) or 0, reverse=True)
