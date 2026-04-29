@@ -116,9 +116,9 @@ async def _publish_phase(
     await publish_event(job_id, phase, payload)
 
 
-async def _set_rls_org(session: AsyncSession, org_id: str) -> None:
+async def _set_rls_org(session: AsyncSession, org_id: uuid.UUID) -> None:
     """B.6 — interpolate a validated UUID into ``SET LOCAL`` (asyncpg cannot bind it)."""
-    validated = str(uuid.UUID(org_id))  # raises ValueError on invalid input
+    validated = str(org_id)
     await session.execute(
         text(f"SET LOCAL app.current_organization_id = '{validated}'")
     )
@@ -126,7 +126,7 @@ async def _set_rls_org(session: AsyncSession, org_id: str) -> None:
 
 async def _build_portfolio_worker(
     job_id: str,
-    org_id: str,
+    org_id: uuid.UUID,
     portfolio_id: str,
     requested_by: str,
 ) -> None:
@@ -217,7 +217,7 @@ async def _build_portfolio_worker(
                 run = await execute_construction_run(
                     db=session,
                     portfolio_id=uuid.UUID(portfolio_id),
-                    organization_id=uuid.UUID(org_id),
+                    organization_id=org_id,
                     requested_by=requested_by,
                     job_id=job_id,
                 )
@@ -339,11 +339,11 @@ async def build_portfolio(
             detail="portfolio id must be a UUID",
         ) from err
 
-    org_id = str(actor.organization_id)
+    org_uuid = actor.organization_id
     requested_by = actor.actor_id or "unknown"
     job_id = str(uuid.uuid4())
 
-    await register_job_owner(job_id, org_id)
+    await register_job_owner(job_id, str(org_uuid))
 
     # B.8 — long-running worker must outlive the request. ``BackgroundTasks``
     # ties lifetime to the request and would be killed mid-pipeline. We
@@ -352,7 +352,7 @@ async def build_portfolio(
     task = asyncio.create_task(
         _build_portfolio_worker(
             job_id=job_id,
-            org_id=org_id,
+            org_id=org_uuid,
             portfolio_id=str(portfolio_uuid),
             requested_by=requested_by,
         )
@@ -477,7 +477,7 @@ def _operator_signal_from_cascade(
 
 async def _compute_preview(
     *,
-    org_id: str,
+    org_id: uuid.UUID,
     portfolio_id: str,
     portfolio_profile: str,
     cvar_limit: float,
@@ -495,7 +495,7 @@ async def _compute_preview(
         result = await _run_construction_async(
             session,
             profile=portfolio_profile,
-            org_id=org_id,
+            org_id=str(org_id),
             portfolio_id=uuid.UUID(portfolio_id),
             cvar_limit_override=cvar_limit,
         )
@@ -571,12 +571,12 @@ async def preview_cvar(
     except ValueError as err:
         raise HTTPException(status_code=400, detail="portfolio id must be a UUID") from err
 
-    org_id = str(actor.organization_id)
+    org_uuid = actor.organization_id
     t_start = _time.perf_counter()
 
     # ── Load portfolio (profile + org membership check) ──
     async with async_session_factory() as session:
-        await _set_rls_org(session, org_id)
+        await _set_rls_org(session, org_uuid)
         res = await session.execute(
             select(ModelPortfolio).where(ModelPortfolio.id == portfolio_uuid),
         )
@@ -584,7 +584,7 @@ async def preview_cvar(
     if portfolio is None:
         raise HTTPException(status_code=404, detail="portfolio not found")
 
-    cache_key = _preview_cache_key(org_id, str(portfolio_uuid), body.cvar_limit)
+    cache_key = _preview_cache_key(str(org_uuid), str(portfolio_uuid), body.cvar_limit)
 
     # ── Cache hit ──
     cached_payload: dict[str, Any] | None = None
@@ -619,7 +619,7 @@ async def preview_cvar(
     async def _run() -> dict[str, Any]:
         return await asyncio.wait_for(
             _compute_preview(
-                org_id=org_id,
+                org_id=org_uuid,
                 portfolio_id=str(portfolio_uuid),
                 portfolio_profile=portfolio.profile,
                 cvar_limit=body.cvar_limit,

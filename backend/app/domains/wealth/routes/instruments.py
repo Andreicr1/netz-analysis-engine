@@ -211,7 +211,7 @@ async def update_instrument_org(
     body: InstrumentOrgPatch,
     db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> dict:
     """Update block_id, asset_class, geography for an instrument in this org."""
     _require_investment_role(actor)
@@ -226,7 +226,7 @@ async def update_instrument_org(
         update(InstrumentOrg)
         .where(
             InstrumentOrg.instrument_id == instrument_id,
-            InstrumentOrg.organization_id == uuid.UUID(org_id),
+            InstrumentOrg.organization_id == org_id,
         )
         .values(**patch)
     )

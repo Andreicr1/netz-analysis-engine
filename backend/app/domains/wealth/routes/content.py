@@ -368,7 +368,7 @@ async def _run_content_generation(
     *,
     content_id: str,
     content_type: str,
-    org_id: str,
+    org_id: str | uuid.UUID,
     actor_id: str,
     language: str,
     config: dict[str, Any] | None = None,
@@ -400,7 +400,7 @@ async def _run_content_generation(
             async with async_session_factory() as db:
                 await db.execute(
                     text("SELECT set_config('app.current_organization_id', :oid, true)"),
-                    {"oid": str(uuid.UUID(org_id))},
+                    {"oid": str(org_id)},
                 )
                 stmt = select(WealthContent).where(WealthContent.id == uuid.UUID(content_id))
                 row = await db.execute(stmt)
@@ -440,7 +440,7 @@ async def _run_content_generation(
                 async with async_session_factory() as err_db:
                     await err_db.execute(
                         text("SELECT set_config('app.current_organization_id', :oid, true)"),
-                        {"oid": str(uuid.UUID(org_id))},
+                        {"oid": str(org_id)},
                     )
                     stmt = select(WealthContent).where(WealthContent.id == uuid.UUID(content_id))
                     row = await err_db.execute(stmt)
