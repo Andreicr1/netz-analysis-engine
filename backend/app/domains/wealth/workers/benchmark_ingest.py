@@ -18,6 +18,11 @@ from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.db.engine import async_session_factory as async_session
+from app.core.runtime.provider_gate import (
+    ExternalProviderGate,
+    GateConfig,
+    ProviderGateError,
+)
 from app.domains.wealth.models.benchmark_nav import BenchmarkNav
 from app.domains.wealth.models.block import AllocationBlock
 from app.services.providers.tiingo_instrument_provider import TiingoInstrumentProvider
@@ -27,9 +32,18 @@ logger = structlog.get_logger()
 # Deterministic lock ID — never use hash() (non-deterministic across processes)
 BENCHMARK_INGEST_LOCK_ID = 900_004
 
-MAX_RETRIES = 3
-BACKOFF_BASE = 1  # 1s, 4s, 16s
 UPSERT_CHUNK = 200  # Short transactions to prevent connection pool starvation
+
+# ExternalProviderGate — circuit breaker + hard timeout for Tiingo calls.
+# Mirrors esma_aum_sync.py pattern per Charter §3.
+_tiingo_gate: ExternalProviderGate[dict[str, pd.DataFrame] | None] = ExternalProviderGate(
+    GateConfig(
+        name="tiingo_benchmark",
+        timeout_s=60.0,
+        failure_threshold=3,
+        recovery_after_s=300.0,
+    ),
+)
 
 # Maximum NaN ratio before rejecting a ticker's data
 _MAX_NAN_RATIO = 0.05  # 5%
@@ -109,32 +123,31 @@ async def _do_ingest(db, lookback_days: int) -> dict[str, int | list[str]]:
         tickers=unique_tickers,
     )
 
-    # 3. Resolve period and fetch via Tiingo with retry
+    # 3. Resolve period and fetch via Tiingo (ExternalProviderGate)
     period = _resolve_period(lookback_days)
     hist: dict[str, pd.DataFrame] | None = None
 
     loop = asyncio.get_event_loop()
-    for attempt in range(MAX_RETRIES):
-        try:
-            hist = await loop.run_in_executor(
+    try:
+        async def _tiingo_coro() -> dict[str, pd.DataFrame] | None:
+            return await loop.run_in_executor(
                 _io_executor,
                 _fetch_via_tiingo,
                 unique_tickers,
                 period,
             )
-            break
-        except Exception as e:
-            wait = BACKOFF_BASE * (4 ** attempt)
-            logger.warning(
-                "Tiingo batch download failed, retrying",
-                attempt=attempt + 1,
-                wait=wait,
-                error=str(e),
-            )
-            if attempt == MAX_RETRIES - 1:
-                logger.error("Tiingo batch download exhausted retries")
-                return {"blocks_updated": 0, "rows_upserted": 0, "stale_blocks": [], "skipped_tickers": unique_tickers}
-            await asyncio.sleep(wait)
+
+        hist = await _tiingo_gate.call(
+            op_key=f"benchmark:{','.join(sorted(unique_tickers))}",
+            coro_factory=_tiingo_coro,
+        )
+    except ProviderGateError as e:
+        logger.error(
+            "Tiingo batch download failed (gate)",
+            error=str(e),
+            tickers=unique_tickers,
+        )
+        return {"blocks_updated": 0, "rows_upserted": 0, "stale_blocks": [], "skipped_tickers": unique_tickers}
 
     if hist is None or not hist:
         logger.error("No data returned from Tiingo batch download")
