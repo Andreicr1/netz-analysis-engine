@@ -599,13 +599,25 @@ def fit_fundamental_loadings(
     )
 
 
-def assemble_factor_covariance(fit: FundamentalFactorFit) -> npt.NDArray[np.float64]:
-    """Returns Σ = B · F · B' + diag(D) with PSD enforcement.
+def assemble_factor_covariance(
+    fit: FundamentalFactorFit,
+    *,
+    kappa_target: float = 1e4,
+) -> npt.NDArray[np.float64]:
+    """Returns Σ = B · F · B' + diag(D) with PSD + conditioning enforcement.
 
     Accepts only ``FundamentalFactorFit`` — never ``PCADiagnostic`` (the
     residual diagnostic lives in ``factor_model_pca`` and has no bearing
     on covariance assembly). Enforced at the type level; see
     ``tests/quant_engine/test_assemble_factor_covariance_types.py``.
+
+    PR-Q124: eigenvalue floor is now ``max_eigval / kappa_target`` so the
+    assembled matrix stays within the recoverable conditioning band.  The
+    previous floor (``1e-8 * trace / N``) was orders of magnitude too small
+    for N >> K factor models (159 funds, 8 factors) where many eigenvalues
+    derive solely from residual variance — pathological κ > 1e6 made the
+    optimizer cascade unreachable even when the underlying estimates were
+    reasonable (κ ~48 K on an adjacent run).
     """
     B = fit.loadings
     F = fit.factor_cov
@@ -614,14 +626,23 @@ def assemble_factor_covariance(fit: FundamentalFactorFit) -> npt.NDArray[np.floa
     sigma = (B @ F @ B.T) + np.diag(D_diag)
     sigma = (sigma + sigma.T) / 2
 
-    N = sigma.shape[0]
-    trace_sig = np.trace(sigma)
-    clamp_val = max(1e-10, 1e-8 * trace_sig / N)
-
     eigvals, eigvecs = np.linalg.eigh(sigma)
+    max_eigval = float(eigvals.max())
+    clamp_val = max(1e-10, max_eigval / kappa_target)
+
     if eigvals.min() < clamp_val:
+        kappa_before = max_eigval / max(float(eigvals.min()), 1e-16)
         eigvals = np.maximum(eigvals, clamp_val)
         sigma = eigvecs @ np.diag(eigvals) @ eigvecs.T
+        kappa_after = max_eigval / float(eigvals.min())
+        logger.info(
+            "factor_covariance_eigenvalue_regularized",
+            n_funds=sigma.shape[0],
+            kappa_before=round(kappa_before, 1),
+            kappa_after=round(kappa_after, 1),
+            kappa_target=kappa_target,
+            eigenvalue_floor=float(clamp_val),
+        )
 
     return np.asarray(sigma, dtype=np.float64)
 
