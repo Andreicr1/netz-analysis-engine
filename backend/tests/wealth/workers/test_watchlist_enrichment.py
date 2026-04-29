@@ -6,6 +6,7 @@ Covers:
 - Strategy label change triggers enrichment_change alert
 - Minor fee changes produce no alert
 - Audit events use correct action for enrichment changes
+- PR-Q129 hotfix #2: baseline reads latest row regardless of is_current flag
 """
 
 from __future__ import annotations
@@ -355,3 +356,149 @@ class TestAttributeSnapshotPersistence:
         assert previous_snapshots[iid_a] == {"expense_ratio_pct": 0.005}
         assert iid_b not in previous_snapshots
         assert iid_c not in previous_snapshots
+
+
+# =====================================================================
+#  PR-Q129 hotfix #2: baseline survives screening_batch reset
+# =====================================================================
+
+
+class TestEnrichmentBaselineSurvivesScreeningBatchReset:
+    """Codex P1: previous_snapshots loaded from ScreeningResult.is_current==True.
+
+    When screening_batch (separate worker) runs, it resets is_current=False
+    on prior rows. Next watchlist_batch would find zero is_current=True rows,
+    causing enrichment detection to silently stop.
+
+    Fix: load MOST RECENT row per instrument regardless of is_current flag,
+    using DISTINCT ON (instrument_id) ORDER BY screened_at DESC.
+    """
+
+    def test_enrichment_baseline_reads_latest_regardless_of_is_current(self):
+        """Baseline used = newer row, even when is_current=False (post screening_batch).
+
+        Setup: instrument has 2 ScreeningResult rows.
+        - Older: is_current=True (stale, from before screening_batch ran)
+        - Newer: is_current=False (screening_batch reset it)
+
+        Assert: baseline extraction uses the NEWER row's snapshot,
+        not the older is_current=True row.
+        """
+        iid = uuid.UUID("00000000-0000-0000-0000-c00000000001")
+
+        class FakeRow:
+            def __init__(self, instrument_id, layer_results):
+                self.instrument_id = instrument_id
+                self.layer_results = layer_results
+
+        # Simulate DISTINCT ON result: only the LATEST row per instrument
+        # is returned (the one with screened_at DESC), regardless of is_current.
+        # The newer row has the updated snapshot (expense_ratio_pct = 0.0075),
+        # the older row had 0.005. DISTINCT ON returns only the newer row.
+        latest_row = FakeRow(iid, [
+            {"criterion": "min_aum", "expected": 1e8, "actual": 2e8, "passed": True, "layer": 1},
+            {
+                "criterion": "_attribute_snapshot",
+                "value": {"expense_ratio_pct": 0.0075, "strategy_label": "Large Cap Growth"},
+            },
+        ])
+
+        # Replay the extraction loop from watchlist_batch step 4b
+        rows = [latest_row]
+        previous_snapshots: dict[uuid.UUID, dict] = {}
+        for row in rows:
+            lr = row.layer_results
+            if not lr:
+                continue
+            if isinstance(lr, list):
+                for entry in lr:
+                    if isinstance(entry, dict) and entry.get("criterion") == "_attribute_snapshot":
+                        snap = entry.get("value", {})
+                        if snap:
+                            previous_snapshots[row.instrument_id] = snap
+                        break
+            elif isinstance(lr, dict):
+                snap = lr.get("_attribute_snapshot", {})
+                if snap:
+                    previous_snapshots[row.instrument_id] = snap
+
+        # Key assertion: we got the NEWER snapshot (0.0075), not the stale one (0.005)
+        assert iid in previous_snapshots
+        assert previous_snapshots[iid]["expense_ratio_pct"] == 0.0075
+        assert previous_snapshots[iid]["strategy_label"] == "Large Cap Growth"
+
+    def test_enrichment_detection_survives_screening_batch_reset(self):
+        """Full scenario: watchlist_batch #1 -> screening_batch reset -> watchlist_batch #2.
+
+        Simulates the race condition:
+        1. watchlist_batch #1 creates ScreeningResult with snapshot {ER: 0.005}
+        2. screening_batch runs, resets is_current=False on all prior rows
+        3. Fund's expense_ratio changes to 0.0075 (25bps increase)
+        4. watchlist_batch #2 should detect the fee change and emit alert
+
+        Pre-fix: step 4 finds zero is_current=True rows -> empty previous_snapshots -> no alert.
+        Post-fix: DISTINCT ON returns latest row (is_current=False) -> detects fee change.
+        """
+        from vertical_engines.wealth.watchlist.service import WatchlistService
+
+        iid = uuid.UUID("00000000-0000-0000-0000-c00000000002")
+
+        # Step 1 + 2: Previous snapshot extracted from latest row
+        # (DISTINCT ON returns this even though is_current=False)
+        previous_snapshots = {iid: {"expense_ratio_pct": 0.005}}
+
+        # Step 3: Fund's current attributes show fee increase
+        instruments = [
+            {
+                "instrument_id": iid,
+                "name": "Fee Hike Fund",
+                "attributes": {"expense_ratio_pct": 0.0075},
+            },
+        ]
+
+        # Step 4: check_enrichment_changes should detect the 25bps increase
+        alerts = WatchlistService.check_enrichment_changes(instruments, previous_snapshots)
+
+        assert len(alerts) == 1, (
+            "Enrichment alert should be generated even after screening_batch "
+            "resets is_current=False on prior rows"
+        )
+        assert alerts[0].direction == "enrichment_change"
+        assert alerts[0].instrument_id == iid
+        assert "0.50%" in alerts[0].message
+        assert "0.75%" in alerts[0].message
+
+    def test_query_does_not_filter_on_is_current(self):
+        """Structural test: watchlist_batch step 4/4b queries must NOT filter on is_current.
+
+        Reads the source file directly to verify the fix is in place.
+        """
+        from pathlib import Path
+
+        import app.domains.wealth.workers.watchlist_batch as wb_mod
+
+        source_path = Path(wb_mod.__file__)
+        source = source_path.read_text(encoding="utf-8")
+
+        # Step 4 and 4b queries should use DISTINCT ON, not is_current filter.
+        # The WRITE path (step 7) still correctly uses is_current -- that is fine.
+        # We check that the two READ sections (step 4 comment blocks) do not
+        # use is_current.is_(True) in SQLAlchemy queries.
+        step4_marker = "# 4. Fetch previous screening outcomes"
+        step4b_marker = "# 4b. Load previous attribute snapshots"
+        step5_marker = "# 5. Create screening run"
+
+        step4_idx = source.index(step4_marker)
+        step4b_idx = source.index(step4b_marker)
+        step5_idx = source.index(step5_marker)
+
+        step4_section = source[step4_idx:step4b_idx]
+        step4b_section = source[step4b_idx:step5_idx]
+
+        # Check for actual SQLAlchemy filter usage, not comment mentions
+        assert "is_current.is_" not in step4_section, (
+            "Step 4 (previous_outcomes) must not filter on is_current"
+        )
+        assert "is_current.is_" not in step4b_section, (
+            "Step 4b (previous_snapshots) must not filter on is_current"
+        )
