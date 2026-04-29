@@ -218,6 +218,7 @@ async def _sync_sec_etfs(db: AsyncSession) -> dict[str, Any]:
         WHERE e.ticker IS NOT NULL
         ON CONFLICT (ticker) DO UPDATE SET
             name = EXCLUDED.name,
+            is_active = EXCLUDED.is_active,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
     """.replace("__ASSET_CLASS__", _asset_class_case("e.strategy_label"))
@@ -295,6 +296,7 @@ async def _sync_sec_mf_series(db: AsyncSession) -> dict[str, Any]:
         FROM canonical c
         ON CONFLICT (ticker) DO UPDATE SET
             name = EXCLUDED.name,
+            is_active = EXCLUDED.is_active,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
     """.replace("__ASSET_CLASS__", _asset_class_case("c.strategy_label"))
@@ -309,8 +311,25 @@ async def _sync_sec_mf_series(db: AsyncSession) -> dict[str, Any]:
 
 
 async def _sync_sec_registered(db: AsyncSession) -> dict[str, Any]:
-    """Upsert SEC registered funds that have a direct ticker (supplements Phase 2)."""
+    """Upsert SEC registered funds that have a direct ticker (supplements Phase 2).
+
+    sec_registered_funds can have duplicate tickers (multiple CIKs sharing one
+    ticker), so DISTINCT ON (ticker) is required before INSERT to avoid
+    'ON CONFLICT DO UPDATE cannot affect row a second time' errors.  The
+    NOT EXISTS guard skips tickers already present; ON CONFLICT DO UPDATE SET
+    is_active = true handles the reactivation path for instruments previously
+    deactivated by _deactivate_no_nav.
+    """
     _sql = """
+        WITH deduped AS (
+            SELECT DISTINCT ON (rf.ticker)
+                rf.fund_name, rf.cik, rf.ticker, rf.crd_number, rf.fund_type,
+                rf.strategy_label, rf.is_index, rf.is_target_date,
+                rf.is_fund_of_fund, rf.inception_date
+            FROM sec_registered_funds rf
+            WHERE rf.ticker IS NOT NULL
+            ORDER BY rf.ticker, rf.cik
+        )
         INSERT INTO instruments_universe (
             instrument_id, instrument_type, name, isin, ticker,
             asset_class, geography, currency, is_active, attributes
@@ -318,34 +337,32 @@ async def _sync_sec_registered(db: AsyncSession) -> dict[str, Any]:
         SELECT
             gen_random_uuid(),
             'fund',
-            rf.fund_name,
-            rf.cik,
-            rf.ticker,
+            d.fund_name,
+            d.cik,
+            d.ticker,
             __ASSET_CLASS__,
             'north_america',
             'USD',
             true,
             jsonb_build_object(
-                'sec_cik', rf.cik,
-                'sec_crd', rf.crd_number,
-                'fund_subtype', rf.fund_type,
+                'sec_cik', d.cik,
+                'sec_crd', d.crd_number,
+                'fund_subtype', d.fund_type,
                 'sec_universe', 'registered_us',
-                'strategy_label', rf.strategy_label,
-                'is_index', rf.is_index,
-                'is_target_date', rf.is_target_date,
-                'is_fund_of_fund', rf.is_fund_of_fund,
+                'strategy_label', d.strategy_label,
+                'is_index', d.is_index,
+                'is_target_date', d.is_target_date,
+                'is_fund_of_fund', d.is_fund_of_fund,
                 'aum_usd', NULL,
-                'manager_name', rf.fund_name,
-                'inception_date', rf.inception_date,
+                'manager_name', d.fund_name,
+                'inception_date', d.inception_date,
                 'source', 'universe_sync'
             )
-        FROM sec_registered_funds rf
-        WHERE rf.ticker IS NOT NULL
-          AND NOT EXISTS (
-              SELECT 1 FROM instruments_universe iu WHERE iu.ticker = rf.ticker
-          )
-        ON CONFLICT (ticker) DO NOTHING
-    """.replace("__ASSET_CLASS__", _asset_class_case("rf.strategy_label"))
+        FROM deduped d
+        ON CONFLICT (ticker) DO UPDATE SET
+            is_active = true,
+            updated_at = now()
+    """.replace("__ASSET_CLASS__", _asset_class_case("d.strategy_label"))
     result = cast(CursorResult[Any], await db.execute(text(_sql)))
     await db.commit()
     count = result.rowcount
@@ -391,6 +408,7 @@ async def _sync_sec_bdcs(db: AsyncSession) -> dict[str, Any]:
         WHERE b.ticker IS NOT NULL
         ON CONFLICT (ticker) DO UPDATE SET
             name = EXCLUDED.name,
+            is_active = EXCLUDED.is_active,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
     """)))
@@ -464,6 +482,7 @@ async def _sync_esma_funds(db: AsyncSession) -> dict[str, Any]:
         WHERE ef.yahoo_ticker IS NOT NULL
         ON CONFLICT (ticker) DO UPDATE SET
             name = EXCLUDED.name,
+            is_active = EXCLUDED.is_active,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
     """.replace("__ASSET_CLASS__", _asset_class_case("ef.strategy_label"))
@@ -538,6 +557,7 @@ async def _sync_sec_mmfs(db: AsyncSession) -> dict[str, Any]:
         FROM mmf_with_ticker t
         ON CONFLICT (ticker) DO UPDATE SET
             name = EXCLUDED.name,
+            is_active = EXCLUDED.is_active,
             asset_class = 'cash',
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
