@@ -2039,11 +2039,14 @@ async def _execute_inner(
     # PR-Q116 — populate ValidationDbContext from DB so that checks 7-10
     # (block min/max, banned instruments, approved universe) and check 16
     # (TAA/IPS bands) see real org data instead of empty defaults.
+    # PR-Q116 hotfix #2 — mode-aware: realize uses drift bands as fallback,
+    # propose uses [0, 1].  Must match what the optimizer actually used.
     validation_db_context = await build_validation_db_context(
         db,
         organization_id=organization_id,
         profile=profile,
         instrument_ids=list(weights_proposed.keys()),
+        mode="propose" if propose_mode else "realize",
         as_of_date=run.as_of_date,
     )
     validation_result = validate_construction(

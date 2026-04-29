@@ -6,6 +6,10 @@ instruments, approved universe, block min/max, TAA/IPS bands).
 
 This module provides ``build_validation_db_context()`` which loads all
 five fields from the org's DB state so the gate can actually enforce them.
+
+PR-Q116 hotfix #2 — Codex P1: realize-mode bounds parity.  The ``mode``
+parameter selects the same bounds hierarchy the optimizer used, so
+validation and optimizer always agree on block limits.
 """
 
 from __future__ import annotations
@@ -16,7 +20,10 @@ from datetime import date
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from vertical_engines.wealth.model_portfolio.block_bounds import resolve_block_bounds
+from vertical_engines.wealth.model_portfolio.block_bounds import (
+    ModeType,
+    resolve_block_bounds,
+)
 from vertical_engines.wealth.model_portfolio.validation_gate import (
     ValidationDbContext,
 )
@@ -28,6 +35,7 @@ async def build_validation_db_context(
     organization_id: uuid.UUID | str,
     profile: str,
     instrument_ids: list[str],
+    mode: ModeType = "propose",
     as_of_date: date | None = None,
     nav_staleness_threshold_days: int = 10,
 ) -> ValidationDbContext:
@@ -99,6 +107,8 @@ async def build_validation_db_context(
             SELECT sa.block_id,
                    sa.override_min,
                    sa.override_max,
+                   sa.drift_min,
+                   sa.drift_max,
                    COALESCE(sa.excluded_from_portfolio, false) AS excluded,
                    COALESCE(sa.target_weight, 0.0) AS target_w
               FROM strategic_allocation sa
@@ -110,11 +120,17 @@ async def build_validation_db_context(
     )
     block_constraints: dict[str, tuple[float, float]] = {}
     strategic_targets: dict[str, float] = {}
-    for block_id, override_min, override_max, excluded, target_w in block_rows.all():
+    for (
+        block_id, override_min, override_max,
+        drift_min_val, drift_max_val, excluded, target_w,
+    ) in block_rows.all():
         block_constraints[str(block_id)] = resolve_block_bounds(
             override_min=float(override_min) if override_min is not None else None,
             override_max=float(override_max) if override_max is not None else None,
+            drift_min=float(drift_min_val) if drift_min_val is not None else None,
+            drift_max=float(drift_max_val) if drift_max_val is not None else None,
             excluded_from_portfolio=bool(excluded),
+            mode=mode,
         )
         strategic_targets[str(block_id)] = float(target_w or 0.0)
 
