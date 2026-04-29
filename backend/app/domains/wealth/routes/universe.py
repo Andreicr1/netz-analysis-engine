@@ -401,7 +401,8 @@ async def approve_fund(
 
     svc = UniverseService()
 
-    def _approve() -> tuple[UniverseApprovalRead, str]:
+    def _approve() -> UniverseApprovalRead:
+        from app.core.db.models import AuditEvent
         from app.core.db.session import sync_session_factory
 
         with sync_session_factory() as sync_db, sync_db.begin():
@@ -452,20 +453,25 @@ async def approve_fund(
                     detail="Self-approval is not allowed",
                 )
 
-            return UniverseApprovalRead.model_validate(updated), old_decision
+            # Audit event in the SAME transaction as the mutation (C-11).
+            # If this fails, the mutation rolls back too.
+            sync_db.add(AuditEvent(
+                organization_id=uuid.UUID(org_id) if isinstance(org_id, str) else org_id,
+                actor_id=actor.actor_id,
+                actor_roles=[],
+                action="universe.approve",
+                entity_type="UniverseApproval",
+                entity_id=str(instrument_id),
+                before_state={"decision": old_decision},
+                after_state={"decision": body.decision, "rationale": body.rationale},
+                created_by=actor.actor_id,
+                updated_by=actor.actor_id,
+            ))
+            sync_db.flush()
 
-    approval_result, old_decision = await asyncio.to_thread(_approve)
-    await write_audit_event(
-        db,
-        actor_id=actor.actor_id,
-        action="universe.approve",
-        entity_type="UniverseApproval",
-        entity_id=str(instrument_id),
-        before={"decision": old_decision},
-        after={"decision": body.decision, "rationale": body.rationale},
-    )
-    await db.commit()
-    return approval_result
+            return UniverseApprovalRead.model_validate(updated)
+
+    return await asyncio.to_thread(_approve)
 
 
 @router.post(
@@ -499,7 +505,8 @@ async def reject_fund(
 
     svc = UniverseService()
 
-    def _reject() -> tuple[UniverseApprovalRead, str]:
+    def _reject() -> UniverseApprovalRead:
+        from app.core.db.models import AuditEvent
         from app.core.db.session import sync_session_factory
 
         with sync_session_factory() as sync_db, sync_db.begin():
@@ -543,20 +550,25 @@ async def reject_fund(
                     detail="Self-approval is not allowed",
                 )
 
-            return UniverseApprovalRead.model_validate(updated), old_decision
+            # Audit event in the SAME transaction as the mutation (C-11).
+            # If this fails, the mutation rolls back too.
+            sync_db.add(AuditEvent(
+                organization_id=uuid.UUID(org_id) if isinstance(org_id, str) else org_id,
+                actor_id=actor.actor_id,
+                actor_roles=[],
+                action="universe.reject",
+                entity_type="UniverseApproval",
+                entity_id=str(instrument_id),
+                before_state={"decision": old_decision},
+                after_state={"decision": "rejected", "rationale": body.rationale},
+                created_by=actor.actor_id,
+                updated_by=actor.actor_id,
+            ))
+            sync_db.flush()
 
-    rejection_result, old_decision = await asyncio.to_thread(_reject)
-    await write_audit_event(
-        db,
-        actor_id=actor.actor_id,
-        action="universe.reject",
-        entity_type="UniverseApproval",
-        entity_id=str(instrument_id),
-        before={"decision": old_decision},
-        after={"decision": "rejected", "rationale": body.rationale},
-    )
-    await db.commit()
-    return rejection_result
+            return UniverseApprovalRead.model_validate(updated)
+
+    return await asyncio.to_thread(_reject)
 
 
 @router.get(
