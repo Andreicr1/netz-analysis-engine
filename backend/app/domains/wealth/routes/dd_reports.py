@@ -249,7 +249,7 @@ async def trigger_dd_report(
     fund_id: uuid.UUID,
     body: DDReportCreate | None = None,
     db: AsyncSession = Depends(get_db_with_rls),
-    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(require_role(Role.INVESTMENT_TEAM)),
     org_id: str = Depends(get_org_id),
 ) -> DDReportSummary:
     """Trigger async DD Report generation.
@@ -324,7 +324,7 @@ async def trigger_dd_report(
         status=DDReportStatus.generating.value,
         is_current=True,
         config_snapshot=body.config_overrides if body else None,
-        created_by=user.actor_id,
+        created_by=actor.actor_id,
     )
     db.add(report)
     await db.flush()
@@ -347,7 +347,7 @@ async def trigger_dd_report(
             report_id=str(report_id),
             fund_id=str(fund_id),
             org_id=str(org_id),
-            actor_id=user.actor_id,
+            actor_id=actor.actor_id,
             config=body.config_overrides if body else None,
             job_id=job_id,
         ),
@@ -440,7 +440,7 @@ async def regenerate_dd_report(
     report_id: uuid.UUID,
     body: DDReportRegenerate | None = None,
     db: AsyncSession = Depends(get_db_with_rls),
-    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(require_role(Role.INVESTMENT_TEAM)),
     org_id: str = Depends(get_org_id),
 ) -> DDReportSummary:
     """Force regeneration of specific chapters or entire report."""
@@ -483,7 +483,7 @@ async def regenerate_dd_report(
             report_id=str(report_id),
             fund_id=str(report.instrument_id),
             org_id=str(org_id),
-            actor_id=user.actor_id,
+            actor_id=actor.actor_id,
             config=report.config_snapshot,
             job_id=job_id,
             force=True,
@@ -568,6 +568,17 @@ async def approve_dd_report(
     instrument_org = io_result.scalar_one_or_none()
     if instrument_org:
         instrument_org.approval_status = "approved"
+
+    # Clear prior is_current approval for idempotency (§3.2)
+    existing_approval = (await db.execute(
+        select(UniverseApproval).where(
+            UniverseApproval.instrument_id == report.instrument_id,
+            UniverseApproval.organization_id == report.organization_id,
+            UniverseApproval.is_current.is_(True),
+        ),
+    )).scalar_one_or_none()
+    if existing_approval:
+        existing_approval.is_current = False
 
     # Create UniverseApproval record for audit trail
     approval = UniverseApproval(
