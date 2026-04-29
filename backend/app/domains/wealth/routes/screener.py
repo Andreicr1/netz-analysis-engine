@@ -86,6 +86,55 @@ from app.shared.models import EsmaFund, EsmaManager, SecCusipTickerMap
 logger = structlog.get_logger(__name__)
 
 
+# ── C-12: reject unknown query params on catalog routes ──────────────
+
+
+def _strict_query_params(*allowed: str):
+    """FastAPI dependency that rejects unknown query parameters with 422.
+
+    Usage::
+
+        @router.get("/catalog")
+        async def get_catalog(
+            ...,
+            _strict: None = Depends(_strict_query_params("q", "region", ...)),
+        ):
+    """
+    allowed_set = frozenset(allowed)
+
+    async def _check(request: Request) -> None:
+        unknown = set(request.query_params.keys()) - allowed_set
+        if unknown:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Unknown query parameter(s): {', '.join(sorted(unknown))}",
+            )
+
+    return Depends(_check)
+
+
+_CATALOG_PARAMS = (
+    "q", "region", "fund_universe", "fund_type", "strategy_label",
+    "investment_geography", "aum_min", "has_nav", "in_universe", "has_aum",
+    "domicile", "manager", "manager_id", "sort", "page", "page_size",
+    "max_expense_ratio", "min_return_1y", "min_return_10y", "elite_only",
+    "cursor", "manager_names", "sharpe_min", "sharpe_max",
+    "max_drawdown_min", "max_drawdown_max", "volatility_max",
+    "aum_max", "return_1y_max", "return_10y_min", "return_10y_max",
+)
+
+_MANAGERS_PARAMS = (
+    "q", "region", "fund_universe", "fund_type", "strategy_label",
+    "aum_min", "has_aum", "sort", "page", "page_size",
+)
+
+_FACETS_PARAMS = (
+    "q", "region", "fund_universe", "fund_type", "strategy_label",
+    "investment_geography", "aum_min", "has_nav", "has_aum",
+    "domicile", "manager",
+)
+
+
 def _normalize_to_fraction(value: float | Any | None, source: str) -> float | None:
     """Ensure percentage value is stored as pure decimal fraction (0.015 = 1.5%).
 
@@ -1936,6 +1985,7 @@ async def get_catalog(
     return_10y_min: float | None = Query(None, description="Min 10Y annualized return %"),
     return_10y_max: float | None = Query(None, description="Max 10Y annualized return %"),
     db: AsyncSession = Depends(get_db_with_rls),
+    _strict: None = _strict_query_params(*_CATALOG_PARAMS),
 ) -> UnifiedCatalogPage:
     parsed_manager_names = [n.strip() for n in manager_names.split(",") if n.strip()] if manager_names else None
     filters = CatalogFilters(
@@ -2152,6 +2202,7 @@ async def get_catalog_managers(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db_with_rls),
+    _strict: None = _strict_query_params(*_MANAGERS_PARAMS),
 ) -> ManagerCatalogPage:
     """Group funds by manager_id, return aggregated AUM + fund types.
 
@@ -2246,6 +2297,7 @@ async def get_catalog_facets(
     domicile: str | None = Query(None),
     manager: str | None = Query(None),
     db: AsyncSession = Depends(get_db_with_rls),
+    _strict: None = _strict_query_params(*_FACETS_PARAMS),
 ) -> CatalogFacets:
     filters = CatalogFilters(
         q=q,
