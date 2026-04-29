@@ -343,9 +343,11 @@ async def _sync_sec_registered(db: AsyncSession) -> dict[str, Any]:
             )
         FROM sec_registered_funds rf
         WHERE rf.ticker IS NOT NULL
-          AND NOT EXISTS (
-              SELECT 1 FROM instruments_universe iu WHERE iu.ticker = rf.ticker
-          )
+        -- Q106: NOT EXISTS prefilter removed. The minimal ON CONFLICT clause
+        -- (only is_active + updated_at) cannot overwrite Phase 2's name/attributes,
+        -- so the prefilter that was preventing the conflict path from firing is
+        -- redundant and broke Q94's reactivation invariant. See Wave 6 S09 C-01
+        -- + Codex review on PR-Q94 commit.
         ON CONFLICT (ticker) DO UPDATE SET
             is_active = true,
             updated_at = now()
