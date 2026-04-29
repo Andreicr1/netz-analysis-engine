@@ -391,3 +391,282 @@ class TestConstants:
 
     def test_epsilon_is_small(self):
         assert _EPSILON == 1e-10
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  PR-Q124: C-01 — Baseline excludes recent window
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestBaselineExcludesRecentWindow:
+    """C-01: When recent ⊂ baseline, z-score is biased toward zero.
+
+    Fix: baseline_rows = metrics_history[-baseline_count:-recent_count]
+    so μ_baseline and σ_baseline are computed from non-overlapping data.
+    """
+
+    def test_baseline_excludes_recent_window(self):
+        """270 stable + 90 shifted → z ≈ 3.0, is_anomalous=True.
+
+        Before fix: z ≈ 1.73 (recent absorbed into baseline → bias toward 0).
+        After fix: z ≈ 3.0 (clean baseline, shifted recent → correct detection).
+        """
+        np.random.seed(42)
+
+        # 270 stable baseline points (volatility centered at 0.15)
+        stable_rows = []
+        for i in range(270):
+            stable_rows.append(
+                _make_metrics_row(
+                    f"d{i:03d}",
+                    volatility_1y=0.15,
+                    max_drawdown_1y=-0.08,
+                    sharpe_1y=1.2,
+                    sortino_1y=1.5,
+                    alpha_1y=0.02,
+                    beta_1y=0.95,
+                    tracking_error_1y=0.03,
+                ),
+            )
+
+        # Add small noise to get nonzero sigma
+        for i in range(270):
+            stable_rows[i]["volatility_1y"] = 0.15 + np.random.normal(0, 0.002)
+
+        # 90 shifted recent points (volatility shifted to 0.15 + 3σ ≈ 0.156)
+        sigma_approx = 0.002  # std of baseline
+        shift = 3.0 * sigma_approx  # 3σ shift
+        shifted_rows = []
+        for i in range(90):
+            shifted_rows.append(
+                _make_metrics_row(
+                    f"r{i:03d}",
+                    volatility_1y=0.15 + shift,
+                    max_drawdown_1y=-0.08,
+                    sharpe_1y=1.2,
+                    sortino_1y=1.5,
+                    alpha_1y=0.02,
+                    beta_1y=0.95,
+                    tracking_error_1y=0.03,
+                ),
+            )
+
+        history = stable_rows + shifted_rows  # 360 total
+
+        result = scan_strategy_drift(
+            history,
+            "inst_c01",
+            "C01 Test Fund",
+            config={
+                "recent_window_days": 90,
+                "baseline_window_days": 360,
+            },
+        )
+
+        # Find the volatility metric
+        vol_metric = next(
+            m for m in result.metrics if m.metric_name == "volatility_1y"
+        )
+
+        # z should be approximately 3.0 (shifted by 3σ of baseline)
+        assert abs(vol_metric.z_score) > 2.0, (
+            f"Expected z > 2.0 but got {vol_metric.z_score}. "
+            f"Baseline likely still contains recent window (C-01 not fixed)."
+        )
+        assert vol_metric.is_anomalous is True
+        assert result.status == "drift_detected"
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  PR-Q124: C-09 — Flat baseline breakout detection
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestFlatBaselineBreakout:
+    """C-09: sigma_baseline < ε → unconditional is_anomalous=False was wrong.
+
+    Fix: fall back to absolute-distance check when sigma is degenerate.
+    """
+
+    def test_flat_baseline_breakout_detected(self):
+        """Baseline all 0.0, recent all 5.0 → is_anomalous=True.
+
+        Before fix: unconditionally False (flat baseline guard).
+        After fix: abs_diff = 5.0 > tol (0.001) → True.
+        """
+        baseline = [
+            _make_metrics_row(f"d{i:03d}", tracking_error_1y=0.0)
+            for i in range(270)
+        ]
+        recent = [
+            _make_metrics_row(f"r{i:03d}", tracking_error_1y=5.0)
+            for i in range(90)
+        ]
+        history = baseline + recent
+
+        result = scan_strategy_drift(
+            history,
+            "inst_c09",
+            "C09 Flat Baseline Fund",
+            config={
+                "recent_window_days": 90,
+                "baseline_window_days": 360,
+            },
+        )
+
+        te_metric = next(
+            m for m in result.metrics if m.metric_name == "tracking_error_1y"
+        )
+        assert te_metric.z_score == 0.0  # sentinel for degenerate sigma
+        assert te_metric.is_anomalous is True, (
+            "Expected breakout from flat baseline to be detected (C-09 not fixed)."
+        )
+        assert result.status == "drift_detected"
+
+    def test_flat_baseline_within_tol_not_anomalous(self):
+        """Baseline all 0.0, recent all 0.0005 (< 0.001 tol) → is_anomalous=False.
+
+        Small perturbation within tolerance should not trigger.
+        """
+        baseline = [
+            _make_metrics_row(f"d{i:03d}", tracking_error_1y=0.0)
+            for i in range(270)
+        ]
+        recent = [
+            _make_metrics_row(f"r{i:03d}", tracking_error_1y=0.0005)
+            for i in range(90)
+        ]
+        history = baseline + recent
+
+        result = scan_strategy_drift(
+            history,
+            "inst_c09b",
+            "C09 Within-Tol Fund",
+            config={
+                "recent_window_days": 90,
+                "baseline_window_days": 360,
+            },
+        )
+
+        te_metric = next(
+            m for m in result.metrics if m.metric_name == "tracking_error_1y"
+        )
+        assert te_metric.z_score == 0.0
+        assert te_metric.is_anomalous is False
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  PR-Q124: C-12 — Hysteresis open/close band
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestHysteresisOpenCloseBand:
+    """C-12: Without hysteresis, z oscillating at 1.95/2.05 flaps daily.
+
+    Fix: open threshold (2.0) to enter drift_detected, close threshold
+    (1.5) to return to stable.
+    """
+
+    def _make_z_controlled_history(
+        self, target_z: float, baseline_std: float = 0.01,
+    ) -> list[dict]:
+        """Build 360-row history where volatility_1y z-score ≈ target_z.
+
+        270 baseline rows at mean=0.15 with given std.
+        90 recent rows at mean = 0.15 + target_z * baseline_std.
+        """
+        np.random.seed(0)
+        baseline_mean = 0.15
+        recent_mean = baseline_mean + target_z * baseline_std
+
+        rows: list[dict] = []
+        for i in range(270):
+            rows.append(
+                _make_metrics_row(
+                    f"d{i:03d}",
+                    volatility_1y=baseline_mean + np.random.normal(0, baseline_std),
+                ),
+            )
+        for i in range(90):
+            rows.append(
+                _make_metrics_row(f"r{i:03d}", volatility_1y=recent_mean),
+            )
+        return rows
+
+    def test_hysteresis_open_close_band(self):
+        """Verify hysteresis band behavior.
+
+        - previous_status="drift_detected", z≈1.6 → is_anomalous=True
+          (still above close=1.5)
+        - previous_status="stable", z≈1.6 → is_anomalous=False
+          (below open=2.0)
+        """
+        # z≈1.6: above close (1.5) but below open (2.0)
+        history = self._make_z_controlled_history(1.6)
+
+        # Case 1: previously drift_detected → use close_threshold=1.5 → 1.6>1.5 → anomalous
+        result_drift = scan_strategy_drift(
+            history,
+            "inst_hyst",
+            "Hysteresis Fund",
+            config={
+                "recent_window_days": 90,
+                "baseline_window_days": 360,
+                "z_threshold": 2.0,
+                "z_close_threshold": 1.5,
+            },
+            previous_status="drift_detected",
+        )
+        vol_drift = next(
+            m for m in result_drift.metrics if m.metric_name == "volatility_1y"
+        )
+        assert vol_drift.is_anomalous is True, (
+            f"Expected z≈1.6 > close_threshold=1.5 with previous=drift_detected, "
+            f"but is_anomalous={vol_drift.is_anomalous} (z={vol_drift.z_score})"
+        )
+
+        # Case 2: previously stable → use open_threshold=2.0 → 1.6<2.0 → not anomalous
+        result_stable = scan_strategy_drift(
+            history,
+            "inst_hyst",
+            "Hysteresis Fund",
+            config={
+                "recent_window_days": 90,
+                "baseline_window_days": 360,
+                "z_threshold": 2.0,
+                "z_close_threshold": 1.5,
+            },
+            previous_status="stable",
+        )
+        vol_stable = next(
+            m for m in result_stable.metrics if m.metric_name == "volatility_1y"
+        )
+        assert vol_stable.is_anomalous is False, (
+            f"Expected z≈1.6 < open_threshold=2.0 with previous=stable, "
+            f"but is_anomalous={vol_stable.is_anomalous} (z={vol_stable.z_score})"
+        )
+
+    def test_hysteresis_config_validation(self):
+        """Inverted band (close >= open) → ValueError."""
+        with pytest.raises(ValueError, match="z_close_threshold"):
+            scan_strategy_drift(
+                [_make_metrics_row(f"d{i}") for i in range(100)],
+                "inst_val",
+                "Validation Fund",
+                config={
+                    "z_threshold": 1.5,
+                    "z_close_threshold": 2.0,  # inverted!
+                },
+            )
+
+        # Equal values should also fail
+        with pytest.raises(ValueError, match="z_close_threshold"):
+            scan_strategy_drift(
+                [_make_metrics_row(f"d{i}") for i in range(100)],
+                "inst_val",
+                "Validation Fund",
+                config={
+                    "z_threshold": 2.0,
+                    "z_close_threshold": 2.0,  # equal!
+                },
+            )
