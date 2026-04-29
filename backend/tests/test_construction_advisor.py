@@ -309,6 +309,54 @@ class TestProjectCvarHistorical:
         assert result < 0  # CVaR is always negative (loss)
         assert result > -2.0  # sanity: not more than -200%
 
+    def test_cvar_uses_rolling_when_sufficient_data(self):
+        """C-14: rolling 252-day path for >= 252 days; sqrt fallback for < 252."""
+        rng = np.random.default_rng(77)
+
+        # --- Rolling path: 500 days of data (>= 252) ---
+        # Use realistic equity-like volatility so the 5% tail is negative
+        port_ret_long = rng.normal(0.0003, 0.015, size=(500, 2))
+        cand_ret_long = rng.normal(0.0001, 0.008, size=500)
+        weights = np.array([0.5, 0.5])
+
+        result_rolling = project_cvar_historical(
+            port_ret_long, cand_ret_long, weights, 0.10,
+        )
+        assert result_rolling is not None
+        assert result_rolling < 0  # loss convention
+
+        # Manually compute the rolling path to verify
+        combined = np.column_stack([port_ret_long, cand_ret_long])
+        new_w = np.append(weights * 0.9, 0.10)
+        port_daily = combined @ new_w
+        annual_rets = np.convolve(port_daily, np.ones(252), mode="valid")
+        sorted_annual = np.sort(annual_rets)
+        cutoff = max(int(len(sorted_annual) * 0.05), 1)
+        expected_cvar = float(round(np.mean(sorted_annual[:cutoff]), 6))
+        assert result_rolling == pytest.approx(expected_cvar, abs=1e-6)
+
+        # --- Sqrt fallback path: 150 days of data (< 252 but >= 126 MIN) ---
+        port_ret_short = rng.normal(0.0003, 0.015, size=(150, 2))
+        cand_ret_short = rng.normal(0.0001, 0.008, size=150)
+
+        result_sqrt = project_cvar_historical(
+            port_ret_short, cand_ret_short, weights, 0.10,
+        )
+        assert result_sqrt is not None
+        assert result_sqrt < 0  # loss convention
+
+        # Manually compute the sqrt fallback to verify
+        combined_s = np.column_stack([port_ret_short, cand_ret_short])
+        port_daily_s = combined_s @ new_w
+        sorted_s = np.sort(port_daily_s)
+        cutoff_s = max(int(len(sorted_s) * 0.05), 1)
+        daily_cvar = float(-np.mean(sorted_s[:cutoff_s]))
+        expected_sqrt = float(round(-daily_cvar * np.sqrt(252), 6))
+        assert result_sqrt == pytest.approx(expected_sqrt, abs=1e-6)
+
+        # The two results should differ — rolling != sqrt scaling
+        assert result_rolling != pytest.approx(result_sqrt, abs=0.001)
+
 
 class TestProjectCvarForCandidates:
     def test_fills_projection_fields(self):
@@ -580,7 +628,7 @@ class TestBuildAdvice:
         assert result.current_cvar_95 == -0.10
         assert result.cvar_limit == -0.06
         assert result.cvar_gap == pytest.approx(-0.04)
-        assert result.projected_cvar_is_heuristic is True
+        assert result.projected_cvar_is_heuristic is False  # 252 days → rolling path
 
         # Coverage should detect gaps
         assert result.coverage.total_blocks == 4
@@ -786,7 +834,7 @@ class TestEndToEndAdvisorFlow:
         assert advice.coverage.total_blocks == 5
         assert len(advice.coverage.block_gaps) >= 3  # fi, alt, cash gaps
         assert len(advice.candidates) > 0
-        assert advice.projected_cvar_is_heuristic is True
+        assert advice.projected_cvar_is_heuristic is False  # 252 days → rolling path
 
         # All candidates should have projected CVaR
         projected_candidates = [c for c in advice.candidates if c.projected_cvar_95 is not None]
