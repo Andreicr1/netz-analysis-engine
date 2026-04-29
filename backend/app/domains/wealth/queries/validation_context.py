@@ -101,10 +101,21 @@ async def build_validation_db_context(
     #    PR-Q116 hotfix: previous COALESCE chain fell back to
     #    target_weight * 0.5/1.5 which was tighter than propose-mode's
     #    default [0, 1], causing false block failures.
+    #    PR-Q116 hotfix #3 — Codex P1: filter to the active allocation
+    #    version exactly like ``_run_construction_async`` does (see
+    #    ``routes/model_portfolios.py``):
+    #      ``effective_from <= today`` AND
+    #      ``effective_to IS NULL OR effective_to > today``,
+    #    then collapse duplicates to the latest ``effective_from`` per block.
+    #    Without this filter, historical/future rows can overwrite the
+    #    active one in undefined DB order, making validation enforce
+    #    different bounds than the optimizer used.
+    today = date.today()
     block_rows = await db.execute(
         text(
             """
-            SELECT sa.block_id,
+            SELECT DISTINCT ON (sa.block_id)
+                   sa.block_id,
                    sa.override_min,
                    sa.override_max,
                    sa.drift_min,
@@ -114,9 +125,12 @@ async def build_validation_db_context(
               FROM strategic_allocation sa
              WHERE sa.organization_id = :org
                AND sa.profile = :profile
+               AND sa.effective_from <= :today
+               AND (sa.effective_to IS NULL OR sa.effective_to > :today)
+             ORDER BY sa.block_id, sa.effective_from DESC
             """
         ),
-        {"org": org_str, "profile": profile},
+        {"org": org_str, "profile": profile, "today": today},
     )
     block_constraints: dict[str, tuple[float, float]] = {}
     strategic_targets: dict[str, float] = {}

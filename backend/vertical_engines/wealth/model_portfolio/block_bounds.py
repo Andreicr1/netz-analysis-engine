@@ -48,12 +48,17 @@ def resolve_block_bounds(
 
     if mode == "realize":
         # Realize optimizer uses drift bands only; overrides are not applied
-        # by ``_run_construction_async`` (see ``alloc_dicts`` build there).
-        # Validation must mirror that or it enforces stricter limits than
-        # the optimizer actually used (Codex P1 — false block failures/passes).
-        if drift_min is not None and drift_max is not None:
-            return (float(drift_min), float(drift_max))
-        return (0.0, 1.0)
+        # by ``_run_construction_async`` (see ``alloc_dicts`` build there,
+        # which fills each side independently:
+        # ``min_weight = drift_min if not None else 0.0``,
+        # ``max_weight = drift_max if not None else 1.0``).
+        # Validation must mirror that side-by-side fill or it enforces
+        # different limits than the optimizer (Codex P1 — false block
+        # failures/passes when only one drift side is populated).
+        return (
+            float(drift_min) if drift_min is not None else 0.0,
+            float(drift_max) if drift_max is not None else 1.0,
+        )
 
     if override_min is not None and override_max is not None:
         return (float(override_min), float(override_max))

@@ -200,12 +200,15 @@ class TestRealizeModeBlockBounds:
         )
         assert result == (0.0, 0.0)
 
-    def test_partial_drift_ignored(self) -> None:
-        """Only one of drift_min/drift_max set → falls back to (0, 1)."""
+    def test_partial_drift_filled_side_by_side(self) -> None:
+        """One-sided drift bounds are filled side-by-side, mirroring the
+        realize optimizer's ``alloc_dicts`` build (drift_min OR 0.0,
+        drift_max OR 1.0). Anything else would make validation enforce
+        different bounds than the optimizer (Codex P1 false pass/fail)."""
         result1 = _realize_bounds_for(drift_min=0.10, drift_max=None)
-        assert result1 == (0.0, 1.0)
+        assert result1 == (0.10, 1.0)
         result2 = _realize_bounds_for(drift_min=None, drift_max=0.30)
-        assert result2 == (0.0, 1.0)
+        assert result2 == (0.0, 0.30)
 
 
 # ── Integration: realize-mode validation catches drift violation ──────
