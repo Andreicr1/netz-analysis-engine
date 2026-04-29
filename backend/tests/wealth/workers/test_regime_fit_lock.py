@@ -204,3 +204,43 @@ async def test_regime_fit_uses_correct_lock_id():
     lock_sqls = [sql for sql in session.executed_sql if "pg_try_advisory_lock" in sql]
     assert len(lock_sqls) == 1
     assert "900026" in lock_sqls[0], f"Lock SQL must use LOCK_ID 900026, got: {lock_sqls[0]}"
+
+
+# ── Test: Q104 invariant — single session for all I/O ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_regime_fit_uses_lock_owning_session_for_all_io():
+    """Q104 invariant: all phases of regime fit must use the lock-owning
+    session, not child sessions. This prevents idle-in-transaction timeout
+    from killing the lock-holder mid-job and silently releasing the lock.
+
+    Verified by wrapping async_session() and asserting it's called exactly once.
+    """
+    session = _FakeSession(lock_acquired=True)
+    base_factory = _make_session_factory(session)
+
+    call_count = 0
+
+    def counting_factory(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return base_factory(*args, **kwargs)
+
+    with (
+        patch.object(mod, "async_session", side_effect=counting_factory),
+        patch.object(
+            mod,
+            "_fetch_vix_series_with_dates",
+            new_callable=AsyncMock,
+            return_value=[],  # empty → short-circuits at MIN_VIX_OBS check
+        ),
+    ):
+        result = await mod.run_regime_fit()
+
+    assert result["status"] == "skipped"
+    assert result["reason"] == "insufficient_vix_history"
+    assert call_count == 1, (
+        f"Expected exactly 1 async_session() open (lock-owning session). "
+        f"Got {call_count}. _do_regime_fit must use the passed db, not open new sessions."
+    )
