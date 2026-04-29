@@ -134,7 +134,8 @@ def test_constructed_actions_no_run_yet_hides_approve():
 
 
 def test_validated_actions():
-    actions = compute_allowed_actions("validated")
+    validation = ValidationStatus(has_run=True, passed=True)
+    actions = compute_allowed_actions("validated", validation=validation)
     assert ACTION_APPROVE in actions
     assert ACTION_REBUILD_DRAFT in actions
     assert ACTION_ACTIVATE not in actions  # only after approve
@@ -245,11 +246,61 @@ def test_validated_state_actions_under_self_approval_policy():
     accepts the call from a single-actor org and whether the audit row
     flags ``self_approved=true``. The state machine action computer
     should yield the same shape regardless of policy.allow_self_approval."""
-    actions_strict = compute_allowed_actions("validated", policy=ApprovalPolicy())
+    validation = ValidationStatus(has_run=True, passed=True)
+    actions_strict = compute_allowed_actions(
+        "validated", validation=validation, policy=ApprovalPolicy(),
+    )
     actions_relaxed = compute_allowed_actions(
-        "validated", policy=ApprovalPolicy(allow_self_approval=True),
+        "validated",
+        validation=validation,
+        policy=ApprovalPolicy(allow_self_approval=True),
     )
     assert set(actions_strict) == set(actions_relaxed)
+
+
+# ── PR-Q110: C-01 validation gate bypass + C-02 constructed→approved ──
+
+
+def test_approve_blocked_when_validation_failed():
+    """C-01: validated state with validation.passed=False must NOT expose
+    ACTION_APPROVE. Prevents approval bypass via the validated→approved path
+    when the validation gate has not actually passed."""
+    validation = ValidationStatus(has_run=True, passed=False)
+    actions = compute_allowed_actions("validated", validation=validation)
+    assert ACTION_APPROVE not in actions
+    # rebuild_draft should still be available
+    assert ACTION_REBUILD_DRAFT in actions
+
+
+def test_approve_allowed_when_validation_passed():
+    """C-01: validated state with validation.passed=True must expose
+    ACTION_APPROVE — the normal happy path."""
+    validation = ValidationStatus(has_run=True, passed=True)
+    actions = compute_allowed_actions("validated", validation=validation)
+    assert ACTION_APPROVE in actions
+    assert ACTION_REBUILD_DRAFT in actions
+
+
+def test_od5_override_constructed_to_approved():
+    """C-02: TRANSITIONS['constructed'] must include 'approved' so the
+    OD-5 override path (require_construction_for_approve=False) can
+    transition constructed→approved without raising InvalidStateTransition."""
+    assert "approved" in TRANSITIONS["constructed"]
+    # Also verify the action computer emits approve under OD-5 policy
+    validation = ValidationStatus(has_run=True, passed=False)
+    policy = ApprovalPolicy(require_construction_for_approve=False)
+    actions = compute_allowed_actions(
+        "constructed", validation=validation, policy=policy,
+    )
+    assert ACTION_APPROVE in actions
+
+
+def test_existing_constructed_to_validated_still_works():
+    """Regression: the existing constructed→validated edge must still be
+    present after adding the constructed→approved edge (C-02)."""
+    assert "validated" in TRANSITIONS["constructed"]
+    assert "rejected" in TRANSITIONS["constructed"]
+    assert "draft" in TRANSITIONS["constructed"]
 
 
 # NOTE: The DB-write path of the async ``transition()`` function is
