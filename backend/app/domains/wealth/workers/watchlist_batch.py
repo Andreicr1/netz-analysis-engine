@@ -246,27 +246,31 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
         for i in watchlist_instruments
     ]
 
-    # 4. Fetch previous screening outcomes for comparison
+    # 4. Fetch previous screening outcomes for comparison.
+    # Use DISTINCT ON (instrument_id) ORDER BY screened_at DESC to get the
+    # LATEST row per instrument regardless of is_current flag. This survives
+    # screening_batch resetting is_current=False on prior rows (Codex P1).
     instrument_ids = [i.instrument_id for i in watchlist_instruments]
     prev_results = await db.execute(
-        select(ScreeningResult.instrument_id, ScreeningResult.overall_status).where(
-            ScreeningResult.instrument_id.in_(instrument_ids),
-            ScreeningResult.is_current.is_(True),
-        ),
+        select(ScreeningResult.instrument_id, ScreeningResult.overall_status)
+        .where(ScreeningResult.instrument_id.in_(instrument_ids))
+        .distinct(ScreeningResult.instrument_id)
+        .order_by(ScreeningResult.instrument_id, ScreeningResult.screened_at.desc()),
     )
     previous_outcomes: dict[uuid.UUID, str] = {
         row.instrument_id: row.overall_status for row in prev_results
     }
 
-    # 4b. Load previous attribute snapshots for enrichment change detection
+    # 4b. Load previous attribute snapshots for enrichment change detection.
+    # Same DISTINCT ON pattern -- latest row per instrument, not is_current.
     prev_snap_results = await db.execute(
         select(
             ScreeningResult.instrument_id,
             ScreeningResult.layer_results,
-        ).where(
-            ScreeningResult.instrument_id.in_(instrument_ids),
-            ScreeningResult.is_current.is_(True),
-        ),
+        )
+        .where(ScreeningResult.instrument_id.in_(instrument_ids))
+        .distinct(ScreeningResult.instrument_id)
+        .order_by(ScreeningResult.instrument_id, ScreeningResult.screened_at.desc()),
     )
     previous_snapshots: dict[uuid.UUID, dict] = {}
     for row in prev_snap_results:
