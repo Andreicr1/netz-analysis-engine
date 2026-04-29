@@ -2865,7 +2865,7 @@ async def fast_track_approval(
     body: FastTrackRequest,
     db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> FastTrackResult:
     """Approve liquid/regulated instruments directly to the universe.
 

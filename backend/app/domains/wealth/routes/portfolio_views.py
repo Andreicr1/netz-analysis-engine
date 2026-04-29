@@ -67,7 +67,7 @@ async def create_view(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> PortfolioViewRead:
     _require_ic_role(actor)
     await _get_portfolio_or_404(db, portfolio_id)

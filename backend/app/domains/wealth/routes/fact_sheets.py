@@ -61,7 +61,7 @@ async def generate_fact_sheet(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> dict[str, Any]:
     """Trigger on-demand fact-sheet generation.
 
@@ -127,9 +127,9 @@ async def generate_fact_sheet(
 
                 fact_job_id = f"fs-{portfolio_id}-{uuid.uuid4().hex[:8]}"
                 async with async_session_factory() as record_db:
-                    await set_rls_context(record_db, uuid.UUID(str(org_id)))
+                    await set_rls_context(record_db, org_id)
                     report_record = WealthGeneratedReport(
-                        organization_id=uuid.UUID(str(org_id)),
+                        organization_id=org_id,
                         portfolio_id=portfolio_id,
                         report_type="fact_sheet",
                         job_id=fact_job_id,
@@ -156,7 +156,7 @@ async def list_fact_sheets(
     portfolio_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> dict[str, Any]:
     """List available fact-sheet PDFs for a portfolio."""
     _require_feature()
@@ -203,7 +203,7 @@ async def download_dd_report_pdf(
     language: Literal["pt", "en"] = Query(default="pt", description="PDF language"),
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> Response:
     """Generate and download a DD Report as PDF."""
     from sqlalchemy.orm import selectinload
@@ -308,7 +308,7 @@ async def download_dd_report_pdf(
 async def download_fact_sheet(
     fact_sheet_path: str,
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> Response:
     """Download a fact-sheet PDF by storage path."""
     _require_feature()

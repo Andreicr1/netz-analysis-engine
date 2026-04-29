@@ -100,7 +100,7 @@ logger = structlog.get_logger()
 
 
 async def _resolve_approval_policy(
-    db: AsyncSession, org_id: str | uuid.UUID,
+    db: AsyncSession, org_id: uuid.UUID,
 ) -> ApprovalPolicy:
     """Resolve the org's approval policy from ConfigService.
 
@@ -111,7 +111,7 @@ async def _resolve_approval_policy(
     try:
         result = await ConfigService(db).get(
             "wealth", "approval_policy",
-            org_id=uuid.UUID(str(org_id)) if not isinstance(org_id, uuid.UUID) else org_id,
+            org_id=org_id,
         )
         cfg = result.value or {}
         return ApprovalPolicy(
@@ -200,7 +200,7 @@ async def create_model_portfolio(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> ModelPortfolioRead:
     """Create a new model portfolio (Phase 5 Task 5.1).
 
@@ -218,8 +218,6 @@ async def create_model_portfolio(
     (the source must belong to the same org — RLS guarantees that).
     """
     _require_ic_role(actor)
-
-    org_uuid = uuid.UUID(str(org_id))
 
     # Optional clone source — fetch first so a 404 happens before any
     # writes hit the DB.
@@ -243,7 +241,7 @@ async def create_model_portfolio(
         source_calibration = src_cal.scalar_one_or_none()
 
     portfolio = ModelPortfolio(
-        organization_id=org_uuid,
+        organization_id=org_id,
         profile=body.profile,
         display_name=body.display_name,
         description=body.description,
@@ -272,7 +270,7 @@ async def create_model_portfolio(
         default_cvar_limit_for_profile,
     )
     calibration = PortfolioCalibration(
-        organization_id=org_uuid,
+        organization_id=org_id,
         portfolio_id=portfolio.id,
         updated_by=actor.actor_id,
         cvar_limit=default_cvar_limit_for_profile(portfolio.profile),
@@ -320,7 +318,7 @@ async def create_model_portfolio(
 async def list_model_portfolios(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> list[ModelPortfolioRead]:
     """List all model portfolios for the organization.
 
@@ -425,7 +423,7 @@ async def apply_portfolio_transition(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> ModelPortfolioRead:
     """Single dispatcher for all state-machine actions (DL3).
 
@@ -584,7 +582,7 @@ async def construct_portfolio(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> ConstructRunAccepted:
     """Kick off an enriched construction run via the Job-or-Stream pattern.
 
@@ -707,7 +705,7 @@ _ADVANCED_FIELDS: tuple[str, ...] = (
 async def _ensure_calibration(
     db: AsyncSession,
     portfolio_id: uuid.UUID,
-    organization_id: uuid.UUID | str,
+    organization_id: uuid.UUID,
     profile: str | None = None,
 ) -> PortfolioCalibration:
     """Fetch-or-create the ``portfolio_calibration`` row for a portfolio.
@@ -733,16 +731,11 @@ async def _ensure_calibration(
     if row is not None:
         return row
 
-    org_uuid = (
-        organization_id
-        if isinstance(organization_id, uuid.UUID)
-        else uuid.UUID(str(organization_id))
-    )
     from app.domains.wealth.models.model_portfolio import (
         default_cvar_limit_for_profile,
     )
     row = PortfolioCalibration(
-        organization_id=org_uuid,
+        organization_id=organization_id,
         portfolio_id=portfolio_id,
         cvar_limit=default_cvar_limit_for_profile(profile),
     )
@@ -761,7 +754,7 @@ async def get_portfolio_calibration(
     portfolio_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> PortfolioCalibrationRead:
     """Read the Builder CalibrationPanel state for a portfolio.
 
@@ -794,7 +787,7 @@ async def update_portfolio_calibration(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> PortfolioCalibrationRead:
     """Persist the Builder CalibrationPanel Apply action.
 
@@ -1212,7 +1205,7 @@ async def get_construction_advice(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> ConstructionAdviceRead:
     """Analyze block coverage gaps and recommend candidate funds.
 
@@ -3457,7 +3450,7 @@ async def list_portfolio_reports(
     limit: int = Query(default=50, ge=1, le=200),
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> dict[str, Any]:
     """Unified report history for a portfolio.
 
@@ -3519,7 +3512,7 @@ async def generate_portfolio_report(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> dict[str, Any]:
     """Unified report generation trigger.
 
@@ -3594,7 +3587,7 @@ async def stream_report_progress(
     job_id: str,
     request: Request,
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> Any:
     """Subscribe to SSE events for a report generation job."""
     from app.core.jobs.sse import create_job_stream
@@ -4860,7 +4853,7 @@ async def propose_allocation(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> JobCreatedResponse:
     """Kick off a propose-mode construction run.
 
@@ -4931,7 +4924,7 @@ async def latest_proposal(
     profile: str,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> LatestProposalResponse:
     """Return the latest ``run_mode='propose'`` run for the profile.
 
@@ -5056,7 +5049,7 @@ async def approve_proposal(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> ApprovalResponse:
     """Approve a propose run for the given profile.
 
@@ -5137,7 +5130,6 @@ async def approve_proposal(
     raw_proposed_bands = telemetry.get("proposed_bands") or []
     proposal_metrics = telemetry.get("proposal_metrics") or {}
     approver = actor.actor_id
-    org_uuid = uuid.UUID(str(org_id))
     now_ts = await db.scalar(_sa_text("SELECT now()"))
 
     # Update strategic_allocation only when the run carries band data
@@ -5177,7 +5169,7 @@ async def approve_proposal(
                 "run_id": run_id,
                 "ts": now_ts,
                 "approver": approver[:100],
-                "org": org_uuid,
+                "org": org_id,
                 "profile": profile_lc,
                 "block_id": bid,
             },
@@ -5196,7 +5188,7 @@ async def approve_proposal(
                AND superseded_at IS NULL
             """
         ),
-        {"ts": now_ts, "org": org_uuid, "profile": profile_lc},
+        {"ts": now_ts, "org": org_id, "profile": profile_lc},
     )
 
     approval_id = uuid.uuid4()
@@ -5216,7 +5208,7 @@ async def approve_proposal(
         {
             "id": approval_id,
             "run_id": run_id,
-            "org": org_uuid,
+            "org": org_id,
             "profile": profile_lc,
             "approver": approver,
             "ts": now_ts,
@@ -5263,7 +5255,7 @@ async def approve_proposal(
     return ApprovalResponse(
         approval_id=approval_id,
         run_id=run_id,
-        organization_id=org_uuid,
+        organization_id=org_id,
         profile=profile_lc,
         approved_at=now_ts,
         approved_by=approver,
@@ -5289,7 +5281,7 @@ async def set_override(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> StrategicAllocationRow:
     """Set or clear override_min/override_max on one block.
 
@@ -5348,7 +5340,7 @@ async def set_override(
             "omin": body.override_min,
             "omax": body.override_max,
             "rationale": body.rationale,
-            "org": uuid.UUID(str(org_id)),
+            "org": org_id,
             "profile": profile_lc,
             "block_id": body.block_id,
         },
@@ -5410,7 +5402,7 @@ async def get_strategic_allocation(
     profile: str,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> StrategicAllocationResponse:
     """Return every canonical ``strategic_allocation`` row for the profile.
 
@@ -5441,8 +5433,6 @@ async def get_strategic_allocation(
             ),
         )
 
-    org_uuid = uuid.UUID(str(org_id))
-
     rows_stmt = _sa_text(
         """
         SELECT block_id, target_weight, drift_min, drift_max,
@@ -5455,7 +5445,7 @@ async def get_strategic_allocation(
     )
     result = await db.execute(
         rows_stmt,
-        {"org": org_uuid, "profile": profile_lc},
+        {"org": org_id, "profile": profile_lc},
     )
     by_block: dict[str, dict[str, Any]] = {
         str(r["block_id"]): dict(r) for r in result.mappings().all()
@@ -5552,7 +5542,7 @@ async def get_strategic_allocation(
         cvar_limit = float(cvar_raw)
 
     return StrategicAllocationResponse(
-        organization_id=org_uuid,
+        organization_id=org_id,
         profile=profile_lc,
         cvar_limit=cvar_limit,
         has_active_approval=has_active_approval,
@@ -5573,7 +5563,7 @@ async def get_approval_history(
     profile: str,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> ApprovalHistoryResponse:
@@ -5596,8 +5586,6 @@ async def get_approval_history(
             ),
         )
 
-    org_uuid = uuid.UUID(str(org_id))
-
     total_stmt = _sa_text(
         """
         SELECT COUNT(*) AS n
@@ -5607,7 +5595,7 @@ async def get_approval_history(
         """
     )
     total = int(
-        (await db.execute(total_stmt, {"org": org_uuid, "profile": profile_lc}))
+        (await db.execute(total_stmt, {"org": org_id, "profile": profile_lc}))
         .scalar_one()
     )
 
@@ -5626,7 +5614,7 @@ async def get_approval_history(
     result = await db.execute(
         rows_stmt,
         {
-            "org": org_uuid,
+            "org": org_id,
             "profile": profile_lc,
             "limit": limit,
             "offset": offset,
@@ -5659,7 +5647,7 @@ async def get_approval_history(
     ]
 
     return ApprovalHistoryResponse(
-        organization_id=org_uuid,
+        organization_id=org_id,
         profile=profile_lc,
         total=total,
         entries=entries,

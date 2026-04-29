@@ -255,8 +255,7 @@ async def _load_style_bias_payload(
     )
 
 
-def _latest_risk_row_stmt(org_id: uuid.UUID | str | None):
-    org_uuid = org_id if isinstance(org_id, uuid.UUID) else uuid.UUID(str(org_id))
+def _latest_risk_row_stmt(org_id: uuid.UUID):
     base = (
         select(
             FundRiskMetrics.instrument_id,
@@ -268,7 +267,7 @@ def _latest_risk_row_stmt(org_id: uuid.UUID | str | None):
             func.row_number().over(
                 partition_by=FundRiskMetrics.instrument_id,
                 order_by=(
-                    case((FundRiskMetrics.organization_id == org_uuid, 0), else_=1),
+                    case((FundRiskMetrics.organization_id == org_id, 0), else_=1),
                     FundRiskMetrics.calc_date.desc(),
                 ),
             ).label("rn"),
@@ -276,7 +275,7 @@ def _latest_risk_row_stmt(org_id: uuid.UUID | str | None):
         .where(
             or_(
                 FundRiskMetrics.organization_id.is_(None),
-                FundRiskMetrics.organization_id == org_uuid,
+                FundRiskMetrics.organization_id == org_id,
             ),
         )
     )
@@ -331,7 +330,7 @@ async def get_research_scatter(
     limit: int = Query(default=80, ge=2, le=200),
     approved_only: bool = Query(default=True),
     db: AsyncSession = Depends(get_db_with_rls),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
     user: CurrentUser = Depends(get_current_user),
 ) -> ResearchScatterResponse:
     risk_sq = _latest_risk_row_stmt(org_id).subquery()

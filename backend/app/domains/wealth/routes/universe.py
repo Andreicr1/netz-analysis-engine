@@ -152,7 +152,7 @@ async def list_universe(
     ),
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> list[UniverseAssetRead]:
     """List all approved and active funds in the investment universe.
 
@@ -322,7 +322,7 @@ async def list_universe(
 async def list_pending_approvals(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> list[UniverseApprovalRead]:
     """List all pending approval requests for the organization.
 
@@ -387,7 +387,7 @@ async def approve_fund(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> UniverseApprovalRead:
     """Approve or watchlist a fund for the investment universe.
 
@@ -479,7 +479,7 @@ async def reject_fund(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> UniverseApprovalRead:
     """Reject a fund from the investment universe.
 

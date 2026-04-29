@@ -78,7 +78,7 @@ async def trigger_outlook(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> ContentSummary:
     """Trigger async Investment Outlook generation."""
     _require_feature()
@@ -128,7 +128,7 @@ async def trigger_flash_report(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> ContentSummary:
     """Trigger async Flash Report generation."""
     _require_feature()
@@ -180,7 +180,7 @@ async def trigger_spotlight(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> ContentSummary:
     """Trigger async Manager Spotlight generation."""
     _require_feature()
@@ -349,7 +349,7 @@ async def stream_content_generation(
     job_id: str,
     request: Request,
     user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ):
     """SSE stream for content generation progress."""
     _require_feature()

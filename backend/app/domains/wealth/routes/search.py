@@ -182,7 +182,7 @@ async def global_search(
     categories: str = Query("funds,managers,documents", description="Comma-separated categories"),
     db: AsyncSession = Depends(get_db_with_rls),
     _user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> GlobalSearchResponse:
     """Fan-out search across funds, managers, and documents."""
     cats = {c.strip() for c in categories.split(",") if c.strip() in VALID_CATEGORIES}

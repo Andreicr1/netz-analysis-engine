@@ -59,7 +59,7 @@ async def apply_rebalance_proposal(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
-    org_id: str = Depends(get_org_id),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> PortfolioSnapshotRead:
     """Apply a pending rebalance proposal.
 
