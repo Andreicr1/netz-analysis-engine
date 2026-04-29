@@ -28,7 +28,7 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from sqlalchemy import Float, Select, String, case, literal, select, text, union_all
+from sqlalchemy import Float, Select, String, case, literal, select, text, union_all, update
 from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -806,15 +806,27 @@ async def trigger_screening(
         ],
     )
 
-    # Mark previous results as not current
-    for inst_dict in instrument_dicts:
+    # Mark previous results as not current — lock + UPDATE before INSERT
+    # to avoid IntegrityError on partial unique index uq_screening_results_current.
+    # SELECT FOR UPDATE serializes concurrent runs for the same instruments;
+    # the UPDATE then clears is_current so the subsequent INSERT succeeds.
+    screened_ids = [d["instrument_id"] for d in instrument_dicts]
+    if screened_ids:
         await db.execute(
-            select(ScreeningResult)
+            select(ScreeningResult.id)
             .where(
-                ScreeningResult.instrument_id == inst_dict["instrument_id"],
+                ScreeningResult.instrument_id.in_(screened_ids),
                 ScreeningResult.is_current.is_(True),
             )
             .with_for_update(),
+        )
+        await db.execute(
+            update(ScreeningResult)
+            .where(
+                ScreeningResult.instrument_id.in_(screened_ids),
+                ScreeningResult.is_current.is_(True),
+            )
+            .values(is_current=False),
         )
 
     # Persist results
