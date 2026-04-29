@@ -31,6 +31,11 @@ logger = structlog.get_logger()
 # Minimum trading days for a fund to be included in backtest
 MIN_HISTORY_DAYS = 252
 
+# Minimum portfolio weight coverage for a stress scenario day to be valid.
+# If the sum of weights for funds with actual return data on a given day
+# falls below this threshold, the scenario is marked as degraded.
+COVERAGE_THRESHOLD = 0.80
+
 
 def compute_backtest(
     db: Session,
@@ -216,16 +221,59 @@ def compute_stress(
                 scenario=scenario.name,
                 available_days=len(scenario_dates),
             )
+            scenario_results.append(
+                ScenarioResult(
+                    name=scenario.name,
+                    start_date=scenario.start_date,
+                    end_date=scenario.end_date,
+                    degraded=True,
+                    degraded_reason=(
+                        f"Insufficient data: {len(scenario_dates)} trading days "
+                        f"available (minimum 5)"
+                    ),
+                ),
+            )
             continue
 
-        # Compute weighted portfolio returns for the scenario window
+        # Compute weighted portfolio returns for the scenario window,
+        # tracking per-day coverage (sum of weights with actual data).
         portfolio_returns = []
+        scenario_degraded = False
+        degraded_reason: str | None = None
         for d in scenario_dates:
             day_return = 0.0
+            day_coverage = 0.0
             for fid, w in zip(fund_ids, weights, strict=False):
-                r = returns_lookup.get((fid, d), 0.0)
-                day_return += w * r
+                r = returns_lookup.get((fid, d))
+                if r is not None:
+                    day_return += w * r
+                    day_coverage += w
+            if day_coverage < COVERAGE_THRESHOLD:
+                scenario_degraded = True
+                degraded_reason = (
+                    f"Coverage {day_coverage:.0%} < {COVERAGE_THRESHOLD:.0%} on {d}"
+                )
+                logger.warning(
+                    "stress_coverage_below_threshold",
+                    scenario=scenario.name,
+                    date=str(d),
+                    coverage=round(day_coverage, 4),
+                    threshold=COVERAGE_THRESHOLD,
+                )
+                break
             portfolio_returns.append(day_return)
+
+        if scenario_degraded:
+            scenario_results.append(
+                ScenarioResult(
+                    name=scenario.name,
+                    start_date=scenario.start_date,
+                    end_date=scenario.end_date,
+                    degraded=True,
+                    degraded_reason=degraded_reason,
+                ),
+            )
+            continue
 
         pr = np.array(portfolio_returns)
         cum = np.cumprod(1.0 + pr)

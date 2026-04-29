@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date as d
+from datetime import timedelta
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -13,6 +17,7 @@ from vertical_engines.wealth.model_portfolio.models import (
     LiveNAV,
     OptimizationMeta,
     PortfolioComposition,
+    ScenarioResult,
     StressResult,
 )
 from vertical_engines.wealth.model_portfolio.portfolio_builder import (
@@ -598,6 +603,138 @@ class TestPortfolioMetricsF01:
         assert result.max_drawdown <= -0.099, (
             f"max_drawdown should reflect the day-1 10% loss, got {result.max_drawdown}"
         )
+
+
+class TestHistoricalStressCoverage:
+    """PR-Q113: Historical stress must detect missing fund history (C-06)."""
+
+    def test_historical_stress_handles_missing_funds(self):
+        """Portfolio with 100% in fund incepted 2015; replay 2008 GFC scenario.
+
+        The fund has zero rows for 2008 dates, so coverage is 0%.
+        The scenario should be marked degraded=True with max_drawdown=None.
+        """
+        from vertical_engines.wealth.model_portfolio.track_record import compute_stress
+
+        young_fund_id = uuid.uuid4()
+
+        # Build mock DB: fund only has NAV from 2015 onward.
+        # GFC scenario runs 2007-10-01 to 2009-03-31 — fund has ZERO rows there.
+        # COVID scenario runs 2020-02-15 to 2020-04-30 — fund HAS rows.
+        covid_start = d(2020, 2, 15)
+        covid_end = d(2020, 4, 30)
+        covid_dates = []
+        current = covid_start
+        while current <= covid_end:
+            if current.weekday() < 5:  # weekdays only
+                covid_dates.append(current)
+            current += timedelta(days=1)
+
+        mock_rows = [
+            SimpleNamespace(
+                instrument_id=young_fund_id,
+                nav_date=dt,
+                return_1d=-0.01,  # -1% per day
+            )
+            for dt in covid_dates
+        ]
+
+        mock_result = MagicMock()
+        mock_result.__iter__ = lambda self: iter(mock_rows)
+
+        mock_db = MagicMock()
+        mock_db.execute.return_value = mock_result
+
+        result = compute_stress(
+            mock_db,
+            fund_ids=[young_fund_id],
+            weights=[1.0],
+        )
+
+        # GFC scenario: fund has no data → should be degraded
+        gfc = next((s for s in result.scenarios if s.name == "2008_gfc"), None)
+        assert gfc is not None, "GFC scenario should still appear in results"
+        assert gfc.degraded is True, "GFC should be degraded — fund has no 2008 data"
+        assert gfc.max_drawdown is None, "Degraded scenario should not report drawdown"
+        assert gfc.portfolio_return is None, "Degraded scenario should not report return"
+        assert gfc.degraded_reason is not None
+
+        # COVID scenario: fund has full data → should NOT be degraded
+        covid = next((s for s in result.scenarios if s.name == "2020_covid"), None)
+        assert covid is not None, "COVID scenario should be present"
+        assert covid.degraded is False
+        assert covid.max_drawdown is not None
+        assert covid.portfolio_return is not None
+
+    def test_full_coverage_stress_not_degraded(self):
+        """A fund with data spanning all scenarios should produce no degraded results."""
+        from vertical_engines.wealth.model_portfolio.stress_scenarios import SCENARIOS
+        from vertical_engines.wealth.model_portfolio.track_record import compute_stress
+
+        fund_id = uuid.uuid4()
+
+        # Generate rows for ALL scenario windows
+        earliest = min(s.start_date for s in SCENARIOS)
+        latest = max(s.end_date for s in SCENARIOS)
+
+        all_dates = []
+        current = earliest
+        while current <= latest:
+            if current.weekday() < 5:
+                all_dates.append(current)
+            current += timedelta(days=1)
+
+        mock_rows = [
+            SimpleNamespace(
+                instrument_id=fund_id,
+                nav_date=dt,
+                return_1d=0.001,  # +0.1% per day
+            )
+            for dt in all_dates
+        ]
+
+        mock_result = MagicMock()
+        mock_result.__iter__ = lambda self: iter(mock_rows)
+
+        mock_db = MagicMock()
+        mock_db.execute.return_value = mock_result
+
+        result = compute_stress(
+            mock_db,
+            fund_ids=[fund_id],
+            weights=[1.0],
+        )
+
+        assert len(result.scenarios) == len(SCENARIOS)
+        for s in result.scenarios:
+            assert s.degraded is False, f"Scenario {s.name} should not be degraded"
+            assert s.portfolio_return is not None
+            assert s.max_drawdown is not None
+
+    def test_scenario_result_degraded_defaults(self):
+        """ScenarioResult backwards compatibility — degraded defaults to False."""
+        # Old-style creation (no degraded args) — should default gracefully
+        sr = ScenarioResult(
+            name="test",
+            start_date=d(2020, 1, 1),
+            end_date=d(2020, 12, 31),
+            portfolio_return=-0.10,
+            max_drawdown=-0.15,
+        )
+        assert sr.degraded is False
+        assert sr.degraded_reason is None
+
+        # Degraded creation
+        sr_deg = ScenarioResult(
+            name="test_deg",
+            start_date=d(2020, 1, 1),
+            end_date=d(2020, 12, 31),
+            degraded=True,
+            degraded_reason="Low coverage",
+        )
+        assert sr_deg.degraded is True
+        assert sr_deg.portfolio_return is None
+        assert sr_deg.max_drawdown is None
 
 
 class TestQuantAnalyzerRewired:
