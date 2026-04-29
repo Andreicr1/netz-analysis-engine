@@ -15,11 +15,13 @@ import asyncio
 import uuid
 
 import structlog
+from sqlalchemy import select as sa_select
 from sqlalchemy import text
 
 from app.core.db.audit import write_audit_event
 from app.core.db.engine import async_session_factory as async_session
 from app.core.tenancy.middleware import set_rls_context
+from app.domains.wealth.models.rebalance import RebalanceEvent
 from app.domains.wealth.services.quant_queries import compute_drift, create_system_rebalance_event
 
 logger = structlog.get_logger()
@@ -53,8 +55,6 @@ async def run_drift_check(org_id: uuid.UUID) -> dict[str, str]:
         try:
             # Load config once for all profiles
             try:
-                from sqlalchemy import select as sa_select
-
                 from app.core.config.models import VerticalConfigDefault
 
                 cfg_result = await db.execute(
@@ -81,6 +81,23 @@ async def run_drift_check(org_id: uuid.UUID) -> dict[str, str]:
                 )
 
                 if report.rebalance_recommended:
+                    # Dedupe: skip if a pending drift_rebalance already exists
+                    existing = await db.execute(
+                        sa_select(RebalanceEvent.event_id).where(
+                            RebalanceEvent.profile == profile,
+                            RebalanceEvent.event_type == "drift_rebalance",
+                            RebalanceEvent.status == "pending",
+                        ).limit(1),
+                    )
+                    if existing.scalar_one_or_none() is not None:
+                        logger.info(
+                            "drift_rebalance_already_pending",
+                            profile=profile,
+                        )
+                        await db.commit()
+                        await set_rls_context(db, org_id)
+                        continue
+
                     # Build drift detail for trigger reason
                     drifted_blocks = ", ".join(
                         f"{d.block_id}={d.absolute_drift:+.1%}"
