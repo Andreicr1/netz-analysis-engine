@@ -148,6 +148,13 @@ async def _do_ingest(db, lookback_days: int) -> dict[str, int | list[str]]:
             tickers=unique_tickers,
         )
         return {"blocks_updated": 0, "rows_upserted": 0, "stale_blocks": [], "skipped_tickers": unique_tickers}
+    except Exception as e:  # Q107: fail-soft on non-gate exceptions (parse / runtime)
+        logger.error(
+            "Tiingo batch download raised unexpected error",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+        return {"blocks_updated": 0, "rows_upserted": 0, "stale_blocks": [], "skipped_tickers": unique_tickers}
 
     if hist is None or not hist:
         logger.error("No data returned from Tiingo batch download")
