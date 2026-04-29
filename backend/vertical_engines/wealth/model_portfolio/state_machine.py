@@ -56,7 +56,7 @@ State = str  # 'draft' | 'constructed' | ... — runtime check via TRANSITIONS
 #: ``draft``).
 TRANSITIONS: Final[dict[State, set[State]]] = {
     "draft":       {"constructed", "archived"},
-    "constructed": {"validated", "rejected", "draft"},
+    "constructed": {"validated", "rejected", "draft", "approved"},
     "validated":   {"approved", "draft"},
     "approved":    {"live", "draft"},
     "live":        {"paused", "archived"},
@@ -184,9 +184,11 @@ def compute_allowed_actions(
         actions.append(ACTION_REBUILD_DRAFT)
 
     elif state == "validated":
-        # ``validated`` only exists if validation already passed; allow
-        # both approval paths (normal + self-approval flagged).
-        actions.append(ACTION_APPROVE)
+        # Gate on validation.passed — a portfolio may reach ``validated``
+        # with a failing gate (constructed→validated always allowed); the
+        # approve action must only appear when the gate actually passed.
+        if validation is not None and validation.passed:
+            actions.append(ACTION_APPROVE)
         actions.append(ACTION_REBUILD_DRAFT)
 
     elif state == "approved":
