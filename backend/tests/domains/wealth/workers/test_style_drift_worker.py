@@ -8,10 +8,14 @@ a drift signal and which are skipped.
 from __future__ import annotations
 
 from datetime import date
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from app.domains.wealth.services.style_drift_analyzer import (
     StyleDriftResult,
 )
+from app.domains.wealth.workers import style_drift_worker as sdw_mod
 from app.domains.wealth.workers.style_drift_worker import (
     _process_holdings_quarters,
 )
@@ -109,3 +113,46 @@ class TestSuccessPath:
         assert out.status == "drift_detected"
         # Asset mix and FI subtype should be the top drivers.
         assert "asset_mix" in out.drivers[:2]
+
+
+# ── Audit trail test (PR-Q126) ─────────────────────────────────────
+
+
+class TestAuditTrail:
+    @pytest.mark.asyncio
+    async def test_style_drift_worker_writes_audit_event(self):
+        """PR-Q126: _persist calls write_audit_event with allow_global=True."""
+        fake_result = StyleDriftResult(
+            instrument_id="0001234567",
+            current_date=date(2026, 3, 31),
+            historical_window_quarters=4,
+            composite_drift=0.35,
+            asset_mix_drift=0.40,
+            fi_subtype_drift=0.10,
+            geography_drift=0.05,
+            issuer_category_drift=0.02,
+            status="drift_detected",
+            severity="severe",
+            drivers=["asset_mix", "fi_subtype"],
+        )
+
+        mock_db = AsyncMock()
+        mock_write_audit = AsyncMock()
+
+        with patch.object(sdw_mod, "write_audit_event", mock_write_audit):
+            await sdw_mod._persist(
+                mock_db,
+                fake_result,
+                cik="0001234567",
+                fund_name="Test Fund",
+            )
+
+        mock_write_audit.assert_called_once()
+        _, kwargs = mock_write_audit.call_args
+        assert kwargs["action"] == "holdings_drift.alert_emitted"
+        assert kwargs["entity_type"] == "holdings_drift_alert"
+        assert kwargs["entity_id"] == "0001234567"
+        assert kwargs["actor_id"] == "system:style_drift_worker"
+        assert kwargs["allow_global"] is True
+        assert kwargs["after"]["severity"] == "severe"
+        assert kwargs["after"]["composite_drift"] == 0.35

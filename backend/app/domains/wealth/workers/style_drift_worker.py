@@ -43,6 +43,7 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db.audit import write_audit_event
 from app.core.db.engine import async_session_factory as async_session
 from app.domains.wealth.services.holdings_analyzer import (
     analyze_holdings,
@@ -272,6 +273,20 @@ async def _persist(
             "drivers": _json_dumps(result.drivers),
             "detected_at": datetime.now(UTC),
         },
+    )
+    await write_audit_event(
+        db,
+        action="holdings_drift.alert_emitted",
+        entity_type="holdings_drift_alert",
+        entity_id=str(cik),
+        actor_id="system:style_drift_worker",
+        before=None,
+        after={
+            "cik": cik,
+            "severity": result.severity,
+            "composite_drift": float(result.composite_drift),
+        },
+        allow_global=True,
     )
 
 
