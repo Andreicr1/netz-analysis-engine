@@ -7,6 +7,7 @@ Constraints: weights sum to 1, per-block bounds, portfolio CVaR <= limit, long-o
 
 import asyncio
 import time
+import warnings
 import zlib
 from dataclasses import dataclass, field
 from datetime import date as date_type
@@ -657,19 +658,45 @@ async def optimize_fund_portfolio(
             cs.append(blk_sum <= bc.max_weight)
         return cs
 
+    def _solve_with_warning_capture(
+        prob: cp.Problem, solver_name: str, **kwargs: Any,
+    ) -> None:
+        """Run prob.solve() while capturing solver accuracy warnings."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", UserWarning)
+            prob.solve(solver=solver_name, verbose=False, **kwargs)  # type: ignore[no-untyped-call]
+
+        for w in caught:
+            msg = str(w.message)
+            if "Solution may be inaccurate" in msg:
+                logger.warning(
+                    "optimizer_solver_accuracy_warning",
+                    category="solver_accuracy",
+                    solver=str(solver_name),
+                    status=str(prob.status) if prob.status else None,
+                    message=msg,
+                )
+            else:
+                # Re-emit unrelated UserWarnings — DO NOT swallow
+                warnings.warn_explicit(
+                    w.message, w.category, w.filename, w.lineno,
+                )
+
     async def _solve_problem(prob: cp.Problem) -> str | None:
         """Solve with CLARABEL → SCS fallback. Returns status."""
         def _do() -> None:
             try:
-                prob.solve(solver=cp.CLARABEL, verbose=False)  # type: ignore[no-untyped-call]
+                _solve_with_warning_capture(prob, cp.CLARABEL)
                 if prob.status not in ("optimal", "optimal_inaccurate"):
                     # CLARABEL failed — try SCS with looser tolerances
-                    prob.solve(solver=cp.SCS, verbose=False,  # type: ignore[no-untyped-call]
-                               eps=1e-5, max_iters=10000)
+                    _solve_with_warning_capture(
+                        prob, cp.SCS, eps=1e-5, max_iters=10000,
+                    )
             except cp.SolverError:
                 try:
-                    prob.solve(solver=cp.SCS, verbose=False,  # type: ignore[no-untyped-call]
-                               eps=1e-5, max_iters=10000)
+                    _solve_with_warning_capture(
+                        prob, cp.SCS, eps=1e-5, max_iters=10000,
+                    )
                 except cp.SolverError:
                     pass
         await asyncio.to_thread(_do)

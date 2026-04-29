@@ -469,3 +469,36 @@ async def test_construction_creates_audit_event_row():
             assert kwargs["allow_global"] is False
             assert kwargs["before"] == {"state": from_state}
             assert kwargs["after"]["state"] == "constructed"
+
+
+# ── PR-Q123: transition() updates state_changed_at ────────────────
+
+
+@pytest.mark.asyncio
+async def test_transition_updates_state_changed_at():
+    """PR-Q123: transition() must include state_changed_at=func.now() in the
+    UPDATE statement so recency semantics are preserved."""
+    pid = uuid.uuid4()
+    org_id = uuid.uuid4()
+    db, _ = _mock_db_for_transition(pid, org_id, from_state="draft")
+
+    with patch(
+        "vertical_engines.wealth.model_portfolio.state_machine.write_audit_event",
+        new_callable=AsyncMock,
+    ):
+        await transition(
+            db,
+            portfolio_id=pid,
+            to_state="constructed",
+            actor_id="actor_1",
+        )
+
+    # The UPDATE call is the second db.execute() call (after SELECT FOR UPDATE)
+    update_call = db.execute.call_args_list[1]
+    update_stmt = update_call.args[0]
+    # Extract the compiled parameters from the UPDATE statement
+    compiled = update_stmt.compile()
+    param_keys = set(compiled.params.keys())
+    assert "state_changed_at" in param_keys or any(
+        "state_changed_at" in str(c) for c in update_stmt._values
+    ), "transition() must set state_changed_at in the UPDATE"

@@ -13,6 +13,7 @@ from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from app.domains.wealth.services.quant_queries import (
@@ -74,6 +75,9 @@ async def test_compute_fund_level_inputs_happy_path_20_fund_synthetic() -> None:
     ), patch(
         "app.domains.wealth.services.quant_queries._maybe_regime_condition_cov",
         return_value=None,
+    ), patch(
+        "app.domains.wealth.services.quant_queries.build_fundamental_factor_returns",
+        new=AsyncMock(return_value=pd.DataFrame()),
     ):
         result = await compute_fund_level_inputs(
             db, ids, profile="balanced", as_of_date=date(2026, 4, 14),
@@ -136,6 +140,9 @@ async def test_compute_fund_level_inputs_collinear_funds_raises() -> None:
     ), patch(
         "app.domains.wealth.services.quant_queries._maybe_regime_condition_cov",
         return_value=None,
+    ), patch(
+        "app.domains.wealth.services.quant_queries.build_fundamental_factor_returns",
+        new=AsyncMock(return_value=pd.DataFrame()),
     ):
         with pytest.raises(IllConditionedCovarianceError):
             await compute_fund_level_inputs(
@@ -163,6 +170,9 @@ async def test_compute_fund_level_inputs_insufficient_data_raises_value_error() 
     ), patch(
         "app.domains.wealth.services.quant_queries._maybe_regime_condition_cov",
         return_value=None,
+    ), patch(
+        "app.domains.wealth.services.quant_queries.build_fundamental_factor_returns",
+        new=AsyncMock(return_value=pd.DataFrame()),
     ):
         with pytest.raises(ValueError, match="Need ≥2 funds"):
             await compute_fund_level_inputs(
@@ -190,6 +200,9 @@ async def test_compute_fund_level_inputs_historical_1y_mode_does_not_call_thbb()
     ), patch(
         "app.domains.wealth.services.quant_queries._maybe_regime_condition_cov",
         return_value=None,
+    ), patch(
+        "app.domains.wealth.services.quant_queries.build_fundamental_factor_returns",
+        new=AsyncMock(return_value=pd.DataFrame()),
     ):
         result = await compute_fund_level_inputs(
             db, ids, mu_prior="historical_1y",
