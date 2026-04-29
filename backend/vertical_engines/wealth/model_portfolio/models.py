@@ -171,7 +171,7 @@ class CandidateFund:
     correlation_with_portfolio: float
     overlap_pct: float
     projected_cvar_95: float | None
-    cvar_improvement: float  # (current - projected) / abs(current)
+    cvar_improvement: float  # (projected - current) / abs(current); positive = better
     in_universe: bool
     external_id: str
     has_holdings_data: bool = True

@@ -343,6 +343,53 @@ class TestProjectCvarForCandidates:
         assert result[0].projected_cvar_95 is not None
         assert result[0].cvar_improvement != 0.0
 
+    def test_cvar_improvement_sign(self):
+        """PR-Q111: positive improvement when CVaR improves (less negative)."""
+        rng = np.random.default_rng(99)
+        port_ret = rng.normal(0.0003, 0.015, size=(252, 2))
+        current_weights = np.array([0.5, 0.5])
+
+        c1 = CandidateFund(
+            block_id="fi_us_aggregate",
+            instrument_id="fund-sign-test",
+            name="Bond Fund Sign",
+            ticker="BST",
+            strategy_label="Fixed Income",
+            volatility_1y=0.04,
+            correlation_with_portfolio=-0.1,
+            overlap_pct=0.0,
+            projected_cvar_95=None,
+            cvar_improvement=0.0,
+            in_universe=False,
+            external_id="CIK-SIGN",
+        )
+
+        # Low-vol bond returns — should reduce portfolio CVaR
+        cand_returns = {"fund-sign-test": rng.normal(0.0001, 0.003, size=252)}
+
+        # Use a known current_cvar = -0.08 (8% loss).
+        # Adding a low-vol bond should produce projected > -0.08 (less negative).
+        result = project_cvar_for_candidates(
+            [c1], port_ret, cand_returns, current_weights,
+            {"fi_us_aggregate": 0.30},
+            current_cvar=-0.08,
+        )
+
+        assert len(result) == 1
+        proj = result[0].projected_cvar_95
+        assert proj is not None
+
+        # projected is less negative than current → improvement must be positive
+        if proj > -0.08:
+            assert result[0].cvar_improvement > 0, (
+                f"CVaR improved ({proj:.4f} > -0.08) but cvar_improvement "
+                f"is {result[0].cvar_improvement} (should be positive)"
+            )
+
+        # Verify the formula directly: (projected - current) / abs(current)
+        expected = round((proj - (-0.08)) / abs(-0.08), 4)
+        assert result[0].cvar_improvement == expected
+
 
 # ---------------------------------------------------------------------------
 # 5. Minimum Viable Set
