@@ -1,10 +1,13 @@
-"""PR-Q128 hotfix #2: migration 0196 dedupe DELETE tiebreak.
+"""PR-Q128: migration 0196 dedupe DELETE tiebreak + event_type scoping.
 
 Validates that the DELETE ... USING pattern in 0196 correctly deduplicates
 pending rebalance_events even when multiple duplicates share the exact
 same created_at timestamp.  The tiebreak uses event_id (UUID, lexicographic)
 so that exactly one row -- the one with the largest (latest ts, then largest
 UUID) -- survives.
+
+Also validates that ONLY drift_rebalance events are affected — manual and
+other event_type pending rows must be preserved unconditionally.
 
 This is a pure-logic test that simulates the SQL predicate in Python,
 avoiding the need for a live database.
@@ -36,10 +39,11 @@ def _apply_dedupe_delete(rows: list[_Row]) -> list[_Row]:
     For each pair (re_old, re_new) that matches the WHERE clause,
     re_old is marked for deletion.  Returns the surviving rows.
 
-    The predicate (from the fixed migration):
+    The predicate (from the fixed migration — scoped to drift_rebalance only):
         re_old.organization_id = re_new.organization_id
         AND re_old.profile = re_new.profile
-        AND re_old.event_type = re_new.event_type
+        AND re_old.event_type = 'drift_rebalance'
+        AND re_new.event_type = 'drift_rebalance'
         AND re_old.status = 'pending'
         AND re_new.status = 'pending'
         AND re_old.event_id != re_new.event_id
@@ -58,7 +62,8 @@ def _apply_dedupe_delete(rows: list[_Row]) -> list[_Row]:
             if (
                 re_old.organization_id == re_new.organization_id
                 and re_old.profile == re_new.profile
-                and re_old.event_type == re_new.event_type
+                and re_old.event_type == "drift_rebalance"
+                and re_new.event_type == "drift_rebalance"
                 and re_old.status == "pending"
                 and re_new.status == "pending"
                 and re_old.event_id != re_new.event_id
@@ -207,3 +212,103 @@ def test_migration_treats_profiles_independently():
             assert r.event_id == ids_a[1]
         else:
             assert r.event_id == ids_b[1]
+
+
+# -- Test: manual pending events are preserved ----------------------------
+
+
+def test_migration_preserves_manual_pending_events():
+    """2 manual pending for same org/profile -> both survive (not drift_rebalance)."""
+    org_id = uuid.uuid4()
+    ts = datetime(2026, 4, 29, 12, 0, 0, tzinfo=timezone.utc)
+
+    id1, id2 = uuid.uuid4(), uuid.uuid4()
+    rows = [
+        _Row(id1, org_id, "conservative", "manual", "pending", ts),
+        _Row(id2, org_id, "conservative", "manual", "pending", ts),
+    ]
+
+    survivors = _apply_dedupe_delete(rows)
+
+    assert len(survivors) == 2, (
+        "Manual pending events must NOT be deduped by migration — "
+        "only drift_rebalance is scoped"
+    )
+    assert {r.event_id for r in survivors} == {id1, id2}
+
+
+# -- Test: scheduled_rebalance pending events are preserved ----------------
+
+
+def test_migration_preserves_scheduled_rebalance_pending_events():
+    """2 scheduled_rebalance pending for same org/profile -> both survive."""
+    org_id = uuid.uuid4()
+    ts = datetime(2026, 4, 29, 12, 0, 0, tzinfo=timezone.utc)
+
+    id1, id2 = uuid.uuid4(), uuid.uuid4()
+    rows = [
+        _Row(id1, org_id, "moderate", "scheduled_rebalance", "pending", ts),
+        _Row(id2, org_id, "moderate", "scheduled_rebalance", "pending", ts),
+    ]
+
+    survivors = _apply_dedupe_delete(rows)
+
+    assert len(survivors) == 2, (
+        "scheduled_rebalance pending events must NOT be deduped"
+    )
+
+
+# -- Test: only drift_rebalance is deduped ---------------------------------
+
+
+def test_migration_only_dedups_drift_rebalance():
+    """3 drift_rebalance pending + 2 manual pending -> 1 drift + 2 manual survive."""
+    org_id = uuid.uuid4()
+    ts = datetime(2026, 4, 29, 12, 0, 0, tzinfo=timezone.utc)
+
+    drift_ids = sorted([uuid.uuid4() for _ in range(3)], key=str)
+    manual_ids = [uuid.uuid4(), uuid.uuid4()]
+
+    rows = [
+        _Row(drift_ids[0], org_id, "conservative", "drift_rebalance", "pending", ts),
+        _Row(drift_ids[1], org_id, "conservative", "drift_rebalance", "pending", ts),
+        _Row(drift_ids[2], org_id, "conservative", "drift_rebalance", "pending", ts),
+        _Row(manual_ids[0], org_id, "conservative", "manual", "pending", ts),
+        _Row(manual_ids[1], org_id, "conservative", "manual", "pending", ts),
+    ]
+
+    survivors = _apply_dedupe_delete(rows)
+
+    assert len(survivors) == 3, (
+        "Expected 1 drift_rebalance + 2 manual survivors, "
+        f"got {len(survivors)}"
+    )
+    drift_survivors = [r for r in survivors if r.event_type == "drift_rebalance"]
+    manual_survivors = [r for r in survivors if r.event_type == "manual"]
+    assert len(drift_survivors) == 1
+    assert drift_survivors[0].event_id == drift_ids[2]  # largest UUID
+    assert len(manual_survivors) == 2
+
+
+# -- Test: unique index scoping (structural) --------------------------------
+
+
+def test_migration_index_scoped_to_drift_rebalance():
+    """Structural: migration SQL must scope index to drift_rebalance only."""
+    from pathlib import Path
+
+    migration_path = Path(__file__).resolve().parents[2] / (
+        "app/core/db/migrations/versions/0196_q128_rebalance_pending_dedupe.py"
+    )
+    source = migration_path.read_text(encoding="utf-8")
+
+    assert "uq_rebalance_event_pending_drift_per_profile" in source, (
+        "Index name must reflect drift-only scope"
+    )
+    assert "event_type = 'drift_rebalance'" in source, (
+        "Index WHERE clause must restrict to drift_rebalance"
+    )
+    # Must NOT have a generic 'pending' only filter
+    assert "uq_rebalance_event_pending_per_profile" not in source, (
+        "Old generic index name must not be present"
+    )
