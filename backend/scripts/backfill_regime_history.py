@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import async_session_factory as async_session
+from app.core.db.engine import engine
 from app.domains.wealth.models.macro import MacroData
 from app.domains.wealth.workers.regime_fit import (
     MIN_VIX_OBS,
@@ -70,9 +71,9 @@ async def main() -> None:
 
     logger.info("HMM fit complete, persisting regime history", n_obs=n_obs)
 
-    async with async_session() as db:
+    async with engine.connect() as conn:
         n_persisted = await _persist_regime_history(
-            db, dates_list, p_low_vol_series, p_high_vol_series, vix_or_none,
+            conn, dates_list, p_low_vol_series, p_high_vol_series, vix_or_none,
         )
 
     # Log regime distribution

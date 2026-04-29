@@ -1,9 +1,10 @@
-"""Tests for regime_fit advisory lock acquire/release (PR-Q99).
+"""Tests for regime_fit advisory lock acquire/release (PR-Q99, Q109).
 
 Validates:
   C-04: LOCK_ID 900_026 is acquired before run_regime_fit body executes
   C-04: Lock is released in finally (even on exception or cancellation)
   C-04: Concurrent invocation returns {"status": "skipped", "reason": "lock_held"}
+  Q109: Advisory lock acquired and released on the SAME pinned connection
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from app.domains.wealth.workers import regime_fit as mod
 
 
 class _FakeResult:
-    """Minimal result proxy for mocked session.execute()."""
+    """Minimal result proxy for mocked connection.execute()."""
 
     def __init__(self, scalar_value=None):
         self._scalar = scalar_value
@@ -30,8 +31,8 @@ class _FakeResult:
         return self._scalar
 
 
-class _FakeSession:
-    """Fake async session that tracks execute calls for lock assertions."""
+class _FakeConnection:
+    """Fake async connection that tracks execute calls for lock assertions."""
 
     def __init__(self, *, lock_acquired: bool = True):
         self._lock_acquired = lock_acquired
@@ -53,14 +54,17 @@ class _FakeSession:
         pass
 
 
-def _make_session_factory(session: _FakeSession):
-    """Build an async context manager factory that yields the given session."""
+class _FakeEngine:
+    """Fake engine whose connect() returns a fake connection context manager."""
+
+    def __init__(self, conn: _FakeConnection):
+        self._conn = conn
+        self.connect_call_count = 0
 
     @asynccontextmanager
-    async def factory():
-        yield session
-
-    return factory
+    async def connect(self):
+        self.connect_call_count += 1
+        yield self._conn
 
 
 # Sample VIX data — 300 points (> MIN_VIX_OBS=252) for tests that need fitting
@@ -75,16 +79,17 @@ _SAMPLE_VIX_DATES = [
 @pytest.mark.asyncio
 async def test_regime_fit_skips_when_lock_held():
     """Lock not acquired -> returns {"status": "skipped", "reason": "lock_held"}."""
-    session = _FakeSession(lock_acquired=False)
+    conn = _FakeConnection(lock_acquired=False)
+    fake_engine = _FakeEngine(conn)
 
-    with patch.object(mod, "async_session", _make_session_factory(session)):
+    with patch.object(mod, "engine", fake_engine):
         result = await mod.run_regime_fit()
 
     assert result == {"status": "skipped", "reason": "lock_held"}
 
     # Lock was attempted but not acquired — no unlock should be called
-    lock_sqls = [sql for sql in session.executed_sql if "pg_try_advisory_lock" in sql]
-    unlock_sqls = [sql for sql in session.executed_sql if "pg_advisory_unlock" in sql]
+    lock_sqls = [sql for sql in conn.executed_sql if "pg_try_advisory_lock" in sql]
+    unlock_sqls = [sql for sql in conn.executed_sql if "pg_advisory_unlock" in sql]
     assert len(lock_sqls) == 1, "Lock must be attempted once"
     assert len(unlock_sqls) == 0, "Lock was never acquired — unlock must not be called"
 
@@ -95,10 +100,11 @@ async def test_regime_fit_skips_when_lock_held():
 @pytest.mark.asyncio
 async def test_regime_fit_releases_lock_on_exception():
     """Advisory lock is released even when _fetch_vix_series_with_dates raises."""
-    session = _FakeSession(lock_acquired=True)
+    conn = _FakeConnection(lock_acquired=True)
+    fake_engine = _FakeEngine(conn)
 
     with (
-        patch.object(mod, "async_session", _make_session_factory(session)),
+        patch.object(mod, "engine", fake_engine),
         patch.object(
             mod,
             "_fetch_vix_series_with_dates",
@@ -110,8 +116,8 @@ async def test_regime_fit_releases_lock_on_exception():
             await mod.run_regime_fit()
 
     # Even after exception, lock must have been released
-    lock_sqls = [sql for sql in session.executed_sql if "pg_try_advisory_lock" in sql]
-    unlock_sqls = [sql for sql in session.executed_sql if "pg_advisory_unlock" in sql]
+    lock_sqls = [sql for sql in conn.executed_sql if "pg_try_advisory_lock" in sql]
+    unlock_sqls = [sql for sql in conn.executed_sql if "pg_advisory_unlock" in sql]
     assert len(lock_sqls) == 1, "Lock must be acquired once"
     assert len(unlock_sqls) == 1, "Lock must be released even on exception"
 
@@ -122,10 +128,11 @@ async def test_regime_fit_releases_lock_on_exception():
 @pytest.mark.asyncio
 async def test_regime_fit_releases_lock_on_cancellation():
     """Advisory lock is released on asyncio.CancelledError (BaseException)."""
-    session = _FakeSession(lock_acquired=True)
+    conn = _FakeConnection(lock_acquired=True)
+    fake_engine = _FakeEngine(conn)
 
     with (
-        patch.object(mod, "async_session", _make_session_factory(session)),
+        patch.object(mod, "engine", fake_engine),
         patch.object(
             mod,
             "_fetch_vix_series_with_dates",
@@ -137,7 +144,7 @@ async def test_regime_fit_releases_lock_on_cancellation():
             await mod.run_regime_fit()
 
     # CancelledError is a BaseException — try/finally must still release lock
-    unlock_sqls = [sql for sql in session.executed_sql if "pg_advisory_unlock" in sql]
+    unlock_sqls = [sql for sql in conn.executed_sql if "pg_advisory_unlock" in sql]
     assert len(unlock_sqls) == 1, "Lock must be released even on CancelledError"
 
 
@@ -147,10 +154,11 @@ async def test_regime_fit_releases_lock_on_cancellation():
 @pytest.mark.asyncio
 async def test_regime_fit_acquires_and_releases_lock_on_success():
     """Normal run: lock acquired, body runs, lock released."""
-    session = _FakeSession(lock_acquired=True)
+    conn = _FakeConnection(lock_acquired=True)
+    fake_engine = _FakeEngine(conn)
 
     with (
-        patch.object(mod, "async_session", _make_session_factory(session)),
+        patch.object(mod, "engine", fake_engine),
         patch.object(
             mod,
             "_fetch_vix_series_with_dates",
@@ -179,14 +187,14 @@ async def test_regime_fit_acquires_and_releases_lock_on_success():
 
     assert result["status"] == "completed"
 
-    lock_sqls = [sql for sql in session.executed_sql if "pg_try_advisory_lock" in sql]
-    unlock_sqls = [sql for sql in session.executed_sql if "pg_advisory_unlock" in sql]
+    lock_sqls = [sql for sql in conn.executed_sql if "pg_try_advisory_lock" in sql]
+    unlock_sqls = [sql for sql in conn.executed_sql if "pg_advisory_unlock" in sql]
     assert len(lock_sqls) == 1, "Lock must be acquired once"
     assert len(unlock_sqls) == 1, "Lock must be released once"
 
     # Unlock must come after lock
-    lock_idx = next(i for i, sql in enumerate(session.executed_sql) if "pg_try_advisory_lock" in sql)
-    unlock_idx = next(i for i, sql in enumerate(session.executed_sql) if "pg_advisory_unlock" in sql)
+    lock_idx = next(i for i, sql in enumerate(conn.executed_sql) if "pg_try_advisory_lock" in sql)
+    unlock_idx = next(i for i, sql in enumerate(conn.executed_sql) if "pg_advisory_unlock" in sql)
     assert unlock_idx > lock_idx, "Unlock must come after lock acquisition"
 
 
@@ -196,39 +204,79 @@ async def test_regime_fit_acquires_and_releases_lock_on_success():
 @pytest.mark.asyncio
 async def test_regime_fit_uses_correct_lock_id():
     """Lock SQL must contain LOCK_ID = 900026."""
-    session = _FakeSession(lock_acquired=False)
+    conn = _FakeConnection(lock_acquired=False)
+    fake_engine = _FakeEngine(conn)
 
-    with patch.object(mod, "async_session", _make_session_factory(session)):
+    with patch.object(mod, "engine", fake_engine):
         await mod.run_regime_fit()
 
-    lock_sqls = [sql for sql in session.executed_sql if "pg_try_advisory_lock" in sql]
+    lock_sqls = [sql for sql in conn.executed_sql if "pg_try_advisory_lock" in sql]
     assert len(lock_sqls) == 1
     assert "900026" in lock_sqls[0], f"Lock SQL must use LOCK_ID 900026, got: {lock_sqls[0]}"
 
 
-# ── Test: Q104 invariant — single session for all I/O ──────────────────
+# ── Test: Q109 — pinned connection invariant ───────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_regime_fit_uses_lock_owning_session_for_all_io():
-    """Q104 invariant: all phases of regime fit must use the lock-owning
-    session, not child sessions. This prevents idle-in-transaction timeout
-    from killing the lock-holder mid-job and silently releasing the lock.
-
-    Verified by wrapping async_session() and asserting it's called exactly once.
+async def test_regime_fit_lock_held_on_pinned_connection():
+    """Q109: advisory lock acquired and released on the SAME pinned
+    connection via engine.connect(). Verifies that exactly one connection
+    is opened and both lock/unlock happen on it.
     """
-    session = _FakeSession(lock_acquired=True)
-    base_factory = _make_session_factory(session)
-
-    call_count = 0
-
-    def counting_factory(*args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        return base_factory(*args, **kwargs)
+    conn = _FakeConnection(lock_acquired=True)
+    fake_engine = _FakeEngine(conn)
 
     with (
-        patch.object(mod, "async_session", side_effect=counting_factory),
+        patch.object(mod, "engine", fake_engine),
+        patch.object(
+            mod,
+            "_fetch_vix_series_with_dates",
+            new_callable=AsyncMock,
+            return_value=_SAMPLE_VIX_DATES,
+        ),
+        patch.object(mod, "_fit_markov_regime", return_value=[0.3] * 300),
+        patch.object(
+            mod,
+            "_persist_regime_history",
+            new_callable=AsyncMock,
+            return_value=300,
+        ),
+        patch.object(
+            mod,
+            "_update_snapshots_with_regime_probs",
+            new_callable=AsyncMock,
+            return_value=5,
+        ),
+    ):
+        result = await mod.run_regime_fit()
+
+    assert result["status"] == "completed"
+    assert fake_engine.connect_call_count == 1, (
+        "Must use exactly one pinned connection for the entire lock lifetime"
+    )
+
+    # Both lock and unlock happened on the same connection object
+    lock_sqls = [sql for sql in conn.executed_sql if "pg_try_advisory_lock" in sql]
+    unlock_sqls = [sql for sql in conn.executed_sql if "pg_advisory_unlock" in sql]
+    assert len(lock_sqls) == 1, "Lock must be acquired once on pinned connection"
+    assert len(unlock_sqls) == 1, "Lock must be released once on pinned connection"
+
+
+# ── Test: Q109 — all phases use the pinned connection ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_regime_fit_uses_pinned_connection_for_all_phases():
+    """Q109: all phases of regime fit must use the pinned connection,
+    not child sessions. The connection passed to _do_regime_fit is the
+    same one that holds the advisory lock.
+    """
+    conn = _FakeConnection(lock_acquired=True)
+    fake_engine = _FakeEngine(conn)
+
+    with (
+        patch.object(mod, "engine", fake_engine),
         patch.object(
             mod,
             "_fetch_vix_series_with_dates",
@@ -240,7 +288,8 @@ async def test_regime_fit_uses_lock_owning_session_for_all_io():
 
     assert result["status"] == "skipped"
     assert result["reason"] == "insufficient_vix_history"
-    assert call_count == 1, (
-        f"Expected exactly 1 async_session() open (lock-owning session). "
-        f"Got {call_count}. _do_regime_fit must use the passed db, not open new sessions."
+    assert fake_engine.connect_call_count == 1, (
+        f"Expected exactly 1 engine.connect() call (pinned connection). "
+        f"Got {fake_engine.connect_call_count}. "
+        f"_do_regime_fit must use the passed conn, not open new ones."
     )

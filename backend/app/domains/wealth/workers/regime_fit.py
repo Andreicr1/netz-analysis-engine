@@ -32,9 +32,9 @@ from typing import Any, cast
 import numpy as np
 import structlog
 from sqlalchemy import CursorResult, select, text, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
-from app.core.db.engine import async_session_factory as async_session
+from app.core.db.engine import engine
 from app.domains.wealth.models.macro import MacroData
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 
@@ -68,7 +68,7 @@ async def _fetch_vix_series(db: AsyncSession, lookback_days: int = PREFERRED_VIX
 
 
 async def _fetch_vix_series_with_dates(
-    db: AsyncSession, lookback_days: int = PREFERRED_VIX_LOOKBACK,
+    conn: AsyncConnection, lookback_days: int = PREFERRED_VIX_LOOKBACK,
 ) -> list[tuple[date, float]]:
     """Fetch VIX daily observations with dates from macro_data, ascending."""
     start_date = date.today() - timedelta(days=lookback_days)
@@ -80,7 +80,7 @@ async def _fetch_vix_series_with_dates(
         )
         .order_by(MacroData.obs_date)
     )
-    result = await db.execute(stmt)
+    result = await conn.execute(stmt)
     return [(row[0], float(row[1])) for row in result.all()]
 
 
@@ -183,7 +183,7 @@ def _classify_regime_from_probs(
 
 
 async def _persist_regime_history(
-    db: AsyncSession,
+    conn: AsyncConnection,
     dates: list[date],
     p_low_vol_series: list[float],
     p_high_vol_series: list[float],
@@ -232,15 +232,15 @@ async def _persist_regime_history(
                 vix_value = EXCLUDED.vix_value,
                 computed_at = EXCLUDED.computed_at
         """  # noqa: S608
-        await db.execute(text(sql), params)
+        await conn.execute(text(sql), params)
         upserted += batch_end - batch_start
 
-    await db.commit()
+    await conn.commit()
     return upserted
 
 
 async def _update_snapshots_with_regime_probs(
-    db: AsyncSession,
+    conn: AsyncConnection,
     p_high_vol_current: float,
 ) -> int:
     """Update today's portfolio snapshots with regime_probs for all profiles.
@@ -259,19 +259,17 @@ async def _update_snapshots_with_regime_probs(
         .where(PortfolioSnapshot.snapshot_date == today)
         .values(regime_probs=regime_probs_value)
     )
-    result = cast(CursorResult[Any], await db.execute(stmt))
-    await db.commit()
+    result = cast(CursorResult[Any], await conn.execute(stmt))
+    await conn.commit()
     return result.rowcount
 
 
-async def _do_regime_fit(db: AsyncSession) -> dict[str, Any]:
-    """Core regime fitting logic — uses lock-owning session for all I/O.
-
-    Phase commits are explicit so the session is never idle in an open
-    transaction across CPU-bound work or external waits.
+async def _do_regime_fit(conn: AsyncConnection) -> dict[str, Any]:
+    """Core regime fitting logic — bound to a pinned connection so the
+    advisory lock held on ``conn`` survives across phase commits.
     """
-    vix_with_dates = await _fetch_vix_series_with_dates(db)
-    await db.commit()  # phase 1 done; session is idle but NOT in transaction
+    vix_with_dates = await _fetch_vix_series_with_dates(conn)
+    await conn.commit()  # phase 1 done; connection stays pinned
 
     n_obs = len(vix_with_dates)
     if n_obs < MIN_VIX_OBS:
@@ -286,7 +284,7 @@ async def _do_regime_fit(db: AsyncSession) -> dict[str, Any]:
     vix_values = [v for _, v in vix_with_dates]
 
     logger.info("VIX history fetched", n_obs=n_obs)
-    high_vol_probs = _fit_markov_regime(vix_values)  # CPU only; session not in tx
+    high_vol_probs = _fit_markov_regime(vix_values)  # CPU only; connection not in tx
 
     if high_vol_probs is None:
         return {"status": "skipped", "reason": "fitting_failed"}
@@ -300,14 +298,14 @@ async def _do_regime_fit(db: AsyncSession) -> dict[str, Any]:
     vix_or_none: list[float | None] = list(vix_values)
 
     n_persisted = await _persist_regime_history(
-        db, dates_list, p_low_vol_series, p_high_vol_series, vix_or_none,
+        conn, dates_list, p_low_vol_series, p_high_vol_series, vix_or_none,
     )
-    await db.commit()  # phase 3 done
+    await conn.commit()  # phase 3 done
     logger.info("Regime history persisted", rows_upserted=n_persisted)
 
     # Update today's portfolio snapshots with current regime probs
-    n_updated = await _update_snapshots_with_regime_probs(db, p_high)
-    await db.commit()  # phase 4 done
+    n_updated = await _update_snapshots_with_regime_probs(conn, p_high)
+    await conn.commit()  # phase 4 done
 
     logger.info("Regime probs written to snapshots", snapshots_updated=n_updated)
     return {
@@ -320,28 +318,38 @@ async def _do_regime_fit(db: AsyncSession) -> dict[str, Any]:
 
 
 async def run_regime_fit() -> dict[str, Any]:
-    """Fit Markov regime model on VIX, persist full series, enrich snapshots."""
+    """Fit Markov regime model on VIX, persist full series, enrich snapshots.
+
+    Uses ``engine.connect()`` to pin a single connection for the entire
+    lock lifetime.  PostgreSQL advisory locks are bound to connections,
+    not to SQLAlchemy sessions — ``commit()`` on an ``AsyncSession`` can
+    return the connection to the pool, silently losing the lock.  A
+    pinned ``AsyncConnection`` keeps the same connection across phase
+    commits, ensuring the lock is held until explicitly released.
+    """
     logger.info("Starting Markov regime fitting")
 
-    async with async_session() as db:
-        # Advisory lock — skip if already running (non-blocking)
-        lock_result = await db.execute(
+    async with engine.connect() as conn:
+        # Advisory lock — skip if already running (non-blocking).
+        # Connection is pinned for the lifetime of this ``async with`` —
+        # commits within do not return it to the pool.
+        lock_result = await conn.execute(
             text(f"SELECT pg_try_advisory_lock({LOCK_ID})"),
         )
         lock_acquired = bool(lock_result.scalar())
-        await db.commit()  # close implicit tx; advisory lock survives commits
+        await conn.commit()  # close implicit tx; advisory lock survives (pinned conn)
 
         if not lock_acquired:
             logger.warning("Regime fit already running — skipping")
             return {"status": "skipped", "reason": "lock_held"}
 
         try:
-            return await _do_regime_fit(db)
+            return await _do_regime_fit(conn)
         finally:
-            await db.execute(
+            await conn.execute(
                 text(f"SELECT pg_advisory_unlock({LOCK_ID})"),
             )
-            await db.commit()
+            await conn.commit()
 
 
 if __name__ == "__main__":
