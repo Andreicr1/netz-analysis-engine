@@ -164,67 +164,86 @@ class TestWatchlistBatchEnrichmentWiring:
 
 
 class TestAttributeSnapshotPersistence:
-    """Verify _attribute_snapshot is stored in ScreeningResult.layer_results."""
+    """Verify _attribute_snapshot is stored in ScreeningResult.layer_results.
+
+    After PR-Q129 hotfix: layer_results is list[dict] (criterion entries),
+    NOT dict. Snapshot is appended as a list entry with criterion="_attribute_snapshot".
+    """
 
     def test_snapshot_key_in_layer_results(self):
-        """ScreeningResult layer_results should merge _attribute_snapshot.
+        """ScreeningResult layer_results should append _attribute_snapshot.
 
-        Exercises the exact dict-merge logic used in watchlist_batch step 7.
+        Exercises the exact list filter+append logic used in watchlist_batch step 7.
         """
         inst_attrs = {"expense_ratio_pct": 0.0060, "strategy_label": "Large Cap Value"}
-        base_layer_results: dict = {"layer1": {"passed": True}}
+        existing_results = [
+            {"criterion": "min_aum", "expected": 1e8, "actual": 2e8, "passed": True, "layer": 1},
+        ]
 
-        merged = {
-            **(base_layer_results if isinstance(base_layer_results, dict) else {}),
-            "_attribute_snapshot": {
+        # Same logic as watchlist_batch step 7
+        filtered = [
+            e for e in existing_results
+            if not (isinstance(e, dict) and e.get("criterion") == "_attribute_snapshot")
+        ]
+        filtered.append({
+            "criterion": "_attribute_snapshot",
+            "value": {
                 "expense_ratio_pct": inst_attrs.get("expense_ratio_pct"),
                 "strategy_label": inst_attrs.get("strategy_label"),
             },
-        }
+        })
 
-        assert "_attribute_snapshot" in merged
-        assert merged["_attribute_snapshot"]["expense_ratio_pct"] == 0.0060
-        assert merged["_attribute_snapshot"]["strategy_label"] == "Large Cap Value"
-        # Original layer results preserved
-        assert merged["layer1"] == {"passed": True}
+        assert len(filtered) == 2
+        snapshot_entry = next(e for e in filtered if e.get("criterion") == "_attribute_snapshot")
+        assert snapshot_entry["value"]["expense_ratio_pct"] == 0.0060
+        assert snapshot_entry["value"]["strategy_label"] == "Large Cap Value"
+        # Original criterion preserved
+        assert filtered[0]["criterion"] == "min_aum"
 
-    def test_snapshot_with_list_layer_results_fallback(self):
-        """When layer_results_dict is a list (legacy format), snapshot still works.
+    def test_snapshot_deduplication_on_rewrite(self):
+        """When layer_results already has a snapshot entry, it is replaced (not duplicated)."""
+        existing_results = [
+            {"criterion": "min_aum", "expected": 1e8, "actual": 2e8, "passed": True, "layer": 1},
+            {"criterion": "_attribute_snapshot", "value": {"expense_ratio_pct": 0.005}},
+        ]
 
-        The batch code guards with isinstance(base, dict) — lists fall through
-        to empty dict merge.
+        # Same logic as watchlist_batch step 7
+        filtered = [
+            e for e in existing_results
+            if not (isinstance(e, dict) and e.get("criterion") == "_attribute_snapshot")
+        ]
+        filtered.append({
+            "criterion": "_attribute_snapshot",
+            "value": {"expense_ratio_pct": 0.007, "strategy_label": "Growth"},
+        })
+
+        snapshot_entries = [e for e in filtered if e.get("criterion") == "_attribute_snapshot"]
+        assert len(snapshot_entries) == 1
+        assert snapshot_entries[0]["value"]["expense_ratio_pct"] == 0.007
+
+    def test_snapshot_extraction_from_previous_layer_results_list(self):
+        """Verify _attribute_snapshot can be extracted from list-format layer_results JSONB.
+
+        Simulates the prev_snap_results loop in step 4b (post-hotfix).
         """
-        base_layer_results = [{"layer": 1, "passed": True}]  # legacy list format
-
-        merged = {
-            **(base_layer_results if isinstance(base_layer_results, dict) else {}),
-            "_attribute_snapshot": {
-                "expense_ratio_pct": None,
-                "strategy_label": None,
+        layer_results = [
+            {"criterion": "min_aum", "expected": 1e8, "actual": 2e8, "passed": True, "layer": 1},
+            {
+                "criterion": "_attribute_snapshot",
+                "value": {
+                    "expense_ratio_pct": 0.005,
+                    "strategy_label": "Growth Equity",
+                },
             },
-        }
+        ]
 
-        assert "_attribute_snapshot" in merged
-        # List was not merged (not a dict) — only snapshot key present
-        assert "layer" not in merged
-
-    def test_snapshot_extraction_from_previous_layer_results(self):
-        """Verify _attribute_snapshot can be extracted from layer_results JSONB.
-
-        Simulates the prev_snap_results loop in step 4b.
-        """
-        iid = uuid.uuid4()
-        layer_results = {
-            "layer1": {"passed": True},
-            "_attribute_snapshot": {
-                "expense_ratio_pct": 0.005,
-                "strategy_label": "Growth Equity",
-            },
-        }
-
-        # Simulate the extraction loop from watchlist_batch step 4b
-        lr = layer_results or {}
-        snap = lr.get("_attribute_snapshot", {})
+        # Same logic as watchlist_batch step 4b (post-hotfix)
+        snap = {}
+        if isinstance(layer_results, list):
+            for entry in layer_results:
+                if isinstance(entry, dict) and entry.get("criterion") == "_attribute_snapshot":
+                    snap = entry.get("value", {})
+                    break
 
         assert snap == {
             "expense_ratio_pct": 0.005,
@@ -233,9 +252,106 @@ class TestAttributeSnapshotPersistence:
 
     def test_snapshot_extraction_missing_key_returns_empty(self):
         """layer_results without _attribute_snapshot returns empty dict (first run)."""
-        layer_results = {"layer1": {"passed": True}}
+        layer_results = [
+            {"criterion": "min_aum", "expected": 1e8, "actual": 2e8, "passed": True, "layer": 1},
+        ]
 
-        lr = layer_results or {}
-        snap = lr.get("_attribute_snapshot", {})
+        snap = {}
+        if isinstance(layer_results, list):
+            for entry in layer_results:
+                if isinstance(entry, dict) and entry.get("criterion") == "_attribute_snapshot":
+                    snap = entry.get("value", {})
+                    break
 
         assert snap == {}
+
+    def test_layer_results_preserves_criterion_entries(self):
+        """PR-Q129 hotfix regression: N criteria in + snapshot = N+1 entries out.
+
+        Verifies the writing path preserves all criterion entries from
+        layer_results_dict (list[dict]) and appends exactly one snapshot.
+        """
+        # Simulate 3 criterion entries from screener
+        layer_results_dict = [
+            {"criterion": "min_aum", "expected": 1e8, "actual": 2e8, "passed": True, "layer": 1},
+            {"criterion": "max_expense_ratio", "expected": 0.02, "actual": 0.01, "passed": True, "layer": 1},
+            {"criterion": "min_sharpe", "expected": 0.5, "actual": 0.8, "passed": True, "layer": 3},
+        ]
+
+        inst_attrs = {"expense_ratio_pct": 0.01, "strategy_label": "Large Cap Growth"}
+
+        # Same logic as watchlist_batch step 7 (post-hotfix)
+        existing_results = layer_results_dict if layer_results_dict else []
+        filtered = [
+            e for e in existing_results
+            if not (isinstance(e, dict) and e.get("criterion") == "_attribute_snapshot")
+        ]
+        filtered.append({
+            "criterion": "_attribute_snapshot",
+            "value": {
+                "expense_ratio_pct": inst_attrs.get("expense_ratio_pct"),
+                "strategy_label": inst_attrs.get("strategy_label"),
+            },
+        })
+
+        # N criteria + 1 snapshot = N+1
+        assert len(filtered) == 4
+        criteria_names = [e["criterion"] for e in filtered]
+        assert "min_aum" in criteria_names
+        assert "max_expense_ratio" in criteria_names
+        assert "min_sharpe" in criteria_names
+        assert "_attribute_snapshot" in criteria_names
+
+    def test_layer_results_snapshot_reading_from_list(self):
+        """PR-Q129 hotfix regression: reading path extracts snapshot from list format.
+
+        Verifies the reading loop in step 4b correctly extracts _attribute_snapshot
+        from list-format layer_results as stored in JSONB.
+        """
+        iid_a = uuid.UUID("00000000-0000-0000-0000-b00000000001")
+        iid_b = uuid.UUID("00000000-0000-0000-0000-b00000000002")
+        iid_c = uuid.UUID("00000000-0000-0000-0000-b00000000003")
+
+        # Simulate rows from DB query
+        class FakeRow:
+            def __init__(self, instrument_id, layer_results):
+                self.instrument_id = instrument_id
+                self.layer_results = layer_results
+
+        rows = [
+            # Has snapshot
+            FakeRow(iid_a, [
+                {"criterion": "min_aum", "expected": 1e8, "actual": 2e8, "passed": True, "layer": 1},
+                {"criterion": "_attribute_snapshot", "value": {"expense_ratio_pct": 0.005}},
+            ]),
+            # No snapshot (first run)
+            FakeRow(iid_b, [
+                {"criterion": "min_aum", "expected": 1e8, "actual": 5e7, "passed": False, "layer": 1},
+            ]),
+            # Empty layer_results
+            FakeRow(iid_c, None),
+        ]
+
+        # Same logic as watchlist_batch step 4b (post-hotfix)
+        previous_snapshots: dict[uuid.UUID, dict] = {}
+        for row in rows:
+            lr = row.layer_results
+            if not lr:
+                continue
+            if isinstance(lr, list):
+                for entry in lr:
+                    if isinstance(entry, dict) and entry.get("criterion") == "_attribute_snapshot":
+                        snap = entry.get("value", {})
+                        if snap:
+                            previous_snapshots[row.instrument_id] = snap
+                        break
+            elif isinstance(lr, dict):
+                snap = lr.get("_attribute_snapshot", {})
+                if snap:
+                    previous_snapshots[row.instrument_id] = snap
+
+        # iid_a has snapshot, iid_b and iid_c do not
+        assert iid_a in previous_snapshots
+        assert previous_snapshots[iid_a] == {"expense_ratio_pct": 0.005}
+        assert iid_b not in previous_snapshots
+        assert iid_c not in previous_snapshots

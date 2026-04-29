@@ -270,10 +270,22 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
     )
     previous_snapshots: dict[uuid.UUID, dict] = {}
     for row in prev_snap_results:
-        lr = row.layer_results or {}
-        snap = lr.get("_attribute_snapshot", {})
-        if snap:
-            previous_snapshots[row.instrument_id] = snap
+        lr = row.layer_results
+        if not lr:
+            continue
+        # layer_results is a list of criterion dicts; find snapshot entry
+        if isinstance(lr, list):
+            for entry in lr:
+                if isinstance(entry, dict) and entry.get("criterion") == "_attribute_snapshot":
+                    snap = entry.get("value", {})
+                    if snap:
+                        previous_snapshots[row.instrument_id] = snap
+                    break
+        elif isinstance(lr, dict):
+            # Legacy fallback (shouldn't happen, but defensive)
+            snap = lr.get("_attribute_snapshot", {})
+            if snap:
+                previous_snapshots[row.instrument_id] = snap
 
     # 5. Create screening run record (type = "watchlist")
     run = ScreeningRun(
@@ -343,7 +355,20 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
 
         for sr in batch:
             inst_attrs = inst_attrs_by_id.get(sr.instrument_id, {})
-            base_layer_results = sr.layer_results_dict if sr.layer_results_dict else {}
+            # layer_results_dict is list[dict] — preserve all criteria, append snapshot
+            existing_results = sr.layer_results_dict if sr.layer_results_dict else []
+            # Remove any prior snapshot entry to avoid duplicates
+            filtered = [
+                e for e in existing_results
+                if not (isinstance(e, dict) and e.get("criterion") == "_attribute_snapshot")
+            ]
+            filtered.append({
+                "criterion": "_attribute_snapshot",
+                "value": {
+                    "expense_ratio_pct": inst_attrs.get("expense_ratio_pct"),
+                    "strategy_label": inst_attrs.get("strategy_label"),
+                },
+            })
             screening_result = ScreeningResult(
                 organization_id=org_id,
                 instrument_id=sr.instrument_id,
@@ -351,13 +376,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
                 overall_status=sr.overall_status,
                 score=sr.score,
                 failed_at_layer=sr.failed_at_layer,
-                layer_results={
-                    **(base_layer_results if isinstance(base_layer_results, dict) else {}),
-                    "_attribute_snapshot": {
-                        "expense_ratio_pct": inst_attrs.get("expense_ratio_pct"),
-                        "strategy_label": inst_attrs.get("strategy_label"),
-                    },
-                },
+                layer_results=filtered,
                 required_analysis_type=sr.required_analysis_type,
                 is_current=True,
             )
