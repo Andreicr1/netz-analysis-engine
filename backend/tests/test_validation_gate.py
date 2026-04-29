@@ -268,6 +268,50 @@ def test_block_max_weight_violation():
     assert failed[0].passed is False
 
 
+# ── NAV staleness threshold enforcement (PR-Q119) ────────────────
+
+
+def test_stale_nav_detects_old_dates():
+    """Fund with NAV 39 days old (> 10d threshold) is flagged stale."""
+    payload = _base_payload()
+    payload["as_of_date"] = "2026-04-09"
+    payload["weights_proposed"] = {
+        "fund_a": 0.50,
+        "fund_b": 0.50,
+    }
+    db = ValidationDbContext(
+        nav_latest_date={
+            "fund_a": "2026-03-01",  # 39 days old → stale
+            "fund_b": "2026-04-07",  # 2 days old → ok
+        },
+        nav_staleness_threshold_days=10,
+    )
+    result = validate_construction(payload, db)
+    nav_check = next(c for c in result.checks if c.id == "no_stale_nav")
+    assert not nav_check.passed
+    assert nav_check.value == 1
+
+
+def test_stale_nav_passes_when_all_recent():
+    """All NAV dates within the threshold window pass the check."""
+    payload = _base_payload()
+    payload["as_of_date"] = "2026-04-09"
+    payload["weights_proposed"] = {
+        "fund_a": 0.50,
+        "fund_b": 0.50,
+    }
+    db = ValidationDbContext(
+        nav_latest_date={
+            "fund_a": "2026-04-07",
+            "fund_b": "2026-04-08",
+        },
+        nav_staleness_threshold_days=10,
+    )
+    result = validate_construction(payload, db)
+    nav_check = next(c for c in result.checks if c.id == "no_stale_nav")
+    assert nav_check.passed
+
+
 # ── Warn-severity cases ──────────────────────────────────────────
 
 
