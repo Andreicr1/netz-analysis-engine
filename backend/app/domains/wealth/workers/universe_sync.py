@@ -218,6 +218,7 @@ async def _sync_sec_etfs(db: AsyncSession) -> dict[str, Any]:
         WHERE e.ticker IS NOT NULL
         ON CONFLICT (ticker) DO UPDATE SET
             name = EXCLUDED.name,
+            is_active = EXCLUDED.is_active,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
     """.replace("__ASSET_CLASS__", _asset_class_case("e.strategy_label"))
@@ -295,6 +296,7 @@ async def _sync_sec_mf_series(db: AsyncSession) -> dict[str, Any]:
         FROM canonical c
         ON CONFLICT (ticker) DO UPDATE SET
             name = EXCLUDED.name,
+            is_active = EXCLUDED.is_active,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
     """.replace("__ASSET_CLASS__", _asset_class_case("c.strategy_label"))
@@ -344,7 +346,9 @@ async def _sync_sec_registered(db: AsyncSession) -> dict[str, Any]:
           AND NOT EXISTS (
               SELECT 1 FROM instruments_universe iu WHERE iu.ticker = rf.ticker
           )
-        ON CONFLICT (ticker) DO NOTHING
+        ON CONFLICT (ticker) DO UPDATE SET
+            is_active = true,
+            updated_at = now()
     """.replace("__ASSET_CLASS__", _asset_class_case("rf.strategy_label"))
     result = cast(CursorResult[Any], await db.execute(text(_sql)))
     await db.commit()
@@ -391,6 +395,7 @@ async def _sync_sec_bdcs(db: AsyncSession) -> dict[str, Any]:
         WHERE b.ticker IS NOT NULL
         ON CONFLICT (ticker) DO UPDATE SET
             name = EXCLUDED.name,
+            is_active = EXCLUDED.is_active,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
     """)))
@@ -464,6 +469,7 @@ async def _sync_esma_funds(db: AsyncSession) -> dict[str, Any]:
         WHERE ef.yahoo_ticker IS NOT NULL
         ON CONFLICT (ticker) DO UPDATE SET
             name = EXCLUDED.name,
+            is_active = EXCLUDED.is_active,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
     """.replace("__ASSET_CLASS__", _asset_class_case("ef.strategy_label"))
@@ -538,6 +544,7 @@ async def _sync_sec_mmfs(db: AsyncSession) -> dict[str, Any]:
         FROM mmf_with_ticker t
         ON CONFLICT (ticker) DO UPDATE SET
             name = EXCLUDED.name,
+            is_active = EXCLUDED.is_active,
             asset_class = 'cash',
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
@@ -555,8 +562,9 @@ async def _deactivate_no_nav(db: AsyncSession) -> dict[str, Any]:
     """Mark instruments without NAV data as inactive.
 
     Funds without NAV are not useful in catalog, screener, or analytics.
-    Idempotent — if a ticker gains NAV later, next universe_sync re-inserts
-    with is_active=true via ON CONFLICT UPDATE.
+    Idempotent — if a ticker gains NAV later, next universe_sync re-activates
+    with is_active=true via ON CONFLICT DO UPDATE SET is_active = EXCLUDED.is_active
+    in all 6 sync phases (ETF, MF series, registered, BDC, ESMA, MMF).
     """
     result = cast(CursorResult[Any], await db.execute(text("""
         UPDATE instruments_universe
