@@ -264,10 +264,8 @@ async def _update_snapshots_with_regime_probs(
     return result.rowcount
 
 
-async def run_regime_fit() -> dict[str, Any]:
-    """Fit Markov regime model on VIX, persist full series, enrich snapshots."""
-    logger.info("Starting Markov regime fitting")
-
+async def _do_regime_fit() -> dict[str, Any]:
+    """Core regime fitting logic — separated for advisory lock cleanup."""
     async with async_session() as db:
         vix_with_dates = await _fetch_vix_series_with_dates(db)
 
@@ -315,6 +313,27 @@ async def run_regime_fit() -> dict[str, Any]:
         "rows_persisted": n_persisted,
         "snapshots_updated": n_updated,
     }
+
+
+async def run_regime_fit() -> dict[str, Any]:
+    """Fit Markov regime model on VIX, persist full series, enrich snapshots."""
+    logger.info("Starting Markov regime fitting")
+
+    async with async_session() as db:
+        # Advisory lock — skip if already running (non-blocking)
+        lock_result = await db.execute(
+            text(f"SELECT pg_try_advisory_lock({LOCK_ID})"),
+        )
+        if not lock_result.scalar():
+            logger.warning("Regime fit already running — skipping")
+            return {"status": "skipped", "reason": "lock_held"}
+
+        try:
+            return await _do_regime_fit()
+        finally:
+            await db.execute(
+                text(f"SELECT pg_advisory_unlock({LOCK_ID})"),
+            )
 
 
 if __name__ == "__main__":
