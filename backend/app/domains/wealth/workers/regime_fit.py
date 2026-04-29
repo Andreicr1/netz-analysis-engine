@@ -264,10 +264,14 @@ async def _update_snapshots_with_regime_probs(
     return result.rowcount
 
 
-async def _do_regime_fit() -> dict[str, Any]:
-    """Core regime fitting logic — separated for advisory lock cleanup."""
-    async with async_session() as db:
-        vix_with_dates = await _fetch_vix_series_with_dates(db)
+async def _do_regime_fit(db: AsyncSession) -> dict[str, Any]:
+    """Core regime fitting logic — uses lock-owning session for all I/O.
+
+    Phase commits are explicit so the session is never idle in an open
+    transaction across CPU-bound work or external waits.
+    """
+    vix_with_dates = await _fetch_vix_series_with_dates(db)
+    await db.commit()  # phase 1 done; session is idle but NOT in transaction
 
     n_obs = len(vix_with_dates)
     if n_obs < MIN_VIX_OBS:
@@ -282,7 +286,7 @@ async def _do_regime_fit() -> dict[str, Any]:
     vix_values = [v for _, v in vix_with_dates]
 
     logger.info("VIX history fetched", n_obs=n_obs)
-    high_vol_probs = _fit_markov_regime(vix_values)
+    high_vol_probs = _fit_markov_regime(vix_values)  # CPU only; session not in tx
 
     if high_vol_probs is None:
         return {"status": "skipped", "reason": "fitting_failed"}
@@ -295,15 +299,15 @@ async def _do_regime_fit() -> dict[str, Any]:
     p_low_vol_series = [1.0 - p for p in p_high_vol_series]
     vix_or_none: list[float | None] = list(vix_values)
 
-    async with async_session() as db:
-        n_persisted = await _persist_regime_history(
-            db, dates_list, p_low_vol_series, p_high_vol_series, vix_or_none,
-        )
+    n_persisted = await _persist_regime_history(
+        db, dates_list, p_low_vol_series, p_high_vol_series, vix_or_none,
+    )
+    await db.commit()  # phase 3 done
     logger.info("Regime history persisted", rows_upserted=n_persisted)
 
     # Update today's portfolio snapshots with current regime probs
-    async with async_session() as db:
-        n_updated = await _update_snapshots_with_regime_probs(db, p_high)
+    n_updated = await _update_snapshots_with_regime_probs(db, p_high)
+    await db.commit()  # phase 4 done
 
     logger.info("Regime probs written to snapshots", snapshots_updated=n_updated)
     return {
@@ -324,16 +328,20 @@ async def run_regime_fit() -> dict[str, Any]:
         lock_result = await db.execute(
             text(f"SELECT pg_try_advisory_lock({LOCK_ID})"),
         )
-        if not lock_result.scalar():
+        lock_acquired = bool(lock_result.scalar())
+        await db.commit()  # close implicit tx; advisory lock survives commits
+
+        if not lock_acquired:
             logger.warning("Regime fit already running — skipping")
             return {"status": "skipped", "reason": "lock_held"}
 
         try:
-            return await _do_regime_fit()
+            return await _do_regime_fit(db)
         finally:
             await db.execute(
                 text(f"SELECT pg_advisory_unlock({LOCK_ID})"),
             )
+            await db.commit()
 
 
 if __name__ == "__main__":
