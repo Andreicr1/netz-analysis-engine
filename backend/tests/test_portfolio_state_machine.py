@@ -392,3 +392,80 @@ async def test_transition_writes_both_domain_and_audit_rows():
 
         # Unified audit: write_audit_event also called
         mock_audit.assert_called_once()
+
+
+# ── PR-Q118: executor uses transition() → audit row + event ──────
+
+
+def test_rejected_to_constructed_is_valid_edge():
+    """PR-Q118: TRANSITIONS must allow rejected→constructed so the executor
+    can re-construct a rejected portfolio via state_machine.transition()."""
+    assert "constructed" in TRANSITIONS["rejected"]
+
+
+@pytest.mark.asyncio
+async def test_construction_creates_transition_audit_row():
+    """PR-Q118: When the executor path triggers draft→constructed via
+    transition(), a PortfolioStateTransition row is created with correct
+    from_state/to_state."""
+    pid = uuid.uuid4()
+    org_id = uuid.uuid4()
+    db, _ = _mock_db_for_transition(pid, org_id, from_state="draft")
+
+    added_objects: list = []
+    db.add = MagicMock(side_effect=lambda obj: added_objects.append(obj))
+
+    with patch(
+        "vertical_engines.wealth.model_portfolio.state_machine.write_audit_event",
+        new_callable=AsyncMock,
+    ):
+        await transition(
+            db,
+            portfolio_id=pid,
+            to_state="constructed",
+            actor_id="executor_actor",
+            reason="Construction run abc-123",
+        )
+
+    transition_rows = [
+        obj for obj in added_objects
+        if isinstance(obj, PortfolioStateTransition)
+    ]
+    assert len(transition_rows) == 1
+    assert transition_rows[0].from_state == "draft"
+    assert transition_rows[0].to_state == "constructed"
+    assert transition_rows[0].actor_id == "executor_actor"
+    assert transition_rows[0].reason == "Construction run abc-123"
+
+
+@pytest.mark.asyncio
+async def test_construction_creates_audit_event_row():
+    """PR-Q118: After Q115, executor→transition()→write_audit_event.
+    Verify the unified audit_events entry is emitted with the correct
+    model_portfolio.state_transition action for both draft and rejected
+    source states."""
+    for from_state in ("draft", "rejected"):
+        pid = uuid.uuid4()
+        org_id = uuid.uuid4()
+        db, _ = _mock_db_for_transition(pid, org_id, from_state=from_state)
+
+        with patch(
+            "vertical_engines.wealth.model_portfolio.state_machine.write_audit_event",
+            new_callable=AsyncMock,
+        ) as mock_audit:
+            await transition(
+                db,
+                portfolio_id=pid,
+                to_state="constructed",
+                actor_id="executor_actor",
+                reason=f"Construction run from {from_state}",
+            )
+
+            mock_audit.assert_called_once()
+            kwargs = mock_audit.call_args.kwargs
+            assert kwargs["action"] == "model_portfolio.state_transition"
+            assert kwargs["entity_type"] == "ModelPortfolio"
+            assert kwargs["entity_id"] == str(pid)
+            assert kwargs["allow_global"] is False
+            assert kwargs["before"] == {"state": from_state}
+            assert kwargs["after"]["state"] == "constructed"

@@ -2094,9 +2094,17 @@ async def _execute_inner(
         portfolio.fund_selection_schema = _jsonb_safe(base_result)
         portfolio.status = "backtesting"
         if portfolio.state in {"draft", "rejected"}:
-            portfolio.state = "constructed"
-            portfolio.state_changed_by = run.requested_by
-            portfolio.state_changed_at = datetime.now(tz=timezone.utc)
+            from vertical_engines.wealth.model_portfolio.state_machine import (
+                transition as sm_transition,
+            )
+
+            await sm_transition(
+                db,
+                portfolio_id=portfolio.id,
+                to_state="constructed",
+                actor_id=run.requested_by,
+                reason=f"Construction run {run.id}",
+            )
 
         from app.domains.wealth.workers.portfolio_nav_synthesizer import (
             synthesize_portfolio_nav,

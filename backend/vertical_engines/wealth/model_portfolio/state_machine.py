@@ -63,7 +63,7 @@ TRANSITIONS: Final[dict[State, set[State]]] = {
     "live":        {"paused", "archived"},
     "paused":      {"live", "archived"},
     "archived":    set(),
-    "rejected":    {"draft", "archived"},
+    "rejected":    {"draft", "constructed", "archived"},
 }
 
 
