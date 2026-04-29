@@ -21,6 +21,7 @@ from typing import Any
 import pytest
 
 from vertical_engines.wealth.model_portfolio.validation_gate import (
+    _INTENDED_SEVERITY,
     CHECKS,
     ValidationDbContext,
     ValidationResult,
@@ -387,22 +388,20 @@ def test_no_fail_fast_all_15_checks_run():
     )
 
 
-# ── Resilience: a raising check becomes a warn ───────────────────
+# ── Resilience: a raising check preserves intended severity ───────
 
 
-def test_check_that_raises_is_caught_as_warn():
-    """A bug in one check cannot strand activation."""
-    # Inject an instrument with a non-string key to force a TypeError
-    # path in one of the checks.
+def test_check_that_raises_preserves_intended_severity():
+    """A check that raises preserves its intended severity (fail-closed)."""
     payload = _base_payload()
     payload["weights_proposed"] = None  # likely to raise in multiple checks
     result = validate_construction(payload, _base_db_context())
-    assert len(result.checks) == 16  # all 15 still run
-    # None of the raised ones are block severity (they were caught
-    # and converted to warn).
+    assert len(result.checks) == 16  # all 16 still run
+    # Raised checks preserve their intended severity from
+    # _INTENDED_SEVERITY, not always "warn".
     for c in result.checks:
         if not c.passed and c.explanation.startswith("Check raised:"):
-            assert c.severity == "warn"
+            assert c.severity == _INTENDED_SEVERITY.get(c.id, "block")
 
 
 # ── JSONB serialization ──────────────────────────────────────────
@@ -446,3 +445,55 @@ def test_validation_result_is_frozen_dataclass():
     # Frozen dataclass — mutation must raise FrozenInstanceError
     with pytest.raises(dataclasses.FrozenInstanceError):
         result.passed = False  # type: ignore[misc]
+
+
+# ── Fail-closed severity preservation (PR-Q117, C-09) ────────────
+
+
+def test_block_check_exception_stays_block_severity():
+    """A block-severity check that raises must stay block, not demote to warn.
+
+    Wave 6 S10 C-09: the old code silently demoted all exceptions to
+    severity='warn', allowing block checks on malformed input to pass
+    the gate. With _INTENDED_SEVERITY, the exception handler preserves
+    the check's canonical severity. Default for unknown IDs is 'block'
+    (fail-closed).
+    """
+    payload = {"weights_proposed": {"a": "not_a_number"}}
+    result = validate_construction(payload, ValidationDbContext())
+    wst = next(c for c in result.checks if c.id == "weights_sum_to_one")
+    assert wst.severity == "block"
+    assert not wst.passed
+    assert not result.passed  # block failure must prevent activation
+
+
+def test_warn_check_exception_stays_warn_severity():
+    """A warn-severity check that raises must stay warn, not escalate to block.
+
+    Counterpart to the block test: when a warn-severity check (e.g.
+    stress_within_tolerance) raises, the gate must not accidentally
+    escalate it to block. The aggregate result should still pass.
+    """
+    payload = _base_payload()
+    # Force stress_within_tolerance to raise by injecting a non-numeric
+    # nav_impact_pct that will fail float() conversion.
+    payload["stress_results"] = [
+        {"scenario": "evil", "nav_impact_pct": "not_a_number"},
+    ]
+    result = validate_construction(payload, _base_db_context())
+    stress = next(c for c in result.checks if c.id == "stress_within_tolerance")
+    assert stress.severity == "warn"
+    assert not stress.passed
+    assert stress.explanation.startswith("Check raised:")
+    # A warn-only failure must NOT block the aggregate result
+    assert result.passed is True
+
+
+def test_intended_severity_registry_covers_all_checks():
+    """_INTENDED_SEVERITY must list all 16 checks from the CHECKS registry."""
+    check_ids = {check_id for check_id, _ in CHECKS}
+    registry_ids = set(_INTENDED_SEVERITY.keys())
+    assert check_ids == registry_ids, (
+        f"Missing from _INTENDED_SEVERITY: {check_ids - registry_ids}; "
+        f"Extra in _INTENDED_SEVERITY: {registry_ids - check_ids}"
+    )

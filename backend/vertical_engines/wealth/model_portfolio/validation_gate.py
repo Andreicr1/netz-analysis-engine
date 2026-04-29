@@ -17,6 +17,15 @@ Severity taxonomy
 - ``warn`` — a warning that does not block activation but is
   surfaced in the narrative and the Builder's CalibrationPanel.
 
+Exception handling — fail-closed (§3.2)
+---------------------------------------
+When a check function raises an unhandled exception, the gate
+preserves the check's **intended severity** from ``_INTENDED_SEVERITY``
+rather than demoting it to ``warn``. Unknown check IDs default to
+``block`` (fail-closed). This ensures that block-severity checks
+on malformed input remain blocking — a bug in a check function
+cannot silently bypass the gate.
+
 Public surface
 --------------
 - :class:`ValidationCheck` — frozen dataclass, one per check
@@ -767,6 +776,34 @@ CHECKS: Final[list[tuple[str, Callable[[dict[str, Any], ValidationDbContext], Va
 ]
 
 
+# ── Intended severity per check (fail-closed default) ─────────────
+#
+# When a check function raises, this registry determines the severity
+# of the resulting ValidationCheck. Unknown check IDs default to
+# "block" (fail-closed, §3.2). This prevents a TypeError or missing
+# key from silently demoting a block-severity check to warn.
+
+
+_INTENDED_SEVERITY: Final[dict[str, Severity]] = {
+    "weights_sum_to_one": "block",
+    "no_stale_nav": "block",
+    "cvar_within_limit": "block",
+    "turnover_within_cap": "warn",
+    "min_diversification_count": "block",
+    "max_single_fund_weight": "block",
+    "all_block_min_weights_satisfied": "block",
+    "all_block_max_weights_satisfied": "block",
+    "no_banned_instruments": "block",
+    "all_instruments_approved": "block",
+    "stress_within_tolerance": "warn",
+    "no_unrealistic_expected_return": "warn",
+    "bl_views_consistent_with_prior": "warn",
+    "garch_convergence_rate": "warn",
+    "factor_model_r_squared": "warn",
+    "taa_bands_within_ips": "block",
+}
+
+
 def validate_construction(
     run_payload: dict[str, Any],
     db_context: ValidationDbContext | None = None,
@@ -798,12 +835,12 @@ def validate_construction(
         try:
             result = check_fn(run_payload, db_context)
         except Exception as exc:  # noqa: BLE001
-            # A check that raises is a warn-level failure — never a
-            # block — so a bug in one check can't strand activation.
+            # Preserve the check's intended severity from the registry.
+            # Unknown check IDs default to "block" (fail-closed, §3.2).
             result = ValidationCheck(
                 id=_check_id,
                 label=_check_id.replace("_", " ").capitalize(),
-                severity="warn",
+                severity=_INTENDED_SEVERITY.get(_check_id, "block"),
                 passed=False,
                 value=None,
                 threshold=None,
