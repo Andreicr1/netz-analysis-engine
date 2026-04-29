@@ -73,6 +73,9 @@ from app.domains.wealth.models.model_portfolio import (
     PortfolioConstructionRun,
     PortfolioStressResult,
 )
+from app.domains.wealth.queries.validation_context import (
+    build_validation_db_context,
+)
 from app.domains.wealth.schemas.sanitized import (
     WinnerSignal,
     build_operator_message,
@@ -98,7 +101,6 @@ from vertical_engines.wealth.model_portfolio.stress_scenarios import (
     run_stress_scenario,
 )
 from vertical_engines.wealth.model_portfolio.validation_gate import (
-    ValidationDbContext,
     to_jsonb,
     validate_construction,
 )
@@ -2034,8 +2036,18 @@ async def _execute_inner(
         "statistical_inputs": statistical_inputs_payload,
         "factor_exposure": factor_exposure,
     }
+    # PR-Q116 — populate ValidationDbContext from DB so that checks 7-10
+    # (block min/max, banned instruments, approved universe) and check 16
+    # (TAA/IPS bands) see real org data instead of empty defaults.
+    validation_db_context = await build_validation_db_context(
+        db,
+        organization_id=organization_id,
+        profile=profile,
+        instrument_ids=list(weights_proposed.keys()),
+        as_of_date=run.as_of_date,
+    )
     validation_result = validate_construction(
-        validation_payload, ValidationDbContext(),
+        validation_payload, validation_db_context,
     )
     validation_jsonb = to_jsonb(validation_result)
 
