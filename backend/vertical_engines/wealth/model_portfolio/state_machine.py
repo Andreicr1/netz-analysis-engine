@@ -37,6 +37,7 @@ import structlog
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db.audit import write_audit_event
 from app.domains.wealth.models.model_portfolio import (
     ModelPortfolio,
     PortfolioStateTransition,
@@ -339,6 +340,24 @@ async def transition(
     await db.flush()
     await db.refresh(transition_row)
     await db.refresh(portfolio)
+
+    # PR-Q115: emit unified audit event (Session 10 I-Audit-Tenant-1).
+    # The PortfolioStateTransition row is domain-specific; the audit_events
+    # row feeds the unified tenant-scoped audit feed.
+    await write_audit_event(
+        db,
+        action="model_portfolio.state_transition",
+        entity_type="ModelPortfolio",
+        entity_id=str(portfolio_id),
+        actor_id=actor_id,
+        before={"state": from_state},
+        after={
+            "state": to_state,
+            "actor_id": actor_id,
+            "reason": reason,
+        },
+        allow_global=False,
+    )
 
     logger.info(
         "portfolio_state_transition",
