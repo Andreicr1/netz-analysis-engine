@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from quant_engine.cvar_service import compute_cvar_from_returns
 from vertical_engines.wealth.model_portfolio.stress_scenarios import (
     PRESET_SCENARIOS,
     StressScenarioResult,
@@ -76,3 +77,25 @@ class TestRunStressScenario:
         assert result.nav_impact_pct == 0.0
         assert result.worst_block is None
         assert result.best_block is None
+
+    def test_stressed_cvar_materially_different_from_unstressed(self):
+        """PR-Q112 (S10 C-05): stressed CVaR must reflect the scenario shock.
+
+        The old implementation divided nav_impact by T, diluting a -38%
+        GFC shock to ~-0.15%/day across 252 observations — producing
+        stressed CVaR indistinguishable from unstressed.  The fix appends
+        the shock as a single extreme observation so it properly impacts
+        the CVaR_95 tail.
+        """
+        rng = np.random.default_rng(42)
+        returns = rng.normal(0.0004, 0.01, 252)
+        base_cvar, _ = compute_cvar_from_returns(returns, confidence=0.95)
+
+        # 100% equity portfolio hit by GFC -38% shock
+        result = run_stress_scenario(
+            {"equity": 1.0}, {"equity": -0.38}, returns, "gfc"
+        )
+
+        assert result.cvar_stressed is not None
+        # Stressed CVaR should be materially worse (at least 10% more negative)
+        assert result.cvar_stressed < base_cvar * 1.10
