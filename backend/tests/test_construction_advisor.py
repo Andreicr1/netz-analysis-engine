@@ -325,11 +325,14 @@ class TestProjectCvarHistorical:
         assert result_rolling is not None
         assert result_rolling < 0  # loss convention
 
-        # Manually compute the rolling path to verify
+        # Manually compute the rolling path to verify (compound, not sum)
         combined = np.column_stack([port_ret_long, cand_ret_long])
         new_w = np.append(weights * 0.9, 0.10)
         port_daily = combined @ new_w
-        annual_rets = np.convolve(port_daily, np.ones(252), mode="valid")
+        annual_rets = np.array([
+            np.prod(1 + port_daily[i:i + 252]) - 1
+            for i in range(len(port_daily) - 252 + 1)
+        ])
         sorted_annual = np.sort(annual_rets)
         cutoff = max(int(len(sorted_annual) * 0.05), 1)
         expected_cvar = float(round(np.mean(sorted_annual[:cutoff]), 6))
