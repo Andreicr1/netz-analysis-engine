@@ -6,7 +6,9 @@ from quant_engine.cvar_service import compute_cvar_from_returns
 from vertical_engines.wealth.model_portfolio.stress_scenarios import (
     PRESET_SCENARIOS,
     StressScenarioResult,
+    apply_idiosyncratic_dispersion,
     run_stress_scenario,
+    run_stress_scenario_fund_level,
 )
 
 
@@ -99,3 +101,68 @@ class TestRunStressScenario:
         assert result.cvar_stressed is not None
         # Stressed CVaR should be materially worse (at least 10% more negative)
         assert result.cvar_stressed < base_cvar * 1.10
+
+
+class TestIdiosyncraticDispersion:
+    """C-13: per-fund RNG seed produces distinct shocks per fund."""
+
+    def test_dispersion_produces_different_shocks_per_fund(self):
+        """Same base seed + different fund_ids must yield distinct residuals."""
+        import hashlib
+
+        base_seed = 42
+        block_shock = -0.38
+        fund_vol = 0.15
+
+        shocks: dict[str, float] = {}
+        for fid in ["fund_a", "fund_b", "fund_c"]:
+            fund_hash = int(hashlib.md5(fid.encode()).hexdigest()[:8], 16)
+            fund_seed = (base_seed + fund_hash) & 0xFFFFFFFF
+            shocks[fid] = apply_idiosyncratic_dispersion(
+                block_shock=block_shock,
+                fund_volatility=fund_vol,
+                seed=fund_seed,
+            )
+
+        assert len(set(shocks.values())) == 3, (
+            f"Expected 3 distinct shocks but got {shocks}"
+        )
+
+    def test_fund_level_scenario_produces_distinct_per_fund_shocks(self):
+        """run_stress_scenario_fund_level must not produce identical impacts."""
+        fund_ids = ["fund_a", "fund_b", "fund_c"]
+        fund_weights = {fid: 1.0 / 3 for fid in fund_ids}
+        fund_blocks = {fid: "na_equity_large" for fid in fund_ids}
+        fund_vols = {fid: 0.15 for fid in fund_ids}
+        shocks = {"na_equity_large": -0.38}
+
+        result = run_stress_scenario_fund_level(
+            fund_weights=fund_weights,
+            fund_blocks=fund_blocks,
+            fund_volatilities=fund_vols,
+            shocks=shocks,
+            seed=42,
+        )
+
+        # NAV impact must differ from naive (all-identical) calculation
+        naive_impact = sum(w * (-0.38) for w in fund_weights.values())
+        assert result.nav_impact_pct != round(naive_impact, 6), (
+            "Fund-level shocks should differ from block-level due to dispersion"
+        )
+
+    def test_dispersion_deterministic_for_same_fund(self):
+        """Same fund_id + same base seed must produce identical results."""
+        import hashlib
+
+        base_seed = 99
+        fund_id = "fund_x"
+        fund_hash = int(hashlib.md5(fund_id.encode()).hexdigest()[:8], 16)
+        fund_seed = (base_seed + fund_hash) & 0xFFFFFFFF
+
+        s1 = apply_idiosyncratic_dispersion(
+            block_shock=-0.20, fund_volatility=0.12, seed=fund_seed,
+        )
+        s2 = apply_idiosyncratic_dispersion(
+            block_shock=-0.20, fund_volatility=0.12, seed=fund_seed,
+        )
+        assert s1 == s2

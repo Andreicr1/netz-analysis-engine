@@ -10,6 +10,7 @@ block-level weights for instant NAV impact and stressed CVaR estimation.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import date
 
@@ -224,11 +225,16 @@ def run_stress_scenario_fund_level(
         if block_id is None:
             continue
         block_shock = shocks.get(block_id, 0.0)
+        # C-13: derive per-fund seed so each fund gets a distinct residual
+        fund_seed: int | None = None
+        if seed is not None:
+            fund_hash = int(hashlib.md5(fund_id.encode()).hexdigest()[:8], 16)
+            fund_seed = (seed + fund_hash) & 0xFFFFFFFF
         fund_shock = apply_idiosyncratic_dispersion(
             block_shock=block_shock,
             fund_volatility=fund_volatilities.get(fund_id),
             fund_beta=fund_betas.get(fund_id),
-            seed=seed,
+            seed=fund_seed,
         )
         impact = weight * fund_shock
         block_impacts[block_id] = round(block_impacts.get(block_id, 0.0) + impact, 6)
