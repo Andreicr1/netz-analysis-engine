@@ -26,6 +26,7 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
 
     Returns dict of name → (async_fn, scope_type, timeout_seconds).
     """
+    from app.domains.wealth.workers.alert_sweeper import run_alert_sweeper
     from app.domains.wealth.workers.benchmark_ingest import run_benchmark_ingest
     from app.domains.wealth.workers.bis_ingestion import run_bis_ingestion
     from app.domains.wealth.workers.brochure_ingestion import (
@@ -91,6 +92,7 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         "portfolio_nav_synthesizer": (run_portfolio_nav_synthesizer, "org", _LIGHT),
         "screening_batch": (run_screening_batch, "org", _LIGHT),
         "watchlist_batch": (run_watchlist_check, "org", _LIGHT),
+        "alert_sweeper": (run_alert_sweeper, "org", _LIGHT),
     }
 
 

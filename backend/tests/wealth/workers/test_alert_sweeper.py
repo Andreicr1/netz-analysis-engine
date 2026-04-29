@@ -61,6 +61,7 @@ class _FakeSession:
     async def execute(self, stmt, params=None):
         sql = str(stmt)
         self.executed_sql.append(sql)
+        self.last_params = params
 
         if "set_config" in sql and "app.current_organization_id" in sql:
             if params:
@@ -364,3 +365,77 @@ async def test_alert_sweeper_no_session_lock_orphan():
         f"Session-scoped advisory lock/unlock detected -- must use xact variant: "
         f"{session_lock_sqls}"
     )
+
+
+# -- Test 9: alert_sweeper registered in dispatcher -------------------------
+
+
+def test_alert_sweeper_registered_in_dispatcher():
+    """alert_sweeper must be present in get_worker_registry with correct metadata."""
+    from app.domains.admin.routes.worker_registry import get_worker_registry
+
+    registry = get_worker_registry()
+    assert "alert_sweeper" in registry, (
+        "alert_sweeper not found in worker registry — it will never be invoked by scheduler"
+    )
+
+    coro_fn, scope_type, timeout = registry["alert_sweeper"]
+    assert coro_fn is mod.run_alert_sweeper
+    assert scope_type == "org", "alert_sweeper must be org-scoped"
+    assert timeout > 0
+
+
+# -- Test 10: lock scoped per org -------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_alert_sweeper_lock_scoped_per_org():
+    """Two different orgs can acquire lock independently; same org blocks."""
+    org_a = uuid.uuid4()
+    org_b = uuid.uuid4()
+
+    # Both orgs acquire lock successfully (independent sessions)
+    session_a = _FakeSession(lock_acquired=True, candidates=[])
+    with patch.object(mod, "async_session_factory", _make_session_factory(session_a)):
+        result_a = await mod.run_alert_sweeper(org_a)
+    assert result_a["status"] == "completed"
+
+    session_b = _FakeSession(lock_acquired=True, candidates=[])
+    with patch.object(mod, "async_session_factory", _make_session_factory(session_b)):
+        result_b = await mod.run_alert_sweeper(org_b)
+    assert result_b["status"] == "completed"
+
+    # Verify lock SQL uses two-arg form (class, key) not single-arg
+    for session in (session_a, session_b):
+        lock_sqls = [
+            sql for sql in session.executed_sql
+            if "pg_try_advisory_xact_lock" in sql
+        ]
+        assert len(lock_sqls) == 1
+        assert "lock_class" in lock_sqls[0] or ":lock_class" in lock_sqls[0], (
+            "Lock must use two-arg form pg_try_advisory_xact_lock(:lock_class, :lock_obj)"
+        )
+
+    # Same org: second run blocked
+    session_blocked = _FakeSession(lock_acquired=False)
+    with patch.object(mod, "async_session_factory", _make_session_factory(session_blocked)):
+        result_blocked = await mod.run_alert_sweeper(org_a)
+    assert result_blocked["status"] == "skipped"
+    assert result_blocked["dismissed"] == 0
+
+
+# -- Test 11: different orgs produce different lock keys --------------------
+
+
+def test_org_lock_key_deterministic_and_distinct():
+    """_org_lock_key produces distinct, deterministic keys for distinct orgs."""
+    org_a = uuid.UUID("00000000-0000-0000-0000-000000000001")
+    org_b = uuid.UUID("00000000-0000-0000-0000-000000000002")
+
+    key_a = mod._org_lock_key(org_a)
+    key_b = mod._org_lock_key(org_b)
+
+    assert key_a == mod._org_lock_key(org_a), "must be deterministic"
+    assert key_a != key_b, "different orgs must produce different lock keys"
+    assert 0 <= key_a <= 0x7FFFFFFF, "must fit in int4 range"
+    assert 0 <= key_b <= 0x7FFFFFFF, "must fit in int4 range"

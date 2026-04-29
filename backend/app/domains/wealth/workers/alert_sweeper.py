@@ -11,6 +11,7 @@ Lock ID: 900_102 (documented in CLAUDE.md worker table).
 from __future__ import annotations
 
 import uuid
+import zlib
 from datetime import UTC, datetime
 
 import structlog
@@ -27,26 +28,36 @@ logger = structlog.get_logger(__name__)
 ALERT_SWEEPER_LOCK_ID = 900_102
 
 
+def _org_lock_key(organization_id: uuid.UUID | str) -> int:
+    """Deterministic per-org lock key via zlib.crc32 (CLAUDE.md §3)."""
+    return zlib.crc32(str(organization_id).encode("utf-8")) & 0x7FFFFFFF
+
+
 async def run_alert_sweeper(org_id: uuid.UUID) -> dict:
     """Auto-dismiss portfolio alerts past auto_dismiss_at.
 
-    Uses pg_try_advisory_xact_lock (Stability Charter section 3): lock is
-    automatically released on commit or rollback — no manual unlock needed,
-    no orphaned lock risk.
+    Uses pg_try_advisory_xact_lock(class, key) with org-scoped key so
+    different organizations can run concurrently. Lock is automatically
+    released on commit or rollback — no manual unlock needed.
 
     Returns dict with status and count of dismissed alerts.
     """
     async with async_session_factory() as db:
         await set_rls_context(db, org_id)
 
-        # Acquire xact lock — non-blocking, auto-released on commit/rollback
+        # Acquire org-scoped xact lock — non-blocking, auto-released on commit/rollback
+        org_lock_key = _org_lock_key(org_id)
         lock_result = await db.execute(
-            text("SELECT pg_try_advisory_xact_lock(:lock_id)"),
-            {"lock_id": ALERT_SWEEPER_LOCK_ID},
+            text("SELECT pg_try_advisory_xact_lock(:lock_class, :lock_obj)"),
+            {"lock_class": ALERT_SWEEPER_LOCK_ID, "lock_obj": org_lock_key},
         )
         acquired = lock_result.scalar()
         if not acquired:
-            logger.info("alert_sweeper_skipped", reason="lock held")
+            logger.info(
+                "alert_sweeper_skipped",
+                reason="lock held",
+                organization_id=str(org_id),
+            )
             return {"status": "skipped", "reason": "lock held", "dismissed": 0}
 
         count = await _execute_sweep(db, org_id)
