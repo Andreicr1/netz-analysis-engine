@@ -177,6 +177,16 @@ class AttributionService:
         if not block_ids:
             return AttributionResult(benchmark_available=False, n_periods=1)
 
+        # Codex P1: at least one included block must have an observed
+        # benchmark return. If all blocks are off-benchmark CIPM fallback
+        # (fabricated r_b = r_p), the benchmark stream is synthetic and
+        # attribution is meaningless.
+        has_observed_bench = any(
+            bid in benchmark_returns_by_block for bid in block_ids
+        )
+        if not has_observed_bench:
+            return AttributionResult(benchmark_available=False, n_periods=1)
+
         benchmark_weights = np.array([sa_map.get(bid, 0.0) for bid in block_ids])
         portfolio_weights = np.array([
             (actual_weights_by_block or sa_map).get(bid, 0.0) for bid in block_ids

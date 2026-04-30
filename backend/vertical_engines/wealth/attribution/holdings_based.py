@@ -263,8 +263,10 @@ async def run_holdings_rail(
             cik=cik,
         )
 
-    # WMJ-010: compute staleness lag for IC/RIA review badge
-    period_lag_days = (request.asof - period).days if period is not None else None
+    # WMJ-010: compute staleness lag for IC/RIA review badge.
+    # Clamp to non-negative — negative lag means period > asof (backdated
+    # request without asof upper bound; Q156 adds that guard).
+    period_lag_days = max(0, (request.asof - period).days) if period is not None else None
 
     if coverage < min_coverage:
         return HoldingsBasedResult(
