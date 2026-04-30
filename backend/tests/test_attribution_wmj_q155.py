@@ -948,3 +948,51 @@ def test_multi_period_carino_preserves_observed_bench_in_unavailable_period():
         f"correct={multi_correct.total_benchmark_return}, "
         f"buggy={multi_buggy.total_benchmark_return}"
     )
+
+
+def test_unavailable_bench_uses_actual_weights_when_provided():
+    """Q162 (Codex P2 follow-up to Q155): when the benchmark degrades to
+    unavailable, the preserved total_portfolio_return MUST honor
+    ``actual_weights_by_block`` if the caller provided it. Falling back to
+    strategic targets (sa_map) when actual weights are present violates
+    the method contract and silently misstates the realized portfolio
+    return for report engines that pass live weights.
+    """
+    svc = AttributionService()
+
+    # Strategic weights: 50/50.
+    allocations = [
+        {"block_id": "A", "target_weight": 0.50},
+        {"block_id": "B", "target_weight": 0.50},
+    ]
+    # Actual portfolio weights diverge materially from strategic.
+    actual = {"A": 0.70, "B": 0.30}
+    fund_returns = {"A": 0.10, "B": 0.04}
+    # Empty benchmark → degraded branch (has_observed_bench = False).
+    benchmark_returns: dict[str, float] = {}
+    labels = {"A": "Asset A", "B": "Asset B"}
+
+    result = svc.compute_portfolio_attribution(
+        strategic_allocations=allocations,
+        fund_returns_by_block=fund_returns,
+        benchmark_returns_by_block=benchmark_returns,
+        block_labels=labels,
+        actual_weights_by_block=actual,
+    )
+
+    # Degraded — benchmark unknown.
+    assert result.benchmark_available is False
+
+    # Expected: actual weights drive the realized portfolio return.
+    expected_actual = 0.70 * 0.10 + 0.30 * 0.04  # = 0.082
+    expected_strategic = 0.50 * 0.10 + 0.50 * 0.04  # = 0.07 (the buggy value)
+
+    assert result.total_portfolio_return == pytest.approx(expected_actual, abs=1e-9), (
+        "Q162: degraded-period total_portfolio_return must use "
+        "actual_weights_by_block when provided (0.082), NOT fall back to "
+        f"strategic sa_map (0.07). Got {result.total_portfolio_return}."
+    )
+    assert result.total_portfolio_return != pytest.approx(expected_strategic, abs=1e-9), (
+        "Q162 regression guard: result must not equal the sa_map-only value "
+        "when actual weights are provided and differ."
+    )
