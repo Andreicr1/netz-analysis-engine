@@ -373,12 +373,10 @@ async def test_ipca_result_includes_residual():
         result = await run_ipca_rail(req, db)
 
     assert result is not None, "Expected IPCA result"
-    assert result.residual is not None, "residual must be populated"
-    # For Option B, residual = sum(beta_k * f_k_mean) + alpha - (beta' f_t_mean + alpha)
-    # This is mathematically zero because contribution_per_factor = beta * f_t_mean.
-    assert abs(result.residual) < 1e-10, (
-        f"Residual {result.residual} is not near zero for a well-decomposed model"
-    )
+    # Option B residual is None — computing a meaningful residual would
+    # require period-bounded fund returns (Codex P2: tautology removal).
+    # Option A has a real residual via its regression y_period.
+    assert result.residual is None
 
 
 # ---------------------------------------------------------------------------

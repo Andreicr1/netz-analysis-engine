@@ -261,8 +261,12 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
 
     factor_names = ["Size", "Value", "Momentum", "Quality", "Investment", "Profitability"]
 
-    # WMJ-014B: compute residual for reconstruction quality assessment
-    residual = _compute_residual(contribution_per_factor, alpha, f_t_mean, beta)
+    # WMJ-014B: Option B residual is None — computing a meaningful residual
+    # (mean_period(r_fund) - implied) would require an additional DB query
+    # for period-bounded fund returns. The tautological sum(beta*f_t_mean)
+    # vs beta@f_t_mean is always zero (Codex P2). Option A has a real
+    # residual via its regression y_period.
+    residual = None
 
     # WMJ-013: propagate degraded status from fit + WMJ-014C: dates fallback
     degraded = fit.degraded or dates_unavailable
@@ -282,24 +286,6 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
         degraded_reason=degraded_reason,
         residual=residual,
     )
-
-def _compute_residual(
-    contribution_per_factor: np.ndarray,
-    alpha: float,
-    f_t_mean: np.ndarray,
-    beta: np.ndarray,
-) -> float | None:
-    """Compute residual: sum(contributions) + alpha vs implied return.
-
-    For Option B, the implied return is beta' * f_t_mean + alpha.
-    The residual measures how well the decomposition reconstructs.
-    For a fully decomposed model this should be exactly zero, but
-    floating-point arithmetic may introduce small residuals.
-    """
-    implied = float(np.sum(contribution_per_factor)) + alpha
-    reconstructed = float(beta @ f_t_mean) + alpha
-    return float(implied - reconstructed)
-
 
 async def _estimate_alpha_fixed_beta(request: AttributionRequest, db: AsyncSession, fit: IPCAFit, beta: np.ndarray) -> float:
     """Estimate alpha as the mean residual: r_fund - beta' * f_t.
