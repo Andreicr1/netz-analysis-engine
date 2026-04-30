@@ -627,9 +627,15 @@ async def test_executor_marks_real_solver_runs_as_succeeded() -> None:
             )
             await db.flush()
 
+            async def _fake_nav(*a: Any, **kw: Any) -> dict[str, Any]:
+                return {"status": "ok", "dates_computed": 5, "funds_covered": 1}
+
             with mock_patch(
                 "app.domains.wealth.routes.model_portfolios._run_construction_async",
                 new=_fake,
+            ), mock_patch(
+                "app.domains.wealth.workers.portfolio_nav_synthesizer.synthesize_portfolio_nav",
+                new=_fake_nav,
             ):
                 run = await execute_construction_run(
                     db,
