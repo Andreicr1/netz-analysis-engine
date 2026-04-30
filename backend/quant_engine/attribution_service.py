@@ -195,11 +195,16 @@ def compute_multi_period_attribution(
     #   k_t = (ln(1 + R_p_t) - ln(1 + R_b_t)) / (R_p_t - R_b_t)
     # When portfolio and benchmark returns are nearly equal, L'Hopital
     # gives k_t -> 1 / (1 + R_p_t).
+    # WMJ-025: clamp k_t to prevent divergence with pathological returns
+    # close to -100% (e.g. r_p = -0.999, r_b = -0.998 produces k_t ≈ 1000).
+    _K_CLAMP = 10.0
+
     def _carino_factor(r_p: float, r_b: float) -> float:
         diff = r_p - r_b
         if abs(diff) < 1e-10:
             return 1.0 / (1.0 + r_p) if abs(1.0 + r_p) > 1e-10 else 1.0
-        return float((np.log(1 + r_p) - np.log(1 + r_b)) / diff)
+        k = float((np.log(1 + r_p) - np.log(1 + r_b)) / diff)
+        return max(-_K_CLAMP, min(_K_CLAMP, k))
 
     # Per-period Carino factors and arithmetic excess returns
     k_values = [

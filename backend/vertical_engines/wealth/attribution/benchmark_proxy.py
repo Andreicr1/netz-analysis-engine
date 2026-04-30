@@ -308,6 +308,31 @@ async def run_proxy_rail(
             degraded_reason="proxy_no_holdings",
         )
 
+    # WMJ-012: symmetric fund-side empty-holdings guard. Without fund
+    # holdings, Brinson runs with all-zero fund weights — meaningless.
+    if not fund_sectors:
+        return BenchmarkProxyResult(
+            resolution=resolution,
+            brinson=_empty_brinson(),
+            confidence=0.0,
+            period_of_report=fund_period,
+            degraded=True,
+            degraded_reason="fund_no_holdings",
+        )
+
+    # WMJ-011: period alignment. Fund and proxy periods are independently
+    # selected via MAX(period_of_report). When sector returns are wired,
+    # running Brinson on mismatched return windows produces cross-period
+    # attribution noise. Log a warning now; future PR should enforce
+    # shared period or degrade.
+    if fund_period != proxy_period:
+        logger.warning(
+            "proxy_rail_period_misaligned",
+            fund_period=str(fund_period),
+            proxy_period=str(proxy_period),
+            lag_days=abs((fund_period - proxy_period).days),
+        )
+
     fund_weights = _weights_by_sector(fund_sectors)
     bench_weights = _weights_by_sector(proxy_sectors)
 
