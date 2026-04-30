@@ -329,5 +329,57 @@ def test_sterling_yearly_chunk_captures_initial_drawdown():
     chunk1 = np.concatenate([np.full(5, -0.01), np.full(247, 0.0001)])
     daily = np.concatenate([chunk1, chunk1, chunk1])
     result = compute_return_statistics(daily)
-    if result.sterling_ratio is not None:
-        assert result.sterling_ratio is not None
+    # WMJ-030: replaced tautological assertion (was `if x is not None: assert x is not None`).
+    # This fund has 5 consecutive -1% losses per year → net negative return → negative Sterling.
+    assert result.sterling_ratio is not None
+    assert np.isfinite(result.sterling_ratio)
+
+
+# ── WMJ-022: Sterling convention — denominator = |avg_max_dd − 0.10| ──
+
+
+def test_sterling_convention_denominator_documented():
+    """Pin the Sterling denominator convention: abs(avg_max_dd − 0.10).
+
+    With avg_max_dd = −0.20 (negative drawdown):
+        denominator = |−0.20 − 0.10| = 0.30  ("|DD| + 10%" style)
+
+    This is the "original Sterling" convention (Kestner 1996), NOT
+    the "modified Sterling" where denominator = |DD| − 10%.
+    """
+    # Build a 3-year (756-day) series with known max drawdowns per year.
+    # Each year: 5 days of sharp loss producing ~-20% DD, then flat recovery.
+    year_days = 252
+    loss_days = 5
+    # daily loss to compound to -20%: (1+r)^5 = 0.80 → r = 0.80^(1/5) - 1
+    daily_loss = 0.80 ** (1.0 / loss_days) - 1  # ≈ -0.0437
+
+    def _make_year() -> np.ndarray:
+        days = np.zeros(year_days)
+        days[:loss_days] = daily_loss  # sharp loss → ~-20% DD
+        # remaining days: zero return (no recovery)
+        return days
+
+    daily = np.concatenate([_make_year(), _make_year(), _make_year()])
+    sterling = _compute_sterling_ratio(daily)
+    assert sterling is not None
+
+    # Manually compute what the formula should produce:
+    n = len(daily)
+    cum_return = float(np.prod(1.0 + daily))
+    ann_return = cum_return ** (252.0 / n) - 1
+
+    # Each yearly chunk has max DD ≈ -0.20 (from the 5 loss days).
+    # avg_max_dd ≈ -0.20
+    # Our denominator: |(-0.20) - 0.10| = 0.30
+    # Alternative "modified" denominator: |(-0.20)| - 0.10 = 0.10
+    # Verify our convention produces Sterling = ann_return / ~0.30
+    expected_sterling_original = ann_return / 0.30  # ≈ negative/0.30
+    expected_sterling_modified = ann_return / 0.10  # ≈ negative/0.10
+
+    # The actual Sterling should be close to the "original" convention value,
+    # NOT the "modified" value (which is 3× larger in magnitude).
+    assert abs(sterling - expected_sterling_original) < abs(sterling - expected_sterling_modified), (
+        f"Sterling {sterling:.4f} is closer to modified ({expected_sterling_modified:.4f}) "
+        f"than original ({expected_sterling_original:.4f}) — wrong convention"
+    )

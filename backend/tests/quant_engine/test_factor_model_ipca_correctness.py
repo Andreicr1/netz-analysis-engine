@@ -68,11 +68,12 @@ class TestBugI2WalkForwardBoundary:
         """T=72 exactly → at least one fold runs (not empty range)."""
         ret, chars = _synthetic_panel(T=72, N=30, K=2, L=6, seed=7)
         fit = fit_universe(ret, chars, max_k=3)
-        # If the loop ran, oos_r_squared should not be the unvalidated default
-        assert fit.oos_r_squared != 0.0 or fit.degraded is False or fit.degraded is True
-        # Key: it should NOT fall into the short-panel path (degraded for insufficient_dates)
-        if fit.degraded:
-            assert "insufficient_dates" not in (fit.degraded_reason or "")
+        # WMJ-030 (TEMP-A7-18): replaced tautological assertion
+        # (``degraded is False or degraded is True`` is always True).
+        # T=72 must not hit the short-panel guard — verify positively.
+        assert "insufficient_dates" not in (fit.degraded_reason or ""), (
+            "T=72 must not hit short-panel guard"
+        )
 
 
 # ---------------------------------------------------------------------------

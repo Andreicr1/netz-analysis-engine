@@ -314,6 +314,30 @@ def test_stale_nav_passes_when_all_recent():
     assert nav_check.passed
 
 
+# ── WMJ-019: fail-closed when as_of_date missing ─────────────────
+
+
+def test_stale_nav_fails_closed_when_as_of_date_missing():
+    """Missing as_of_date must fail-closed (block), not skip with passed=True."""
+    payload = _base_payload()
+    del payload["as_of_date"]
+    result = validate_construction(payload, _base_db_context())
+    nav_check = next(c for c in result.checks if c.id == "no_stale_nav")
+    assert nav_check.passed is False
+    assert nav_check.severity == "block"
+    assert "missing" in nav_check.explanation.lower()
+
+
+def test_stale_nav_fails_closed_empty_as_of_date():
+    """Empty string as_of_date must also fail-closed."""
+    payload = _base_payload()
+    payload["as_of_date"] = ""
+    result = validate_construction(payload, _base_db_context())
+    nav_check = next(c for c in result.checks if c.id == "no_stale_nav")
+    assert nav_check.passed is False
+    assert nav_check.severity == "block"
+
+
 # ── Warn-severity cases ──────────────────────────────────────────
 
 

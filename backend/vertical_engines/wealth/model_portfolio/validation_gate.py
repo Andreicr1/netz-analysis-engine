@@ -190,14 +190,17 @@ def _check_no_stale_nav(
     as_of_date_raw = run_payload.get("as_of_date")
 
     if not as_of_date_raw:
+        # WMJ-019: fail-closed — missing as_of_date must block, not skip.
+        # Production caller (construction_run_executor) always provides it,
+        # so this is defense-in-depth against future callers or payload bugs.
         return ValidationCheck(
             id="no_stale_nav",
             label="NAV data is fresh",
             severity="block",
-            passed=True,
-            value=0,
+            passed=False,
+            value=None,
             threshold=db.nav_staleness_threshold_days,
-            explanation="as_of_date missing from payload; staleness check skipped.",
+            explanation="as_of_date missing from payload; staleness check cannot run.",
         )
 
     as_of = (

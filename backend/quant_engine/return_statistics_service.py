@@ -180,7 +180,18 @@ def _compute_semi_deviation(returns: np.ndarray) -> float | None:
 def _compute_sterling_ratio(
     daily_returns: np.ndarray,
 ) -> float | None:
-    """Sterling ratio = ann_return / abs(avg_yearly_max_dd - 10%).
+    """Sterling ratio = ann_return / abs(avg_yearly_max_dd − 10%).
+
+    Convention (WMJ-022 pinned):
+        denominator = |avg_max_dd − 0.10|
+
+    ``avg_max_dd`` is negative (drawdowns), so the subtraction *increases*
+    the denominator: e.g. avg_max_dd = −0.20 → |−0.20 − 0.10| = 0.30.
+    This matches the "original Sterling" convention (Kestner 1996) where
+    10% is an *additive* cushion that penalises funds with small
+    drawdowns less harshly.  The alternative "|DD| − 10%" convention
+    (sometimes called "modified Sterling") was considered but not adopted
+    — it produces negative denominators for low-DD funds.
 
     Uses 3-year equivalent: average of annual max drawdowns.
     Falls back to single max DD if < 3 years of data.
