@@ -545,3 +545,18 @@ def test_validation_passes_on_legacy_payload_without_cvar_enforcement():
     cvar_enf = next(c for c in result.checks if c.id == "cvar_enforcement")
     assert cvar_enf.passed is True
     assert "legacy" in cvar_enf.explanation.lower()
+
+
+def test_validation_passes_on_optimization_present_but_enforcement_none():
+    """Executor early-exit paths (no cascade ran) set cvar_enforcement=None.
+
+    PR-Q142 hotfix: the optimization section IS present (executor always
+    injects it), but cvar_enforcement is None when the cascade didn't run
+    (e.g. block_coverage_insufficient, template_incomplete). These should
+    pass gracefully — they are not heuristic fallbacks.
+    """
+    payload = _base_payload()
+    payload["optimization"] = {"cvar_enforcement": None}
+    result = validate_construction(payload, _base_db_context())
+    cvar_enf = next(c for c in result.checks if c.id == "cvar_enforcement")
+    assert cvar_enf.passed is True

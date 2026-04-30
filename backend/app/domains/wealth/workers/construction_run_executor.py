@@ -2032,6 +2032,24 @@ async def _execute_inner(
         statistical_inputs_payload["kappa_final"] = shrinkage_block.get(
             "kappa_final",
         )
+    # PR-Q142 — derive cvar_enforcement from cascade_summary so the
+    # validation gate check #17 (_check_cvar_enforcement) sees the flag.
+    # The route path sets this on OptimizationMeta; the executor path must
+    # derive it from the cascade telemetry which is already available here.
+    _cs = (cascade_telemetry or {}).get("cascade_summary")
+    if _cs == "upstream_heuristic":
+        _cvar_enforcement = "unverified"
+    elif _cs == "phase_3_min_cvar_above_limit":
+        _cvar_enforcement = "violated"
+    elif _cs in (
+        "phase_1_succeeded",
+        "phase_2_robust_succeeded",
+        "phase_3_min_cvar_within_limit",
+    ):
+        _cvar_enforcement = "enforced"
+    else:
+        _cvar_enforcement = None  # early-exit paths (no cascade ran)
+
     validation_payload: dict[str, Any] = {
         "as_of_date": run.as_of_date.isoformat(),
         "profile": profile,
@@ -2043,6 +2061,7 @@ async def _execute_inner(
         "optimizer_trace": optimizer_trace,
         "statistical_inputs": statistical_inputs_payload,
         "factor_exposure": factor_exposure,
+        "optimization": {"cvar_enforcement": _cvar_enforcement},
     }
     # PR-Q116 — populate ValidationDbContext from DB so that checks 7-10
     # (block min/max, banned instruments, approved universe) and check 16

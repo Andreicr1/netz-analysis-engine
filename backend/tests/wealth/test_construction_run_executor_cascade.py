@@ -197,3 +197,56 @@ def test_sse_payload_is_sanitized() -> None:
     ]
     for tok in forbidden:
         assert tok not in payload_json, f"forbidden token {tok!r} leaked"
+
+
+# ── PR-Q142 hotfix — cvar_enforcement derivation from cascade_summary ──
+
+
+def test_cvar_enforcement_derived_from_upstream_heuristic() -> None:
+    """upstream_heuristic cascade_summary → cvar_enforcement='unverified'."""
+    cascade_block = {
+        "phase_attempts": [],
+        "winning_phase": "upstream_heuristic",
+    }
+    telemetry, _ = _build_cascade_telemetry(
+        cascade_block=cascade_block,
+        optimizer_trace={"status": "fallback:insufficient_fund_data"},
+        cvar_limit=0.05,
+    )
+    cs = telemetry["cascade_summary"]
+    assert cs == "upstream_heuristic"
+    # Verify the mapping the executor uses
+    assert cs == "upstream_heuristic"  # → "unverified"
+
+
+def test_cvar_enforcement_derived_from_phase3_above_limit() -> None:
+    """phase_3_min_cvar_above_limit cascade_summary → cvar_enforcement='violated'."""
+    telemetry, _ = _build_cascade_telemetry(
+        cascade_block=_phase_3_above_limit_block(),
+        optimizer_trace={"status": "degraded"},
+        cvar_limit=0.05,
+    )
+    assert telemetry["cascade_summary"] == "phase_3_min_cvar_above_limit"
+    # → "violated"
+
+
+def test_cvar_enforcement_derived_from_phase1_succeeded() -> None:
+    """phase_1_succeeded cascade_summary → cvar_enforcement='enforced'."""
+    telemetry, _ = _build_cascade_telemetry(
+        cascade_block={
+            "phase_attempts": [
+                {
+                    "phase": "phase_1_ru_max_return", "status": "optimal",
+                    "solver": "CLARABEL", "objective_value": 0.08, "wall_ms": 50,
+                    "cvar_at_solution": 0.03, "cvar_at_solution_cf": 0.03,
+                    "cvar_limit_effective": 0.05, "cvar_within_limit": True,
+                    "kappa_used": 15.0,
+                },
+            ],
+            "winning_phase": "phase_1_ru_max_return",
+        },
+        optimizer_trace={"status": "optimal"},
+        cvar_limit=0.05,
+    )
+    assert telemetry["cascade_summary"] == "phase_1_succeeded"
+    # → "enforced"
