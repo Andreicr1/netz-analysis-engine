@@ -66,15 +66,17 @@ class CorrelationService:
                 contagion_pairs=(),
                 concentration=ConcentrationAnalysis(
                     eigenvalues=(), explained_variance_ratios=(),
-                    first_eigenvalue_ratio=0.0, concentration_status="diversified",
-                    diversification_ratio=1.0, dr_alert=False,
-                    absorption_ratio=0.0, absorption_status="normal",
+                    first_eigenvalue_ratio=0.0, concentration_status="unknown",
+                    diversification_ratio=0.0, dr_alert=False,
+                    absorption_ratio=0.0, absorption_status="unknown",
                     mp_threshold=0.0, n_signal_eigenvalues=0,
                 ),
                 average_correlation=0.0,
                 baseline_average_correlation=0.0,
                 regime_shift_detected=False,
                 computed_at=datetime.now(UTC),
+                degraded=True,
+                degraded_reason="insufficient_data",
             )
 
         # Map pair indices to instrument identifiers

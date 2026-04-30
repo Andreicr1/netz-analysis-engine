@@ -342,3 +342,42 @@ class TestCorrelationModels:
             mp_threshold=1.2, n_signal_eigenvalues=1,
         )
         assert ca.concentration_status == "moderate_concentration"
+
+
+# ── Degraded flag (F-S12-11) ────────────────────────────────────────
+
+
+class TestCorrelationInsufficientDataDegraded:
+    def test_correlation_insufficient_data_degraded(self):
+        """Insufficient data → degraded=True, concentration_status='unknown'."""
+        rng = np.random.default_rng(42)
+        returns = rng.normal(0, 0.01, (30, 3))
+        svc = CorrelationService(config={"min_observations": 45})
+        result = svc.analyze_portfolio_correlation(
+            instrument_ids=("id-a", "id-b", "id-c"),
+            instrument_names=("Fund A", "Fund B", "Fund C"),
+            returns_matrix=returns,
+            profile="moderate",
+        )
+        assert result.degraded is True
+        assert result.degraded_reason == "insufficient_data"
+        assert result.concentration.concentration_status == "unknown"
+        assert result.concentration.absorption_status == "unknown"
+        assert result.concentration.diversification_ratio == 0.0
+
+    def test_sufficient_data_not_degraded(self):
+        """Sufficient data → degraded=False."""
+        rng = np.random.default_rng(42)
+        returns = rng.normal(0, 0.01, (100, 3))
+        svc = CorrelationService(config={
+            "apply_denoising": False, "apply_shrinkage": False,
+            "min_observations": 10, "window_days": 100,
+        })
+        result = svc.analyze_portfolio_correlation(
+            instrument_ids=("id-a", "id-b", "id-c"),
+            instrument_names=("Fund A", "Fund B", "Fund C"),
+            returns_matrix=returns,
+            profile="moderate",
+        )
+        assert result.degraded is False
+        assert result.degraded_reason is None

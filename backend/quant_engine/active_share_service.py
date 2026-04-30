@@ -24,6 +24,8 @@ class ActiveShareResult:
     n_portfolio_positions: int = 0
     n_benchmark_positions: int = 0
     n_common_positions: int = 0
+    degraded: bool = False
+    degraded_reason: str | None = None
 
 
 def compute_active_share(
@@ -43,13 +45,34 @@ def compute_active_share(
         Annualized excess return for efficiency calculation.
 
     """
-    if not portfolio_weights or not benchmark_weights:
+    if not portfolio_weights and not benchmark_weights:
+        return ActiveShareResult(
+            active_share=100.0,
+            overlap=0.0,
+            n_portfolio_positions=0,
+            n_benchmark_positions=0,
+            n_common_positions=0,
+            degraded=True,
+            degraded_reason="no_positions",
+        )
+    if not benchmark_weights:
         return ActiveShareResult(
             active_share=100.0,
             overlap=0.0,
             n_portfolio_positions=len(portfolio_weights),
+            n_benchmark_positions=0,
+            n_common_positions=0,
+            degraded=True,
+            degraded_reason="no_benchmark",
+        )
+    if not portfolio_weights:
+        return ActiveShareResult(
+            active_share=100.0,
+            overlap=0.0,
+            n_portfolio_positions=0,
             n_benchmark_positions=len(benchmark_weights),
             n_common_positions=0,
+            degraded=False,
         )
 
     # Union of all position identifiers
