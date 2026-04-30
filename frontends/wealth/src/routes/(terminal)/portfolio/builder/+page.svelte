@@ -208,6 +208,18 @@
 			</div>
 		{/if}
 
+		<!-- PR-Q141 (C-04): diagnostic banner — visible across all tabs -->
+		{#if workspace.isDiagnostic}
+			<div class="builder-diagnostic-banner" role="status">
+				<span class="builder-diagnostic-icon">&#x26A0;</span>
+				<span>
+					<strong>Diagnostic only</strong> — this construction is mandate-infeasible
+					and not eligible for approval. Backtest, stress, and drift actions are
+					blocked. Relax the CVaR limit or expand the universe and re-run.
+				</span>
+			</div>
+		{/if}
+
 		<!-- Zone E: Tab content -->
 		<div class="builder-tab-content" role="tabpanel">
 			{#key activeTab}
@@ -383,6 +395,24 @@
 	.builder-tab:focus-visible {
 		outline: var(--terminal-border-focus);
 		outline-offset: -2px;
+	}
+
+	.builder-diagnostic-banner {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--terminal-space-2);
+		padding: var(--terminal-space-2) var(--terminal-space-3);
+		background: color-mix(in srgb, var(--terminal-accent-amber) 10%, transparent);
+		border-bottom: 1px solid var(--terminal-accent-amber);
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-11);
+		line-height: var(--terminal-leading-tight);
+		color: var(--terminal-accent-amber);
+	}
+
+	.builder-diagnostic-icon {
+		flex-shrink: 0;
+		font-size: var(--terminal-text-14);
 	}
 
 	.builder-tab-content {
