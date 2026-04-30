@@ -128,15 +128,17 @@ class AttributionService:
         # WMJ-009: blocks with fund returns but no benchmark return use CIPM
         # fallback (r_b = r_p) so off-benchmark bets route to allocation,
         # consistent with brinson_fachler.py convention.
+        # Local copy avoids mutating the caller's dict (Codex P1).
+        bench_returns = dict(benchmark_returns_by_block)
         block_ids: list[str] = []
         for sa in strategic_allocations:
             bid = sa["block_id"]
             if bid in fund_returns_by_block:
-                if bid not in benchmark_returns_by_block:
+                if bid not in bench_returns:
                     # CIPM fallback: off-benchmark block — set benchmark
                     # return equal to fund return so entire bet flows to
                     # allocation (consistent with brinson_fachler.py).
-                    benchmark_returns_by_block[bid] = fund_returns_by_block[bid]
+                    bench_returns[bid] = fund_returns_by_block[bid]
                     logger.warning(
                         "attribution_off_benchmark_cipm_fallback",
                         block_id=bid,
@@ -162,7 +164,7 @@ class AttributionService:
             (actual_weights_by_block or sa_map).get(bid, 0.0) for bid in block_ids
         ])
         portfolio_returns = np.array([fund_returns_by_block[bid] for bid in block_ids])
-        benchmark_returns = np.array([benchmark_returns_by_block[bid] for bid in block_ids])
+        benchmark_returns = np.array([bench_returns[bid] for bid in block_ids])
         labels = [block_labels.get(bid, bid) for bid in block_ids]
 
         # Weight normalization check — compute residuals independently
