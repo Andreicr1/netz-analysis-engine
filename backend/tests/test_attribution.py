@@ -315,15 +315,20 @@ class TestWeightNormalization:
 
 class TestPartialBenchmarkCoverage:
     def test_missing_benchmark_for_block_uses_cipm_fallback(self):
-        """Block without benchmark data is included via CIPM fallback (WMJ-009).
+        """Truly off-benchmark block (w_b=0) without benchmark data is
+        included via CIPM fallback (WMJ-009 + Codex P1-a).
 
-        Off-benchmark blocks use r_b = r_p so the entire bet flows to
-        allocation, consistent with brinson_fachler.py convention.
+        CIPM fallback only applies when w_b=0. Benchmark-held blocks
+        (w_b>0) with missing return data are excluded.
         """
         svc = AttributionService()
-        allocations = _make_3block_allocations()
+        allocations = [
+            {"block_id": "equity", "target_weight": 0.60},
+            {"block_id": "fixed_income", "target_weight": 0.40},
+            {"block_id": "alternatives", "target_weight": 0.0},  # off-benchmark
+        ]
         fund_returns = {"equity": 0.05, "fixed_income": 0.02, "alternatives": 0.04}
-        # Missing alternatives benchmark — CIPM fallback applies
+        # Missing alternatives benchmark — CIPM fallback applies (w_b=0)
         bench_returns = {"equity": 0.04, "fixed_income": 0.015}
         labels = _make_block_labels()
 

@@ -126,23 +126,22 @@ def test_holdings_result_includes_period_lag_days():
 
 
 def test_portfolio_attribution_includes_off_benchmark_blocks():
-    """Strategic allocation with a block that has fund return but no benchmark
-    return must be included via CIPM fallback, not dropped.
+    """Strategic allocation with a truly off-benchmark block (w_b=0) that has
+    fund return but no benchmark return must be included via CIPM fallback.
 
-    WMJ-009: before fix, compute_portfolio_attribution excluded blocks without
-    benchmark returns, while brinson_fachler.py used CIPM convention (r_b = r_p
-    for off-benchmark sectors). This caused the same fund to produce different
-    attribution depending on which code path ran.
+    WMJ-009 + Codex P1-a: CIPM fallback only applies when w_b=0 (truly
+    off-benchmark). Benchmark-held blocks (w_b>0) with missing return data
+    are excluded so brinson_fachler.py's r_b=R_B convention applies.
     """
     svc = AttributionService()
 
     allocations = [
         {"block_id": "equity", "target_weight": 0.70},
-        {"block_id": "crypto", "target_weight": 0.10},
-        {"block_id": "bonds", "target_weight": 0.20},
+        {"block_id": "crypto", "target_weight": 0.0},   # truly off-benchmark
+        {"block_id": "bonds", "target_weight": 0.30},
     ]
     fund_returns = {"equity": 0.08, "crypto": 0.25, "bonds": 0.03}
-    # Benchmark has NO return for crypto — off-benchmark bet
+    # Benchmark has NO return for crypto — off-benchmark bet (w_b=0)
     benchmark_returns = {"equity": 0.07, "bonds": 0.04}
     labels = {"equity": "Equity", "crypto": "Crypto", "bonds": "Bonds"}
 

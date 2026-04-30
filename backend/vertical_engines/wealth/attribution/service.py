@@ -124,40 +124,58 @@ class AttributionService:
             block_id -> actual portfolio weight. If None, uses strategic targets.
 
         """
+        # Build weight map up-front so we can distinguish off-benchmark
+        # (w_b = 0) from benchmark-held-but-missing-return (w_b > 0).
+        sa_map = {sa["block_id"]: float(sa["target_weight"]) for sa in strategic_allocations}
+
         # Build aligned arrays — include blocks that have fund returns.
-        # WMJ-009: blocks with fund returns but no benchmark return use CIPM
-        # fallback (r_b = r_p) so off-benchmark bets route to allocation,
-        # consistent with brinson_fachler.py convention.
+        # WMJ-009 + Codex P1-a: CIPM fallback (r_b = r_p) applies ONLY to
+        # truly off-benchmark blocks (w_b = 0). For benchmark-held blocks
+        # with missing return data (w_b > 0), brinson_fachler.py uses
+        # r_b = R_B — we exclude them here so the downstream BF handles
+        # the convention consistently.
         # Local copy avoids mutating the caller's dict (Codex P1).
         bench_returns = dict(benchmark_returns_by_block)
         block_ids: list[str] = []
         for sa in strategic_allocations:
             bid = sa["block_id"]
-            if bid in fund_returns_by_block:
-                if bid not in bench_returns:
-                    # CIPM fallback: off-benchmark block — set benchmark
-                    # return equal to fund return so entire bet flows to
-                    # allocation (consistent with brinson_fachler.py).
-                    bench_returns[bid] = fund_returns_by_block[bid]
-                    logger.warning(
-                        "attribution_off_benchmark_cipm_fallback",
-                        block_id=bid,
-                        fund_return=fund_returns_by_block[bid],
-                    )
-                block_ids.append(bid)
-            else:
+            if bid not in fund_returns_by_block:
                 logger.warning(
                     "attribution_block_excluded",
                     block_id=bid,
                     has_fund_return=False,
                     has_benchmark_return=bid in benchmark_returns_by_block,
                 )
+                continue
+            if bid in bench_returns:
+                block_ids.append(bid)
+            elif sa_map.get(bid, 0.0) == 0.0:
+                # Off-benchmark block (w_b = 0): CIPM fallback r_b = r_p
+                # routes entire bet to allocation. These blocks have zero
+                # benchmark weight so they don't contribute to the Carino
+                # benchmark period return stream (Codex P1-b safe).
+                bench_returns[bid] = fund_returns_by_block[bid]
+                logger.warning(
+                    "attribution_off_benchmark_cipm_fallback",
+                    block_id=bid,
+                    fund_return=fund_returns_by_block[bid],
+                )
+                block_ids.append(bid)
+            else:
+                # Benchmark-held block with missing return data (w_b > 0).
+                # Exclude — downstream BF would use r_b = R_B but we lack
+                # the return to contribute to R_B correctly.
+                logger.warning(
+                    "attribution_block_excluded",
+                    block_id=bid,
+                    has_fund_return=True,
+                    has_benchmark_return=False,
+                    benchmark_weight=sa_map[bid],
+                    reason="benchmark_held_missing_return",
+                )
 
         if not block_ids:
             return AttributionResult(benchmark_available=False, n_periods=1)
-
-        # Build weight/return arrays
-        sa_map = {sa["block_id"]: float(sa["target_weight"]) for sa in strategic_allocations}
 
         benchmark_weights = np.array([sa_map.get(bid, 0.0) for bid in block_ids])
         portfolio_weights = np.array([
