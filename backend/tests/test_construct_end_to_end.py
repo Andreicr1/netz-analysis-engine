@@ -373,11 +373,11 @@ async def test_construct_e2e_happy_path(seeded_portfolio):
     assert narrative["schema_version"] == 2
     assert len(narrative["technical"]["headline"]) > 0
 
-    # Validation section — aggregate + list of 16 checks
+    # Validation section — aggregate + list of 17 checks
     validation = json.loads(row["validation"])
     assert "passed" in validation
     assert "checks" in validation
-    assert validation["summary"]["total"] == 16
+    assert validation["summary"]["total"] == 17
 
     # Stress results — 4 preset scenarios were run
     stress_results = json.loads(row["stress_results"])

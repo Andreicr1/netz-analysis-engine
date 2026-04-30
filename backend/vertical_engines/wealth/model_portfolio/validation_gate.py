@@ -1,8 +1,8 @@
-"""Validation gate with 16 checks for construction runs.
+"""Validation gate with 17 checks for construction runs.
 
 Phase 3 Task 3.1 of `docs/superpowers/plans/2026-04-08-portfolio-enterprise-workbench.md`.
 
-Runs 16 independent checks against a construction run payload.
+Runs 17 independent checks against a construction run payload.
 **No fail-fast** — every check is evaluated so the UI can render a
 complete health panel, not just the first failure. Aggregation is
 ``passed = not any(block failures)``.
@@ -32,9 +32,9 @@ Public surface
 - :class:`ValidationResult` — aggregate result
 - :class:`ValidationDbContext` — pre-fetched DB rows needed by the
   checks (keeps the gate synchronous and testable)
-- :func:`validate_construction` — run all 16 and aggregate
+- :func:`validate_construction` — run all 17 and aggregate
 
-The 16 checks
+The 17 checks
 -------------
 1. weights-sum-to-one
 2. no-stale-nav
@@ -52,6 +52,7 @@ The 16 checks
 14. garch-convergence-rate
 15. factor-model-r-squared
 16. taa-bands-within-ips
+17. cvar-enforcement
 """
 
 from __future__ import annotations
@@ -89,13 +90,13 @@ class ValidationCheck:
 
 @dataclass(frozen=True, slots=True)
 class ValidationResult:
-    """Aggregate of the 16 checks."""
+    """Aggregate of the 17 checks."""
 
     passed: bool
     """True if no block-severity check failed."""
 
     checks: list[ValidationCheck]
-    """All 16 checks in stable order."""
+    """All 17 checks in stable order."""
 
     warnings: list[ValidationCheck] = field(default_factory=list)
     """Subset of ``checks`` where ``severity='warn'`` and ``passed=False``."""
@@ -782,6 +783,76 @@ def _check_taa_bands_within_ips(
     )
 
 
+def _check_cvar_enforcement(
+    run_payload: dict[str, Any],
+    _db: ValidationDbContext,
+) -> ValidationCheck:
+    """Check #17: CVaR enforcement status must not be 'unverified'.
+
+    When the optimizer cascade fails and the heuristic fallback
+    produces weights, the ``cvar_enforcement`` field on
+    ``OptimizationMeta`` is set to ``"unverified"`` — meaning the
+    CVaR constraint was never evaluated. This is a structural
+    blindness (not a numerical-precision breach) and must block
+    activation until manual review.
+    """
+    optimization = run_payload.get("optimization") or {}
+    enforcement = optimization.get("cvar_enforcement")
+
+    if enforcement is None:
+        # Legacy payloads before PR-Q142 lack the field — treat as
+        # passing with explanation so existing runs are not retroactively
+        # blocked.
+        return ValidationCheck(
+            id="cvar_enforcement",
+            label="CVaR enforcement status",
+            severity="block",
+            passed=True,
+            value=None,
+            threshold=None,
+            explanation="cvar_enforcement not present in payload — check skipped (legacy run).",
+        )
+
+    if enforcement == "unverified":
+        return ValidationCheck(
+            id="cvar_enforcement",
+            label="CVaR enforcement status",
+            severity="block",
+            passed=False,
+            value=None,
+            threshold=None,
+            explanation=(
+                "CVaR limit was not enforced during construction "
+                "(heuristic fallback). Manual review required."
+            ),
+        )
+
+    if enforcement == "violated":
+        return ValidationCheck(
+            id="cvar_enforcement",
+            label="CVaR enforcement status",
+            severity="block",
+            passed=False,
+            value=None,
+            threshold=None,
+            explanation=(
+                "CVaR limit was violated by the optimizer solution. "
+                "The portfolio exceeds the calibration CVaR budget."
+            ),
+        )
+
+    # "enforced" — optimizer confirmed CVaR within limit
+    return ValidationCheck(
+        id="cvar_enforcement",
+        label="CVaR enforcement status",
+        severity="block",
+        passed=True,
+        value=None,
+        threshold=None,
+        explanation="CVaR constraint was enforced by the optimizer.",
+    )
+
+
 # ── Check registry — stable order for JSONB serialization ─────────
 
 
@@ -802,6 +873,7 @@ CHECKS: Final[list[tuple[str, Callable[[dict[str, Any], ValidationDbContext], Va
     ("garch_convergence_rate",          _check_garch_convergence),
     ("factor_model_r_squared",          _check_factor_model_r_squared),
     ("taa_bands_within_ips",            _check_taa_bands_within_ips),
+    ("cvar_enforcement",                _check_cvar_enforcement),
 ]
 
 
@@ -830,6 +902,7 @@ _INTENDED_SEVERITY: Final[dict[str, Severity]] = {
     "garch_convergence_rate": "warn",
     "factor_model_r_squared": "warn",
     "taa_bands_within_ips": "block",
+    "cvar_enforcement": "block",
 }
 
 
@@ -837,7 +910,7 @@ def validate_construction(
     run_payload: dict[str, Any],
     db_context: ValidationDbContext | None = None,
 ) -> ValidationResult:
-    """Run all 16 checks against the construction run payload.
+    """Run all 17 checks against the construction run payload.
 
     **No fail-fast.** Every check is evaluated so the UI can show
     the full health panel. Aggregation rule:

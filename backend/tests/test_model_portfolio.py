@@ -771,6 +771,94 @@ class TestHistoricalStressCoverage:
         assert sr_deg.max_drawdown is None
 
 
+class TestCvarEnforcementFlag:
+    """PR-Q142: CVaR enforcement flag on OptimizationMeta."""
+
+    def test_heuristic_fallback_marks_cvar_unverified(self):
+        """Heuristic fallback must set cvar_enforcement='unverified'."""
+        funds = [
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "Fund A", "block_id": "equity", "manager_score": 80},
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "Fund B", "block_id": "equity", "manager_score": 60},
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "Fund C", "block_id": "equity", "manager_score": 40},
+        ]
+        fallback_meta = OptimizationMeta(
+            expected_return=0.0,
+            portfolio_volatility=0.0,
+            sharpe_ratio=0.0,
+            solver="heuristic_fallback",
+            status="fallback:insufficient_fund_data",
+            cvar_95=None,
+            cvar_limit=-0.08,
+            cvar_within_limit=False,
+            cvar_enforcement="unverified",
+        )
+        result = construct("moderate", funds, {"equity": 1.0}, optimization_meta=fallback_meta)
+        assert result.optimization is not None
+        assert result.optimization.cvar_enforcement == "unverified"
+        assert result.optimization.solver == "heuristic_fallback"
+
+    def test_phase_1_winner_marks_cvar_enforced(self):
+        """Optimizer success must set cvar_enforcement='enforced'."""
+        fid1 = str(uuid.uuid4())
+        fid2 = str(uuid.uuid4())
+        fund_weights = {fid1: 0.6, fid2: 0.4}
+        fund_info = {
+            fid1: {"fund_name": "Fund A", "block_id": "equity", "manager_score": 80},
+            fid2: {"fund_name": "Fund B", "block_id": "fi", "manager_score": 70},
+        }
+        meta = OptimizationMeta(
+            expected_return=0.08,
+            portfolio_volatility=0.12,
+            sharpe_ratio=0.67,
+            solver="CLARABEL",
+            status="optimal",
+            cvar_95=-0.04,
+            cvar_limit=-0.08,
+            cvar_within_limit=True,
+            cvar_enforcement="enforced",
+        )
+        result = construct_from_optimizer("moderate", fund_weights, fund_info, meta)
+        assert result.optimization is not None
+        assert result.optimization.cvar_enforcement == "enforced"
+        assert result.optimization.cvar_within_limit is True
+
+    def test_diagnostic_phase3_marks_cvar_violated(self):
+        """Phase 3 winner above CVaR limit must set cvar_enforcement='violated'."""
+        fid1 = str(uuid.uuid4())
+        fid2 = str(uuid.uuid4())
+        fund_weights = {fid1: 0.5, fid2: 0.5}
+        fund_info = {
+            fid1: {"fund_name": "Risky A", "block_id": "equity", "manager_score": 90},
+            fid2: {"fund_name": "Risky B", "block_id": "equity", "manager_score": 80},
+        }
+        meta = OptimizationMeta(
+            expected_return=0.02,
+            portfolio_volatility=0.25,
+            sharpe_ratio=0.08,
+            solver="SCS",
+            status="degraded",
+            cvar_95=-0.15,
+            cvar_limit=-0.08,
+            cvar_within_limit=False,
+            cvar_enforcement="violated",
+        )
+        result = construct_from_optimizer("growth", fund_weights, fund_info, meta)
+        assert result.optimization is not None
+        assert result.optimization.cvar_enforcement == "violated"
+        assert result.optimization.cvar_within_limit is False
+
+    def test_cvar_enforcement_defaults_to_none_for_backwards_compat(self):
+        """Old code that does not pass cvar_enforcement gets None (not crash)."""
+        meta = OptimizationMeta(
+            expected_return=0.0,
+            portfolio_volatility=0.0,
+            sharpe_ratio=0.0,
+            solver="test",
+            status="test",
+        )
+        assert meta.cvar_enforcement is None
+
+
 class TestQuantAnalyzerRewired:
     """Test QuantAnalyzer is no longer a scaffold."""
 

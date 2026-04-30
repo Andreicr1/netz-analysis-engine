@@ -5,6 +5,9 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
+from typing import Literal
+
+CvarEnforcement = Literal["enforced", "unverified", "violated"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +47,7 @@ class OptimizationMeta:
     cvar_95: float | None = None  # parametric CVaR (negative = loss)
     cvar_limit: float | None = None
     cvar_within_limit: bool = True
+    cvar_enforcement: CvarEnforcement | None = None  # PR-Q142: enforced | unverified | violated
 
 
 @dataclass(frozen=True, slots=True)
