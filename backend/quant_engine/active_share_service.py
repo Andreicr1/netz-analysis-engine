@@ -83,7 +83,7 @@ def compute_active_share(
     if abs(pw_sum - 1.0) > _WEIGHT_SUM_TOL or abs(bw_sum - 1.0) > _WEIGHT_SUM_TOL:
         return ActiveShareResult(
             active_share=0.0,
-            overlap=0.0,
+            overlap=100.0,
             n_portfolio_positions=len(portfolio_weights),
             n_benchmark_positions=len(benchmark_weights),
             n_common_positions=len(set(portfolio_weights) & set(benchmark_weights)),
