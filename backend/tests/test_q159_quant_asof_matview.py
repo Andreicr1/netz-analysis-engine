@@ -106,6 +106,21 @@ class TestMatviewCikPadded:
         assert _normalize_cik("0000012345") == "0000012345"
         assert _normalize_cik("00123") == "0000000123"
 
+    def test_fetch_sector_weights_normalizes_cik(self):
+        """fetch_sector_weights should normalize CIK internally (Codex P2).
+
+        Callers outside run_holdings_rail (e.g. benchmark_proxy) may pass
+        unpadded CIKs; fetch_sector_weights must pad defensively.
+        """
+        import inspect
+
+        from vertical_engines.wealth.attribution.holdings_based import (
+            fetch_sector_weights,
+        )
+
+        src = inspect.getsource(fetch_sector_weights)
+        assert "_normalize_cik" in src
+
     def test_downgrade_ddl_uses_bare_cik(self):
         """Downgrade DDL should revert to bare h.cik."""
         import importlib

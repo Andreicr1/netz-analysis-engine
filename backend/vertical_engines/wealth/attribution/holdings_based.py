@@ -152,7 +152,13 @@ async def latest_period_for_cik(
 async def fetch_sector_weights(
     db: "AsyncSession", cik: str, period: date,
 ) -> tuple[list[SectorWeight], float]:
-    """Read one matview period and return (sectors, aum_total)."""
+    """Read one matview period and return (sectors, aum_total).
+
+    After migration 0198, ``filer_cik`` is always 10-digit padded.
+    Normalizes the input CIK defensively so callers outside
+    ``run_holdings_rail`` (e.g. ``benchmark_proxy``) don't need to pad.
+    """
+    padded = _normalize_cik(cik) or cik
     rows = (await db.execute(text("""
         SELECT issuer_category, industry_sector,
                aum_usd, weight, holdings_count
@@ -161,7 +167,7 @@ async def fetch_sector_weights(
           AND period_of_report = :period
         ORDER BY weight DESC
         LIMIT :lim
-    """), {"cik": cik, "period": period, "lim": MAX_SECTOR_ROWS})).mappings().all()
+    """), {"cik": padded, "period": period, "lim": MAX_SECTOR_ROWS})).mappings().all()
 
     sectors = [
         SectorWeight(
