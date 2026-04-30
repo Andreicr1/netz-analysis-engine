@@ -2542,6 +2542,9 @@ async def _run_construction_async(
                 cvar_95=fund_result.cvar_95,
                 cvar_limit=fund_result.cvar_limit,
                 cvar_within_limit=fund_result.cvar_within_limit,
+                cvar_enforcement=(
+                    "violated" if not fund_result.cvar_within_limit else "enforced"
+                ),
             )
             composition = construct_from_optimizer(
                 profile, fund_result.weights, fund_info, opt_meta,
@@ -2622,6 +2625,7 @@ async def _run_construction_async(
             cvar_95=None,
             cvar_limit=cvar_limit,
             cvar_within_limit=False,
+            cvar_enforcement="unverified",
         )
         composition = construct(
             profile, universe_funds, strategic_targets,
@@ -2741,6 +2745,7 @@ async def _run_construction_async(
             "cvar_95": composition.optimization.cvar_95,
             "cvar_limit": composition.optimization.cvar_limit,
             "cvar_within_limit": composition.optimization.cvar_within_limit,
+            "cvar_enforcement": composition.optimization.cvar_enforcement,
         }
 
     # ── BL-7: Factor decomposition (best-effort, never blocks) ──
