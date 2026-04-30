@@ -425,10 +425,19 @@ def _build_ipca_result(
     ipca: IPCAResult,
 ) -> FundAttributionResult:
     """Wrap a successful IPCA rail into the dispatcher envelope."""
-    metadata = {
+    metadata: dict[str, str] = {
         "n_factors": str(len(ipca.factor_names)),
         "alpha": f"{ipca.alpha:.4f}",
     }
+    degraded = getattr(ipca, "degraded", False)
+    if degraded is True:
+        metadata["degraded"] = "true"
+        reason = getattr(ipca, "degraded_reason", None)
+        if isinstance(reason, str):
+            metadata["degraded_reason"] = reason
+    residual = getattr(ipca, "residual", None)
+    if isinstance(residual, (int, float)):
+        metadata["residual"] = f"{residual:.6f}"
     return FundAttributionResult(
         fund_instrument_id=request.fund_instrument_id,
         asof=request.asof,
@@ -575,12 +584,25 @@ def _serialize_result(result: FundAttributionResult) -> dict[str, Any]:
     rb = result.returns_based
     hb = result.holdings_based
     px = result.proxy
+    ic = result.ipca
     return {
         "fund_instrument_id": str(result.fund_instrument_id),
         "asof": result.asof.isoformat(),
         "badge": result.badge.value,
         "reason": result.reason,
         "metadata": result.metadata,
+        "ipca": None
+        if ic is None
+        else {
+            "factor_names": ic.factor_names,
+            "factor_exposures": ic.factor_exposures,
+            "factor_returns_contribution": ic.factor_returns_contribution,
+            "alpha": ic.alpha,
+            "confidence": ic.confidence,
+            "degraded": ic.degraded,
+            "degraded_reason": ic.degraded_reason,
+            "residual": ic.residual,
+        },
         "returns_based": None
         if rb is None
         else {
@@ -699,6 +721,20 @@ def _deserialize_result(data: dict[str, Any]) -> FundAttributionResult:
             degraded_reason=hb_raw.get("degraded_reason"),
         )
 
+    ic_raw = data.get("ipca")
+    ic: IPCAResult | None = None
+    if ic_raw is not None:
+        ic = IPCAResult(
+            factor_names=list(ic_raw["factor_names"]),
+            factor_exposures=[float(x) for x in ic_raw["factor_exposures"]],
+            factor_returns_contribution=[float(x) for x in ic_raw["factor_returns_contribution"]],
+            alpha=float(ic_raw["alpha"]),
+            confidence=float(ic_raw["confidence"]),
+            degraded=bool(ic_raw.get("degraded", False)),
+            degraded_reason=ic_raw.get("degraded_reason"),
+            residual=float(ic_raw["residual"]) if ic_raw.get("residual") is not None else None,
+        )
+
     px_raw = data.get("proxy")
     px: BenchmarkProxyResult | None = None
     if px_raw is not None:
@@ -752,6 +788,7 @@ def _deserialize_result(data: dict[str, Any]) -> FundAttributionResult:
         returns_based=rb,
         holdings_based=hb,
         proxy=px,
+        ipca=ic,
         reason=data.get("reason"),
         metadata=dict(data.get("metadata") or {}),
     )
