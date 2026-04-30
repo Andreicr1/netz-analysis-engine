@@ -181,18 +181,24 @@ class AttributionService:
         # which downstream Carino / simple-average linking then compounds
         # into materially understated multi-period totals. Only the
         # benchmark return is unknown — signal that with NaN, NOT zero.
+        #
+        # Codex P2 (Q162): respect the method contract — when
+        # actual_weights_by_block is provided, use it for the degraded-period
+        # portfolio return; fall back to sa_map (strategic targets) only
+        # when actual weights are absent. Equal-weight is the last resort.
         def _portfolio_return_from_inputs() -> float:
             if not fund_returns_by_block:
                 return 0.0
-            if sa_map:
+            weights = actual_weights_by_block if actual_weights_by_block else sa_map
+            if weights:
                 return float(
                     sum(
-                        sa_map.get(bid, 0.0) * r
+                        weights.get(bid, 0.0) * r
                         for bid, r in fund_returns_by_block.items()
                     )
                 )
-            # Strategic allocations empty/zero → equal-weight average so the
-            # caller still sees realized fund performance.
+            # Neither actual weights nor strategic allocations → equal-weight
+            # average so the caller still sees realized fund performance.
             return float(np.mean(list(fund_returns_by_block.values())))
 
         if not block_ids:
