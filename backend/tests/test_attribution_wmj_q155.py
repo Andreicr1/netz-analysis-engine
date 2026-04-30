@@ -346,3 +346,177 @@ def test_serialization_round_trip_none_new_fields():
     assert decoded.reconciliation_residual is None
     assert decoded.reconciliation_warning is None
     assert decoded.holdings_based is None
+
+
+# ---------------------------------------------------------------------------
+# Codex P1 hotfix bundle — off-benchmark fallback semantics
+# ---------------------------------------------------------------------------
+
+
+def test_input_dict_not_mutated():
+    """Caller's benchmark_returns_by_block must not be mutated by CIPM fallback.
+
+    Codex P1 (Catch 1): the fallback wrote synthetic r_b = r_p back into the
+    caller's dict, leaking into multi-period Carino computations downstream.
+    """
+    svc = AttributionService()
+
+    allocations = [
+        {"block_id": "equity", "target_weight": 0.70},
+        {"block_id": "crypto", "target_weight": 0.0},  # off-benchmark, w_b = 0
+        {"block_id": "bonds", "target_weight": 0.30},
+    ]
+    fund_returns = {"equity": 0.08, "crypto": 0.25, "bonds": 0.03}
+    benchmark_returns = {"equity": 0.07, "bonds": 0.04}
+    labels = {"equity": "Equity", "crypto": "Crypto", "bonds": "Bonds"}
+
+    snapshot_before = dict(benchmark_returns)
+
+    svc.compute_portfolio_attribution(
+        strategic_allocations=allocations,
+        fund_returns_by_block=fund_returns,
+        benchmark_returns_by_block=benchmark_returns,
+        block_labels=labels,
+    )
+
+    # Caller's dict must be unchanged — no synthetic crypto entry leaked in
+    assert benchmark_returns == snapshot_before
+    assert "crypto" not in benchmark_returns
+
+
+def test_w_b_positive_missing_return_excluded_not_r_p_fallback():
+    """When a benchmark-held block (w_b > 0) is missing a return, the CIPM
+    fallback r_b = r_p must NOT apply. The block is excluded; downstream BF
+    uses r_b = R_B for any retained benchmark-held blocks.
+
+    Codex P1 (Catch 2): previously, ANY block missing a benchmark return
+    received r_b = r_p, including w_b > 0 blocks where the benchmark exists
+    but data is absent.
+    """
+    svc = AttributionService()
+
+    # 'bonds' has w_b=0.30 but no benchmark return — must be EXCLUDED, not
+    # treated as off-benchmark.
+    allocations = [
+        {"block_id": "equity", "target_weight": 0.70},
+        {"block_id": "bonds", "target_weight": 0.30},  # benchmark-held, missing
+    ]
+    fund_returns = {"equity": 0.08, "bonds": 0.03}
+    benchmark_returns = {"equity": 0.07}  # bonds missing
+    labels = {"equity": "Equity", "bonds": "Bonds"}
+
+    result = svc.compute_portfolio_attribution(
+        strategic_allocations=allocations,
+        fund_returns_by_block=fund_returns,
+        benchmark_returns_by_block=benchmark_returns,
+        block_labels=labels,
+    )
+
+    # Result is computed (equity has observed bench return), but bonds is
+    # excluded — NOT included with synthetic r_b = r_p = 0.03.
+    sector_labels = [s.sector for s in result.sectors]
+    assert "Bonds" not in sector_labels, (
+        "Benchmark-held block (w_b=0.30) with missing return must be excluded, "
+        "not given r_b=r_p fallback (which is reserved for w_b=0 blocks)"
+    )
+    assert "Equity" in sector_labels
+
+
+def test_carino_uses_fallback_adjusted_returns():
+    """Multi-period Carino linking must operate on fallback-adjusted per-period
+    results, so reconciliation between linked totals and per-period effects
+    holds when off-benchmark blocks are present.
+
+    Codex P1 (Catch 3): the local fallback-adjusted dict must be used by both
+    per-period BF and the Carino linker — they cannot diverge.
+    """
+    svc = AttributionService()
+
+    # Two consecutive periods, identical structure, with off-benchmark crypto
+    allocations = [
+        {"block_id": "equity", "target_weight": 0.80},
+        {"block_id": "crypto", "target_weight": 0.0},  # off-benchmark
+    ]
+    labels = {"equity": "Equity", "crypto": "Crypto"}
+    actual_weights = {"equity": 0.85, "crypto": 0.15}
+
+    period1_fund = {"equity": 0.05, "crypto": 0.10}
+    period1_bench = {"equity": 0.04}
+    period2_fund = {"equity": 0.03, "crypto": 0.06}
+    period2_bench = {"equity": 0.02}
+
+    p1 = svc.compute_portfolio_attribution(
+        strategic_allocations=allocations,
+        fund_returns_by_block=period1_fund,
+        benchmark_returns_by_block=period1_bench,
+        block_labels=labels,
+        actual_weights_by_block=actual_weights,
+    )
+    p2 = svc.compute_portfolio_attribution(
+        strategic_allocations=allocations,
+        fund_returns_by_block=period2_fund,
+        benchmark_returns_by_block=period2_bench,
+        block_labels=labels,
+        actual_weights_by_block=actual_weights,
+    )
+
+    # Both per-period results must have used CIPM fallback (crypto present)
+    assert "Crypto" in [s.sector for s in p1.sectors]
+    assert "Crypto" in [s.sector for s in p2.sectors]
+    assert p1.benchmark_available is True
+    assert p2.benchmark_available is True
+
+    # Caller's per-period benchmark dicts must be untouched (no synthetic
+    # crypto leak that would corrupt the Carino benchmark stream).
+    assert "crypto" not in period1_bench
+    assert "crypto" not in period2_bench
+
+    # Compose Carino linking: the multi-period total return streams should
+    # be derived from the per-period results, not from raw caller dicts.
+    multi = svc.compute_multi_period(
+        period_results=[p1, p2],
+        portfolio_period_returns=[
+            p1.total_portfolio_return,
+            p2.total_portfolio_return,
+        ],
+        benchmark_period_returns=[
+            p1.total_benchmark_return,
+            p2.total_benchmark_return,
+        ],
+    )
+    assert multi.benchmark_available is True
+    # Total excess return should be consistent with linked period excess
+    assert multi.n_periods == 2
+
+
+def test_zero_observed_benchmark_returns_degrades():
+    """If every included block is off-benchmark CIPM fallback (no observed
+    benchmark return at all), the result must degrade with
+    benchmark_available=False rather than fabricating attribution from
+    a synthetic benchmark stream.
+
+    Codex P1 (Catch 4): without this guard, a portfolio of only off-benchmark
+    bets would surface fake attribution data with cash-normalization noise.
+    """
+    svc = AttributionService()
+
+    # All blocks are off-benchmark (w_b = 0) AND have no benchmark return.
+    allocations = [
+        {"block_id": "crypto", "target_weight": 0.0},
+        {"block_id": "private", "target_weight": 0.0},
+    ]
+    fund_returns = {"crypto": 0.10, "private": 0.05}
+    benchmark_returns: dict[str, float] = {}  # nothing observed
+    labels = {"crypto": "Crypto", "private": "Private"}
+
+    result = svc.compute_portfolio_attribution(
+        strategic_allocations=allocations,
+        fund_returns_by_block=fund_returns,
+        benchmark_returns_by_block=benchmark_returns,
+        block_labels=labels,
+    )
+
+    assert result.benchmark_available is False, (
+        "Zero observed benchmark returns must produce degraded result, "
+        "not synthetic attribution from fabricated r_b = r_p stream"
+    )
