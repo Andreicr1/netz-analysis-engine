@@ -61,6 +61,7 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db.audit import write_audit_event
 from app.core.jobs.tracker import (
     clear_cancellation_flag,
     is_cancellation_requested,
@@ -1675,6 +1676,32 @@ async def execute_construction_run(
         run.status = "succeeded"
     run.completed_at = datetime.now(tz=timezone.utc)
     run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
+
+    # PR-Q144: emit ONE consolidated audit event per cascade run into the
+    # unified tenant audit feed (Q92 I-Audit-Tenant-1). Placed before
+    # db.flush() so the audit row commits atomically with the run row
+    # update (Q126 atomicity discipline).
+    ct = run.cascade_telemetry or {}
+    await write_audit_event(
+        db,
+        action="model_portfolio.cascade_completed",
+        entity_type="ConstructionRun",
+        entity_id=str(run.id),
+        actor_id=run.requested_by or "system:cascade",
+        before=None,
+        after={
+            "winning_phase": ct.get("winning_phase"),
+            "cascade_summary": ct.get("cascade_summary"),
+            "run_status": run.status,
+            "min_achievable_cvar": ct.get("min_achievable_cvar"),
+            "cvar_enforcement": None,  # Q142 pending — will carry value post-merge
+            "phase_attempts": [
+                a.get("phase") for a in (ct.get("phase_attempts") or [])
+            ],
+        },
+        allow_global=False,
+    )
+
     await db.flush()
 
     # Keep the raw_type as ``run_succeeded`` so the existing frontend
