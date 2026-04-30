@@ -50,6 +50,22 @@ class QuantAnalyzer:
             Quant analysis result (CVaR, scores, drift, regime).
 
         """
+        if as_of is not None:
+            import warnings
+
+            warnings.warn(
+                "QuantAnalyzer.analyze_portfolio(as_of=...) is not implemented — "
+                "SQL queries do not apply point-in-time filtering. "
+                "Pass as_of=None until SQL predicates are added.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            logger.warning(
+                "quant_analyzer_as_of_not_implemented",
+                as_of=as_of,
+                instrument_id=instrument_id,
+            )
+
         logger.info("running_quant_analysis", instrument_id=instrument_id, as_of=as_of)
 
         fid = uuid.UUID(instrument_id)
