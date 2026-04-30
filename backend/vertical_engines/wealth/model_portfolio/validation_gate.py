@@ -287,7 +287,7 @@ def _check_cvar_within_limit(
     # reviewers can distinguish solver imprecision from mandate infeasibility.
     # Threshold: gap >= 50bps → infeasibility language; < 50bps → generic Breach.
     min_achievable_cvar_f: float | None = (
-        float(min_achievable_cvar_raw) if min_achievable_cvar_raw is not None else None
+        -abs(float(min_achievable_cvar_raw)) if min_achievable_cvar_raw is not None else None
     )
     if (
         not passed

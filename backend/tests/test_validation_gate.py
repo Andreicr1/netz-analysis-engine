@@ -571,13 +571,14 @@ def test_cvar_check_with_infeasibility_gap_explains_actionably():
     must contain infeasibility language with the gap in bps and an
     actionable recommendation for the IC reviewer.
 
-    Scenario: cvar_95=-0.042, limit=-0.01, min_achievable=-0.042.
+    Scenario: cvar_95=-0.042, limit=-0.01, min_achievable=0.042 (positive
+    magnitude as emitted by optimizer cascade).
     Gap = |-0.042 - (-0.01)| = 0.032 = 320bps (>> 50bps threshold).
     """
     payload = _base_payload()
     payload["ex_ante_metrics"]["cvar_95"] = -0.042
     payload["calibration_snapshot"]["cvar_limit"] = 0.01
-    payload["min_achievable_cvar"] = -0.042
+    payload["min_achievable_cvar"] = 0.042
     result = validate_construction(payload, _base_db_context())
     cvar_check = next(c for c in result.checks if c.id == "cvar_within_limit")
     assert cvar_check.passed is False
@@ -608,13 +609,14 @@ def test_cvar_check_solver_imprecision_no_infeasibility_lang():
     infeasibility language — because this is solver imprecision, not
     a mandate mismatch.
 
-    Scenario: cvar=-0.0102, limit=-0.01, min_achievable=-0.0102.
+    Scenario: cvar=-0.0102, limit=-0.01, min_achievable=0.0102 (positive
+    magnitude as emitted by optimizer cascade).
     Gap = 0.0002 = 2bps (< 50bps threshold).
     """
     payload = _base_payload()
     payload["ex_ante_metrics"]["cvar_95"] = -0.0102
     payload["calibration_snapshot"]["cvar_limit"] = 0.01
-    payload["min_achievable_cvar"] = -0.0102
+    payload["min_achievable_cvar"] = 0.0102
     result = validate_construction(payload, _base_db_context())
     cvar_check = next(c for c in result.checks if c.id == "cvar_within_limit")
     assert cvar_check.passed is False
