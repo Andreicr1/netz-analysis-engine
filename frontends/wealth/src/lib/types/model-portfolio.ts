@@ -79,6 +79,7 @@ export interface SelectionSchema {
 	total_weight: number;
 	funds: InstrumentWeight[];
 	optimization?: OptimizationMeta;
+	is_diagnostic?: boolean;
 }
 
 export interface InstrumentWeight {
