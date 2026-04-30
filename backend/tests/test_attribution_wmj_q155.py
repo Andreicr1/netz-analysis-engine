@@ -489,6 +489,147 @@ def test_carino_uses_fallback_adjusted_returns():
     assert multi.n_periods == 2
 
 
+def test_multi_period_carino_uses_fallback_adjusted_b_ret():
+    """Carino's R_p / R_b streams MUST come from per-period AttributionResult
+    totals, not from re-summing the original input dicts in the orchestrator.
+
+    Codex P1 (Q155 hotfix, route-level alignment): the multi-period
+    orchestrator in routes/attribution.py previously recomputed both p_ret
+    and b_ret from the ORIGINAL benchmark / fund dicts using
+    `target_weight * dict.get(bid, 0.0)`. But the per-period BF effects
+    operate on a fallback-adjusted view that:
+      - excludes benchmark-held blocks (w_b>0) with missing benchmark
+        return data, AND
+      - normalizes weights to sum to 1.0 via a synthetic cash residual,
+        AND
+      - applies CIPM r_b=r_p for truly off-benchmark blocks (w_b=0).
+
+    When a benchmark-held block is excluded, the BF R_p excludes that
+    block's r_p contribution (it is dropped along with its r_b), but the
+    naive route recompute STILL includes it via `target_w * r_p`, so the
+    two streams diverge. Feeding the buggy stream to Carino skews the K
+    factor and breaks reconciliation between linked totals and per-period
+    scaled effects.
+
+    Scenario: 2 periods. Period 1: 'bonds' (w_b=0.30) has a fund return
+    but its benchmark is missing → BF excludes it, but the buggy route
+    `p_ret` still adds `0.30 * r_p_bonds`. Period 2: clean (all blocks
+    have benchmark observations).
+    """
+    svc = AttributionService()
+
+    allocations = [
+        {"block_id": "equity", "target_weight": 0.70},
+        {"block_id": "bonds", "target_weight": 0.30},
+    ]
+    labels = {"equity": "Equity", "bonds": "Bonds"}
+
+    # Period 1: 'bonds' fund return present, but benchmark observation
+    # MISSING — BF will exclude bonds entirely.
+    period1_fund = {"equity": 0.05, "bonds": 0.02}
+    period1_bench = {"equity": 0.04}  # bonds NOT observed
+
+    # Period 2: clean — both observed. No exclusions, no fallback.
+    period2_fund = {"equity": 0.03, "bonds": 0.01}
+    period2_bench = {"equity": 0.025, "bonds": 0.012}
+
+    p1 = svc.compute_portfolio_attribution(
+        strategic_allocations=allocations,
+        fund_returns_by_block=period1_fund,
+        benchmark_returns_by_block=period1_bench,
+        block_labels=labels,
+    )
+    p2 = svc.compute_portfolio_attribution(
+        strategic_allocations=allocations,
+        fund_returns_by_block=period2_fund,
+        benchmark_returns_by_block=period2_bench,
+        block_labels=labels,
+    )
+
+    assert p1.benchmark_available is True
+    assert p2.benchmark_available is True
+    # Bonds dropped in period 1 (benchmark-held but missing return)
+    assert "Bonds" not in [s.sector for s in p1.sectors]
+    # Bonds present in period 2
+    assert "Bonds" in [s.sector for s in p2.sectors]
+
+    # ---- BUGGY STREAM (what the route used to do): naive sum over the
+    # ORIGINAL caller-supplied dicts, using strategic target_weight, with
+    # missing entries defaulting to 0.0. ----
+    def _buggy_p_ret(fund_dict: dict[str, float]) -> float:
+        return sum(
+            float(sa["target_weight"]) * fund_dict.get(sa["block_id"], 0.0)
+            for sa in allocations
+        )
+
+    def _buggy_b_ret(bench_dict: dict[str, float]) -> float:
+        return sum(
+            float(sa["target_weight"]) * bench_dict.get(sa["block_id"], 0.0)
+            for sa in allocations
+        )
+
+    buggy_p_ret_p1 = _buggy_p_ret(period1_fund)
+    buggy_p_ret_p2 = _buggy_p_ret(period2_fund)
+    buggy_b_ret_p1 = _buggy_b_ret(period1_bench)
+    buggy_b_ret_p2 = _buggy_b_ret(period2_bench)
+
+    # ---- CORRECT STREAM (what the fix uses): per-period AttributionResult
+    # total_*_return, which is the fallback-adjusted R_P / R_B from BF. ----
+    correct_p_ret_p1 = p1.total_portfolio_return
+    correct_p_ret_p2 = p2.total_portfolio_return
+    correct_b_ret_p1 = p1.total_benchmark_return
+    correct_b_ret_p2 = p2.total_benchmark_return
+
+    # Period 1 must exhibit divergence in the PORTFOLIO stream because
+    # BF dropped 'bonds' entirely, but the buggy route recompute still
+    # adds 0.30 * 0.02 = 0.006 from bonds.
+    assert correct_p_ret_p1 != pytest.approx(buggy_p_ret_p1, abs=1e-9), (
+        "Period 1 must exhibit divergence between buggy naive p_ret and "
+        "AttributionResult.total_portfolio_return — bonds was excluded "
+        "from BF but the buggy stream still credits bonds via target_w * "
+        "fund_return. "
+        f"buggy={buggy_p_ret_p1}, correct={correct_p_ret_p1}"
+    )
+
+    # Period 2 should agree (no exclusions, no fallback).
+    assert correct_p_ret_p2 == pytest.approx(buggy_p_ret_p2, abs=1e-9)
+    assert correct_b_ret_p2 == pytest.approx(buggy_b_ret_p2, abs=1e-9)
+
+    # Compose Carino linking using the CORRECT (fallback-adjusted) stream.
+    multi_correct = svc.compute_multi_period(
+        period_results=[p1, p2],
+        portfolio_period_returns=[correct_p_ret_p1, correct_p_ret_p2],
+        benchmark_period_returns=[correct_b_ret_p1, correct_b_ret_p2],
+    )
+    # And using the BUGGY stream for contrast.
+    multi_buggy = svc.compute_multi_period(
+        period_results=[p1, p2],
+        portfolio_period_returns=[buggy_p_ret_p1, buggy_p_ret_p2],
+        benchmark_period_returns=[buggy_b_ret_p1, buggy_b_ret_p2],
+    )
+
+    assert multi_correct.benchmark_available is True
+    assert multi_correct.n_periods == 2
+
+    # The two linked results must produce different total_portfolio_return
+    # because the buggy stream's R_p_t differs from BF's R_p_t in period 1.
+    assert multi_correct.total_portfolio_return != pytest.approx(
+        multi_buggy.total_portfolio_return, abs=1e-9
+    ), (
+        "Carino linker must surface a different total_portfolio_return "
+        "when fed buggy vs fallback-adjusted streams; otherwise the "
+        "regression assertion is no-op."
+    )
+
+    # Reconciliation: with the CORRECT stream, the linked excess equals
+    # the difference of linked totals (Carino additivity holds).
+    assert multi_correct.total_excess_return == pytest.approx(
+        multi_correct.total_portfolio_return
+        - multi_correct.total_benchmark_return,
+        abs=1e-9,
+    )
+
+
 def test_zero_observed_benchmark_returns_degrades():
     """If every included block is off-benchmark CIPM fallback (no observed
     benchmark return at all), the result must degrade with
