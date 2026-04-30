@@ -561,3 +561,64 @@ def test_validation_passes_on_optimization_present_but_enforcement_none():
     result = validate_construction(payload, _base_db_context())
     cvar_enf = next(c for c in result.checks if c.id == "cvar_enforcement")
     assert cvar_enf.passed is True
+
+
+# ── CVaR infeasibility gap (PR-Q145, C-02) ────────────────────────
+
+
+def test_cvar_check_with_infeasibility_gap_explains_actionably():
+    """When min_achievable_cvar is far below the limit, the explanation
+    must contain infeasibility language with the gap in bps and an
+    actionable recommendation for the IC reviewer.
+
+    Scenario: cvar_95=-0.042, limit=-0.01, min_achievable=0.042 (positive
+    magnitude as emitted by optimizer cascade).
+    Gap = |-0.042 - (-0.01)| = 0.032 = 320bps (>> 50bps threshold).
+    """
+    payload = _base_payload()
+    payload["ex_ante_metrics"]["cvar_95"] = -0.042
+    payload["calibration_snapshot"]["cvar_limit"] = 0.01
+    payload["min_achievable_cvar"] = 0.042
+    result = validate_construction(payload, _base_db_context())
+    cvar_check = next(c for c in result.checks if c.id == "cvar_within_limit")
+    assert cvar_check.passed is False
+    assert cvar_check.severity == "block"
+    assert "infeasible" in cvar_check.explanation.lower()
+    assert "320bps" in cvar_check.explanation
+    assert "Mandate-level review" in cvar_check.explanation
+
+
+def test_cvar_check_without_min_achievable_falls_back():
+    """When min_achievable_cvar is None (older runs), the explanation
+    must use the generic Breach language, not infeasibility language."""
+    payload = _base_payload()
+    payload["ex_ante_metrics"]["cvar_95"] = -0.20
+    payload["calibration_snapshot"]["cvar_limit"] = 0.05
+    # No min_achievable_cvar key → None
+    payload.pop("min_achievable_cvar", None)
+    result = validate_construction(payload, _base_db_context())
+    cvar_check = next(c for c in result.checks if c.id == "cvar_within_limit")
+    assert cvar_check.passed is False
+    assert "Breach" in cvar_check.explanation
+    assert "infeasible" not in cvar_check.explanation.lower()
+
+
+def test_cvar_check_solver_imprecision_no_infeasibility_lang():
+    """When the gap between min_achievable_cvar and the limit is small
+    (< 50bps), the explanation must use generic Breach language — not
+    infeasibility language — because this is solver imprecision, not
+    a mandate mismatch.
+
+    Scenario: cvar=-0.0102, limit=-0.01, min_achievable=0.0102 (positive
+    magnitude as emitted by optimizer cascade).
+    Gap = 0.0002 = 2bps (< 50bps threshold).
+    """
+    payload = _base_payload()
+    payload["ex_ante_metrics"]["cvar_95"] = -0.0102
+    payload["calibration_snapshot"]["cvar_limit"] = 0.01
+    payload["min_achievable_cvar"] = 0.0102
+    result = validate_construction(payload, _base_db_context())
+    cvar_check = next(c for c in result.checks if c.id == "cvar_within_limit")
+    assert cvar_check.passed is False
+    assert "Breach" in cvar_check.explanation
+    assert "infeasible" not in cvar_check.explanation.lower()

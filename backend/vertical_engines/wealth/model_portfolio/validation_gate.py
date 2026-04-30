@@ -152,6 +152,7 @@ _FACTOR_MODEL_MIN_R2: Final[float] = 0.30
 _STRESS_NAV_IMPACT_THRESHOLD: Final[float] = -0.40  # worse than -40% = block
 _BL_POSTERIOR_DEVIATION_MAX: Final[float] = 2.0  # sigma
 _BLOCK_WEIGHT_TOLERANCE: Final[float] = 1e-4
+_INFEASIBILITY_GAP_THRESHOLD: Final[float] = 0.005  # 50bps — below = solver imprecision
 
 
 # ── Individual check implementations ─────────────────────────────
@@ -246,6 +247,9 @@ def _check_cvar_within_limit(
     # PR-Q140 (C-11): propagate degraded_reason from cvar_service when
     # the CVaR computation fell back to NaN / insufficient observations.
     cvar_degraded_reason = metrics.get("cvar_degraded_reason")
+    # PR-Q145 (C-02): min_achievable_cvar from Phase 3 optimizer via
+    # cascade_telemetry → validation_payload.  None on legacy/older runs.
+    min_achievable_cvar_raw = run_payload.get("min_achievable_cvar")
     if cvar is None or limit is None:
         return ValidationCheck(
             id="cvar_within_limit",
@@ -277,6 +281,36 @@ def _check_cvar_within_limit(
             degraded_reason=cvar_degraded_reason,
         )
     passed = cvar_f >= limit_f  # less negative = within budget
+
+    # PR-Q145 (C-02): when CVaR check fails AND Phase 3 reported the
+    # minimum achievable CVaR, expose the infeasibility gap so IC
+    # reviewers can distinguish solver imprecision from mandate infeasibility.
+    # Threshold: gap >= 50bps → infeasibility language; < 50bps → generic Breach.
+    min_achievable_cvar_f: float | None = (
+        -abs(float(min_achievable_cvar_raw)) if min_achievable_cvar_raw is not None else None
+    )
+    if (
+        not passed
+        and min_achievable_cvar_f is not None
+        and not math.isnan(min_achievable_cvar_f)
+        and min_achievable_cvar_f < limit_f  # more negative = worse loss floor
+        and abs(min_achievable_cvar_f - limit_f) >= _INFEASIBILITY_GAP_THRESHOLD
+    ):
+        # Express gap in basis points (positive = how far below the limit).
+        gap_bps = round(abs(min_achievable_cvar_f - limit_f) * 10_000)
+        explanation = (
+            f"CVaR target infeasible: minimum achievable CVaR for current "
+            f"universe is {min_achievable_cvar_f:.4%}. Configured limit is "
+            f"{limit_f:.4%}. Gap: {gap_bps}bps. Mandate-level review "
+            f"required: consider raising the CVaR target or expanding the "
+            f"universe with lower-tail-risk instruments."
+        )
+    else:
+        explanation = (
+            f"Ex-ante CVaR 95% is {cvar_f:.4%}; calibration limit is "
+            f"{limit_f:.4%}. {'OK' if passed else 'Breach'}."
+        )
+
     return ValidationCheck(
         id="cvar_within_limit",
         label="CVaR within calibration limit",
@@ -284,10 +318,7 @@ def _check_cvar_within_limit(
         passed=passed,
         value=round(cvar_f, 6),
         threshold=round(limit_f, 6),
-        explanation=(
-            f"Ex-ante CVaR 95% is {cvar_f:.4%}; calibration limit is "
-            f"{limit_f:.4%}. {'OK' if passed else 'Breach'}."
-        ),
+        explanation=explanation,
         degraded_reason=cvar_degraded_reason,
     )
 

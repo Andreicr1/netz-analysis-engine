@@ -2091,6 +2091,9 @@ async def _execute_inner(
         "statistical_inputs": statistical_inputs_payload,
         "factor_exposure": factor_exposure,
         "optimization": {"cvar_enforcement": _cvar_enforcement},
+        # PR-Q145 (C-02): pass min_achievable_cvar from cascade telemetry
+        # so validation gate can expose the infeasibility gap.
+        "min_achievable_cvar": (cascade_telemetry or {}).get("min_achievable_cvar"),
     }
     # PR-Q116 — populate ValidationDbContext from DB so that checks 7-10
     # (block min/max, banned instruments, approved universe) and check 16
