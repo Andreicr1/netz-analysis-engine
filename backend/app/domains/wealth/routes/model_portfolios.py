@@ -1266,9 +1266,10 @@ async def get_construction_advice(
 
     profile = portfolio.profile
 
-    # 2. Redis cache check
-    cache_key = _hash_advice_input(str(portfolio_id), str(portfolio.updated_at))
-    cached = await _get_cached_advice(cache_key)
+    # 2. Redis cache check (org-scoped — C-12 defense-in-depth)
+    org_id_str = str(org_id)
+    cache_key = _hash_advice_input(org_id_str, str(portfolio_id), str(portfolio.updated_at))
+    cached = await _get_cached_advice(org_id_str, cache_key)
     if cached is not None:
         logger.info("construction_advice_cache_hit", cache_key=cache_key)
         return ConstructionAdviceRead(**cached)
@@ -1374,7 +1375,7 @@ async def get_construction_advice(
 
     # 10. Serialize and cache
     result_dict = asdict(advice)
-    await _set_cached_advice(cache_key, result_dict)
+    await _set_cached_advice(org_id_str, cache_key, result_dict)
 
     logger.info(
         "construction_advice_computed",
@@ -1811,20 +1812,15 @@ async def activate_portfolio(
 # ── Advice cache helpers ──────────────────────────────────────────────────
 
 
-def _hash_advice_input(portfolio_id: str, updated_at: str) -> str:
-    """Deterministic hash for advice cache key."""
+def _hash_advice_input(organization_id: str, portfolio_id: str, updated_at: str) -> str:
+    """Deterministic hash for advice cache key (org-scoped, defense-in-depth)."""
     import hashlib
-    import json
 
-    payload = json.dumps({
-        "portfolio_id": portfolio_id,
-        "updated_at": updated_at,
-        "date": date.today().isoformat(),
-    }, sort_keys=True).encode()
-    return hashlib.sha256(payload).hexdigest()[:24]
+    payload = f"{organization_id}|{portfolio_id}|{updated_at}|{date.today().isoformat()}"
+    return hashlib.sha256(payload.encode()).hexdigest()[:24]
 
 
-async def _get_cached_advice(cache_key: str) -> dict | None:
+async def _get_cached_advice(org_id: str, cache_key: str) -> dict | None:
     """Check Redis for cached advice result (fail-open)."""
     try:
         import redis.asyncio as aioredis
@@ -1833,7 +1829,7 @@ async def _get_cached_advice(cache_key: str) -> dict | None:
 
         r = aioredis.Redis(connection_pool=get_redis_pool())
         try:
-            cached = await r.get(f"advice:cache:{cache_key}")
+            cached = await r.get(f"advice:cache:{org_id}:{cache_key}")
             if cached:
                 import json
 
@@ -1841,11 +1837,11 @@ async def _get_cached_advice(cache_key: str) -> dict | None:
         finally:
             await r.aclose()
     except Exception:
-        logger.debug("advice_cache_miss", cache_key=cache_key)
+        logger.debug("advice_cache_miss", org_id=org_id, cache_key=cache_key)
     return None
 
 
-async def _set_cached_advice(cache_key: str, result: dict, ttl: int = 600) -> None:
+async def _set_cached_advice(org_id: str, cache_key: str, result: dict, ttl: int = 600) -> None:
     """Cache advice result in Redis (10min TTL, fail-open)."""
     try:
         import json
@@ -1857,14 +1853,14 @@ async def _set_cached_advice(cache_key: str, result: dict, ttl: int = 600) -> No
         r = aioredis.Redis(connection_pool=get_redis_pool())
         try:
             await r.set(
-                f"advice:cache:{cache_key}",
+                f"advice:cache:{org_id}:{cache_key}",
                 json.dumps(result, default=str),
                 ex=ttl,
             )
         finally:
             await r.aclose()
     except Exception:
-        logger.debug("advice_cache_set_failed", cache_key=cache_key)
+        logger.debug("advice_cache_set_failed", org_id=org_id, cache_key=cache_key)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
