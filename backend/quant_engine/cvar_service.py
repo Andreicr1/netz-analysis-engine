@@ -177,7 +177,21 @@ def compute_cvar(
                     confidence=confidence,
                     populated=list(res.quantile_results.keys()),
                 )
-            var, cvar = 0.0, 0.0
+            # WMJ-020: fail-closed — NaN + degraded, never silent 0.0
+            var, cvar = float("nan"), float("nan")
+            return CVaRResult(
+                cvar=cvar,
+                var=var,
+                confidence=confidence,
+                method="evt_pot",
+                n_obs=n_obs,
+                evt_xi=res.fit.xi,
+                evt_beta=res.fit.beta,
+                evt_threshold=res.fit.u,
+                evt_n_exceedances=res.fit.n_exceedances,
+                degraded=True,
+                degraded_reason=res.degraded_reason or "evt_quantile_missing",
+            )
         else:
             var, cvar = res.quantile_results[confidence]
             # Fix 2: EVT returns loss-space (positive = loss magnitude).

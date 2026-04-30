@@ -13,12 +13,14 @@ Design decisions:
 - Report fold consistency (N/5 positive Sharpe), NOT p-values. See Finucane (2004).
 """
 
+import math
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import numpy as np
 import structlog
 
+from quant_engine.cvar_service import compute_cvar_from_returns
 from quant_engine.drawdown_service import compute_drawdown_series
 
 logger = structlog.get_logger()
@@ -36,9 +38,10 @@ def _compute_fold_metrics(
     std_r = float(np.std(returns, ddof=1))
     sharpe = float((mean_r - risk_free_daily) / std_r * np.sqrt(252)) if std_r > 0 else None
 
-    sorted_r = np.sort(returns)
-    cutoff = max(int(np.floor(len(sorted_r) * 0.05)), 1)
-    cvar_95 = -float(np.mean(sorted_r[:cutoff]))
+    cvar_val, _ = compute_cvar_from_returns(returns, 0.95)
+    # compute_cvar_from_returns returns return-space (negative = loss);
+    # backtest stores as positive loss magnitude.  NaN → None.
+    cvar_95 = None if math.isnan(cvar_val) else -cvar_val
 
     navs = np.concatenate([[1.0], np.cumprod(1.0 + returns)])
     dd_series = compute_drawdown_series(navs)
@@ -46,7 +49,7 @@ def _compute_fold_metrics(
 
     return {
         "sharpe": round(sharpe, 4) if sharpe is not None else None,
-        "cvar_95": round(cvar_95, 6),
+        "cvar_95": round(cvar_95, 6) if cvar_95 is not None else None,
         "max_drawdown": round(max_drawdown, 6),
         "n_obs": len(returns),
     }
