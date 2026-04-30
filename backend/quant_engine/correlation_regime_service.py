@@ -414,11 +414,16 @@ def compute_correlation_regime(
         corr_baseline = cov_base / np.outer(d_base, d_base)
         np.fill_diagonal(corr_baseline, 1.0)
 
+        # WMJ-015 / Codex P2: save raw baseline before denoising so that
+        # avg_corr_base is on the same transform as avg_corr (both raw).
+        corr_baseline_raw = corr_baseline.copy()
+
         if cfg["apply_denoising"] and N > 1:
             q_base = N / len(baseline_returns)
             corr_baseline = _marchenko_pastur_denoise(corr_baseline, q_base)
     else:
-        corr_baseline = corr_recent  # fallback
+        corr_baseline = corr_recent  # fallback (denoised)
+        corr_baseline_raw = corr_recent_raw  # fallback (raw)
 
     # Pair correlations
     pairs = []
@@ -454,7 +459,7 @@ def compute_correlation_regime(
     if N > 1:
         upper_tri = corr_recent_raw[np.triu_indices(N, k=1)]
         avg_corr = float(np.mean(upper_tri))
-        upper_tri_base = corr_baseline[np.triu_indices(N, k=1)]
+        upper_tri_base = corr_baseline_raw[np.triu_indices(N, k=1)]
         avg_corr_base = float(np.mean(upper_tri_base))
     else:
         avg_corr = 0.0

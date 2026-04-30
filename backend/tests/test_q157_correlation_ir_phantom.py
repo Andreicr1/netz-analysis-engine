@@ -110,6 +110,51 @@ class TestCorrelationRawVsDenoised:
         # At least verify that pair correlations exist and are populated
         assert len(denoised_pairs) == len(raw_pairs) == 3  # C(3,2) = 3
 
+    def test_regime_shift_zero_when_same_returns(self) -> None:
+        """When window_days >= T, recent == baseline; regime shift must be zero.
+
+        Codex P2 regression: if avg_corr uses raw but avg_corr_base uses
+        denoised, the delta can be non-zero even with identical input data.
+        Both must use the same transform (raw).
+        """
+        rng = np.random.default_rng(42)
+        T, N = 80, 4
+        returns = rng.normal(0.0005, 0.01, (T, N))
+        returns[:, 1] += 0.6 * returns[:, 0]
+
+        result = compute_correlation_regime(
+            returns,
+            config={
+                "apply_denoising": True,
+                "apply_shrinkage": True,
+                "min_observations": 30,
+                "window_days": T + 10,  # >= T → baseline == recent
+                "contagion_threshold": 0.3,
+            },
+        )
+        # With identical data, avg_corr == avg_corr_base → no regime shift
+        assert result.average_correlation == result.baseline_average_correlation
+        assert result.regime_shift_detected is False
+
+    def test_baseline_average_uses_raw_not_denoised(self) -> None:
+        """baseline_average_correlation must use raw (same transform as average_correlation)."""
+        rng = np.random.default_rng(42)
+        T, N = 300, 5
+        returns = rng.normal(0.0005, 0.01, (T, N))
+        returns[:, 1] += 0.5 * returns[:, 0]
+
+        result_denoised = compute_correlation_regime(
+            returns,
+            config={"apply_denoising": True, "apply_shrinkage": True, "min_observations": 30},
+        )
+        result_raw = compute_correlation_regime(
+            returns,
+            config={"apply_denoising": False, "apply_shrinkage": True, "min_observations": 30},
+        )
+        # baseline_average should match between denoised and raw configs
+        # because both now use the raw (pre-denoising) baseline
+        assert result_denoised.baseline_average_correlation == result_raw.baseline_average_correlation
+
     def test_no_denoising_raw_equals_display(self) -> None:
         """When denoising is OFF, raw and display matrix should trivially match."""
         rng = np.random.default_rng(42)
