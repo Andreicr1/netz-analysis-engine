@@ -51,6 +51,8 @@ class AttributionResult:
     interaction_total: float = 0.0
     n_periods: int = 0
     benchmark_available: bool = False
+    reconciliation_residual: float = 0.0
+    reconciliation_warning: bool = False
 
 
 def compute_attribution(
@@ -142,6 +144,18 @@ def compute_attribution(
         select_total += select_i
         interact_total += interact_i
 
+    # Reconciliation check (F-S12-15): effects should sum to R_p - R_b
+    effects_sum = alloc_total + select_total + interact_total
+    residual = (R_p - R_b) - effects_sum
+    warn = abs(residual) > 1e-6
+    if warn:
+        logger.warning(
+            "attribution_reconciliation_gap",
+            excess=R_p - R_b,
+            effects_sum=effects_sum,
+            residual=residual,
+        )
+
     return AttributionResult(
         total_portfolio_return=round(R_p, 6),
         total_benchmark_return=round(R_b, 6),
@@ -152,6 +166,8 @@ def compute_attribution(
         interaction_total=round(interact_total, 6),
         n_periods=1,
         benchmark_available=True,
+        reconciliation_residual=round(residual, 10),
+        reconciliation_warning=warn,
     )
 
 

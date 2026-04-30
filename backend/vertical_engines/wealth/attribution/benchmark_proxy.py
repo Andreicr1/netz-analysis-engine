@@ -65,10 +65,13 @@ _CONFIDENCE_CLASS_FALLBACK = 0.30
 _ASSET_CLASS_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("fi_us_treasury", re.compile(r"\b(u\.?s\.?\s+)?treasury|govt?\b", re.I)),
     ("fi_us_hy", re.compile(r"high\s*yield|junk\s+bond", re.I)),
+    # fi_intl BEFORE fi_us_ig/fi_us_agg — "Global Aggregate" and
+    # "International Corporate Bond" must not be swallowed by the broader
+    # US patterns (F-S12-10).
+    ("fi_intl", re.compile(r"global\s+agg|international\s+(bond|corporate)", re.I)),
     ("fi_us_ig", re.compile(r"investment\s*grade|corporate\s+bond|us\s+corp", re.I)),
     ("fi_us_muni", re.compile(r"muni(cipal)?", re.I)),
     ("fi_us_agg", re.compile(r"aggregate|agg\b|bond\s+index", re.I)),
-    ("fi_intl", re.compile(r"global\s+agg|international\s+bond", re.I)),
     ("equity_em", re.compile(r"emerg(ing)?\s+markets?|em\s+equity", re.I)),
     ("equity_intl_dev", re.compile(r"eafe|acwi|developed\s+markets?|msci\s+world", re.I)),
     ("equity_us_small", re.compile(r"small\s*cap|russell\s*2000", re.I)),

@@ -75,6 +75,22 @@ def compute_active_share(
             degraded=False,
         )
 
+    # Weight-sum validation (F-S12-13) — AS formula assumes normalized
+    # weights; garbage-in produces silently wrong AS with clamp hiding it.
+    _WEIGHT_SUM_TOL = 0.05
+    pw_sum = sum(portfolio_weights.values())
+    bw_sum = sum(benchmark_weights.values())
+    if abs(pw_sum - 1.0) > _WEIGHT_SUM_TOL or abs(bw_sum - 1.0) > _WEIGHT_SUM_TOL:
+        return ActiveShareResult(
+            active_share=0.0,
+            overlap=0.0,
+            n_portfolio_positions=len(portfolio_weights),
+            n_benchmark_positions=len(benchmark_weights),
+            n_common_positions=len(set(portfolio_weights) & set(benchmark_weights)),
+            degraded=True,
+            degraded_reason="weight_sum_out_of_range",
+        )
+
     # Union of all position identifiers
     all_ids = set(portfolio_weights.keys()) | set(benchmark_weights.keys())
 

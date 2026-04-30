@@ -95,7 +95,7 @@ def fit_style(
     # the constrained fit is worse than the mean.
     r_squared = max(0.0, min(1.0, r_squared))
 
-    te_annualized = float(np.std(residuals) * np.sqrt(periods_per_year))
+    te_annualized = float(np.std(residuals, ddof=1) * np.sqrt(periods_per_year))
     confidence = max(0.0, r_squared)
 
     exposures = tuple(
