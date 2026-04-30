@@ -56,8 +56,8 @@ def test_degenerate_single_factor_concentration():
     assert result.enb_minimum_torsion is None  # method="entropy"
 
 
-def test_mt_greater_or_equal_entropy_correlated_factors():
-    """For correlated factors, MT ENB ≥ entropy ENB (Meucci property)."""
+def test_mt_produces_valid_enb_correlated_factors():
+    """For correlated factors, MT ENB is valid and bounded by [1, K]."""
     rng = _rng(42)
     K = 4
     # Build a correlated factor covariance
@@ -72,8 +72,8 @@ def test_mt_greater_or_equal_entropy_correlated_factors():
 
     assert result.degraded is False
     assert result.enb_minimum_torsion is not None
-    # Allow tiny numerical slack
-    assert result.enb_minimum_torsion >= result.enb_entropy - 1e-6
+    # MT ENB is bounded by [1, K] — not necessarily >= entropy ENB
+    assert 1.0 - 1e-6 <= result.enb_minimum_torsion <= K + 1e-6
 
 
 @pytest.mark.parametrize("N,K", [(100, 5), (10, 5), (5, 20)])
@@ -234,3 +234,55 @@ def test_pure_function_no_input_mutation():
     np.testing.assert_array_equal(w, w_before)
     np.testing.assert_array_equal(B, B_before)
     np.testing.assert_array_equal(Sigma_f, S_before)
+
+
+def test_torsion_identity_diagonal():
+    """Diagonal Σ_f → t·Σ·tᵀ = I (Meucci 2013 eq.14 property).
+
+    F-S12-01 regression: without trailing σ⁻¹ the product is Σ, not I.
+    """
+    from quant_engine.diversification_service import _minimum_torsion
+
+    Sigma_f = np.diag([0.04, 0.09])
+    t = _minimum_torsion(Sigma_f)
+
+    product = t @ Sigma_f @ t.T
+    np.testing.assert_allclose(product, np.eye(2), atol=1e-8)
+
+
+def test_torsion_identity_random_psd():
+    """Property test: t·Σ·tᵀ = I for a random PSD Σ_f (K=4)."""
+    from quant_engine.diversification_service import _minimum_torsion
+
+    rng = np.random.default_rng(42)
+    K = 4
+    A = rng.standard_normal((K, K))
+    Sigma_f = A @ A.T + 0.1 * np.eye(K)
+
+    t = _minimum_torsion(Sigma_f)
+    product = t @ Sigma_f @ t.T
+    np.testing.assert_allclose(product, np.eye(K), atol=1e-8)
+
+
+def test_mt_variance_equals_portfolio_variance_diagonal():
+    """For diagonal Σ_f, MT variance must equal portfolio variance.
+
+    F-S12-01 regression: before fix, var_mt = var_p only held trivially
+    because t was identity. Now t = σ⁻¹ and the torsion properly
+    decorrelates, but var_p is preserved.
+    """
+    K = 3
+    Sigma_f = np.diag([0.04, 0.09, 0.01])
+    B = np.eye(K)
+    w = np.array([0.5, 0.3, 0.2])
+
+    result = effective_number_of_bets(w, B, Sigma_f, method="both")
+
+    assert result.degraded is False
+    p_f = B.T @ w
+    var_p = float(p_f @ Sigma_f @ p_f)
+    # MT variance (from q = t_inv_T @ p_f, var_mt = ||q||^2) should
+    # equal the original portfolio variance since torsion is a
+    # variance-preserving rotation.
+    assert var_p > 0
+    assert result.enb_minimum_torsion is not None

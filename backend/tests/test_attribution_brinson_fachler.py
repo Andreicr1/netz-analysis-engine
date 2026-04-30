@@ -55,9 +55,8 @@ def test_brinson_fachler_identity_sum_matches_active_return():
 
 
 def test_brinson_fachler_fund_sector_absent_from_benchmark():
-    """Fund holds Crypto (5%), benchmark doesn't. Allocation must take
-    the full bet. Selection/interaction fall through to the aggregate
-    benchmark return fallback."""
+    """Fund holds Crypto (5%), benchmark doesn't. Entire off-benchmark
+    bet flows to allocation (CIPM standard)."""
     fund_w = {"Equity": 0.95, "Crypto": 0.05}
     fund_r = {"Equity": 0.08, "Crypto": 0.25}
     bench_w = {"Equity": 1.0}
@@ -65,12 +64,15 @@ def test_brinson_fachler_fund_sector_absent_from_benchmark():
 
     r = brinson_fachler(fund_w, fund_r, bench_w, bench_r)
 
-    # Benchmark doesn't hold crypto; using R_B = 0.08 as fallback.
-    # allocation_crypto = (0.05 - 0) * (0.08 - 0.08) = 0
-    # selection_crypto = 0 * (0.25 - 0.08) = 0
-    # interaction_crypto = 0.05 * (0.25 - 0.08) = 0.0085
+    # Benchmark doesn't hold Crypto; r_b fallback = r_p = 0.25.
+    # R_B = 1.0 * 0.08 = 0.08
+    # allocation_crypto = (0.05 - 0) * (0.25 - 0.08) = 0.0085
+    # selection_crypto = 0 * (0.25 - 0.25) = 0
+    # interaction_crypto = (0.05 - 0) * (0.25 - 0.25) = 0
     # Equity: all zero since weights and returns equal on both sides.
-    assert r.interaction_effect == pytest.approx(0.0085, abs=1e-9)
+    assert r.allocation_effect == pytest.approx(0.0085, abs=1e-9)
+    assert r.selection_effect == pytest.approx(0.0, abs=1e-9)
+    assert r.interaction_effect == pytest.approx(0.0, abs=1e-9)
 
 
 def test_brinson_fachler_zero_benchmark_weight_zero_selection_interaction():
@@ -150,3 +152,34 @@ def test_brinson_fachler_by_sector_covers_all_sectors():
     r = brinson_fachler(fund_w, fund_r, bench_w, bench_r)
     sectors = {s.sector for s in r.by_sector}
     assert sectors == {"A", "B", "C"}
+
+
+def test_off_benchmark_allocation_nonzero():
+    """Off-benchmark sector (w_b=0): entire bet flows to allocation (CIPM).
+
+    F-S12-07b regression: before fix, allocation was zero and the entire
+    effect was misclassified as interaction.
+
+    Setup: fund holds 10% in sector X (r_p=0.08), benchmark holds 0%.
+    Remaining 90% in sector Y with identical weights/returns on both
+    sides (R_B = 0.90 * 0.05 = 0.045 from Y alone since X has w_b=0).
+
+    Expected for sector X:
+        r_b fallback = r_p = 0.08  (off-benchmark CIPM)
+        allocation = (0.10 - 0) * (0.08 - 0.05) = 0.003
+        selection  = 0 * (0.08 - 0.08) = 0
+        interaction = (0.10 - 0) * (0.08 - 0.08) = 0
+    """
+    fund_w = {"Y": 0.90, "X": 0.10}
+    fund_r = {"Y": 0.05, "X": 0.08}
+    bench_w = {"Y": 1.0}
+    bench_r = {"Y": 0.05}
+
+    r = brinson_fachler(fund_w, fund_r, bench_w, bench_r)
+
+    x = next(s for s in r.by_sector if s.sector == "X")
+    # R_B = 1.0 * 0.05 = 0.05
+    # allocation = (0.10 - 0) * (0.08 - 0.05) = 0.003
+    assert x.allocation_effect == pytest.approx(0.003, abs=1e-9)
+    assert x.selection_effect == pytest.approx(0.0, abs=1e-9)
+    assert x.interaction_effect == pytest.approx(0.0, abs=1e-9)

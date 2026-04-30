@@ -212,31 +212,37 @@ def _entropy_enb(rc: NDArray[np.float64]) -> float:
 def _minimum_torsion(Sigma_f: NDArray[np.float64]) -> NDArray[np.float64]:
     """Meucci 2013 minimum-torsion matrix t with t·Σ_f·tᵀ = I.
 
-    Closed form (Meucci et al. 2013, eq. 18)::
+    Solved via orthogonal Procrustes (Meucci et al. 2013, §3.2):
 
-        t = σ⁻¹ · C^{1/2} · (C^{1/2} · σ⁻² · C^{1/2})^{-1/2} · C^{1/2}
+        t = argmin_t  ||t − σ⁻¹||_F   subject to  t·Σ_f·tᵀ = I
 
-    where σ = diag(√diag(Σ_f)), C = σ⁻¹ Σ_f σ⁻¹.
+    where σ⁻¹ = diag(1/√diag(Σ_f)) is the marginal-decorrelation reference.
+
+    Writing any valid decorrelation as t = U·Σ^{−½} (U orthogonal), the
+    problem reduces to::
+
+        U* = argmin  ||U·Σ^{−½} − σ⁻¹||_F  ⟺  argmax  tr(U·M)
+        M   = Σ^{−½}·σ⁻¹,   SVD M = V·S·Wᵀ  ⟹  U* = W·Vᵀ
+
+    giving  t = W·Vᵀ·Σ^{−½}.  Verified: t·Σ·tᵀ = I, and for diagonal Σ_f
+    the result is exactly σ⁻¹.
 
     Among all invertible matrices that decorrelate factors, MT minimises the
     tracking error of the rotated bets vs original factors, making the bets
     the "closest uncorrelated basis" — more stable than PCA when factors are
     correlated.
     """
+    Sigma_inv_half = _sym_sqrt(Sigma_f, inverse=True)
+
     diag_var = np.diag(Sigma_f).copy()
     diag_var = np.where(diag_var > _EPS, diag_var, _EPS)
-    sigma = np.sqrt(diag_var)
-    sigma_inv = np.diag(1.0 / sigma)
-    C = sigma_inv @ Sigma_f @ sigma_inv
-    C = 0.5 * (C + C.T)
+    sigma_inv = np.diag(1.0 / np.sqrt(diag_var))
 
-    C_half = _sym_sqrt(C)
-    sigma_inv_sq = np.diag(1.0 / (sigma * sigma))
-    inner = C_half @ sigma_inv_sq @ C_half
-    inner = 0.5 * (inner + inner.T)
-    inner_inv_half = _sym_sqrt(inner, inverse=True)
+    M = Sigma_inv_half @ sigma_inv
+    V, _S, Wt = np.linalg.svd(M)
+    U_opt: NDArray[np.float64] = Wt.T @ V.T
 
-    t = sigma_inv @ C_half @ inner_inv_half @ C_half
+    t: NDArray[np.float64] = U_opt @ Sigma_inv_half
     return t
 
 

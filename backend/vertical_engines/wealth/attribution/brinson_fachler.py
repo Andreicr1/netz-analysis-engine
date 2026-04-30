@@ -13,9 +13,10 @@ Formulation (Brinson, Hood, Beebower 1986; Fachler 1985):
 
 Missing sectors on either side are treated as zero weight / zero return
 (the standard convention). When a fund holds a sector the benchmark does
-not, the benchmark's aggregate return R_B is used as the sector's
-benchmark return — this keeps allocation credit pure (the manager's bet
-on that sector is compared to doing nothing different from the index).
+not (off-benchmark), the portfolio's sector return r_p is used as the
+benchmark sector return fallback — this ensures the entire active bet
+flows to allocation = (w_p - 0) * (r_p - R_B), with selection and
+interaction both zero (CIPM standard for off-benchmark sectors).
 
 The formula preserves the identity::
 
@@ -50,9 +51,9 @@ def brinson_fachler(
     fund_returns, bench_returns
         Sector → period return (decimal, e.g. 0.03 for +3%). A missing
         sector return on the fund side is treated as zero. On the
-        benchmark side, a missing sector falls back to the aggregate
-        benchmark return R_B so that allocation credit for fund-only
-        sectors is measured against "do nothing" (the index).
+        benchmark side, a missing sector falls back to the portfolio's
+        sector return r_p so that the entire off-benchmark bet flows to
+        allocation (CIPM standard).
     """
     sectors = set(fund_weights) | set(bench_weights)
 
@@ -70,9 +71,10 @@ def brinson_fachler(
         w_p = float(fund_weights.get(sector, 0.0))
         w_b = float(bench_weights.get(sector, 0.0))
         r_p = float(fund_returns.get(sector, 0.0))
-        # If the benchmark does not hold the sector, fall back to the
-        # aggregate benchmark return so allocation captures the whole bet.
-        r_b = float(bench_returns.get(sector, aggregate_benchmark_return))
+        # Off-benchmark sector (w_b=0): use r_p as fallback so the entire
+        # bet flows to allocation = (w_p - 0)*(r_p - R_B), with selection
+        # and interaction both zero (CIPM standard).
+        r_b = float(bench_returns.get(sector, r_p))
 
         allocation = (w_p - w_b) * (r_b - aggregate_benchmark_return)
         selection = w_b * (r_p - r_b)

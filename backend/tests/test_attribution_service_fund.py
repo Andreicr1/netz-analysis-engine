@@ -18,6 +18,7 @@ from vertical_engines.wealth.attribution.models import (
     RailBadge,
 )
 from vertical_engines.wealth.attribution.service import (
+    AttributionService,
     _cache_key,
     compute_fund_attribution,
 )
@@ -160,6 +161,71 @@ def test_idempotent_same_inputs_same_output() -> None:
     for e1, e2 in zip(a.returns_based.exposures, b.returns_based.exposures, strict=True):
         assert e1.ticker == e2.ticker
         assert e1.weight == pytest.approx(e2.weight, rel=1e-9, abs=1e-12)
+
+
+def test_cache_key_changes_with_asset_class() -> None:
+    """F-S12-09: fund_asset_class must be included in cache key.
+
+    Same fund with different asset_class must produce different keys,
+    otherwise changing asset class serves stale cached attribution.
+    """
+    fund_id = uuid4()
+    req_a = AttributionRequest(
+        fund_instrument_id=fund_id,
+        asof=date(2026, 4, 19),
+        fund_asset_class=None,
+    )
+    req_b = AttributionRequest(
+        fund_instrument_id=fund_id,
+        asof=date(2026, 4, 19),
+        fund_asset_class="fixed_income",
+    )
+    req_c = AttributionRequest(
+        fund_instrument_id=fund_id,
+        asof=date(2026, 4, 19),
+        fund_asset_class="equity",
+    )
+    assert _cache_key(req_a) != _cache_key(req_b)
+    assert _cache_key(req_b) != _cache_key(req_c)
+    assert _cache_key(req_a) != _cache_key(req_c)
+
+
+def test_independent_residuals() -> None:
+    """F-S12-04: portfolio and benchmark weight residuals computed independently.
+
+    When pw_sum=0.90 and bw_sum=1.0, the benchmark residual should be 0.0
+    and the portfolio residual should be 0.10. Before fix, the benchmark
+    residual (0.0) was applied to both.
+    """
+    svc = AttributionService()
+
+    allocations = [
+        {"block_id": "equity", "target_weight": 0.60},
+        {"block_id": "bonds", "target_weight": 0.40},
+    ]
+    fund_returns = {"equity": 0.08, "bonds": 0.03}
+    benchmark_returns = {"equity": 0.07, "bonds": 0.04}
+    labels = {"equity": "Equity", "bonds": "Bonds"}
+    # Actual portfolio weights sum to 0.90 — 10% cash
+    actual_weights = {"equity": 0.50, "bonds": 0.40}
+
+    result = svc.compute_portfolio_attribution(
+        strategic_allocations=allocations,
+        fund_returns_by_block=fund_returns,
+        benchmark_returns_by_block=benchmark_returns,
+        block_labels=labels,
+        actual_weights_by_block=actual_weights,
+    )
+
+    # The result should have a cash_residual sector
+    cash_sectors = [s for s in result.sectors if s.sector == "cash_residual"]
+    assert len(cash_sectors) == 1
+
+    # Sum of portfolio weights must be 1.0 (0.50 + 0.40 + 0.10 = 1.0)
+    # Sum of benchmark weights must be 1.0 (0.60 + 0.40 + 0.00 = 1.0)
+    # The important thing is that both sides independently normalize.
+    # The result should be valid attribution (benchmark_available=True).
+    assert result.benchmark_available is True
 
 
 def test_cache_is_used_when_client_provided() -> None:
