@@ -87,7 +87,7 @@ class QuantAnalyzer:
 
         returns = np.array([float(r) for r in navs if r is not None], dtype=np.float64)
 
-        from quant_engine.cvar_service import resolve_cvar_config
+        from quant_engine.cvar_service import compute_cvar_from_returns, resolve_cvar_config
 
         cvar_configs = resolve_cvar_config(self._config.get("cvar"))
 
@@ -96,11 +96,11 @@ class QuantAnalyzer:
             window = cfg.get("window_months", 3) * 21
             conf = cfg.get("confidence", 0.95)
             r_slice = returns[:window] if len(returns) >= window else returns
-            sorted_r = np.sort(r_slice)
-            cutoff = max(int(np.floor(len(sorted_r) * (1 - conf))), 1)
-            cvar_val = -float(np.mean(sorted_r[:cutoff]))
+            cvar_val, _ = compute_cvar_from_returns(r_slice, conf)
+            # compute_cvar_from_returns returns return-space (negative = loss);
+            # negate to maintain positive-loss convention in the response dict.
             results[profile] = {
-                "cvar": round(cvar_val, 6),
+                "cvar": round(-cvar_val, 6) if not np.isnan(cvar_val) else None,
                 "limit": cfg.get("limit"),
                 "window_days": len(r_slice),
             }
