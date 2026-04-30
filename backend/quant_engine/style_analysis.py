@@ -114,7 +114,7 @@ def classify_fund_style(
     for h in holdings:
         pct = h.get("pct_of_nav")
         if pct is not None:
-            weight = pct / 100.0 if abs(pct) > 1.5 else pct
+            weight = pct / 100.0
         elif total_value > 0:
             mv = h.get("market_value") or 0
             weight = mv / total_value
