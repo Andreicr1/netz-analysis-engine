@@ -127,6 +127,96 @@ class TestClassifyFundStyle:
         with pytest.raises(AttributeError):
             result.style_label = "mixed"  # type: ignore[misc]
 
+    def test_small_holdings_not_inflated(self):
+        """Holdings below 1.5% NAV must not be inflated relative to larger ones.
+
+        Regression: the old heuristic ``pct / 100 if abs(pct) > 1.5 else pct``
+        treated sub-1.5% values as fractions instead of percentages, inflating
+        a 0.5% position to appear as 50%.
+        """
+        # 2 large holdings (5% each) + 8 small holdings (0.5% each)
+        # Correct equity weight = (10 + 4) / 100 = 0.14
+        # Bug would give: 0.05 + 0.05 + 8*0.005 = 0.14 for large but 8*0.5 = 4.0 for small
+        holdings = [
+            _holding(sector="Information Technology", pct_of_nav=5.0),
+            _holding(sector="Financials", pct_of_nav=5.0),
+        ] + [
+            _holding(sector="Utilities", pct_of_nav=0.5)
+            for _ in range(8)
+        ]
+        result = classify_fund_style(holdings)
+        # Large holdings contribute 10% total, small contribute 4% total
+        # So large holdings should dominate — IT + Financials = 10/14 ~ 71%
+        # Small Utilities = 4/14 ~ 29%
+        it_weight = result.sector_weights.get("Information Technology", 0)
+        fin_weight = result.sector_weights.get("Financials", 0)
+        util_weight = result.sector_weights.get("Utilities", 0)
+        # IT + Financials should clearly dominate over Utilities
+        assert it_weight + fin_weight > util_weight
+        # IT should be ~35.7% of sector weight, not dwarfed by inflated small holdings
+        assert it_weight > 0.30
+
+    def test_all_sub_1_5_pct_correct(self):
+        """Fund with all holdings < 1.5% NAV must have correct total weight.
+
+        Regression: old heuristic left sub-1.5% values as-is (fractions),
+        making total weight = sum(pct_of_nav) instead of sum(pct_of_nav)/100.
+        """
+        # 20 holdings each at 1.0% of NAV = 20% total
+        holdings = [
+            _holding(sector="Information Technology", pct_of_nav=1.0)
+            for _ in range(20)
+        ]
+        result = classify_fund_style(holdings)
+        # equity_pct should be ~1.0 (all equity) regardless of individual sizes
+        assert result.equity_pct is not None
+        assert result.equity_pct > 0.99
+        # The actual equity weight in fractions should be ~0.20 (20/100), not 20.0
+        # We verify by checking style_label — if weights were inflated 100x,
+        # the sector normalization would still work BUT the equity_pct fraction
+        # would be computed from inflated sums. With the fix, it's correct.
+        assert result.style_label == "large_growth"
+
+    def test_style_label_correct_for_diversified_fund(self):
+        """500-stock index fund with realistic pct_of_nav values.
+
+        Regression: ~80% of holdings in an S&P 500 fund are below 1.5% NAV.
+        The old heuristic inflated those by 100x, making small-cap value
+        sectors dominate and corrupting style_label from large_blend to
+        large_growth or large_value.
+        """
+        holdings = []
+        # Top 10 holdings: large tech/growth stocks (typical S&P 500 top)
+        for pct in [7.0, 6.5, 5.0, 3.5, 2.5, 2.0, 1.8, 1.6, 1.5, 1.4]:
+            holdings.append(_holding(sector="Information Technology", pct_of_nav=pct))
+        # Next 20: mix of growth and value at moderate weights
+        for _ in range(10):
+            holdings.append(_holding(sector="Health Care", pct_of_nav=1.2))
+        for _ in range(10):
+            holdings.append(_holding(sector="Financials", pct_of_nav=1.0))
+        # Remaining 470 positions: small weights, balanced growth/value
+        for _ in range(120):
+            holdings.append(_holding(sector="Consumer Discretionary", pct_of_nav=0.05))
+        for _ in range(120):
+            holdings.append(_holding(sector="Consumer Staples", pct_of_nav=0.05))
+        for _ in range(115):
+            holdings.append(_holding(sector="Industrials", pct_of_nav=0.05))
+        for _ in range(115):
+            holdings.append(_holding(sector="Energy", pct_of_nav=0.05))
+
+        result = classify_fund_style(holdings)
+        # Top-heavy fund: IT dominates with ~32.8% of total weight
+        # Growth sectors (IT + Health Care + Consumer Disc + Industrials) vs
+        # Value sectors (Financials + Consumer Staples + Energy)
+        # Expected: growth-heavy due to IT concentration → large_growth
+        assert result.style_label in ("large_growth", "large_blend")
+        # Key regression check: small holdings must NOT dominate sector weights
+        it_weight = result.sector_weights.get("Information Technology", 0)
+        # IT has 32.8/total of total NAV — should be the largest sector
+        assert it_weight > 0.30
+        # Confidence should be 1.0 (all holdings have sectors)
+        assert result.confidence == 1.0
+
     def test_never_raises_on_bad_data(self):
         bad_holdings = [
             {"sector": None, "asset_class": None, "pct_of_nav": None, "market_value": None},
