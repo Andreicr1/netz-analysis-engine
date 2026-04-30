@@ -198,6 +198,31 @@ def _compute_sortino(returns: np.ndarray, days: int, risk_free_rate: float = 0.0
     )
 
 
+def _compute_information_ratio(
+    returns: np.ndarray, days: int, risk_free_rate: float = 0.04,
+) -> float | None:
+    """Information ratio = annualized excess return / annualized tracking error.
+
+    Uses the risk-free rate as proxy benchmark when no fund-specific benchmark
+    is available. Returns None when data is insufficient or tracking error is
+    below ``MIN_ANNUALIZED_VOL`` (stale/frozen NAV guard).
+
+    WMJ-021: Previously `information_ratio_1y` was declared in the DB model
+    but never computed by the worker, causing scoring_service to always fall
+    back to a degraded synthetic value.
+    """
+    if len(returns) < days:
+        return None
+    window = returns[-days:]
+    rf_daily = risk_free_rate / TRADING_DAYS_PER_YEAR
+    excess = window - rf_daily
+    te = float(np.std(excess, ddof=1)) * np.sqrt(TRADING_DAYS_PER_YEAR)
+    if te < MIN_ANNUALIZED_VOL:
+        return None
+    ann_excess = float(np.mean(excess)) * TRADING_DAYS_PER_YEAR
+    return round(ann_excess / te, 6)
+
+
 async def _batch_resolve_return_types(
     db: AsyncSession,
     fund_ids: list[uuid.UUID],
@@ -587,6 +612,11 @@ def _compute_metrics_from_returns(
     metrics["sharpe_1y"] = _round_or_none(_compute_sharpe(returns, 252, risk_free_rate))
     metrics["sharpe_3y"] = _round_or_none(_compute_sharpe(returns, 3 * 252, risk_free_rate))
     metrics["sortino_1y"] = _round_or_none(_compute_sortino(returns, 252, risk_free_rate))
+
+    # Information Ratio (WMJ-021: previously phantom — column existed but was never computed)
+    metrics["information_ratio_1y"] = _round_or_none(
+        _compute_information_ratio(returns, 252, risk_free_rate),
+    )
 
     # Robust Sharpe (Cornish-Fisher adjusted + Opdyke 95% CI). Populated
     # ALWAYS per PR-Q1 — read by scoring_service only when flag is ON.
