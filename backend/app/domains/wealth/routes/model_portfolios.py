@@ -1073,6 +1073,18 @@ async def run_parametric_stress_test(
             detail="Portfolio has no fund selection. Run /construct first.",
         )
 
+    # PR-Q141 (C-04): reject diagnostic schemas — mandate-infeasible
+    # constructions are for what-if visibility only.
+    if portfolio.fund_selection_schema.get("is_diagnostic"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Portfolio has a diagnostic (mandate-infeasible) construction. "
+                "Relax the CVaR limit and re-run /construct to obtain an "
+                "approval-eligible schema before running stress-test."
+            ),
+        )
+
     from vertical_engines.wealth.model_portfolio.stress_scenarios import (
         PRESET_SCENARIOS,
         run_stress_scenario,
