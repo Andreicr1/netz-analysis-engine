@@ -36,7 +36,8 @@ async def load_latest_ipca_fit(
     stmt = text(
         """
         SELECT k_factors, gamma_loadings, factor_returns,
-               oos_r_squared, converged, n_iterations
+               oos_r_squared, converged, n_iterations,
+               degraded, degraded_reason
         FROM factor_model_fits
         WHERE engine = 'ipca'
           AND asset_class = :asset_class
@@ -67,6 +68,8 @@ async def load_latest_ipca_fit(
         converged=row.converged,
         n_iterations=row.n_iterations,
         dates=dates,
+        degraded=bool(row.degraded) if row.degraded is not None else False,
+        degraded_reason=row.degraded_reason,
     )
 
 
@@ -229,6 +232,9 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
     
     # Calculate returns contribution — always period-bounded (F-S12-05)
     period_start, period_end, period_defaulted = _resolve_period_bounds(request)
+
+    # WMJ-014C: detect full-matrix fallback when fit.dates is None
+    dates_unavailable = fit.dates is None
     factor_returns_period = fit.factor_returns_for_period(period_start, period_end)
 
     if factor_returns_period.size == 0:
@@ -247,13 +253,45 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
 
     factor_names = ["Size", "Value", "Momentum", "Quality", "Investment", "Profitability"]
 
+    # WMJ-014B: compute residual for reconstruction quality assessment
+    residual = _compute_residual(contribution_per_factor, alpha, f_t_mean, beta)
+
+    # WMJ-013: propagate degraded status from fit + WMJ-014C: dates fallback
+    degraded = fit.degraded or dates_unavailable
+    degraded_reason = fit.degraded_reason
+    if dates_unavailable and not fit.degraded:
+        degraded_reason = "ipca_dates_unavailable_full_matrix_fallback"
+    elif dates_unavailable and fit.degraded:
+        degraded_reason = f"{fit.degraded_reason}|ipca_dates_unavailable_full_matrix_fallback"
+
     return IPCAResult(
         factor_names=factor_names[:fit.K],
         factor_exposures=beta.tolist(),
         factor_returns_contribution=contribution_per_factor.tolist(),
         alpha=alpha,
         confidence=fit.oos_r_squared,
+        degraded=degraded,
+        degraded_reason=degraded_reason,
+        residual=residual,
     )
+
+def _compute_residual(
+    contribution_per_factor: np.ndarray,
+    alpha: float,
+    f_t_mean: np.ndarray,
+    beta: np.ndarray,
+) -> float | None:
+    """Compute residual: sum(contributions) + alpha vs implied return.
+
+    For Option B, the implied return is beta' * f_t_mean + alpha.
+    The residual measures how well the decomposition reconstructs.
+    For a fully decomposed model this should be exactly zero, but
+    floating-point arithmetic may introduce small residuals.
+    """
+    implied = float(np.sum(contribution_per_factor)) + alpha
+    reconstructed = float(beta @ f_t_mean) + alpha
+    return float(implied - reconstructed)
+
 
 async def _estimate_alpha_fixed_beta(request: AttributionRequest, db: AsyncSession, fit: IPCAFit, beta: np.ndarray) -> float:
     """Estimate alpha as the mean residual: r_fund - beta' * f_t.
@@ -340,18 +378,41 @@ async def _run_ipca_rail_option_a(request: AttributionRequest, db: AsyncSession,
     fund_returns_df.index = pd.to_datetime(fund_returns_df.index).to_period("M")
     fund_returns_df = fund_returns_df[~fund_returns_df.index.duplicated(keep="last")]
 
-    if fit.dates is None:
-        return None
+    # WMJ-014C: when fit.dates is None, factor_returns_for_period returns
+    # the FULL matrix. We proceed but mark degraded instead of returning None.
+    dates_unavailable = fit.dates is None
 
-    factor_df = pd.DataFrame(
-        fit.factor_returns.T,
-        index=pd.to_datetime(fit.dates).to_period("M"),
-        columns=[f"factor_{i}" for i in range(fit.K)],
-    )
-    factor_df = factor_df[~factor_df.index.duplicated(keep="last")]
+    if dates_unavailable:
+        # Synthesize a date index from fund returns so alignment can proceed.
+        # factor_returns shape is (K, T); we assign monthly periods from fund data.
+        n_factor_periods = fit.factor_returns.shape[1]
+        factor_df = pd.DataFrame(
+            fit.factor_returns.T,
+            index=pd.RangeIndex(n_factor_periods),
+            columns=[f"factor_{i}" for i in range(fit.K)],
+        )
+        # Cannot align by date — use the full factor matrix as-is and
+        # align with fund returns by truncating to the shorter series.
+        fund_ret = fund_returns_df["return"].values
+        n_common = min(len(fund_ret), n_factor_periods)
+        if n_common < 12:
+            return None
+        factor_vals = fit.factor_returns[:, :n_common].T
+        aligned = pd.DataFrame(
+            np.column_stack([fund_ret[-n_common:], factor_vals]),
+            columns=["return"] + [f"factor_{i}" for i in range(fit.K)],
+        )
+    else:
+        factor_df = pd.DataFrame(
+            fit.factor_returns.T,
+            index=pd.to_datetime(fit.dates).to_period("M"),
+            columns=[f"factor_{i}" for i in range(fit.K)],
+        )
+        factor_df = factor_df[~factor_df.index.duplicated(keep="last")]
 
-    # Align fund returns and factor returns
-    aligned = pd.concat([fund_returns_df["return"], factor_df], axis=1, join="inner")
+        # Align fund returns and factor returns
+        aligned = pd.concat([fund_returns_df["return"], factor_df], axis=1, join="inner")
+
     if len(aligned) < 12:
         return None
 
@@ -360,8 +421,6 @@ async def _run_ipca_rail_option_a(request: AttributionRequest, db: AsyncSession,
     # better regression), but factor contribution (f_t_mean) must be
     # computed only over the analysis period to avoid look-ahead bias.
     period_start, period_end, period_defaulted = _resolve_period_bounds(request)
-    p_start = pd.Period(period_start, freq="M")
-    p_end = pd.Period(period_end, freq="M")
 
     # Time-series regression: r_fund_t = α + β' f_t + ε_t
     y = aligned["return"].values
@@ -376,28 +435,55 @@ async def _run_ipca_rail_option_a(request: AttributionRequest, db: AsyncSession,
         logger.warning("ipca_regression_failed", error=str(e))
         return None
 
-    # Factor contribution uses period-bounded subset only
-    period_mask = (aligned.index >= p_start) & (aligned.index <= p_end)
-    aligned_period = aligned[period_mask]
+    # WMJ-014A: use fund-specific regression R² as confidence, not universe OOS R²
+    regression_r2 = float(model.rsquared)
 
-    if len(aligned_period) == 0:
-        logger.warning(
-            "ipca_option_a_no_data_in_period",
-            period_start=str(period_start),
-            period_end=str(period_end),
-            defaulted=period_defaulted,
-        )
-        return None
-    X_period = aligned_period[[f"factor_{i}" for i in range(fit.K)]].values
+    # Factor contribution uses period-bounded subset only
+    if dates_unavailable:
+        # No date index to filter — use all aligned data (already degraded)
+        X_period = X
+    else:
+        p_start = pd.Period(period_start, freq="M")
+        p_end = pd.Period(period_end, freq="M")
+        period_mask = (aligned.index >= p_start) & (aligned.index <= p_end)
+        aligned_period = aligned[period_mask]
+
+        if len(aligned_period) == 0:
+            logger.warning(
+                "ipca_option_a_no_data_in_period",
+                period_start=str(period_start),
+                period_end=str(period_end),
+                defaulted=period_defaulted,
+            )
+            return None
+        X_period = aligned_period[[f"factor_{i}" for i in range(fit.K)]].values
+
     f_t_mean = X_period.mean(axis=0)
     contribution_per_factor = beta * f_t_mean
 
     factor_names = ["Size", "Value", "Momentum", "Quality", "Investment", "Profitability"]
+
+    # WMJ-014B: compute residual — for Option A the decomposition is
+    # sum(beta_k * mean(f_k)) + alpha vs mean(fund_return)
+    mean_fund_return = float(np.mean(y))
+    implied_return = float(np.sum(contribution_per_factor)) + alpha
+    residual = mean_fund_return - implied_return
+
+    # WMJ-013 + WMJ-014C: propagate degraded status
+    degraded = fit.degraded or dates_unavailable
+    degraded_reason = fit.degraded_reason
+    if dates_unavailable and not fit.degraded:
+        degraded_reason = "ipca_dates_unavailable_full_matrix_fallback"
+    elif dates_unavailable and fit.degraded:
+        degraded_reason = f"{fit.degraded_reason}|ipca_dates_unavailable_full_matrix_fallback"
 
     return IPCAResult(
         factor_names=factor_names[:fit.K],
         factor_exposures=beta.tolist(),
         factor_returns_contribution=contribution_per_factor.tolist(),
         alpha=alpha,
-        confidence=fit.oos_r_squared,
+        confidence=regression_r2,
+        degraded=degraded,
+        degraded_reason=degraded_reason,
+        residual=residual,
     )

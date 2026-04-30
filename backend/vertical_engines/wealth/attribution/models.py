@@ -217,13 +217,23 @@ class AttributionRequest:
 
 @dataclass(frozen=True, slots=True)
 class IPCAResult:
-    """Output of IPCA factor model attribution."""
+    """Output of IPCA factor model attribution.
+
+    When ``degraded`` is True, the numeric fields are still populated
+    (best-effort) but ``degraded_reason`` carries the machine-readable
+    cause (``fit_degraded:<reason>``, ``ipca_dates_unavailable_full_matrix_fallback``).
+    ``residual`` is ``sum(contributions) + alpha - mean(fund_return)``
+    when computable; a well-fit model has residual near zero.
+    """
 
     factor_names: list[str]
     factor_exposures: list[float]
     factor_returns_contribution: list[float]
     alpha: float
     confidence: float
+    degraded: bool = False
+    degraded_reason: str | None = None
+    residual: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
