@@ -100,25 +100,37 @@ async def resolve_fund_cik(
 
 
 async def latest_period_for_cik(
-    db: "AsyncSession", cik: str, not_before: date | None = None,
+    db: "AsyncSession",
+    cik: str,
+    not_before: date | None = None,
+    asof: date | None = None,
 ) -> date | None:
-    """Return the latest matview period_of_report for this CIK, or None."""
+    """Return the latest matview period_of_report for this CIK, or None.
+
+    When *asof* is provided the SQL enforces ``period_of_report <= asof``
+    so that backdated attribution requests never pick up filings that
+    post-date the analysis date (WMJ-007 point-in-time correctness).
+    """
     candidates = cik_variants(cik)
+
+    # Build WHERE clauses dynamically based on supplied bounds.
+    clauses = ["filer_cik IN :candidates"]
+    params: dict = {"candidates": list(candidates)}
+
     if not_before is not None:
-        stmt = text("""
-            SELECT MAX(period_of_report)
-            FROM mv_nport_sector_attribution
-            WHERE filer_cik IN :candidates
-              AND period_of_report >= :not_before
-        """).bindparams(bindparam("candidates", expanding=True))
-        params: dict = {"candidates": list(candidates), "not_before": not_before}
-    else:
-        stmt = text("""
-            SELECT MAX(period_of_report)
-            FROM mv_nport_sector_attribution
-            WHERE filer_cik IN :candidates
-        """).bindparams(bindparam("candidates", expanding=True))
-        params = {"candidates": list(candidates)}
+        clauses.append("period_of_report >= :not_before")
+        params["not_before"] = not_before
+    if asof is not None:
+        clauses.append("period_of_report <= :asof")
+        params["asof"] = asof
+
+    where = " AND ".join(clauses)
+    stmt = text(f"""
+        SELECT MAX(period_of_report)
+        FROM mv_nport_sector_attribution
+        WHERE {where}
+    """).bindparams(bindparam("candidates", expanding=True))
+
     row = (await db.execute(stmt, params)).first()
     if row is None:
         return None
@@ -197,7 +209,17 @@ async def run_holdings_rail(
         return None
 
     not_before = request.asof - timedelta(days=int(30.4375 * max_filing_age_months))
-    period = await latest_period_for_cik(db, cik, not_before=not_before)
+    period = await latest_period_for_cik(db, cik, not_before=not_before, asof=request.asof)
+
+    # Defense-in-depth: SQL should enforce this, but guard against edge cases.
+    if period is not None and period > request.asof:
+        logger.error(
+            "holdings_rail_period_exceeds_asof",
+            period=str(period),
+            asof=str(request.asof),
+            cik=cik,
+        )
+        period = None  # treat as no-valid-filing
 
     if period is None:
         # Distinguish "has older filings" from "no filings at all" so the

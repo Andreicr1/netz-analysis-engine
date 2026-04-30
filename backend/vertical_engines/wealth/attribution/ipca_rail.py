@@ -110,7 +110,7 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
         return await _run_ipca_rail_option_a(request, db, fit)
 
     not_before = request.asof - timedelta(days=int(30.4375 * 9))
-    period = await latest_period_for_cik(db, cik, not_before=not_before)
+    period = await latest_period_for_cik(db, cik, not_before=not_before, asof=request.asof)
     if not period:
         return await _run_ipca_rail_option_a(request, db, fit)
 
