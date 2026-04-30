@@ -314,12 +314,16 @@ class TestWeightNormalization:
 
 
 class TestPartialBenchmarkCoverage:
-    def test_missing_benchmark_for_block_excludes_it(self):
-        """Block without benchmark data is excluded from attribution."""
+    def test_missing_benchmark_for_block_uses_cipm_fallback(self):
+        """Block without benchmark data is included via CIPM fallback (WMJ-009).
+
+        Off-benchmark blocks use r_b = r_p so the entire bet flows to
+        allocation, consistent with brinson_fachler.py convention.
+        """
         svc = AttributionService()
         allocations = _make_3block_allocations()
         fund_returns = {"equity": 0.05, "fixed_income": 0.02, "alternatives": 0.04}
-        # Missing alternatives benchmark
+        # Missing alternatives benchmark — CIPM fallback applies
         bench_returns = {"equity": 0.04, "fixed_income": 0.015}
         labels = _make_block_labels()
 
@@ -330,11 +334,11 @@ class TestPartialBenchmarkCoverage:
             block_labels=labels,
         )
 
-        # Only 2 blocks should be included (plus possible cash_residual)
+        # All 3 blocks should be included (plus possible cash_residual)
         non_cash_sectors = [s for s in result.sectors if s.sector != _CASH_LABEL]
-        assert len(non_cash_sectors) == 2
+        assert len(non_cash_sectors) == 3
         sector_names = {s.sector for s in non_cash_sectors}
-        assert "Alternatives" not in sector_names
+        assert "Alternatives" in sector_names
 
     def test_missing_fund_return_excludes_block(self):
         """Block without fund return data is excluded from attribution."""
@@ -357,12 +361,12 @@ class TestPartialBenchmarkCoverage:
         sector_names = {s.sector for s in non_cash_sectors}
         assert "Global Equity" not in sector_names
 
-    def test_no_overlapping_data_returns_unavailable(self):
-        """No blocks with both fund and benchmark data -> benchmark_available=False."""
+    def test_no_fund_returns_at_all_returns_unavailable(self):
+        """No blocks with fund return data at all -> benchmark_available=False."""
         svc = AttributionService()
         allocations = _make_3block_allocations()
-        fund_returns = {"equity": 0.05}
-        bench_returns = {"fixed_income": 0.015}  # No overlap
+        fund_returns: dict[str, float] = {}  # No fund returns for any block
+        bench_returns = {"equity": 0.04, "fixed_income": 0.015}
         labels = _make_block_labels()
 
         result = svc.compute_portfolio_attribution(

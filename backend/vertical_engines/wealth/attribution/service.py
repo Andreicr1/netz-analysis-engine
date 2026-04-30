@@ -64,6 +64,35 @@ _CASH_LABEL = "cash_residual"
 # Carino k_t clamp to prevent divergence
 _CARINO_K_CLAMP = 10.0
 
+# Reconciliation residual tolerance — above this threshold we emit a warning
+_RECONCILIATION_TOLERANCE = 1e-6
+
+
+def _compute_reconciliation(brinson: BrinsonResult) -> tuple[float, str | None]:
+    """Compute reconciliation residual between BF effects and total active return.
+
+    Returns (residual, warning_or_none).
+    """
+    effects_sum = (
+        brinson.allocation_effect
+        + brinson.selection_effect
+        + brinson.interaction_effect
+    )
+    residual = brinson.total_active_return - effects_sum
+    warning = None
+    if abs(residual) > _RECONCILIATION_TOLERANCE:
+        warning = (
+            f"BF effects sum ({effects_sum:.8f}) != total active return "
+            f"({brinson.total_active_return:.8f}), residual={residual:.8f}"
+        )
+        logger.warning(
+            "attribution_reconciliation_gap_fund",
+            effects_sum=effects_sum,
+            total_active_return=brinson.total_active_return,
+            residual=residual,
+        )
+    return round(residual, 10), warning
+
 
 class AttributionService:
     """Orchestrate policy benchmark attribution."""
@@ -95,17 +124,30 @@ class AttributionService:
             block_id -> actual portfolio weight. If None, uses strategic targets.
 
         """
-        # Build aligned arrays — only blocks that have BOTH fund and benchmark data
+        # Build aligned arrays — include blocks that have fund returns.
+        # WMJ-009: blocks with fund returns but no benchmark return use CIPM
+        # fallback (r_b = r_p) so off-benchmark bets route to allocation,
+        # consistent with brinson_fachler.py convention.
         block_ids: list[str] = []
         for sa in strategic_allocations:
             bid = sa["block_id"]
-            if bid in fund_returns_by_block and bid in benchmark_returns_by_block:
+            if bid in fund_returns_by_block:
+                if bid not in benchmark_returns_by_block:
+                    # CIPM fallback: off-benchmark block — set benchmark
+                    # return equal to fund return so entire bet flows to
+                    # allocation (consistent with brinson_fachler.py).
+                    benchmark_returns_by_block[bid] = fund_returns_by_block[bid]
+                    logger.warning(
+                        "attribution_off_benchmark_cipm_fallback",
+                        block_id=bid,
+                        fund_return=fund_returns_by_block[bid],
+                    )
                 block_ids.append(bid)
             else:
                 logger.warning(
                     "attribution_block_excluded",
                     block_id=bid,
-                    has_fund_return=bid in fund_returns_by_block,
+                    has_fund_return=False,
                     has_benchmark_return=bid in benchmark_returns_by_block,
                 )
 
@@ -462,12 +504,18 @@ def _build_proxy_result(
         metadata["asset_class"] = proxy.resolution.asset_class
     if proxy.period_of_report is not None:
         metadata["period_of_report"] = proxy.period_of_report.isoformat()
+
+    # WMJ-008: surface reconciliation residual from BF effects
+    residual, warning = _compute_reconciliation(proxy.brinson)
+
     return FundAttributionResult(
         fund_instrument_id=request.fund_instrument_id,
         asof=request.asof,
         badge=RailBadge.RAIL_PROXY,
         proxy=proxy,
         metadata=metadata,
+        reconciliation_residual=residual,
+        reconciliation_warning=warning,
     )
 
 
@@ -483,6 +531,9 @@ def _build_holdings_result(
     }
     if holdings.period_of_report is not None:
         metadata["period_of_report"] = holdings.period_of_report.isoformat()
+    # WMJ-010: surface period staleness for IC/RIA review badge
+    if holdings.period_lag_days is not None:
+        metadata["period_lag_days"] = str(holdings.period_lag_days)
     return FundAttributionResult(
         fund_instrument_id=request.fund_instrument_id,
         asof=request.asof,
@@ -535,6 +586,8 @@ def _cache_key(request: AttributionRequest) -> str:
             "lookback": request.lookback_months,
             "min": request.min_months,
             "asset_class": request.fund_asset_class,
+            "period_start": request.period_start.isoformat() if request.period_start else None,
+            "period_end": request.period_end.isoformat() if request.period_end else None,
         },
         sort_keys=True,
     ).encode()
@@ -603,6 +656,8 @@ def _serialize_result(result: FundAttributionResult) -> dict[str, Any]:
             "degraded_reason": ic.degraded_reason,
             "residual": ic.residual,
         },
+        "reconciliation_residual": result.reconciliation_residual,
+        "reconciliation_warning": result.reconciliation_warning,
         "returns_based": None
         if rb is None
         else {
@@ -672,6 +727,7 @@ def _serialize_result(result: FundAttributionResult) -> dict[str, Any]:
             "coverage_pct": hb.coverage_pct,
             "confidence": hb.confidence,
             "holdings_count": hb.holdings_count,
+            "period_lag_days": hb.period_lag_days,
             "degraded": hb.degraded,
             "degraded_reason": hb.degraded_reason,
         },
@@ -702,6 +758,7 @@ def _deserialize_result(data: dict[str, Any]) -> FundAttributionResult:
     hb = None
     if hb_raw is not None:
         period_str = hb_raw.get("period_of_report")
+        lag_raw = hb_raw.get("period_lag_days")
         hb = HoldingsBasedResult(
             sectors=tuple(
                 SectorWeight(
@@ -717,6 +774,7 @@ def _deserialize_result(data: dict[str, Any]) -> FundAttributionResult:
             coverage_pct=float(hb_raw["coverage_pct"]),
             confidence=float(hb_raw["confidence"]),
             holdings_count=int(hb_raw["holdings_count"]),
+            period_lag_days=int(lag_raw) if lag_raw is not None else None,
             degraded=bool(hb_raw["degraded"]),
             degraded_reason=hb_raw.get("degraded_reason"),
         )
@@ -781,6 +839,7 @@ def _deserialize_result(data: dict[str, Any]) -> FundAttributionResult:
             degraded_reason=px_raw.get("degraded_reason"),
         )
 
+    recon_raw = data.get("reconciliation_residual")
     return FundAttributionResult(
         fund_instrument_id=_UUID(data["fund_instrument_id"]),
         asof=_date.fromisoformat(data["asof"]),
@@ -791,6 +850,8 @@ def _deserialize_result(data: dict[str, Any]) -> FundAttributionResult:
         ipca=ic,
         reason=data.get("reason"),
         metadata=dict(data.get("metadata") or {}),
+        reconciliation_residual=float(recon_raw) if recon_raw is not None else None,
+        reconciliation_warning=data.get("reconciliation_warning"),
     )
 
 

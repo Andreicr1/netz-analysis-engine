@@ -263,6 +263,9 @@ async def run_holdings_rail(
             cik=cik,
         )
 
+    # WMJ-010: compute staleness lag for IC/RIA review badge
+    period_lag_days = (request.asof - period).days if period is not None else None
+
     if coverage < min_coverage:
         return HoldingsBasedResult(
             sectors=tuple(sectors),
@@ -270,6 +273,7 @@ async def run_holdings_rail(
             coverage_pct=coverage,
             confidence=coverage,
             holdings_count=holdings_count,
+            period_lag_days=period_lag_days,
             degraded=True,
             degraded_reason="low_aum_coverage",
         )
@@ -280,6 +284,7 @@ async def run_holdings_rail(
         coverage_pct=coverage,
         confidence=coverage,
         holdings_count=holdings_count,
+        period_lag_days=period_lag_days,
         degraded=False,
         degraded_reason=None,
     )
