@@ -83,8 +83,10 @@ def _resolve_period_bounds(
     period_end = request.period_end if request.period_end is not None else request.asof
     if request.period_start is not None:
         return request.period_start, period_end, False
-    # Mirror the returns-rail pattern: 30.4375 days/month
-    inferred_start = request.asof - timedelta(days=int(30.4375 * request.lookback_months))
+    # Mirror the returns-rail pattern: 30.4375 days/month.
+    # Anchor to period_end (not asof) so backdated analyses don't produce
+    # inverted windows when period_end < asof.
+    inferred_start = period_end - timedelta(days=int(30.4375 * request.lookback_months))
     return inferred_start, period_end, True
 
 

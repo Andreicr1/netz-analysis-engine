@@ -383,6 +383,29 @@ def test_resolve_period_bounds_defaults_to_lookback():
     assert defaulted is True
 
 
+def test_resolve_period_bounds_anchors_to_period_end():
+    """9c. When period_end is explicit but period_start is None, lookback
+    anchors to period_end — not asof — preventing inverted windows on
+    backdated analyses (P1 badge fix)."""
+    from vertical_engines.wealth.attribution.ipca_rail import _resolve_period_bounds
+
+    # Backdated: period_end is 1 year before asof
+    req = _make_request(
+        asof=date(2026, 4, 19),
+        period_start=None,
+        period_end=date(2025, 4, 19),
+        lookback_months=6,
+    )
+    start, end, defaulted = _resolve_period_bounds(req)
+    assert end == date(2025, 4, 19)
+    assert defaulted is True
+    # start must be ~6 months before period_end, not before asof
+    assert start < end, "inverted window: start >= end"
+    delta_days = (end - start).days
+    # 6 * 30.4375 ≈ 182
+    assert 178 <= delta_days <= 188
+
+
 @pytest.mark.asyncio
 async def test_ipca_period_bounded():
     """10. Two requests with different period bounds produce different contributions.
