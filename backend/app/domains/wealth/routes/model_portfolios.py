@@ -937,6 +937,19 @@ async def trigger_backtest(
             detail="Portfolio has no fund selection. Run /construct first.",
         )
 
+    # PR-Q141 (C-04): reject diagnostic schemas — mandate-infeasible
+    # constructions are for what-if visibility only, not for approval-
+    # track analytics like backtest.
+    if portfolio.fund_selection_schema.get("is_diagnostic"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Portfolio has a diagnostic (mandate-infeasible) construction. "
+                "Relax the CVaR limit and re-run /construct to obtain an "
+                "approval-eligible schema before running backtest."
+            ),
+        )
+
     _org_id = portfolio.organization_id
 
     def _backtest() -> dict[str, Any]:
@@ -989,6 +1002,18 @@ async def trigger_stress(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Portfolio has no fund selection. Run /construct first.",
+        )
+
+    # PR-Q141 (C-04): reject diagnostic schemas — mandate-infeasible
+    # constructions are for what-if visibility only.
+    if portfolio.fund_selection_schema.get("is_diagnostic"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Portfolio has a diagnostic (mandate-infeasible) construction. "
+                "Relax the CVaR limit and re-run /construct to obtain an "
+                "approval-eligible schema before running stress analysis."
+            ),
         )
 
     _org_id_stress = portfolio.organization_id
@@ -1607,6 +1632,17 @@ async def get_live_drift(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Portfolio has no fund selection. Run Construct first.",
+        )
+
+    # PR-Q141 (C-04): refuse to load drift for diagnostic schemas.
+    if fund_selection.get("is_diagnostic"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Portfolio has a diagnostic (mandate-infeasible) construction. "
+                "Relax the CVaR limit and re-run Construct to obtain an "
+                "approval-eligible schema before loading live drift."
+            ),
         )
 
     funds: list[dict] = fund_selection["funds"]
