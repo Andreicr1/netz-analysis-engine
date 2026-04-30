@@ -126,16 +126,21 @@ async def latest_period_for_cik(
 
     After migration 0198, ``filer_cik`` in the matview is always 10-digit
     zero-padded (sourced from ``cik_padded``), so a single equality check
-    against the already-padded *cik* argument suffices.
+    against the normalized CIK suffices.  Returns ``None`` when the CIK
+    cannot be normalized (malformed / overlength) — no fallback to raw
+    CIK (Codex P2).
 
     When *asof* is provided the SQL enforces ``period_of_report <= asof``
     so that backdated attribution requests never pick up filings that
     post-date the analysis date (WMJ-007 point-in-time correctness).
     """
-    padded = _normalize_cik(cik) or cik
+    padded = _normalize_cik(cik)
+    if padded is None:
+        return None
 
     clauses = ["filer_cik = :cik"]
     params: dict = {"cik": padded}
+
 
     if not_before is not None:
         clauses.append("period_of_report >= :not_before")
@@ -164,8 +169,11 @@ async def fetch_sector_weights(
     After migration 0198, ``filer_cik`` is always 10-digit padded.
     Normalizes the input CIK defensively so callers outside
     ``run_holdings_rail`` (e.g. ``benchmark_proxy``) don't need to pad.
+    Returns empty result when the CIK cannot be normalized.
     """
-    padded = _normalize_cik(cik) or cik
+    padded = _normalize_cik(cik)
+    if padded is None:
+        return [], 0.0
     rows = (await db.execute(text("""
         SELECT issuer_category, industry_sector,
                aum_usd, weight, holdings_count
@@ -233,7 +241,9 @@ async def run_holdings_rail(
     if not raw_cik:
         return None
     # Ensure padded 10-digit CIK for matview queries (post migration 0198).
-    cik = _normalize_cik(raw_cik) or raw_cik
+    cik = _normalize_cik(raw_cik)
+    if cik is None:
+        return None
 
     not_before = request.asof - timedelta(days=int(30.4375 * max_filing_age_months))
     period = await latest_period_for_cik(db, cik, not_before=not_before, asof=request.asof)
