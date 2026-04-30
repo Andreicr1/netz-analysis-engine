@@ -9,8 +9,6 @@ declared in the DB model but never written, causing scoring_service
 to always fall back to a degraded synthetic value.
 """
 
-import inspect
-
 import numpy as np
 import pytest
 
@@ -172,7 +170,7 @@ class TestCorrelationRawVsDenoised:
 
 
 class TestInformationRatioComputation:
-    """WMJ-021: risk_calc must compute information_ratio_1y."""
+    """WMJ-021 + Codex P1: IR must use real benchmark, not rf (which ≡ Sharpe)."""
 
     @staticmethod
     def _import_ir_helper():
@@ -182,53 +180,58 @@ class TestInformationRatioComputation:
 
         return _compute_information_ratio
 
-    def test_ir_computed_from_excess_returns(self) -> None:
-        """IR = annualized_excess_mean / annualized_tracking_error."""
+    def test_ir_uses_benchmark_not_rf(self) -> None:
+        """IR = annualized_active_return / tracking_error vs benchmark."""
         _compute_information_ratio = self._import_ir_helper()
 
         rng = np.random.default_rng(42)
-        returns = rng.normal(0.001, 0.01, 252)
-        rf = 0.04
-        ir = _compute_information_ratio(returns, 252, rf)
+        fund = rng.normal(0.001, 0.01, 252)
+        bench = rng.normal(0.0005, 0.008, 252)
+        ir = _compute_information_ratio(fund, bench, 252)
         assert ir is not None
         # Manually verify
-        rf_daily = rf / 252
-        excess = returns[-252:] - rf_daily
-        te = float(np.std(excess, ddof=1)) * np.sqrt(252)
-        ann_excess = float(np.mean(excess)) * 252
-        expected = round(ann_excess / te, 6)
+        active = fund[-252:] - bench[-252:]
+        te = float(np.std(active, ddof=1)) * np.sqrt(252)
+        ann_active = float(np.mean(active)) * 252
+        expected = round(ann_active / te, 6)
         assert abs(ir - expected) < 1e-5
 
+    def test_ir_differs_from_sharpe(self) -> None:
+        """IR vs real benchmark must differ from Sharpe (the whole point of Codex P1)."""
+        _compute_information_ratio = self._import_ir_helper()
+        from quant_engine.return_statistics_service import compute_sharpe_ratio
+
+        rng = np.random.default_rng(42)
+        fund = rng.normal(0.001, 0.012, 300)
+        bench = rng.normal(0.0008, 0.010, 300)  # correlated but different
+        ir = _compute_information_ratio(fund, bench, 252)
+        sharpe = compute_sharpe_ratio(fund[-252:], risk_free_rate=0.04)
+        assert ir is not None and sharpe is not None
+        assert abs(ir - sharpe) > 0.01  # must be meaningfully different
+
     def test_ir_none_when_insufficient_data(self) -> None:
-        """IR should be None when fewer than 252 days available."""
+        """IR should be None when fewer than 252 aligned days."""
         _compute_information_ratio = self._import_ir_helper()
 
-        returns = np.random.default_rng(42).normal(0.001, 0.01, 100)
-        assert _compute_information_ratio(returns, 252, 0.04) is None
+        fund = np.random.default_rng(42).normal(0.001, 0.01, 100)
+        bench = np.random.default_rng(43).normal(0.0005, 0.008, 100)
+        assert _compute_information_ratio(fund, bench, 252) is None
 
-    def test_ir_none_when_vol_too_low(self) -> None:
+    def test_ir_none_when_tracking_error_too_low(self) -> None:
         """IR should be None when tracking error is below minimum threshold."""
         _compute_information_ratio = self._import_ir_helper()
 
-        # Near-constant returns -> near-zero TE
-        returns = np.full(252, 0.0001)
-        assert _compute_information_ratio(returns, 252, 0.04) is None
+        # Identical returns → zero tracking error
+        returns = np.random.default_rng(42).normal(0.001, 0.01, 252)
+        assert _compute_information_ratio(returns, returns, 252) is None
 
-    def test_ir_positive_for_positive_excess(self) -> None:
-        """IR should be positive when excess return is positive and vol is meaningful."""
+    def test_ir_positive_when_fund_outperforms(self) -> None:
+        """IR should be positive when fund consistently outperforms benchmark."""
         _compute_information_ratio = self._import_ir_helper()
 
         rng = np.random.default_rng(99)
-        # Daily returns with a strong positive drift (well above rf)
-        returns = rng.normal(0.003, 0.015, 300)
-        ir = _compute_information_ratio(returns, 252, 0.02)
+        bench = rng.normal(0.0003, 0.01, 300)
+        fund = bench + rng.normal(0.001, 0.003, 300)  # consistent outperformance
+        ir = _compute_information_ratio(fund, bench, 252)
         assert ir is not None
         assert ir > 0
-
-    def test_ir_included_in_metrics_function(self) -> None:
-        """_compute_metrics_from_returns should include information_ratio_1y."""
-        pytest.importorskip("fastapi", reason="risk_calc import chain requires fastapi")
-        from app.domains.wealth.workers.risk_calc import _compute_metrics_from_returns
-
-        src = inspect.getsource(_compute_metrics_from_returns)
-        assert "information_ratio_1y" in src
