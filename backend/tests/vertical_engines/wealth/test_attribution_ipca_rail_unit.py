@@ -351,3 +351,304 @@ async def test_symmetric_option_a_fallback(failure_scenario):
 
     assert result is sentinel, f"Expected Option A fallback for {failure_scenario}, got {result}"
     mock_opt_a.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# Tests 9-11: IPCA period bounds (PR-Q149 / F-S12-05)
+# ---------------------------------------------------------------------------
+
+def test_resolve_period_bounds_explicit():
+    """9a. Explicit period_start/end passes through unchanged."""
+    from vertical_engines.wealth.attribution.ipca_rail import _resolve_period_bounds
+
+    req = _make_request(period_start=date(2025, 6, 1), period_end=date(2026, 4, 19))
+    start, end, defaulted = _resolve_period_bounds(req)
+    assert start == date(2025, 6, 1)
+    assert end == date(2026, 4, 19)
+    assert defaulted is False
+
+
+def test_resolve_period_bounds_defaults_to_lookback():
+    """9b. None period_start defaults to asof - lookback_months."""
+    from vertical_engines.wealth.attribution.ipca_rail import _resolve_period_bounds
+
+    req = _make_request(period_start=None, period_end=None, lookback_months=12)
+    start, end, defaulted = _resolve_period_bounds(req)
+    # lookback_months=12 → ~365 days
+    assert start < req.asof
+    delta_days = (req.asof - start).days
+    # 12 * 30.4375 = 365.25 → int = 365
+    assert 360 <= delta_days <= 370
+    assert end == req.asof
+    assert defaulted is True
+
+
+@pytest.mark.asyncio
+async def test_ipca_period_bounded():
+    """10. Two requests with different period bounds produce different contributions.
+
+    When period bounds are respected, factor_returns_contribution reflects
+    only the factor returns in the specified period — not the full history.
+    Two non-overlapping periods must yield different contribution vectors.
+    """
+    # Build a fit with 60 months of factor returns. First 30 months have
+    # positive factor returns, last 30 have negative. If period bounds
+    # are respected, period=[0..30] gives positive mean, period=[30..60]
+    # gives negative mean.
+    K = 3
+    rng = np.random.default_rng(149)
+    factor_returns = np.zeros((K, 60))
+    factor_returns[:, :30] = np.abs(rng.standard_normal((K, 30))) + 0.01
+    factor_returns[:, 30:] = -np.abs(rng.standard_normal((K, 30))) - 0.01
+
+    dates = pd.date_range("2021-01-31", periods=60, freq="ME")
+
+    fit = IPCAFit(
+        gamma=np.eye(6, K, dtype=np.float64),
+        factor_returns=factor_returns,
+        K=K,
+        intercept=False,
+        r_squared=0.5,
+        oos_r_squared=0.03,
+        converged=True,
+        n_iterations=50,
+        dates=dates,
+    )
+
+    fund_id = uuid4()
+
+    # Period A: first 30 months (positive factor returns)
+    req_a = AttributionRequest(
+        fund_instrument_id=fund_id,
+        asof=date(2023, 6, 30),
+        fund_asset_class="Equity",
+        period_start=date(2021, 1, 1),
+        period_end=date(2023, 6, 30),
+    )
+
+    # Period B: last 30 months (negative factor returns)
+    req_b = AttributionRequest(
+        fund_instrument_id=fund_id,
+        asof=date(2026, 1, 31),
+        fund_asset_class="Equity",
+        period_start=date(2023, 7, 1),
+        period_end=date(2026, 1, 31),
+    )
+
+    ref_date = date(2026, 3, 31)
+    cs_rows = [
+        _CSRow(instrument_id=fund_id, size=1.0, value=1.0, momentum=1.0,
+               quality=1.0, investment=1.0, profitability=1.0),
+    ]
+    h_rows = [_HRow(pct_of_nav=10.0, instrument_id=fund_id)]
+
+    async def _run_with_request(req):
+        call_count = 0
+
+        async def mock_execute(stmt, params=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _FakeResult([_RefRow(ref_period=ref_date)])
+            elif call_count == 2:
+                return _FakeResult(cs_rows)
+            elif call_count == 3:
+                return _FakeResult(h_rows)
+            return _FakeResult([])
+
+        db = AsyncMock()
+        db.execute = mock_execute
+
+        with patch("vertical_engines.wealth.attribution.ipca_rail.load_latest_ipca_fit", return_value=fit), \
+             patch("vertical_engines.wealth.attribution.ipca_rail.resolve_cik",
+                   new=AsyncMock(return_value=_mock_cik("0001234567"))), \
+             patch("vertical_engines.wealth.attribution.ipca_rail.latest_period_for_cik",
+                   return_value=date(2026, 3, 31)), \
+             patch("vertical_engines.wealth.attribution.ipca_rail._estimate_alpha_fixed_beta",
+                   new=AsyncMock(return_value=0.0)):
+            return await run_ipca_rail(req, db)
+
+    result_a = await _run_with_request(req_a)
+    result_b = await _run_with_request(req_b)
+
+    assert result_a is not None, "Period A returned None"
+    assert result_b is not None, "Period B returned None"
+    # Contributions must differ — period A positive, period B negative
+    for i in range(K):
+        assert result_a.factor_returns_contribution[i] != result_b.factor_returns_contribution[i], (
+            f"Factor {i} contribution identical for different periods — bounds not respected"
+        )
+
+
+@pytest.mark.asyncio
+async def test_ipca_default_period_uses_lookback():
+    """11. Request with None period bounds defaults to asof - lookback_months.
+
+    Build a fit spanning 120 months. Request with asof near the end and
+    lookback_months=12 should use only the last ~12 months for f_t_mean,
+    not all 120. Verify by comparing against explicit period bounds matching
+    the same lookback window.
+    """
+    from datetime import timedelta
+
+    K = 3
+    rng = np.random.default_rng(1149)
+    dates = pd.date_range("2016-01-31", periods=120, freq="ME")
+    factor_returns = rng.standard_normal((K, 120))
+    # Make the first 108 months have very different mean from the last 12
+    factor_returns[:, :108] = factor_returns[:, :108] + 5.0
+
+    fit = IPCAFit(
+        gamma=np.eye(6, K, dtype=np.float64),
+        factor_returns=factor_returns,
+        K=K,
+        intercept=False,
+        r_squared=0.5,
+        oos_r_squared=0.03,
+        converged=True,
+        n_iterations=50,
+        dates=dates,
+    )
+
+    fund_id = uuid4()
+    asof = date(2025, 12, 31)
+
+    # Request with None period bounds + lookback_months=12
+    req_default = AttributionRequest(
+        fund_instrument_id=fund_id,
+        asof=asof,
+        fund_asset_class="Equity",
+        lookback_months=12,
+        period_start=None,
+        period_end=None,
+    )
+
+    # Request with explicit period matching the lookback
+    inferred_start = asof - timedelta(days=int(30.4375 * 12))
+    req_explicit = AttributionRequest(
+        fund_instrument_id=fund_id,
+        asof=asof,
+        fund_asset_class="Equity",
+        lookback_months=12,
+        period_start=inferred_start,
+        period_end=asof,
+    )
+
+    ref_date = date(2026, 3, 31)
+    cs_rows = [
+        _CSRow(instrument_id=fund_id, size=1.0, value=1.0, momentum=1.0,
+               quality=1.0, investment=1.0, profitability=1.0),
+    ]
+    h_rows = [_HRow(pct_of_nav=10.0, instrument_id=fund_id)]
+
+    async def _run_with_request(req):
+        call_count = 0
+
+        async def mock_execute(stmt, params=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _FakeResult([_RefRow(ref_period=ref_date)])
+            elif call_count == 2:
+                return _FakeResult(cs_rows)
+            elif call_count == 3:
+                return _FakeResult(h_rows)
+            return _FakeResult([])
+
+        db = AsyncMock()
+        db.execute = mock_execute
+
+        with patch("vertical_engines.wealth.attribution.ipca_rail.load_latest_ipca_fit", return_value=fit), \
+             patch("vertical_engines.wealth.attribution.ipca_rail.resolve_cik",
+                   new=AsyncMock(return_value=_mock_cik("0001234567"))), \
+             patch("vertical_engines.wealth.attribution.ipca_rail.latest_period_for_cik",
+                   return_value=date(2026, 3, 31)), \
+             patch("vertical_engines.wealth.attribution.ipca_rail._estimate_alpha_fixed_beta",
+                   new=AsyncMock(return_value=0.0)):
+            return await run_ipca_rail(req, db)
+
+    result_default = await _run_with_request(req_default)
+    result_explicit = await _run_with_request(req_explicit)
+
+    assert result_default is not None, "Default period returned None"
+    assert result_explicit is not None, "Explicit period returned None"
+    # Both should produce identical contributions (same bounds)
+    for i in range(K):
+        assert abs(result_default.factor_returns_contribution[i] -
+                   result_explicit.factor_returns_contribution[i]) < 1e-12, (
+            f"Factor {i} contribution differs between default and explicit lookback bounds"
+        )
+
+
+@pytest.mark.asyncio
+async def test_ipca_no_lookback_degrades_gracefully():
+    """12. Edge case where lookback produces no factor data — degraded, not crash.
+
+    When factor_returns_for_period returns an empty array (no factor data
+    in the lookback window), the rail should return zero contributions,
+    not raise an exception.
+    """
+    K = 3
+    # Factor returns only cover 2020; asof is 2026 with lookback=12 months
+    dates = pd.date_range("2020-01-31", periods=12, freq="ME")
+    rng = np.random.default_rng(2149)
+    factor_returns = rng.standard_normal((K, 12))
+
+    fit = IPCAFit(
+        gamma=np.eye(6, K, dtype=np.float64),
+        factor_returns=factor_returns,
+        K=K,
+        intercept=False,
+        r_squared=0.5,
+        oos_r_squared=0.03,
+        converged=True,
+        n_iterations=50,
+        dates=dates,
+    )
+
+    fund_id = uuid4()
+    req = AttributionRequest(
+        fund_instrument_id=fund_id,
+        asof=date(2026, 4, 19),
+        fund_asset_class="Equity",
+        lookback_months=12,
+    )
+
+    ref_date = date(2026, 3, 31)
+    cs_rows = [
+        _CSRow(instrument_id=fund_id, size=1.0, value=1.0, momentum=1.0,
+               quality=1.0, investment=1.0, profitability=1.0),
+    ]
+    h_rows = [_HRow(pct_of_nav=10.0, instrument_id=fund_id)]
+
+    call_count = 0
+
+    async def mock_execute(stmt, params=None):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return _FakeResult([_RefRow(ref_period=ref_date)])
+        elif call_count == 2:
+            return _FakeResult(cs_rows)
+        elif call_count == 3:
+            return _FakeResult(h_rows)
+        return _FakeResult([])
+
+    db = AsyncMock()
+    db.execute = mock_execute
+
+    with patch("vertical_engines.wealth.attribution.ipca_rail.load_latest_ipca_fit", return_value=fit), \
+         patch("vertical_engines.wealth.attribution.ipca_rail.resolve_cik",
+               new=AsyncMock(return_value=_mock_cik("0001234567"))), \
+         patch("vertical_engines.wealth.attribution.ipca_rail.latest_period_for_cik",
+               return_value=date(2026, 3, 31)), \
+         patch("vertical_engines.wealth.attribution.ipca_rail._estimate_alpha_fixed_beta",
+               new=AsyncMock(return_value=0.0)):
+        result = await run_ipca_rail(req, db)
+
+    assert result is not None, "Rail crashed instead of degrading gracefully"
+    # All contributions should be zero (no factor data in lookback window)
+    for i in range(K):
+        assert result.factor_returns_contribution[i] == 0.0, (
+            f"Factor {i} contribution should be 0.0 when no data in lookback period"
+        )

@@ -1,7 +1,7 @@
 """IPCA attribution rail."""
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any
 
 import numpy as np
@@ -70,11 +70,29 @@ async def load_latest_ipca_fit(
     )
 
 
+def _resolve_period_bounds(
+    request: AttributionRequest,
+) -> tuple[date, date, bool]:
+    """Derive period_start/end from request, defaulting to lookback window.
+
+    Returns (period_start, period_end, defaulted) where ``defaulted`` is True
+    when the caller did not supply explicit bounds and we fell back to
+    ``asof - lookback_months``.  This prevents full-history averaging that
+    introduces look-ahead / survivorship bias in DD reports (F-S12-05).
+    """
+    period_end = request.period_end if request.period_end is not None else request.asof
+    if request.period_start is not None:
+        return request.period_start, period_end, False
+    # Mirror the returns-rail pattern: 30.4375 days/month
+    inferred_start = request.asof - timedelta(days=int(30.4375 * request.lookback_months))
+    return inferred_start, period_end, True
+
+
 async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCAResult | None:
     """Execute IPCA attribution rail (Option B: Instrumented)."""
     if not request.fund_asset_class:
         return None
-        
+
     fit = await load_latest_ipca_fit(db, request.fund_asset_class)
     # IPCA validity gate. KP-S 2019 reports realistic out-of-sample R² in
     # the 0.02-0.05 band on equity panels — accept any positive signal.
@@ -207,16 +225,27 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
     # Implied beta = Gamma' * z_fund
     beta = fit.gamma.T @ z_fund
     
-    # Calculate returns contribution
-    factor_returns_period = fit.factor_returns_for_period(request.period_start, request.period_end)
-    f_t_mean = factor_returns_period.mean(axis=1) if factor_returns_period.size > 0 else np.zeros(fit.K)
+    # Calculate returns contribution — always period-bounded (F-S12-05)
+    period_start, period_end, period_defaulted = _resolve_period_bounds(request)
+    factor_returns_period = fit.factor_returns_for_period(period_start, period_end)
+
+    if factor_returns_period.size == 0:
+        logger.warning(
+            "ipca_factor_returns_empty_for_period",
+            period_start=str(period_start),
+            period_end=str(period_end),
+            defaulted=period_defaulted,
+        )
+        f_t_mean = np.zeros(fit.K)
+    else:
+        f_t_mean = factor_returns_period.mean(axis=1)
     contribution_per_factor = beta * f_t_mean
-    
+
     # Estimate alpha using fixed beta
     alpha = await _estimate_alpha_fixed_beta(request, db, fit, beta)
-    
+
     factor_names = ["Size", "Value", "Momentum", "Quality", "Investment", "Profitability"]
-    
+
     return IPCAResult(
         factor_names=factor_names[:fit.K],
         factor_exposures=beta.tolist(),
@@ -299,7 +328,7 @@ async def _run_ipca_rail_option_a(request: AttributionRequest, db: AsyncSession,
     rows = res.all()
     if len(rows) < 12:  # require at least 12 months for regression
         return None
-        
+
     fund_returns_df = pd.DataFrame(
         [(r.month, float(r.nav_eom)) for r in rows],
         columns=["month", "nav"]
@@ -325,11 +354,19 @@ async def _run_ipca_rail_option_a(request: AttributionRequest, db: AsyncSession,
     if len(aligned) < 12:
         return None
 
+    # --- Period-bound the aligned data (F-S12-05) ---
+    # Regression uses all aligned history for beta estimation (more data =
+    # better regression), but factor contribution (f_t_mean) must be
+    # computed only over the analysis period to avoid look-ahead bias.
+    period_start, period_end, period_defaulted = _resolve_period_bounds(request)
+    p_start = pd.Period(period_start, freq="M")
+    p_end = pd.Period(period_end, freq="M")
+
     # Time-series regression: r_fund_t = α + β' f_t + ε_t
     y = aligned["return"].values
     X = aligned[[f"factor_{i}" for i in range(fit.K)]].values
     X_sm = sm.add_constant(X)
-    
+
     try:
         model = sm.OLS(y, X_sm).fit()
         alpha = float(model.params[0])
@@ -338,11 +375,25 @@ async def _run_ipca_rail_option_a(request: AttributionRequest, db: AsyncSession,
         logger.warning("ipca_regression_failed", error=str(e))
         return None
 
-    f_t_mean = X.mean(axis=0)
+    # Factor contribution uses period-bounded subset only
+    period_mask = (aligned.index >= p_start) & (aligned.index <= p_end)
+    aligned_period = aligned[period_mask]
+
+    if len(aligned_period) == 0:
+        logger.warning(
+            "ipca_option_a_no_data_in_period",
+            period_start=str(period_start),
+            period_end=str(period_end),
+            defaulted=period_defaulted,
+        )
+        f_t_mean = np.zeros(fit.K)
+    else:
+        X_period = aligned_period[[f"factor_{i}" for i in range(fit.K)]].values
+        f_t_mean = X_period.mean(axis=0)
     contribution_per_factor = beta * f_t_mean
 
     factor_names = ["Size", "Value", "Momentum", "Quality", "Investment", "Profitability"]
-    
+
     return IPCAResult(
         factor_names=factor_names[:fit.K],
         factor_exposures=beta.tolist(),
