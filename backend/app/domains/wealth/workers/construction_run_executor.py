@@ -2121,6 +2121,21 @@ async def _execute_inner(
     else:
         _cvar_enforcement = None  # early-exit paths (no cascade ran)
 
+    # PR-Q146 hotfix: compute NAV synthesis before validation so check #18
+    # sees the production executor summary instead of treating it as N/A.
+    nav_summary: dict[str, Any] | None = None
+    if not propose_mode and funds:
+        is_diagnostic = derived_run_status == "mandate_infeasible"
+        base_result["is_diagnostic"] = is_diagnostic
+        portfolio.fund_selection_schema = _jsonb_safe(base_result)
+
+        from app.domains.wealth.workers.portfolio_nav_synthesizer import (
+            synthesize_portfolio_nav,
+        )
+
+        nav_summary = await synthesize_portfolio_nav(db, portfolio, commit=False)
+        statistical_inputs_payload["portfolio_nav_synthesis"] = nav_summary
+
     validation_payload: dict[str, Any] = {
         "as_of_date": run.as_of_date.isoformat(),
         "profile": profile,
@@ -2245,16 +2260,6 @@ async def _execute_inner(
                     actor_id=run.requested_by,
                     reason=f"Construction run {run.id}",
                 )
-
-        from app.domains.wealth.workers.portfolio_nav_synthesizer import (
-            synthesize_portfolio_nav,
-        )
-
-        nav_summary = await synthesize_portfolio_nav(db, portfolio, commit=False)
-        run.statistical_inputs = {
-            **(run.statistical_inputs or {}),
-            "portfolio_nav_synthesis": nav_summary,
-        }
 
     await db.flush()
 
