@@ -10,7 +10,7 @@ Responsibilities
 4. Call ``_run_construction_async`` to get the optimizer output
 5. Run the 4 preset stress scenarios via ``PRESET_SCENARIOS`` — persist to ``portfolio_stress_results``
 6. Run the ``construction_advisor`` IF ``calibration.advisor_enabled`` (Task 3.3 fold-in)
-7. Run the 15-check ``validation_gate``
+7. Run the 18-check ``validation_gate``
 8. Render the deterministic Jinja2 narrative
 9. Update the run row with ``status='succeeded'|'failed'``, populate all
    enrichment columns, and compute ``wall_clock_ms``
@@ -647,14 +647,29 @@ def _build_cascade_telemetry(
     # optimal" from "Phase 3 min-CVaR fallback because CVaR target
     # infeasible" so the frontend can render the right operator_message
     # verbatim (smart-backend / dumb-frontend).
-    phase3_attempt = next(
-        (a for a in public_attempts if a["phase"] == "phase_3_min_cvar"),
-        None,
-    )
-    _cvar_within_limit = (
-        bool(phase3_attempt.get("cvar_within_limit"))
-        if phase3_attempt is not None else False
-    )
+    # PR-Q146 (C-08): derive _cvar_within_limit from the WINNER's attempt
+    # when the winner is Phase 1 or Phase 2, not from Phase 3. Phase 3's
+    # cvar_within_limit may be None (solver glitch) even when Phase 1
+    # solved optimally within limit — using Phase 3's flag would
+    # misclassify Phase 1 OPTIMAL as DEGRADED_OTHER.
+    if winning_phase in ("phase_1_ru_max_return", "phase_2_ru_robust"):
+        _winner_attempt = next(
+            (a for a in public_attempts if a["phase"] == winning_phase),
+            None,
+        )
+        _cvar_within_limit = (
+            bool(_winner_attempt.get("cvar_within_limit"))
+            if _winner_attempt is not None else False
+        )
+    else:
+        phase3_attempt = next(
+            (a for a in public_attempts if a["phase"] == "phase_3_min_cvar"),
+            None,
+        )
+        _cvar_within_limit = (
+            bool(phase3_attempt.get("cvar_within_limit"))
+            if phase3_attempt is not None else False
+        )
     winner_signal_enum = compute_winner_signal(
         winning_phase=winning_phase,
         cvar_within_limit=_cvar_within_limit,
@@ -1363,7 +1378,7 @@ async def execute_construction_run(
     3. Optimizer cascade via ``_run_construction_async``
     4. Stress suite (4 preset scenarios)
     5. Advisor fold-in (if ``calibration.advisor_enabled``)
-    6. 15-check validation gate
+    6. 18-check validation gate
     7. Jinja2 narrative templater
     8. Persistence of the ``portfolio_construction_runs`` row +
        ``portfolio_stress_results`` rows
@@ -1676,6 +1691,27 @@ async def execute_construction_run(
         run.status = "degraded"
     else:
         run.status = "succeeded"
+
+    # PR-Q146 (C-06): escalate to degraded if NAV synthesis returned
+    # no_fund_data on a portfolio that has instruments. This surfaces
+    # data-coverage gaps that would otherwise be silently stored.
+    nav_synthesis = (run.statistical_inputs or {}).get("portfolio_nav_synthesis")
+    if (
+        nav_synthesis is not None
+        and nav_synthesis.get("dates_computed") == 0
+        and nav_synthesis.get("status") == "no_fund_data"
+        and run.status == "succeeded"
+        and run.weights_proposed  # portfolio has > 0 instruments
+    ):
+        run.status = "degraded"
+        logger.warning(
+            "nav_synthesis_no_fund_data_degraded",
+            extra={
+                "run_id": str(run.id),
+                "nav_status": nav_synthesis.get("status"),
+            },
+        )
+
     run.completed_at = datetime.now(tz=timezone.utc)
     run.wall_clock_ms = int((time.perf_counter() - start_ts) * 1000)
 
@@ -2061,6 +2097,12 @@ async def _execute_inner(
         statistical_inputs_payload["kappa_final"] = shrinkage_block.get(
             "kappa_final",
         )
+    # PR-Q146 (C-09): persist factor covariance eigenvalue regularization
+    # metadata so post-hoc investigation doesn't require log search.
+    _fc_block = base_result.get("factor_conditioning") if isinstance(base_result, dict) else None
+    if isinstance(_fc_block, dict):
+        statistical_inputs_payload["factor_conditioning"] = _fc_block
+
     # PR-Q142 — derive cvar_enforcement from cascade_summary so the
     # validation gate check #17 (_check_cvar_enforcement) sees the flag.
     # The route path sets this on OptimizationMeta; the executor path must

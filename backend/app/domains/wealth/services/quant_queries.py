@@ -44,6 +44,7 @@ from quant_engine.factor_model_pca import compute_residual_pca
 from quant_engine.factor_model_service import (
     assemble_factor_covariance,
     build_fundamental_factor_returns,
+    compute_factor_conditioning_meta,
     fit_fundamental_loadings,
 )
 
@@ -1539,6 +1540,11 @@ async def compute_fund_level_inputs(
                 annual_cov = assemble_factor_covariance(fit)
                 covariance_source = "factor_model"
 
+                # PR-Q146 (C-09): capture eigenvalue regularization metadata
+                # from the factor covariance assembly so it can be persisted
+                # in run.statistical_inputs.factor_conditioning.
+                _factor_conditioning = compute_factor_conditioning_meta(fit)
+
                 # A.2 — residual PCA diagnostic wired into metadata (was discarded)
                 pca_diag = compute_residual_pca(fit.residual_series)
 
@@ -1562,6 +1568,7 @@ async def compute_fund_level_inputs(
                     },
                     "kappa_factor_cov": kappa_factor_cov,
                     "shrinkage_lambda": fit.shrinkage_lambda,
+                    "factor_conditioning": _factor_conditioning,
                 }
                 ev = pca_diag.explained_variance_ratio
                 residual_pca_meta = {

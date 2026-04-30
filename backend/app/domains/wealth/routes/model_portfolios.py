@@ -531,6 +531,22 @@ async def apply_portfolio_transition(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Cannot activate: construction outcome '{ws}' requires resolution before activation.",
                 )
+            # PR-Q146 (C-07): mandate_infeasible requires a separate,
+            # structured acknowledgment — degraded_acknowledged alone is
+            # insufficient because it conflates technical degradation
+            # with mandate-level infeasibility.
+            if run.status == "mandate_infeasible":
+                if not metadata.get("mandate_infeasible_acknowledged"):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=(
+                            "Portfolio's latest construction run is mandate_infeasible. "
+                            "Set metadata.mandate_infeasible_acknowledged=true "
+                            "(in addition to degraded_acknowledged) to proceed."
+                        ),
+                    )
+                metadata["mandate_infeasible_acknowledged_by"] = actor.actor_id
+
             if ws in degraded_signals and not metadata.get("degraded_acknowledged"):
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
@@ -2350,6 +2366,7 @@ async def _run_construction_async(
     # inner try never reaches compute_fund_level_inputs). Overwritten by the
     # successful path below.
     shrinkage_metrics: dict[str, Any] = {}
+    factor_conditioning_meta: dict[str, Any] | None = None  # PR-Q146 (C-09)
 
     # PR-A11 — cascade telemetry handle. Populated by the optimizer path
     # below; synthesized on the heuristic fallback branch so every result
@@ -2413,6 +2430,10 @@ async def _run_construction_async(
         # PR-A9 — surface the three-tier conditioning decision so the run
         # executor can persist + emit it on the SHRINKAGE SSE phase.
         shrinkage_metrics = dict(_fli.inputs_metadata.get("conditioning") or {})
+        # PR-Q146 (C-09): extract factor covariance eigenvalue conditioning
+        # metadata so the executor can persist it in statistical_inputs.
+        _fm_meta = _fli.inputs_metadata.get("factor_model") or {}
+        factor_conditioning_meta = _fm_meta.get("factor_conditioning")
 
         # Filter to funds with NAV data
         opt_fund_ids = [fid for fid in available_ids if fid in fund_blocks]
@@ -2786,6 +2807,9 @@ async def _run_construction_async(
     # ``FundLevelInputs.inputs_metadata.conditioning`` when the optimizer
     # reached the covariance stage; empty dict otherwise (caller checks).
     result["shrinkage"] = shrinkage_metrics
+    # PR-Q146 (C-09): eigenvalue regularization metadata from
+    # assemble_factor_covariance (persisted in statistical_inputs).
+    result["factor_conditioning"] = factor_conditioning_meta
 
     if composition.optimization:
         result["optimization"] = {

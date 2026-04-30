@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -645,6 +646,45 @@ def assemble_factor_covariance(
         )
 
     return np.asarray(sigma, dtype=np.float64)
+
+
+def compute_factor_conditioning_meta(
+    fit: FundamentalFactorFit,
+    *,
+    kappa_target: float = 1e4,
+) -> dict[str, Any]:
+    """Return conditioning metadata for the factor covariance assembly.
+
+    PR-Q146 (C-09): mirrors the eigenvalue regularization logic in
+    ``assemble_factor_covariance`` but only computes the metadata dict
+    (no matrix reconstruction).  Called by the executor path to persist
+    conditioning diagnostics into ``run.statistical_inputs``.
+    """
+    B = fit.loadings
+    F = fit.factor_cov
+    D_diag = fit.residual_variance
+
+    sigma = (B @ F @ B.T) + np.diag(D_diag)
+    sigma = (sigma + sigma.T) / 2
+
+    eigvals = np.linalg.eigvalsh(sigma)
+    max_eigval = float(eigvals.max())
+    clamp_val = max(1e-10, max_eigval / kappa_target)
+
+    n_clamped = int((eigvals < clamp_val).sum())
+    kappa_before = max_eigval / max(float(eigvals.min()), 1e-16)
+    if n_clamped > 0:
+        clamped_eigvals = np.maximum(eigvals, clamp_val)
+        kappa_after = max_eigval / float(clamped_eigvals.min())
+    else:
+        kappa_after = kappa_before
+
+    return {
+        "kappa_before": round(kappa_before, 1),
+        "kappa_after": round(kappa_after, 1),
+        "eigenvalue_floor": float(clamp_val),
+        "n_clamped": n_clamped,
+    }
 
 
 def decompose_factors(

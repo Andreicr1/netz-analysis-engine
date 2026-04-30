@@ -289,11 +289,20 @@ async def _run_executor_with_mock(
     async def _mocked(*_args, **_kwargs):
         return mock_output
 
+    # PR-Q146 (C-06): mock NAV synthesis to return a healthy summary
+    # since the test DB has no seeded NAV data. Without this, the
+    # executor escalates to degraded because no_fund_data fires.
+    async def _mock_nav_synthesis(_db, _portfolio, *, commit=True):
+        return {"portfolio_id": str(portfolio_id), "status": "ok", "dates_computed": 100, "final_nav": 1050.0}
+
     # The executor imports _run_construction_async lazily from the
     # routes module; patch at that exact reference.
     with patch(
         "app.domains.wealth.routes.model_portfolios._run_construction_async",
         side_effect=_mocked,
+    ), patch(
+        "app.domains.wealth.workers.portfolio_nav_synthesizer.synthesize_portfolio_nav",
+        side_effect=_mock_nav_synthesis,
     ):
         async with async_session_factory() as session:
             # Set RLS context for the executor's writes.
@@ -373,11 +382,11 @@ async def test_construct_e2e_happy_path(seeded_portfolio):
     assert narrative["schema_version"] == 2
     assert len(narrative["technical"]["headline"]) > 0
 
-    # Validation section — aggregate + list of 17 checks
+    # Validation section — aggregate + list of 18 checks
     validation = json.loads(row["validation"])
     assert "passed" in validation
     assert "checks" in validation
-    assert validation["summary"]["total"] == 17
+    assert validation["summary"]["total"] == 18
 
     # Stress results — 4 preset scenarios were run
     stress_results = json.loads(row["stress_results"])
