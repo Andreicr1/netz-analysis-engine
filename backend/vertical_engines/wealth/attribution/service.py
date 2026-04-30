@@ -61,8 +61,6 @@ logger = structlog.get_logger()
 _WEIGHT_SUM_TOLERANCE = 1e-4
 _CASH_LABEL = "cash_residual"
 
-# Carino k_t clamp to prevent divergence
-_CARINO_K_CLAMP = 10.0
 
 # Reconciliation residual tolerance — above this threshold we emit a warning
 _RECONCILIATION_TOLERANCE = 1e-6
@@ -272,7 +270,7 @@ class AttributionService:
         """Multi-period Carino linking with numerical guards.
 
         Guards:
-        1. Clamp k_t to [-_CARINO_K_CLAMP, _CARINO_K_CLAMP] to prevent divergence
+        1. k_t clamped in attribution_service._carino_factor (WMJ-025)
         2. If abs(k_total) < 1e-10 (opposing excesses cancel),
            fall back to simple average
         """
@@ -368,6 +366,13 @@ class AttributionService:
                 sector_map[s.sector]["selection"] += s.selection_effect / n_bench
                 sector_map[s.sector]["interaction"] += s.interaction_effect / n_bench
 
+        # WMJ-026: compute totals from full-precision accumulators, not from
+        # the rounded SectorAttribution objects. Rounding at the sector level
+        # is for display only — the aggregate totals must preserve precision.
+        alloc_t = sum(e["allocation"] for e in sector_map.values())
+        select_t = sum(e["selection"] for e in sector_map.values())
+        interact_t = sum(e["interaction"] for e in sector_map.values())
+
         sectors = []
         for label, effects in sector_map.items():
             total = effects["allocation"] + effects["selection"] + effects["interaction"]
@@ -380,10 +385,6 @@ class AttributionService:
                     total_effect=round(total, 6),
                 ),
             )
-
-        alloc_t = sum(s.allocation_effect for s in sectors)
-        select_t = sum(s.selection_effect for s in sectors)
-        interact_t = sum(s.interaction_effect for s in sectors)
 
         return AttributionResult(
             total_portfolio_return=round(total_p, 6),

@@ -233,6 +233,11 @@ def _marchenko_pastur_denoise(corr_matrix: np.ndarray, q: float) -> np.ndarray:
         noise_avg = float(np.mean(eigenvalues[noise_mask]))
         eigenvalues[noise_mask] = noise_avg
 
+    # WMJ-028: clamp eigenvalues to non-negative before reconstruction
+    # to guarantee PSD output. Numerical errors in the noise-averaging step
+    # can produce tiny negatives that break downstream Cholesky/optimization.
+    eigenvalues = np.maximum(eigenvalues, 0.0)
+
     # Reconstruct
     denoised = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T
 
@@ -424,6 +429,14 @@ def compute_correlation_regime(
     else:
         corr_baseline = corr_recent  # fallback (denoised)
         corr_baseline_raw = corr_recent_raw  # fallback (raw)
+        # WMJ-028: baseline fallback visibility — log when baseline uses
+        # the recent window so downstream consumers know the regime-shift
+        # comparison is degenerate (same data on both sides).
+        logger.info(
+            "correlation_baseline_fallback_to_recent",
+            T=T,
+            min_observations=cfg["min_observations"],
+        )
 
     # Pair correlations
     pairs = []
