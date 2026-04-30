@@ -64,6 +64,35 @@ _CASH_LABEL = "cash_residual"
 # Carino k_t clamp to prevent divergence
 _CARINO_K_CLAMP = 10.0
 
+# Reconciliation residual tolerance — above this threshold we emit a warning
+_RECONCILIATION_TOLERANCE = 1e-6
+
+
+def _compute_reconciliation(brinson: BrinsonResult) -> tuple[float, str | None]:
+    """Compute reconciliation residual between BF effects and total active return.
+
+    Returns (residual, warning_or_none).
+    """
+    effects_sum = (
+        brinson.allocation_effect
+        + brinson.selection_effect
+        + brinson.interaction_effect
+    )
+    residual = brinson.total_active_return - effects_sum
+    warning = None
+    if abs(residual) > _RECONCILIATION_TOLERANCE:
+        warning = (
+            f"BF effects sum ({effects_sum:.8f}) != total active return "
+            f"({brinson.total_active_return:.8f}), residual={residual:.8f}"
+        )
+        logger.warning(
+            "attribution_reconciliation_gap_fund",
+            effects_sum=effects_sum,
+            total_active_return=brinson.total_active_return,
+            residual=residual,
+        )
+    return round(residual, 10), warning
+
 
 class AttributionService:
     """Orchestrate policy benchmark attribution."""
@@ -95,32 +124,108 @@ class AttributionService:
             block_id -> actual portfolio weight. If None, uses strategic targets.
 
         """
-        # Build aligned arrays — only blocks that have BOTH fund and benchmark data
+        # Build weight map up-front so we can distinguish off-benchmark
+        # (w_b = 0) from benchmark-held-but-missing-return (w_b > 0).
+        sa_map = {sa["block_id"]: float(sa["target_weight"]) for sa in strategic_allocations}
+
+        # Build aligned arrays — include blocks that have fund returns.
+        # WMJ-009 + Codex P1-a: CIPM fallback (r_b = r_p) applies ONLY to
+        # truly off-benchmark blocks (w_b = 0). For benchmark-held blocks
+        # with missing return data (w_b > 0), brinson_fachler.py uses
+        # r_b = R_B — we exclude them here so the downstream BF handles
+        # the convention consistently.
+        # Local copy avoids mutating the caller's dict (Codex P1).
+        bench_returns = dict(benchmark_returns_by_block)
         block_ids: list[str] = []
         for sa in strategic_allocations:
             bid = sa["block_id"]
-            if bid in fund_returns_by_block and bid in benchmark_returns_by_block:
-                block_ids.append(bid)
-            else:
+            if bid not in fund_returns_by_block:
                 logger.warning(
                     "attribution_block_excluded",
                     block_id=bid,
-                    has_fund_return=bid in fund_returns_by_block,
+                    has_fund_return=False,
                     has_benchmark_return=bid in benchmark_returns_by_block,
                 )
+                continue
+            if bid in bench_returns:
+                block_ids.append(bid)
+            elif sa_map.get(bid, 0.0) == 0.0:
+                # Off-benchmark block (w_b = 0): CIPM fallback r_b = r_p
+                # routes entire bet to allocation. These blocks have zero
+                # benchmark weight so they don't contribute to the Carino
+                # benchmark period return stream (Codex P1-b safe).
+                bench_returns[bid] = fund_returns_by_block[bid]
+                logger.warning(
+                    "attribution_off_benchmark_cipm_fallback",
+                    block_id=bid,
+                    fund_return=fund_returns_by_block[bid],
+                )
+                block_ids.append(bid)
+            else:
+                # Benchmark-held block with missing return data (w_b > 0).
+                # Exclude — downstream BF would use r_b = R_B but we lack
+                # the return to contribute to R_B correctly.
+                logger.warning(
+                    "attribution_block_excluded",
+                    block_id=bid,
+                    has_fund_return=True,
+                    has_benchmark_return=False,
+                    benchmark_weight=sa_map[bid],
+                    reason="benchmark_held_missing_return",
+                )
+
+        # Codex P1 (Q155 hotfix Catch A): when degrading the benchmark to
+        # unavailable, still preserve the observed portfolio return derived
+        # from input fund returns weighted by strategic targets. Zeroing
+        # total_portfolio_return here silently drops real fund performance,
+        # which downstream Carino / simple-average linking then compounds
+        # into materially understated multi-period totals. Only the
+        # benchmark return is unknown — signal that with NaN, NOT zero.
+        def _portfolio_return_from_inputs() -> float:
+            if not fund_returns_by_block:
+                return 0.0
+            if sa_map:
+                return float(
+                    sum(
+                        sa_map.get(bid, 0.0) * r
+                        for bid, r in fund_returns_by_block.items()
+                    )
+                )
+            # Strategic allocations empty/zero → equal-weight average so the
+            # caller still sees realized fund performance.
+            return float(np.mean(list(fund_returns_by_block.values())))
 
         if not block_ids:
-            return AttributionResult(benchmark_available=False, n_periods=1)
+            return AttributionResult(
+                benchmark_available=False,
+                n_periods=1,
+                total_portfolio_return=_portfolio_return_from_inputs(),
+                total_benchmark_return=float("nan"),
+                total_excess_return=float("nan"),
+            )
 
-        # Build weight/return arrays
-        sa_map = {sa["block_id"]: float(sa["target_weight"]) for sa in strategic_allocations}
+        # Codex P1: at least one included block must have an observed
+        # benchmark return. If all blocks are off-benchmark CIPM fallback
+        # (fabricated r_b = r_p), the benchmark stream is synthetic and
+        # attribution is meaningless.
+        has_observed_bench = any(
+            bid in benchmark_returns_by_block for bid in block_ids
+        )
+        if not has_observed_bench:
+            return AttributionResult(
+                benchmark_available=False,
+                n_periods=1,
+                total_portfolio_return=_portfolio_return_from_inputs(),
+                total_benchmark_return=float("nan"),
+                total_excess_return=float("nan"),
+            )
 
         benchmark_weights = np.array([sa_map.get(bid, 0.0) for bid in block_ids])
         portfolio_weights = np.array([
             (actual_weights_by_block or sa_map).get(bid, 0.0) for bid in block_ids
         ])
         portfolio_returns = np.array([fund_returns_by_block[bid] for bid in block_ids])
-        benchmark_returns = np.array([benchmark_returns_by_block[bid] for bid in block_ids])
+        benchmark_returns = np.array([bench_returns[bid] for bid in block_ids])
         labels = [block_labels.get(bid, bid) for bid in block_ids]
 
         # Weight normalization check — compute residuals independently
@@ -195,19 +300,57 @@ class AttributionService:
         self,
         period_results: list[AttributionResult],
     ) -> AttributionResult:
-        """Fallback when Carino diverges: simple average of period effects."""
+        """Fallback when Carino diverges: simple average of period effects.
+
+        Codex P1 (Q155 hotfix): periods with ``benchmark_available=False`` carry
+        ``total_benchmark_return = NaN`` to signal "unknown benchmark" in
+        single-period results. When this fallback path runs over multi-period
+        windows that include such periods, NaN must NOT propagate into the
+        linked benchmark/excess outputs. We therefore split the aggregation:
+
+          * ``total_portfolio_return``: geometric-compounded across ALL periods
+            (every period's fund return is real per Catch A).
+          * ``total_benchmark_return`` / sector effects / per-period averaging:
+            computed only over the subset where ``benchmark_available is True``.
+          * If NO period has an observed benchmark, return
+            ``benchmark_available=False`` with a NaN benchmark return — the
+            multi-period window is genuinely unknown on the benchmark side.
+        """
         n = len(period_results)
         if n == 0:
             return AttributionResult()
 
-        # Aggregate sector effects as simple average
-        sector_map: dict[str, dict[str, float]] = {}
-
-        # Geometric compounding for total returns (F-S12-08 fix)
+        # Always compound fund return across every period — fund performance
+        # is observed even when the benchmark stream is unknown.
         total_p = float(np.prod([1 + r.total_portfolio_return for r in period_results]) - 1)
-        total_b = float(np.prod([1 + r.total_benchmark_return for r in period_results]) - 1)
 
-        for r in period_results:
+        # Filter for benchmark-aware aggregation
+        bench_periods = [r for r in period_results if r.benchmark_available]
+
+        if not bench_periods:
+            # Every period unavailable — preserve fund return, signal NaN bench
+            return AttributionResult(
+                total_portfolio_return=round(total_p, 6),
+                total_benchmark_return=float("nan"),
+                total_excess_return=float("nan"),
+                sectors=[],
+                allocation_total=0.0,
+                selection_total=0.0,
+                interaction_total=0.0,
+                n_periods=n,
+                benchmark_available=False,
+            )
+
+        # Aggregate sector effects as simple average over available periods only
+        sector_map: dict[str, dict[str, float]] = {}
+        n_bench = len(bench_periods)
+
+        # Geometric compounding for benchmark total over available periods
+        # (F-S12-08 fix). NaN periods are skipped — they would otherwise
+        # poison the product.
+        total_b = float(np.prod([1 + r.total_benchmark_return for r in bench_periods]) - 1)
+
+        for r in bench_periods:
             for s in r.sectors:
                 if s.sector not in sector_map:
                     sector_map[s.sector] = {
@@ -215,9 +358,9 @@ class AttributionService:
                         "selection": 0.0,
                         "interaction": 0.0,
                     }
-                sector_map[s.sector]["allocation"] += s.allocation_effect / n
-                sector_map[s.sector]["selection"] += s.selection_effect / n
-                sector_map[s.sector]["interaction"] += s.interaction_effect / n
+                sector_map[s.sector]["allocation"] += s.allocation_effect / n_bench
+                sector_map[s.sector]["selection"] += s.selection_effect / n_bench
+                sector_map[s.sector]["interaction"] += s.interaction_effect / n_bench
 
         sectors = []
         for label, effects in sector_map.items():
@@ -462,12 +605,18 @@ def _build_proxy_result(
         metadata["asset_class"] = proxy.resolution.asset_class
     if proxy.period_of_report is not None:
         metadata["period_of_report"] = proxy.period_of_report.isoformat()
+
+    # WMJ-008: surface reconciliation residual from BF effects
+    residual, warning = _compute_reconciliation(proxy.brinson)
+
     return FundAttributionResult(
         fund_instrument_id=request.fund_instrument_id,
         asof=request.asof,
         badge=RailBadge.RAIL_PROXY,
         proxy=proxy,
         metadata=metadata,
+        reconciliation_residual=residual,
+        reconciliation_warning=warning,
     )
 
 
@@ -483,6 +632,9 @@ def _build_holdings_result(
     }
     if holdings.period_of_report is not None:
         metadata["period_of_report"] = holdings.period_of_report.isoformat()
+    # WMJ-010: surface period staleness for IC/RIA review badge
+    if holdings.period_lag_days is not None:
+        metadata["period_lag_days"] = str(holdings.period_lag_days)
     return FundAttributionResult(
         fund_instrument_id=request.fund_instrument_id,
         asof=request.asof,
@@ -535,6 +687,8 @@ def _cache_key(request: AttributionRequest) -> str:
             "lookback": request.lookback_months,
             "min": request.min_months,
             "asset_class": request.fund_asset_class,
+            "period_start": request.period_start.isoformat() if request.period_start else None,
+            "period_end": request.period_end.isoformat() if request.period_end else None,
         },
         sort_keys=True,
     ).encode()
@@ -603,6 +757,8 @@ def _serialize_result(result: FundAttributionResult) -> dict[str, Any]:
             "degraded_reason": ic.degraded_reason,
             "residual": ic.residual,
         },
+        "reconciliation_residual": result.reconciliation_residual,
+        "reconciliation_warning": result.reconciliation_warning,
         "returns_based": None
         if rb is None
         else {
@@ -672,6 +828,7 @@ def _serialize_result(result: FundAttributionResult) -> dict[str, Any]:
             "coverage_pct": hb.coverage_pct,
             "confidence": hb.confidence,
             "holdings_count": hb.holdings_count,
+            "period_lag_days": hb.period_lag_days,
             "degraded": hb.degraded,
             "degraded_reason": hb.degraded_reason,
         },
@@ -702,6 +859,7 @@ def _deserialize_result(data: dict[str, Any]) -> FundAttributionResult:
     hb = None
     if hb_raw is not None:
         period_str = hb_raw.get("period_of_report")
+        lag_raw = hb_raw.get("period_lag_days")
         hb = HoldingsBasedResult(
             sectors=tuple(
                 SectorWeight(
@@ -717,6 +875,7 @@ def _deserialize_result(data: dict[str, Any]) -> FundAttributionResult:
             coverage_pct=float(hb_raw["coverage_pct"]),
             confidence=float(hb_raw["confidence"]),
             holdings_count=int(hb_raw["holdings_count"]),
+            period_lag_days=int(lag_raw) if lag_raw is not None else None,
             degraded=bool(hb_raw["degraded"]),
             degraded_reason=hb_raw.get("degraded_reason"),
         )
@@ -781,6 +940,7 @@ def _deserialize_result(data: dict[str, Any]) -> FundAttributionResult:
             degraded_reason=px_raw.get("degraded_reason"),
         )
 
+    recon_raw = data.get("reconciliation_residual")
     return FundAttributionResult(
         fund_instrument_id=_UUID(data["fund_instrument_id"]),
         asof=_date.fromisoformat(data["asof"]),
@@ -791,6 +951,8 @@ def _deserialize_result(data: dict[str, Any]) -> FundAttributionResult:
         ipca=ic,
         reason=data.get("reason"),
         metadata=dict(data.get("metadata") or {}),
+        reconciliation_residual=float(recon_raw) if recon_raw is not None else None,
+        reconciliation_warning=data.get("reconciliation_warning"),
     )
 
 

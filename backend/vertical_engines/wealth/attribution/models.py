@@ -127,6 +127,7 @@ class HoldingsBasedResult:
     coverage_pct: float
     confidence: float
     holdings_count: int
+    period_lag_days: int | None = None
     degraded: bool = False
     degraded_reason: str | None = None
 
@@ -255,3 +256,5 @@ class FundAttributionResult:
     ipca: IPCAResult | None = None  # PR-Q9
     reason: str | None = None
     metadata: dict[str, str] = field(default_factory=dict)
+    reconciliation_residual: float | None = None
+    reconciliation_warning: str | None = None
