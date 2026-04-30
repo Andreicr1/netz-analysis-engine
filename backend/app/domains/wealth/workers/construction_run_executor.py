@@ -2165,21 +2165,44 @@ async def _execute_inner(
     # which is synthesized from model_portfolios.fund_selection_schema. The
     # construction run row is an audit artifact; it is not sufficient by
     # itself for downstream analytics.
+    #
+    # PR-Q141 (C-04/C-05): Phase 3 mandate-infeasible diagnostic runs
+    # persist the schema with ``is_diagnostic=True`` so downstream
+    # consumers (backtest, stress, drift loader) reject them.  The
+    # lifecycle transition to ``constructed`` is skipped — the portfolio
+    # stays in ``draft`` until the operator relaxes the CVaR limit.
     if not propose_mode and funds:
+        is_diagnostic = derived_run_status == "mandate_infeasible"
+        base_result["is_diagnostic"] = is_diagnostic
         portfolio.fund_selection_schema = _jsonb_safe(base_result)
         portfolio.status = "backtesting"
-        if portfolio.state in {"draft", "rejected"}:
-            from vertical_engines.wealth.model_portfolio.state_machine import (
-                transition as sm_transition,
-            )
 
-            await sm_transition(
-                db,
-                portfolio_id=portfolio.id,
-                to_state="constructed",
-                actor_id=run.requested_by,
-                reason=f"Construction run {run.id}",
+        if is_diagnostic:
+            # Diagnostic run: persist schema for "what-if" visibility but
+            # do NOT advance the portfolio lifecycle.  The operator must
+            # relax the CVaR limit and re-run to obtain a non-diagnostic
+            # construction before the portfolio can be approved.
+            logger.info(
+                "diagnostic_run_persisted",
+                extra={
+                    "portfolio_id": str(portfolio.id),
+                    "run_id": str(run.id),
+                    "derived_run_status": derived_run_status,
+                },
             )
+        else:
+            if portfolio.state in {"draft", "rejected"}:
+                from vertical_engines.wealth.model_portfolio.state_machine import (
+                    transition as sm_transition,
+                )
+
+                await sm_transition(
+                    db,
+                    portfolio_id=portfolio.id,
+                    to_state="constructed",
+                    actor_id=run.requested_by,
+                    reason=f"Construction run {run.id}",
+                )
 
         from app.domains.wealth.workers.portfolio_nav_synthesizer import (
             synthesize_portfolio_nav,

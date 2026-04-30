@@ -550,6 +550,16 @@ export class PortfolioWorkspaceState {
 	/** True when the last construction violated the CVaR risk limit. */
 	cvarViolated = $derived(this.optimizationMeta?.cvar_within_limit === false);
 
+	/**
+	 * PR-Q141 (C-04): True when the persisted fund_selection_schema is a
+	 * diagnostic (mandate-infeasible) construction.  Downstream analytics
+	 * (backtest, stress, drift) are blocked server-side; the Builder UI
+	 * should render a "diagnostic only — not eligible for approval" badge.
+	 */
+	isDiagnostic = $derived(
+		this.portfolio?.fund_selection_schema?.is_diagnostic === true,
+	);
+
 	/** Group current funds by block_id for drop-zone rendering */
 	fundsByBlock = $derived.by(() => {
 		const map: Record<string, any[]> = {};

@@ -130,6 +130,13 @@ async def synthesize_portfolio_nav(
     if not portfolio.fund_selection_schema:
         return {"portfolio_id": str(portfolio_id), "status": "no_selection", "dates_computed": 0}
 
+    # PR-Q141 (C-04): diagnostic schemas are mandate-infeasible Phase 3
+    # results. Synthesize anyway for "what would this look like" but mark
+    # the summary so downstream consumers know this NAV is diagnostic.
+    is_diagnostic = bool(
+        portfolio.fund_selection_schema.get("is_diagnostic"),
+    )
+
     weights = _extract_weights(portfolio.fund_selection_schema)
     if not weights:
         return {"portfolio_id": str(portfolio_id), "status": "no_weights", "dates_computed": 0}
@@ -233,12 +240,17 @@ async def synthesize_portfolio_nav(
         end=str(sorted_dates[-1]) if sorted_dates else None,
     )
 
-    return {
+    summary: dict[str, Any] = {
         "portfolio_id": str(portfolio_id),
         "status": "ok",
         "dates_computed": len(rows_to_upsert),
         "final_nav": round(current_nav, 4),
     }
+    # PR-Q141 (C-04): propagate diagnostic flag so callers know NAV is
+    # derived from a mandate-infeasible construction (what-if only).
+    if is_diagnostic:
+        summary["is_diagnostic"] = True
+    return summary
 
 
 async def run_portfolio_nav_synthesizer(org_id: uuid.UUID) -> dict[str, Any]:
