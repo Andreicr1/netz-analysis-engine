@@ -391,13 +391,15 @@ async def _run_ipca_rail_option_a(request: AttributionRequest, db: AsyncSession,
             index=pd.RangeIndex(n_factor_periods),
             columns=[f"factor_{i}" for i in range(fit.K)],
         )
-        # Cannot align by date — use the full factor matrix as-is and
-        # align with fund returns by truncating to the shorter series.
+        # Cannot align by date — use the LATEST end of both series so
+        # the most recent fund returns pair with the most recent factor
+        # returns. Using [:n_common] (earliest) against [-n_common:]
+        # (latest) would create a large time shift (Codex P1).
         fund_ret = fund_returns_df["return"].values
         n_common = min(len(fund_ret), n_factor_periods)
         if n_common < 12:
             return None
-        factor_vals = fit.factor_returns[:, :n_common].T
+        factor_vals = fit.factor_returns[:, -n_common:].T
         aligned = pd.DataFrame(
             np.column_stack([fund_ret[-n_common:], factor_vals]),
             columns=["return"] + [f"factor_{i}" for i in range(fit.K)],
@@ -442,6 +444,7 @@ async def _run_ipca_rail_option_a(request: AttributionRequest, db: AsyncSession,
     if dates_unavailable:
         # No date index to filter — use all aligned data (already degraded)
         X_period = X
+        y_period = y
     else:
         p_start = pd.Period(period_start, freq="M")
         p_end = pd.Period(period_end, freq="M")
@@ -457,6 +460,7 @@ async def _run_ipca_rail_option_a(request: AttributionRequest, db: AsyncSession,
             )
             return None
         X_period = aligned_period[[f"factor_{i}" for i in range(fit.K)]].values
+        y_period = aligned_period["return"].values
 
     f_t_mean = X_period.mean(axis=0)
     contribution_per_factor = beta * f_t_mean
@@ -464,8 +468,9 @@ async def _run_ipca_rail_option_a(request: AttributionRequest, db: AsyncSession,
     factor_names = ["Size", "Value", "Momentum", "Quality", "Investment", "Profitability"]
 
     # WMJ-014B: compute residual — for Option A the decomposition is
-    # sum(beta_k * mean(f_k)) + alpha vs mean(fund_return)
-    mean_fund_return = float(np.mean(y))
+    # sum(beta_k * mean(f_k)) + alpha vs mean(fund_return).
+    # Both sides must use the SAME period-bounded window (Codex P2).
+    mean_fund_return = float(np.mean(y_period))
     implied_return = float(np.sum(contribution_per_factor)) + alpha
     residual = mean_fund_return - implied_return
 
