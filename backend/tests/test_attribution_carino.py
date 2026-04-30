@@ -389,3 +389,56 @@ class TestSimpleAverageLinkingUnavailablePeriods:
         assert result.selection_total == 0.0
         assert result.interaction_total == 0.0
         assert result.n_periods == 3
+
+
+# ── WMJ-030 (TEMP-A1-12): Carino L'Hôpital branch ───────────────────
+
+
+class TestCarinoLHopitalBranch:
+    """Exercise the ``abs(diff) < 1e-10`` branch in ``_carino_factor``
+    where r_p == r_b and the scale factor reduces to 1/(1+r_p)."""
+
+    def test_identical_returns_exercises_lhopital(self):
+        """Every period has excess = 0 → forces L'Hôpital in _carino_factor."""
+        p_rets = [0.05, 0.03]
+        b_rets = [0.05, 0.03]  # identical → excess = 0 every period
+
+        periods = [
+            _make_period(p, b, [("All", 0.0, 0.0, 0.0)])
+            for p, b in zip(p_rets, b_rets, strict=False)
+        ]
+
+        result = compute_multi_period_attribution(periods, p_rets, b_rets)
+
+        assert np.isfinite(result.allocation_total)
+        assert np.isfinite(result.selection_total)
+        assert np.isfinite(result.interaction_total)
+
+        # Total excess must be zero (same returns)
+        R_p = float(np.prod([1 + r for r in p_rets]) - 1)
+        R_b = float(np.prod([1 + r for r in b_rets]) - 1)
+        assert abs(R_p - R_b) < 1e-10
+
+    def test_near_zero_excess_per_period_reconciles(self):
+        """Tiny per-period excess that rounds to ~0 → L'Hôpital path."""
+        eps = 1e-12
+        p_rets = [0.02 + eps, 0.04 + eps, -0.01 + eps]
+        b_rets = [0.02, 0.04, -0.01]
+
+        periods = []
+        for p, b in zip(p_rets, b_rets, strict=False):
+            excess = p - b
+            periods.append(
+                _make_period(p, b, [("All", excess * 0.5, excess * 0.3, excess * 0.2)]),
+            )
+
+        result = compute_multi_period_attribution(periods, p_rets, b_rets)
+
+        effects_sum = (
+            result.allocation_total
+            + result.selection_total
+            + result.interaction_total
+        )
+        R_p = float(np.prod([1 + r for r in p_rets]) - 1)
+        R_b = float(np.prod([1 + r for r in b_rets]) - 1)
+        assert abs(effects_sum - (R_p - R_b)) < 1e-5

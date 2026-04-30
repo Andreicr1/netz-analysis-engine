@@ -329,5 +329,62 @@ def test_sterling_yearly_chunk_captures_initial_drawdown():
     chunk1 = np.concatenate([np.full(5, -0.01), np.full(247, 0.0001)])
     daily = np.concatenate([chunk1, chunk1, chunk1])
     result = compute_return_statistics(daily)
-    if result.sterling_ratio is not None:
-        assert result.sterling_ratio is not None
+    # WMJ-030: replaced tautological assertion (was `if x is not None: assert x is not None`).
+    # This fund has 5 consecutive -1% losses per year → net negative return → negative Sterling.
+    assert result.sterling_ratio is not None
+    assert np.isfinite(result.sterling_ratio)
+
+
+# ── WMJ-022: Sterling convention — denominator = |avg_max_dd − 0.10| ──
+
+
+def test_sterling_convention_denominator_documented():
+    """Pin the Sterling denominator convention: abs(avg_max_dd − 0.10).
+
+    With avg_max_dd = −0.20 (negative drawdown):
+        denominator = |−0.20 − 0.10| = 0.30  ("|DD| + 10%" style)
+
+    This is the "original Sterling" convention (Kestner 1996), NOT
+    the "modified Sterling" where denominator = |DD| − 10%.
+    """
+    # Build a 3-year (756-day) series with known max drawdowns per year.
+    # Each year: 5 days of sharp loss producing ~-20% DD, then flat recovery.
+    year_days = 252
+    loss_days = 5
+    # daily loss to compound to -20%: (1+r)^5 = 0.80 → r = 0.80^(1/5) - 1
+    daily_loss = 0.80 ** (1.0 / loss_days) - 1  # ≈ -0.0437
+
+    def _make_year() -> np.ndarray:
+        days = np.zeros(year_days)
+        days[:loss_days] = daily_loss  # sharp loss → ~-20% DD
+        # remaining days: zero return (no recovery)
+        return days
+
+    daily = np.concatenate([_make_year(), _make_year(), _make_year()])
+    sterling = _compute_sterling_ratio(daily)
+    assert sterling is not None
+
+    # Replicate the formula exactly to compute the expected value.
+    from quant_engine.drawdown_service import compute_drawdown_series as _dd
+
+    n = len(daily)
+    cum_return = float(np.prod(1.0 + daily))
+    ann_return = cum_return ** (252.0 / n) - 1
+
+    n_years = n // 252
+    trimmed = daily[-n_years * 252 :]
+    yearly_max_dds = []
+    for i in range(n_years):
+        chunk = trimmed[i * 252 : (i + 1) * 252]
+        navs = np.concatenate([[1.0], np.cumprod(1 + chunk)])
+        yearly_max_dds.append(float(np.min(_dd(navs))))
+
+    avg_max_dd = float(np.mean(yearly_max_dds))
+    # Pinned convention: denominator = |avg_max_dd − 0.10|
+    denominator = abs(avg_max_dd - 0.10)
+    expected_sterling = ann_return / denominator
+
+    assert sterling == pytest.approx(expected_sterling, abs=1e-8), (
+        f"Sterling {sterling} != expected {expected_sterling} "
+        f"(avg_max_dd={avg_max_dd:.6f}, denominator={denominator:.6f})"
+    )

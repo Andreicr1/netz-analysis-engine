@@ -461,10 +461,10 @@ class TestMultiPeriodCarino:
         np.testing.assert_almost_equal(result.total_portfolio_return, expected_p, decimal=5)
         np.testing.assert_almost_equal(result.total_benchmark_return, expected_b, decimal=5)
 
-        # Effects should approximately sum to excess return
-        # Carino linking with synthetic per-period effects may not be exact
+        # WMJ-030 (TEMP-A7-02): tightened from decimal=3 to decimal=5 to
+        # match test_attribution_carino.py tolerance (< 1e-5) post-PR-Q148.
         effects_sum = result.allocation_total + result.selection_total + result.interaction_total
-        np.testing.assert_almost_equal(effects_sum, result.total_excess_return, decimal=3)
+        np.testing.assert_almost_equal(effects_sum, result.total_excess_return, decimal=5)
 
     def test_three_period_additivity(self):
         """Three periods: effects sum = excess return when per-period effects sum to excess."""
@@ -534,12 +534,8 @@ class TestCarinoEdgeCases:
 
     def test_opposing_excesses_fallback_to_average(self):
         """Opposing excesses (+5%/-5%) -> total excess ~0 -> simple average fallback."""
-        r1 = self._make_period_result(0.10, 0.05)  # +5% excess
-        r2 = self._make_period_result(0.00, 0.05)  # -5% excess
-
-        # Compound: P = 1.10 * 1.00 - 1 = 0.10, B = 1.05 * 1.05 - 1 = 0.1025
-        # Total excess = 0.10 - 0.1025 = -0.0025 (not exactly zero)
-        # Let's use exact opposing values
+        # WMJ-030 (TEMP-A7-19): removed dead code — prior r1/r2 assignments
+        # were immediately overwritten.
         r1 = self._make_period_result(0.05, 0.00)  # +5% excess
         r2 = self._make_period_result(0.00, 0.05)  # -5% excess
         # Compound: P = 1.05 * 1.00 - 1 = 0.05, B = 1.00 * 1.05 - 1 = 0.05

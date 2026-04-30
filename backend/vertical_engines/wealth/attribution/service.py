@@ -240,6 +240,12 @@ class AttributionService:
         if needs_cash:
             benchmark_weights = np.append(benchmark_weights, 1.0 - bw_sum)
             portfolio_weights = np.append(portfolio_weights, 1.0 - pw_sum)
+            # WMJ-024: Cash residual return convention — r_cash = 0.0.
+            # The residual sleeve absorbs weight-sum gaps (weights < 1.0)
+            # and is assumed to earn zero return.  This is standard BF
+            # practice: cash is the "numeraire" with no excess contribution.
+            # If IC policy requires SOFR/overnight attribution for cash,
+            # replace 0.0 with the period overnight rate.
             portfolio_returns = np.append(portfolio_returns, 0.0)
             benchmark_returns = np.append(benchmark_returns, 0.0)
             labels.append(_CASH_LABEL)
