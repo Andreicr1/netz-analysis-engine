@@ -201,6 +201,7 @@ class AttributionService:
                 n_periods=1,
                 total_portfolio_return=_portfolio_return_from_inputs(),
                 total_benchmark_return=float("nan"),
+                total_excess_return=float("nan"),
             )
 
         # Codex P1: at least one included block must have an observed
@@ -216,6 +217,7 @@ class AttributionService:
                 n_periods=1,
                 total_portfolio_return=_portfolio_return_from_inputs(),
                 total_benchmark_return=float("nan"),
+                total_excess_return=float("nan"),
             )
 
         benchmark_weights = np.array([sa_map.get(bid, 0.0) for bid in block_ids])

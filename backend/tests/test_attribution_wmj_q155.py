@@ -716,6 +716,52 @@ def test_unavailable_benchmark_preserves_fund_returns():
     )
 
 
+def test_unavailable_benchmark_excess_is_nan_not_zero():
+    """When benchmark is unavailable, total_excess_return MUST be NaN —
+    matching total_benchmark_return — instead of dataclass default 0.0.
+
+    Codex P1 (Q155 hotfix): unavailable-benchmark early returns left
+    total_excess_return at the dataclass default 0.0 while total_benchmark_return
+    was already NaN. This produced a contradictory payload — R_p real,
+    R_b unknown, but excess "known to be 0" — that misstates active return
+    in single-period outputs and any short-circuit multi-period linking.
+    """
+    import math
+
+    svc = AttributionService()
+
+    # Empty benchmark dict → has_observed_bench = False → degraded branch.
+    allocations = [
+        {"block_id": "A", "target_weight": 0.60},
+        {"block_id": "B", "target_weight": 0.40},
+    ]
+    fund_returns = {"A": 0.05, "B": 0.03}
+    benchmark_returns: dict[str, float] = {}
+    labels = {"A": "Asset A", "B": "Asset B"}
+
+    result = svc.compute_portfolio_attribution(
+        strategic_allocations=allocations,
+        fund_returns_by_block=fund_returns,
+        benchmark_returns_by_block=benchmark_returns,
+        block_labels=labels,
+    )
+
+    assert result.benchmark_available is False
+    # Real fund return preserved (Catch A invariant).
+    assert math.isfinite(result.total_portfolio_return)
+    assert result.total_portfolio_return == pytest.approx(
+        0.60 * 0.05 + 0.40 * 0.03, abs=1e-9,
+    )
+    # Both benchmark and excess must be NaN — they share the same
+    # "unknown" semantic. Zero would falsely claim "active return = 0",
+    # which is meaningless when the benchmark itself is unobserved.
+    assert math.isnan(result.total_benchmark_return)
+    assert math.isnan(result.total_excess_return), (
+        "total_excess_return must be NaN when benchmark_available=False; "
+        "dataclass default 0.0 contradicts NaN benchmark return"
+    )
+
+
 def test_multi_period_unavailable_period_uses_observed_bench():
     """When a period degrades to benchmark_available=False because fund-block
     returns are partly missing, but observed benchmark-block returns ARE
