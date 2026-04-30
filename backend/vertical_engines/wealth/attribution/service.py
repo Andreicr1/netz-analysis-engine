@@ -174,8 +174,34 @@ class AttributionService:
                     reason="benchmark_held_missing_return",
                 )
 
+        # Codex P1 (Q155 hotfix Catch A): when degrading the benchmark to
+        # unavailable, still preserve the observed portfolio return derived
+        # from input fund returns weighted by strategic targets. Zeroing
+        # total_portfolio_return here silently drops real fund performance,
+        # which downstream Carino / simple-average linking then compounds
+        # into materially understated multi-period totals. Only the
+        # benchmark return is unknown — signal that with NaN, NOT zero.
+        def _portfolio_return_from_inputs() -> float:
+            if not fund_returns_by_block:
+                return 0.0
+            if sa_map:
+                return float(
+                    sum(
+                        sa_map.get(bid, 0.0) * r
+                        for bid, r in fund_returns_by_block.items()
+                    )
+                )
+            # Strategic allocations empty/zero → equal-weight average so the
+            # caller still sees realized fund performance.
+            return float(np.mean(list(fund_returns_by_block.values())))
+
         if not block_ids:
-            return AttributionResult(benchmark_available=False, n_periods=1)
+            return AttributionResult(
+                benchmark_available=False,
+                n_periods=1,
+                total_portfolio_return=_portfolio_return_from_inputs(),
+                total_benchmark_return=float("nan"),
+            )
 
         # Codex P1: at least one included block must have an observed
         # benchmark return. If all blocks are off-benchmark CIPM fallback
@@ -185,7 +211,12 @@ class AttributionService:
             bid in benchmark_returns_by_block for bid in block_ids
         )
         if not has_observed_bench:
-            return AttributionResult(benchmark_available=False, n_periods=1)
+            return AttributionResult(
+                benchmark_available=False,
+                n_periods=1,
+                total_portfolio_return=_portfolio_return_from_inputs(),
+                total_benchmark_return=float("nan"),
+            )
 
         benchmark_weights = np.array([sa_map.get(bid, 0.0) for bid in block_ids])
         portfolio_weights = np.array([

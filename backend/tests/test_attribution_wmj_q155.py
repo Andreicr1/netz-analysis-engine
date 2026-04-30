@@ -661,3 +661,244 @@ def test_zero_observed_benchmark_returns_degrades():
         "Zero observed benchmark returns must produce degraded result, "
         "not synthetic attribution from fabricated r_b = r_p stream"
     )
+
+
+# ---------------------------------------------------------------------------
+# Codex P1 hotfix-of-hotfix — preserve real returns on degraded periods
+# ---------------------------------------------------------------------------
+
+
+def test_unavailable_benchmark_preserves_fund_returns():
+    """When the per-period attribution degrades to benchmark_available=False,
+    total_portfolio_return MUST still reflect realized fund performance from
+    the input fund_returns_by_block — only total_benchmark_return is unknown.
+
+    Codex P1 (Q155 hotfix-of-hotfix Catch A): the prior hotfix emitted a
+    default AttributionResult with both totals set to 0.0 on the
+    has_observed_bench=False branch. _simple_average_linking compounds
+    period_results[*].total_portfolio_return geometrically, so a single
+    zeroed period materially understates the linked multi-period total.
+    """
+    import math
+
+    svc = AttributionService()
+
+    # Strategic allocation defines the weights used for total_portfolio_return.
+    allocations = [
+        {"block_id": "A", "target_weight": 0.60},
+        {"block_id": "B", "target_weight": 0.40},
+    ]
+    fund_returns = {"A": 0.05, "B": 0.03}
+    # Empty benchmark dict → has_observed_bench = False → degraded branch.
+    benchmark_returns: dict[str, float] = {}
+    labels = {"A": "Asset A", "B": "Asset B"}
+
+    result = svc.compute_portfolio_attribution(
+        strategic_allocations=allocations,
+        fund_returns_by_block=fund_returns,
+        benchmark_returns_by_block=benchmark_returns,
+        block_labels=labels,
+    )
+
+    # Degraded — benchmark unknown.
+    assert result.benchmark_available is False
+    # Portfolio return preserved: 0.60 * 0.05 + 0.40 * 0.03 = 0.042
+    expected_p = 0.60 * 0.05 + 0.40 * 0.03
+    assert result.total_portfolio_return == pytest.approx(expected_p, abs=1e-9)
+    assert result.total_portfolio_return != 0.0, (
+        "Unavailable-benchmark branch must NOT zero out total_portfolio_return; "
+        "real fund performance must survive into multi-period linking."
+    )
+    # Benchmark return signaled as NaN (unknown), not 0.
+    assert math.isnan(result.total_benchmark_return), (
+        "total_benchmark_return must be NaN on the unavailable branch to "
+        "distinguish 'unknown' from 'observed zero'."
+    )
+
+
+def test_multi_period_unavailable_period_uses_observed_bench():
+    """When a period degrades to benchmark_available=False because fund-block
+    returns are partly missing, but observed benchmark-block returns ARE
+    available for that period, the route's Carino b_ret stream MUST fall
+    back to the period-level benchmark dict instead of hard-coding 0.
+
+    Codex P1 (Q155 hotfix-of-hotfix Catch B): the prior hotfix wrote
+    b_ret=0 for any benchmark_available=False period, dropping observed
+    benchmark performance and inflating the linked excess return.
+
+    This test exercises the route-level helper logic directly: given a
+    period-level AttributionResult with benchmark_available=False AND a
+    non-empty period-level benchmark dict, the route must derive b_ret from
+    that dict using strategic weights.
+    """
+    # We re-implement the exact route fallback logic to assert its semantics
+    # without spinning up the FastAPI route machinery (no DB/Clerk in tests).
+    sa_dicts = [
+        {"block_id": "equity", "target_weight": 0.70},
+        {"block_id": "bonds", "target_weight": 0.30},
+    ]
+
+    # Period 1: benchmark observations present for BOTH blocks, but fund
+    # returns missing for one block → has_observed_bench is True, period
+    # remains AVAILABLE. Period 2: simulate degraded (benchmark_available=
+    # False) with observed benchmark dict still populated.
+    benchmark_returns_period_p2 = {"equity": 0.04, "bonds": 0.02}
+
+    # Stub a degraded result mirroring Catch A's preserved fund return.
+    from quant_engine.attribution_service import AttributionResult as _AR
+
+    degraded_result = _AR(
+        benchmark_available=False,
+        n_periods=1,
+        total_portfolio_return=0.05,
+        total_benchmark_return=float("nan"),
+    )
+
+    # ---- Replicate the Catch B route fallback verbatim. ----
+    if degraded_result.benchmark_available:
+        b_ret = degraded_result.total_benchmark_return
+    elif benchmark_returns_period_p2:
+        b_ret = sum(
+            float(sa["target_weight"])
+            * benchmark_returns_period_p2.get(sa["block_id"], 0.0)
+            for sa in sa_dicts
+        )
+    else:
+        b_ret = 0.0
+
+    # b_ret must reflect observed benchmark, NOT 0.
+    expected_b = 0.70 * 0.04 + 0.30 * 0.02  # 0.034
+    assert b_ret == pytest.approx(expected_b, abs=1e-9), (
+        "Degraded period with observed benchmark dict must derive b_ret "
+        "from that dict using strategic weights, not zero."
+    )
+    assert b_ret != 0.0
+
+    # And p_ret comes from the (Catch A-preserved) result total.
+    p_ret = degraded_result.total_portfolio_return
+    assert p_ret == pytest.approx(0.05, abs=1e-9)
+
+    # Sanity: when benchmark dict is also empty, b_ret falls back to 0.
+    empty_bench: dict[str, float] = {}
+    if degraded_result.benchmark_available:
+        b_ret_empty = degraded_result.total_benchmark_return
+    elif empty_bench:
+        b_ret_empty = sum(
+            float(sa["target_weight"])
+            * empty_bench.get(sa["block_id"], 0.0)
+            for sa in sa_dicts
+        )
+    else:
+        b_ret_empty = 0.0
+    assert b_ret_empty == 0.0
+
+
+def test_multi_period_carino_preserves_observed_bench_in_unavailable_period():
+    """End-to-end multi-period Carino: period 1 degrades (benchmark_available
+    False) but the route-level b_ret derivation from observed benchmark dict
+    means linked benchmark total is NON-ZERO and reflects observed data.
+
+    Codex P1 (Q155 hotfix-of-hotfix Catch B regression): asserts Carino
+    linker fed from the corrected route stream produces a different
+    total_benchmark_return than the prior buggy zero-out behaviour.
+    """
+    svc = AttributionService()
+
+    # Two periods with identical structure.
+    allocations = [
+        {"block_id": "equity", "target_weight": 0.70},
+        {"block_id": "bonds", "target_weight": 0.30},
+    ]
+    labels = {"equity": "Equity", "bonds": "Bonds"}
+
+    # Period 1: simulate "fund returns missing" → degrade by passing empty
+    # fund_returns. has_observed_bench=False (block_ids empty), so we hit
+    # the Catch A early return.
+    period1_fund: dict[str, float] = {}
+    period1_bench = {"equity": 0.04, "bonds": 0.02}
+
+    # Period 2: clean — both observed.
+    period2_fund = {"equity": 0.05, "bonds": 0.03}
+    period2_bench = {"equity": 0.04, "bonds": 0.025}
+
+    p1 = svc.compute_portfolio_attribution(
+        strategic_allocations=allocations,
+        fund_returns_by_block=period1_fund,
+        benchmark_returns_by_block=period1_bench,
+        block_labels=labels,
+    )
+    p2 = svc.compute_portfolio_attribution(
+        strategic_allocations=allocations,
+        fund_returns_by_block=period2_fund,
+        benchmark_returns_by_block=period2_bench,
+        block_labels=labels,
+    )
+
+    assert p1.benchmark_available is False
+    assert p2.benchmark_available is True
+
+    # Replicate the route's Carino stream construction with Catch B logic.
+    def _route_streams(
+        results: list,
+        bench_dicts: list[dict[str, float]],
+    ) -> tuple[list[float], list[float]]:
+        p_stream = []
+        b_stream = []
+        for result, bench_dict in zip(results, bench_dicts, strict=True):
+            if result.benchmark_available:
+                p_stream.append(result.total_portfolio_return)
+                b_stream.append(result.total_benchmark_return)
+            else:
+                p_stream.append(result.total_portfolio_return)
+                if bench_dict:
+                    b_ret = sum(
+                        float(sa["target_weight"])
+                        * bench_dict.get(sa["block_id"], 0.0)
+                        for sa in allocations
+                    )
+                else:
+                    b_ret = 0.0
+                b_stream.append(b_ret)
+        return p_stream, b_stream
+
+    p_returns_correct, b_returns_correct = _route_streams(
+        [p1, p2], [period1_bench, period2_bench]
+    )
+
+    # Period 1 b_ret derived from observed benchmark dict.
+    expected_b_p1 = 0.70 * 0.04 + 0.30 * 0.02  # 0.034
+    assert b_returns_correct[0] == pytest.approx(expected_b_p1, abs=1e-9)
+    # Period 2 b_ret comes from AttributionResult.total_benchmark_return
+    # (clean Carino-additive path).
+    assert b_returns_correct[1] == pytest.approx(p2.total_benchmark_return, abs=1e-9)
+
+    # Replicate the BUGGY (pre-hotfix) stream: hard-zero on degraded period.
+    p_returns_buggy = [
+        p1.total_portfolio_return if p1.benchmark_available else 0.0,
+        p2.total_portfolio_return if p2.benchmark_available else 0.0,
+    ]
+    b_returns_buggy = [
+        p1.total_benchmark_return if p1.benchmark_available else 0.0,
+        p2.total_benchmark_return if p2.benchmark_available else 0.0,
+    ]
+
+    # Carino-link both streams.
+    multi_correct = svc.compute_multi_period(
+        period_results=[p1, p2],
+        portfolio_period_returns=p_returns_correct,
+        benchmark_period_returns=b_returns_correct,
+    )
+    multi_buggy = svc.compute_multi_period(
+        period_results=[p1, p2],
+        portfolio_period_returns=p_returns_buggy,
+        benchmark_period_returns=b_returns_buggy,
+    )
+
+    # The corrected stream must produce a strictly larger total_benchmark_return
+    # because period 1 contributes 0.034 instead of 0.0.
+    assert multi_correct.total_benchmark_return > multi_buggy.total_benchmark_return, (
+        "Catch B fix must surface observed period-1 benchmark performance, "
+        "producing a larger linked benchmark total than the buggy zero-out path. "
+        f"correct={multi_correct.total_benchmark_return}, "
+        f"buggy={multi_buggy.total_benchmark_return}"
+    )

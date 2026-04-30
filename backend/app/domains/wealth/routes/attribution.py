@@ -252,16 +252,28 @@ async def get_attribution(
                 p_returns.append(result.total_portfolio_return)
                 b_returns.append(result.total_benchmark_return)
             else:
-                # No observed benchmark — period contributes no excess.
-                # Use raw weighted returns so portfolio total stream still
-                # reflects realized performance, and zero out benchmark.
-                p_ret = sum(
-                    float(sa["target_weight"])
-                    * fund_returns_period.get(sa["block_id"], 0.0)
-                    for sa in sa_dicts
-                )
-                p_returns.append(p_ret)
-                b_returns.append(0.0)
+                # Codex P1 (Q155 hotfix Catch B): a period can be marked
+                # unavailable because fund-block returns are missing while
+                # benchmark observations are still present (or vice-versa).
+                # Hard-coding b_ret=0 here zeroed out real benchmark
+                # performance, understating the linked benchmark total and
+                # inflating multi-period excess return.
+                #
+                # Catch A guarantees result.total_portfolio_return now
+                # reflects realized fund performance even on the unavailable
+                # branch, so use it directly. For benchmark, recompute from
+                # the ORIGINAL period-level benchmark dict using strategic
+                # weights — only zero when no benchmark data exists at all.
+                p_returns.append(result.total_portfolio_return)
+                if benchmark_returns_period:
+                    b_ret = sum(
+                        float(sa["target_weight"])
+                        * benchmark_returns_period.get(sa["block_id"], 0.0)
+                        for sa in sa_dicts
+                    )
+                else:
+                    b_ret = 0.0
+                b_returns.append(b_ret)
 
         return results, p_returns, b_returns
 
