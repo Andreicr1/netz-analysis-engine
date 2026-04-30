@@ -168,7 +168,8 @@ def test_secondary_coexists_with_primary_below_floor() -> None:
         optimizer_trace={"status": "degraded"},
         cvar_limit=0.05,
     )
-    assert status == "degraded"
+    # PR-Q140: phase_3_min_cvar_above_limit → mandate_infeasible (was degraded).
+    assert status == "mandate_infeasible"
     sig = telemetry["operator_signal"]
     assert sig["kind"] == "cvar_limit_below_universe_floor"
     assert sig["secondary"] is not None

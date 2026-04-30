@@ -197,8 +197,9 @@ class PortfolioConstructionRun(OrganizationScopedMixin, Base):
     exposure, advisor advice, validation gate result, narrative output,
     and per-instrument rationale (DL4).
 
-    Status enum mirrors the CHECK constraint in migration 0099:
-    ``running`` → ``succeeded`` | ``failed`` | ``superseded``.
+    Status enum mirrors the CHECK constraint (migrations 0099 / 0141 / 0197):
+    ``running`` → ``succeeded`` | ``mandate_infeasible`` | ``degraded`` |
+    ``failed`` | ``superseded`` | ``cancelled``.
 
     The ``calibration_id`` FK is added in migration 0105 once
     ``portfolio_calibration`` exists. Until then, callers may write

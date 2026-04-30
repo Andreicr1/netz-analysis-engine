@@ -131,22 +131,30 @@ async def _latest_validation_status(
     """Project the most recent construction run's validation gate.
 
     Returns ``has_run=False`` if no runs exist for the portfolio.
-    Reads only the ``validation`` JSONB column to keep the projection
-    cheap — Phase 3 Task 3.1 fills it; until then it's ``{}`` and we
-    treat that as "not yet validated".
+    Reads the ``validation`` JSONB column + ``status`` to keep the
+    projection cheap — Phase 3 Task 3.1 fills validation; until then
+    it's ``{}`` and we treat that as "not yet validated".
+
+    PR-Q140: also reads ``status`` to propagate ``mandate_infeasible``
+    to the state machine (C-01 taxonomy split).
     """
     row = await db.execute(
-        select(PortfolioConstructionRun.validation)
+        select(
+            PortfolioConstructionRun.validation,
+            PortfolioConstructionRun.status,
+        )
         .where(PortfolioConstructionRun.portfolio_id == portfolio_id)
         .order_by(PortfolioConstructionRun.requested_at.desc())
         .limit(1),
     )
-    validation = row.scalar_one_or_none()
-    if validation is None:
+    result = row.one_or_none()
+    if result is None:
         return ValidationStatus(has_run=False, passed=False)
+    validation, run_status = result
     return ValidationStatus(
         has_run=True,
-        passed=bool(validation.get("passed", False)),
+        passed=bool((validation or {}).get("passed", False)),
+        run_status=run_status,
     )
 
 
@@ -672,7 +680,7 @@ async def construct_portfolio(
     return ConstructRunAccepted(
         run_id=run.id,
         portfolio_id=portfolio_id,
-        status=run.status,  # running | succeeded | failed
+        status=run.status,  # running | succeeded | mandate_infeasible | degraded | failed
         job_id=job_id,
         stream_url=f"/api/v1/jobs/{job_id}/stream",
         run_url=f"/api/v1/model-portfolios/{portfolio_id}/runs/{run.id}",

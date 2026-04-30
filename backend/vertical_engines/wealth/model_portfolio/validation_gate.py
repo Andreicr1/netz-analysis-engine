@@ -81,6 +81,10 @@ class ValidationCheck:
     value: float | int | None
     threshold: float | int | None
     explanation: str
+    degraded_reason: str | None = None
+    """PR-Q140 (C-11): propagated from cvar_service when CVaR computation
+    fell back to NaN/insufficient-obs. Enables operator-facing diagnostics
+    without collapsing severity into a single boolean."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +102,11 @@ class ValidationResult:
 
     blocks: list[ValidationCheck] = field(default_factory=list)
     """Subset of ``checks`` where ``severity='block'`` and ``passed=False``."""
+
+    severity_breakdown: dict[str, list[str]] = field(default_factory=dict)
+    """PR-Q140 (C-11): mapping severity → list of failed check IDs.
+    Cascade-aware consumers (state_machine) use this instead of the
+    single ``passed`` boolean to distinguish degraded from blocking."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,6 +242,9 @@ def _check_cvar_within_limit(
     cvar = metrics.get("cvar_95")
     calibration = run_payload.get("calibration_snapshot") or {}
     limit = calibration.get("cvar_limit")
+    # PR-Q140 (C-11): propagate degraded_reason from cvar_service when
+    # the CVaR computation fell back to NaN / insufficient observations.
+    cvar_degraded_reason = metrics.get("cvar_degraded_reason")
     if cvar is None or limit is None:
         return ValidationCheck(
             id="cvar_within_limit",
@@ -242,11 +254,27 @@ def _check_cvar_within_limit(
             value=cvar,
             threshold=limit,
             explanation="Missing cvar_95 or cvar_limit in payload.",
+            degraded_reason=cvar_degraded_reason,
         )
     # CVaR convention in this codebase: negative = loss.
     # Limit e.g. -0.05 means 5% loss budget.
     cvar_f = float(cvar)
     limit_f = -abs(float(limit))
+    # PR-Q140 (C-11): NaN cvar from insufficient obs → fail with reason.
+    if math.isnan(cvar_f):
+        return ValidationCheck(
+            id="cvar_within_limit",
+            label="CVaR within calibration limit",
+            severity="block",
+            passed=False,
+            value=None,
+            threshold=round(limit_f, 6),
+            explanation=(
+                f"CVaR 95% is NaN (degraded: {cvar_degraded_reason or 'unknown'}); "
+                f"calibration limit is {limit_f:.4%}."
+            ),
+            degraded_reason=cvar_degraded_reason,
+        )
     passed = cvar_f >= limit_f  # less negative = within budget
     return ValidationCheck(
         id="cvar_within_limit",
@@ -259,6 +287,7 @@ def _check_cvar_within_limit(
             f"Ex-ante CVaR 95% is {cvar_f:.4%}; calibration limit is "
             f"{limit_f:.4%}. {'OK' if passed else 'Breach'}."
         ),
+        degraded_reason=cvar_degraded_reason,
     )
 
 
@@ -851,11 +880,20 @@ def validate_construction(
     blocks = [c for c in checks if c.severity == "block" and not c.passed]
     warnings = [c for c in checks if c.severity == "warn" and not c.passed]
 
+    # PR-Q140 (C-11): severity_breakdown — mapping severity → list of
+    # failed check IDs, so cascade-aware consumers (state_machine) can
+    # distinguish degraded from blocking without collapsing to a single bool.
+    severity_breakdown: dict[str, list[str]] = {}
+    for c in checks:
+        if not c.passed:
+            severity_breakdown.setdefault(c.severity, []).append(c.id)
+
     return ValidationResult(
         passed=len(blocks) == 0,
         checks=checks,
         warnings=warnings,
         blocks=blocks,
+        severity_breakdown=severity_breakdown,
     )
 
 
@@ -877,6 +915,8 @@ def to_jsonb(result: ValidationResult) -> dict[str, Any]:
                 "value": c.value,
                 "threshold": c.threshold,
                 "explanation": c.explanation,
+                # PR-Q140 (C-11): propagate degraded_reason when present.
+                **({"degraded_reason": c.degraded_reason} if c.degraded_reason else {}),
             }
             for c in result.checks
         ],
@@ -886,4 +926,6 @@ def to_jsonb(result: ValidationResult) -> dict[str, Any]:
             "blocks_failed": len(result.blocks),
             "warnings_failed": len(result.warnings),
         },
+        # PR-Q140 (C-11): severity → failed check IDs for cascade-aware consumers.
+        "severity_breakdown": result.severity_breakdown,
     }

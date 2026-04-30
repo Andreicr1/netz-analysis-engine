@@ -410,20 +410,21 @@ def test_check_that_raises_preserves_intended_severity():
 def test_to_jsonb_shape():
     result = validate_construction(_base_payload(), _base_db_context())
     j = to_jsonb(result)
-    assert set(j.keys()) == {"passed", "checks", "summary"}
+    # PR-Q140: severity_breakdown added to the top-level shape.
+    assert set(j.keys()) == {"passed", "checks", "summary", "severity_breakdown"}
     assert j["passed"] is True
     assert len(j["checks"]) == 16
     assert j["summary"]["total"] == 16
     assert j["summary"]["passed"] == 16
     assert j["summary"]["blocks_failed"] == 0
     assert j["summary"]["warnings_failed"] == 0
+    # All checks pass → severity_breakdown is empty.
+    assert j["severity_breakdown"] == {}
 
-    # Every check has the expected keys
+    # Every check has the expected keys (degraded_reason is omitted when None).
     for c in j["checks"]:
-        assert set(c.keys()) == {
-            "id", "label", "severity", "passed",
-            "value", "threshold", "explanation",
-        }
+        assert {"id", "label", "severity", "passed",
+                "value", "threshold", "explanation"}.issubset(set(c.keys()))
 
 
 def test_to_jsonb_preserves_check_order():
