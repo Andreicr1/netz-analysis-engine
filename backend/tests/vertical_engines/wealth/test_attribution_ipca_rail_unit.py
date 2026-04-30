@@ -47,16 +47,22 @@ def _make_request(**overrides) -> AttributionRequest:
 
 
 def _make_fit(oos_r_squared: float = 0.03, K: int = 6) -> IPCAFit:
+    # 30 monthly periods from 2024-01 to 2026-06, covering the default
+    # request window (2026-01 → 2026-04) so factor_returns_for_period
+    # returns non-empty.  Prior to F-S12-08 the rail silently returned
+    # zeros on empty periods; now it returns None, so test fixtures
+    # must have factor data spanning the analysis window.
+    n_periods = 30
     return IPCAFit(
         gamma=np.eye(K, dtype=np.float64),
-        factor_returns=np.random.default_rng(42).standard_normal((K, 20)),
+        factor_returns=np.random.default_rng(42).standard_normal((K, n_periods)),
         K=K,
         intercept=False,
         r_squared=0.5,
         oos_r_squared=oos_r_squared,
         converged=True,
         n_iterations=50,
-        dates=pd.date_range("2024-01-31", periods=20, freq="ME"),
+        dates=pd.date_range("2024-01-31", periods=n_periods, freq="ME"),
     )
 
 
@@ -271,20 +277,22 @@ async def test_option_a_date_alignment():
 
     req = _make_request()
     fit = _make_fit(K=4)
-    # Override dates to end-of-month (like real IPCA fits)
+    # Override dates to end-of-month covering the request period (2026-01..2026-04).
+    # 30 periods from 2024-01 → 2026-06 so factor_returns_for_period is non-empty.
     fit = IPCAFit(
         gamma=fit.gamma[:, :4],  # 6×4
-        factor_returns=np.random.default_rng(99).standard_normal((4, 24)),
+        factor_returns=np.random.default_rng(99).standard_normal((4, 30)),
         K=4,
         intercept=False,
         r_squared=0.5,
         oos_r_squared=0.03,
         converged=True,
         n_iterations=50,
-        dates=pd.date_range("2024-01-31", periods=24, freq="ME"),
+        dates=pd.date_range("2024-01-31", periods=30, freq="ME"),
     )
 
-    # Simulate nav rows with first-of-month dates (as produced by date_trunc)
+    # Simulate nav rows with first-of-month dates (as produced by date_trunc).
+    # Must span through 2026 so aligned_period has data in 2026-01..2026-04.
     _NavRow = namedtuple("_NavRow", ["month", "nav_eom"])
     nav_rows = [
         _NavRow(month=date(2023, m, 1), nav_eom=100.0 + m)
@@ -292,6 +300,12 @@ async def test_option_a_date_alignment():
     ] + [
         _NavRow(month=date(2024, m, 1), nav_eom=112.0 + m * 0.5)
         for m in range(1, 13)
+    ] + [
+        _NavRow(month=date(2025, m, 1), nav_eom=118.0 + m * 0.3)
+        for m in range(1, 13)
+    ] + [
+        _NavRow(month=date(2026, m, 1), nav_eom=121.6 + m * 0.2)
+        for m in range(1, 5)
     ]
 
     async def mock_execute(stmt, params=None):
@@ -604,12 +618,12 @@ async def test_ipca_default_period_uses_lookback():
 
 
 @pytest.mark.asyncio
-async def test_ipca_no_lookback_degrades_gracefully():
-    """12. Edge case where lookback produces no factor data — degraded, not crash.
+async def test_ipca_empty_period_returns_none():
+    """12. Empty factor period → None (dispatcher falls through to next rail).
 
     When factor_returns_for_period returns an empty array (no factor data
-    in the lookback window), the rail should return zero contributions,
-    not raise an exception.
+    in the lookback window), the rail must return None instead of emitting
+    zero contributions with positive confidence (F-S12-08).
     """
     K = 3
     # Factor returns only cover 2020; asof is 2026 with lookback=12 months
@@ -669,9 +683,6 @@ async def test_ipca_no_lookback_degrades_gracefully():
                new=AsyncMock(return_value=0.0)):
         result = await run_ipca_rail(req, db)
 
-    assert result is not None, "Rail crashed instead of degrading gracefully"
-    # All contributions should be zero (no factor data in lookback window)
-    for i in range(K):
-        assert result.factor_returns_contribution[i] == 0.0, (
-            f"Factor {i} contribution should be 0.0 when no data in lookback period"
-        )
+    assert result is None, (
+        "Rail should return None on empty factor period so dispatcher falls through"
+    )

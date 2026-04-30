@@ -54,3 +54,5 @@ class PortfolioCorrelationResult:
     baseline_average_correlation: float
     regime_shift_detected: bool
     computed_at: datetime
+    degraded: bool = False
+    degraded_reason: str | None = None

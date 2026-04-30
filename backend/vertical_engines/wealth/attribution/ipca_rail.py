@@ -238,9 +238,8 @@ async def run_ipca_rail(request: AttributionRequest, db: AsyncSession) -> IPCARe
             period_end=str(period_end),
             defaulted=period_defaulted,
         )
-        f_t_mean = np.zeros(fit.K)
-    else:
-        f_t_mean = factor_returns_period.mean(axis=1)
+        return None
+    f_t_mean = factor_returns_period.mean(axis=1)
     contribution_per_factor = beta * f_t_mean
 
     # Estimate alpha using fixed beta
@@ -388,10 +387,9 @@ async def _run_ipca_rail_option_a(request: AttributionRequest, db: AsyncSession,
             period_end=str(period_end),
             defaulted=period_defaulted,
         )
-        f_t_mean = np.zeros(fit.K)
-    else:
-        X_period = aligned_period[[f"factor_{i}" for i in range(fit.K)]].values
-        f_t_mean = X_period.mean(axis=0)
+        return None
+    X_period = aligned_period[[f"factor_{i}" for i in range(fit.K)]].values
+    f_t_mean = X_period.mean(axis=0)
     contribution_per_factor = beta * f_t_mean
 
     factor_names = ["Size", "Value", "Momentum", "Quality", "Investment", "Profitability"]
