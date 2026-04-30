@@ -122,6 +122,8 @@ class TestEdgeCases:
         assert result.active_share == 100.0
         assert result.n_portfolio_positions == 0
         assert result.n_common_positions == 0
+        # Empty portfolio with non-empty benchmark is well-defined (100% AS)
+        assert result.degraded is False
 
     def test_empty_benchmark(self):
         result = compute_active_share(
@@ -160,3 +162,47 @@ class TestEdgeCases:
         )
         with pytest.raises(AttributeError):
             result.active_share = 0.0  # type: ignore[misc]
+
+
+# ── Degraded flag (F-S12-06) ────────────────────────────────────────
+
+
+class TestDegradedFlag:
+    def test_active_share_empty_benchmark_degraded(self):
+        """Empty benchmark → degraded=True, reason='no_benchmark'."""
+        result = compute_active_share(
+            portfolio_weights={"A": 0.5, "B": 0.5},
+            benchmark_weights={},
+        )
+        assert result.degraded is True
+        assert result.degraded_reason == "no_benchmark"
+        assert result.active_share == 100.0
+
+    def test_active_share_both_empty_degraded(self):
+        """Both empty → degraded=True, reason='no_positions'."""
+        result = compute_active_share(
+            portfolio_weights={},
+            benchmark_weights={},
+        )
+        assert result.degraded is True
+        assert result.degraded_reason == "no_positions"
+        assert result.active_share == 100.0
+
+    def test_active_share_portfolio_empty_not_degraded(self):
+        """Empty portfolio + non-empty benchmark → degraded=False (well-defined)."""
+        result = compute_active_share(
+            portfolio_weights={},
+            benchmark_weights={"A": 1.0},
+        )
+        assert result.degraded is False
+        assert result.degraded_reason is None
+        assert result.active_share == 100.0
+
+    def test_normal_computation_not_degraded(self):
+        """Normal computation → degraded=False."""
+        result = compute_active_share(
+            portfolio_weights={"A": 0.5, "B": 0.5},
+            benchmark_weights={"A": 0.4, "B": 0.6},
+        )
+        assert result.degraded is False
+        assert result.degraded_reason is None
