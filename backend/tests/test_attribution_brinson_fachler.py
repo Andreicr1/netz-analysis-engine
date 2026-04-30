@@ -183,3 +183,31 @@ def test_off_benchmark_allocation_nonzero():
     assert x.allocation_effect == pytest.approx(0.003, abs=1e-9)
     assert x.selection_effect == pytest.approx(0.0, abs=1e-9)
     assert x.interaction_effect == pytest.approx(0.0, abs=1e-9)
+
+
+def test_benchmark_held_sector_missing_return_uses_aggregate():
+    """Benchmark-held sector (w_b > 0) with missing return data falls back
+    to aggregate benchmark return, NOT to r_p.
+
+    Codex Stage 4 catch: the initial r_p fallback was unconditional and
+    would zero selection/interaction for benchmark-held sectors too.
+    """
+    fund_w = {"A": 0.6, "B": 0.4}
+    fund_r = {"A": 0.10, "B": 0.05}
+    bench_w = {"A": 0.5, "B": 0.5}
+    # B's return is missing from bench_returns
+    bench_r = {"A": 0.08}
+
+    r = brinson_fachler(fund_w, fund_r, bench_w, bench_r)
+
+    # R_B = 0.5*0.08 + 0.5*0.0 = 0.04  (B has no return → 0 in aggregate)
+    # Wait — aggregate_benchmark_return uses bench_returns values only for
+    # sectors present. B missing → R_B = 0.5 * 0.08 = 0.04.
+    # For sector B: r_b falls back to R_B = 0.04 (not r_p=0.05).
+    #   selection = 0.5 * (0.05 - 0.04) = 0.005
+    #   interaction = (0.4 - 0.5) * (0.05 - 0.04) = -0.001
+    b = next(s for s in r.by_sector if s.sector == "B")
+    assert b.selection_effect == pytest.approx(0.005, abs=1e-9)
+    assert b.interaction_effect == pytest.approx(-0.001, abs=1e-9)
+    # Key assertion: selection is NOT zero (would be if r_b == r_p)
+    assert b.selection_effect != 0.0

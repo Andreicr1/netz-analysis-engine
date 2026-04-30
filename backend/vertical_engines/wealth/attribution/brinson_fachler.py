@@ -71,10 +71,16 @@ def brinson_fachler(
         w_p = float(fund_weights.get(sector, 0.0))
         w_b = float(bench_weights.get(sector, 0.0))
         r_p = float(fund_returns.get(sector, 0.0))
-        # Off-benchmark sector (w_b=0): use r_p as fallback so the entire
-        # bet flows to allocation = (w_p - 0)*(r_p - R_B), with selection
-        # and interaction both zero (CIPM standard).
-        r_b = float(bench_returns.get(sector, r_p))
+        if sector in bench_returns:
+            r_b = float(bench_returns[sector])
+        elif w_b == 0.0:
+            # Off-benchmark sector: use r_p so the entire bet flows to
+            # allocation = (w_p)*(r_p - R_B), selection/interaction = 0 (CIPM).
+            r_b = r_p
+        else:
+            # Benchmark-held sector with missing return data — fall back to
+            # aggregate benchmark return to preserve selection/interaction.
+            r_b = aggregate_benchmark_return
 
         allocation = (w_p - w_b) * (r_b - aggregate_benchmark_return)
         selection = w_b * (r_p - r_b)
