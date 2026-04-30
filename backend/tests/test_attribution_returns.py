@@ -86,7 +86,7 @@ def test_tracking_error_annualisation() -> None:
         e.weight for e in result.exposures
     ]) @ r_styles.T
     residuals = r_fund - fitted
-    expected = float(np.std(residuals) * np.sqrt(12))
+    expected = float(np.std(residuals, ddof=1) * np.sqrt(12))
     assert result.tracking_error_annualized == pytest.approx(expected, abs=1e-6)
 
 

@@ -11,18 +11,31 @@ Formulation (Brinson, Hood, Beebower 1986; Fachler 1985):
     Interaction_s = (w_p[s] - w_b[s]) * (r_p[s] - r_b[s])
     R_B          = Σ_s w_b[s] * r_b[s]
 
-Missing sectors on either side are treated as zero weight / zero return
-(the standard convention). When a fund holds a sector the benchmark does
-not (off-benchmark), the portfolio's sector return r_p is used as the
-benchmark sector return fallback — this ensures the entire active bet
-flows to allocation = (w_p - 0) * (r_p - R_B), with selection and
-interaction both zero (CIPM standard for off-benchmark sectors).
+Missing-sector conventions
+--------------------------
+This implementation uses the **CIPM / r_p fallback** convention:
 
-The formula preserves the identity::
+- **Off-benchmark sector** (w_b = 0, sector not in bench_returns):
+  r_b = r_p → allocation = (w_p)*(r_p − R_B), selection = 0, interaction = 0.
+  The entire off-benchmark bet flows to allocation.
 
-    R_P - R_B = Σ_s allocation_s + selection_s + interaction_s
+- **Benchmark-held sector with missing return** (w_b > 0, sector not in
+  bench_returns): r_b = R_B → allocation = (w_p − w_b)*0 = 0, preserving
+  selection = w_b*(r_p − R_B) and interaction.
 
-within floating-point tolerance when both sides cover the same universe.
+- **Fund-only sector** (w_b = 0, sector in bench_returns): standard
+  formulas apply with w_b = 0, so allocation = w_p*(r_b − R_B) and
+  selection = 0.
+
+Alternative conventions exist (Bacon 2008 uses r_b = 0 for missing
+benchmark sectors, routing off-benchmark credit to interaction instead
+of allocation). Both conventions preserve the reconciliation identity:
+
+    R_P − R_B ≈ Σ_s (allocation_s + selection_s + interaction_s)
+
+where R_P = Σ_s w_p[s]·r_p[s] and R_B = Σ_s w_b[s]·r_b[s] are derived
+from inputs (not from the effects). Reconciliation holds within
+floating-point tolerance for any sector universe asymmetry.
 """
 
 from __future__ import annotations

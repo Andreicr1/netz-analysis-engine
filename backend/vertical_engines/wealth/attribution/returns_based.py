@@ -49,7 +49,7 @@ def fit_style(
         return _degraded(tickers, t_obs, "ticker_mismatch")
     if t_obs != r_styles.shape[0]:
         return _degraded(tickers, t_obs, "shape_mismatch")
-    if t_obs < min_months:
+    if t_obs < max(min_months, 2):
         return _degraded(tickers, t_obs, "insufficient_history")
 
     if not np.isfinite(r_fund).all() or not np.isfinite(r_styles).all():
@@ -95,7 +95,7 @@ def fit_style(
     # the constrained fit is worse than the mean.
     r_squared = max(0.0, min(1.0, r_squared))
 
-    te_annualized = float(np.std(residuals) * np.sqrt(periods_per_year))
+    te_annualized = float(np.std(residuals, ddof=1) * np.sqrt(periods_per_year))
     confidence = max(0.0, r_squared)
 
     exposures = tuple(
