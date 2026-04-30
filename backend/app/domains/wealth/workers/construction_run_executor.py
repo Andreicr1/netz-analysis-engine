@@ -1861,11 +1861,14 @@ async def _execute_inner(
     # ── 4. Optimizer cascade ──
     # PR-Q116 hotfix #6 — pin a single allocation-window date for the
     # whole run. Without this, a run that crosses midnight could see one
-    # ``date.today()`` in the optimizer and a different one in
+    # date in the optimizer and a different one in
     # ``build_validation_db_context`` below, producing false block/TAA
     # failures when the active strategic_allocation row changes between
     # phases.
-    construction_effective_date = date.today()
+    # PR-Q153 (WMJ-001) — use run.as_of_date instead of date.today() so
+    # that backdated runs execute against the correct date window, cache
+    # hash and compute anchor agree, and audit trail is reproducible.
+    construction_effective_date = run.as_of_date
     base_result = await _run_construction_async(
         db, profile, str(organization_id), portfolio_id=portfolio_id,
         propose_mode=propose_mode,
