@@ -364,22 +364,27 @@ def test_sterling_convention_denominator_documented():
     sterling = _compute_sterling_ratio(daily)
     assert sterling is not None
 
-    # Manually compute what the formula should produce:
+    # Replicate the formula exactly to compute the expected value.
+    from quant_engine.drawdown_service import compute_drawdown_series as _dd
+
     n = len(daily)
     cum_return = float(np.prod(1.0 + daily))
     ann_return = cum_return ** (252.0 / n) - 1
 
-    # Each yearly chunk has max DD ≈ -0.20 (from the 5 loss days).
-    # avg_max_dd ≈ -0.20
-    # Our denominator: |(-0.20) - 0.10| = 0.30
-    # Alternative "modified" denominator: |(-0.20)| - 0.10 = 0.10
-    # Verify our convention produces Sterling = ann_return / ~0.30
-    expected_sterling_original = ann_return / 0.30  # ≈ negative/0.30
-    expected_sterling_modified = ann_return / 0.10  # ≈ negative/0.10
+    n_years = n // 252
+    trimmed = daily[-n_years * 252 :]
+    yearly_max_dds = []
+    for i in range(n_years):
+        chunk = trimmed[i * 252 : (i + 1) * 252]
+        navs = np.concatenate([[1.0], np.cumprod(1 + chunk)])
+        yearly_max_dds.append(float(np.min(_dd(navs))))
 
-    # The actual Sterling should be close to the "original" convention value,
-    # NOT the "modified" value (which is 3× larger in magnitude).
-    assert abs(sterling - expected_sterling_original) < abs(sterling - expected_sterling_modified), (
-        f"Sterling {sterling:.4f} is closer to modified ({expected_sterling_modified:.4f}) "
-        f"than original ({expected_sterling_original:.4f}) — wrong convention"
+    avg_max_dd = float(np.mean(yearly_max_dds))
+    # Pinned convention: denominator = |avg_max_dd − 0.10|
+    denominator = abs(avg_max_dd - 0.10)
+    expected_sterling = ann_return / denominator
+
+    assert sterling == pytest.approx(expected_sterling, abs=1e-8), (
+        f"Sterling {sterling} != expected {expected_sterling} "
+        f"(avg_max_dd={avg_max_dd:.6f}, denominator={denominator:.6f})"
     )
