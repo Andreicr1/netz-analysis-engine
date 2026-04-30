@@ -38,13 +38,20 @@ logger = structlog.get_logger()
 
 
 def _normalize_cik(cik: str | None) -> str | None:
-    """Zero-pad a CIK string to 10 digits. Returns None for invalid input."""
+    """Zero-pad a CIK string to exactly 10 digits. Returns None for invalid input.
+
+    SEC CIKs are at most 10 digits. Values longer than 10 after stripping
+    leading zeros are rejected to prevent silent matview lookup misses.
+    """
     if not cik:
         return None
     stripped = str(cik).strip()
     if not stripped.isdigit():
         return None
-    return stripped.lstrip("0").zfill(10) if stripped else None
+    canonical = stripped.lstrip("0") or "0"
+    if len(canonical) > 10:
+        return None
+    return canonical.zfill(10)
 
 
 def cik_variants(cik: str) -> tuple[str, str]:

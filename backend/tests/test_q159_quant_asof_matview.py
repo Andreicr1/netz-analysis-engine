@@ -106,6 +106,14 @@ class TestMatviewCikPadded:
         assert _normalize_cik("0000012345") == "0000012345"
         assert _normalize_cik("00123") == "0000000123"
 
+    def test_normalize_cik_rejects_overlength(self):
+        """_normalize_cik should reject CIKs longer than 10 digits (Codex P2)."""
+        from vertical_engines.wealth.attribution.holdings_based import _normalize_cik
+
+        assert _normalize_cik("12345678901") is None  # 11 digits
+        assert _normalize_cik("99999999999") is None  # 11 digits
+        assert _normalize_cik("00000000000012345678901") is None  # >10 after strip
+
     def test_fetch_sector_weights_normalizes_cik(self):
         """fetch_sector_weights should normalize CIK internally (Codex P2).
 
