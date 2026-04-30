@@ -240,7 +240,7 @@ class TestValidationGateTaaBands:
     def test_check_16_registered_in_checks(self):
         check_ids = [cid for cid, _ in CHECKS]
         assert "taa_bands_within_ips" in check_ids
-        assert len(CHECKS) == 17
+        assert len(CHECKS) == 18
 
     def test_check_passes_when_bands_within_ips(self):
         payload = _base_payload()
@@ -310,11 +310,11 @@ class TestValidationGateTaaBands:
         assert taa_check.passed is True
 
     def test_check_16_does_not_block_other_checks(self):
-        """All 17 checks still run when TAA check is present."""
+        """All 18 checks still run when TAA check is present."""
         payload = _base_payload()
         db_ctx = ValidationDbContext(block_constraints=BLOCK_CONSTRAINTS)
         result = validate_construction(payload, db_ctx)
-        assert len(result.checks) == 17
+        assert len(result.checks) == 18
 
 
 # ===================================================================
@@ -434,7 +434,7 @@ class TestBackwardCompatibility:
         payload = _base_payload()
         del payload["calibration_snapshot"]["taa"]
         result = validate_construction(payload, ValidationDbContext())
-        assert len(result.checks) == 17
+        assert len(result.checks) == 18
 
     def test_empty_taa_provenance_is_safe(self):
         payload = _base_payload()

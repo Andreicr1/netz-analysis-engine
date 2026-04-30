@@ -1,8 +1,8 @@
-"""Validation gate with 17 checks for construction runs.
+"""Validation gate with 18 checks for construction runs.
 
 Phase 3 Task 3.1 of `docs/superpowers/plans/2026-04-08-portfolio-enterprise-workbench.md`.
 
-Runs 17 independent checks against a construction run payload.
+Runs 18 independent checks against a construction run payload.
 **No fail-fast** — every check is evaluated so the UI can render a
 complete health panel, not just the first failure. Aggregation is
 ``passed = not any(block failures)``.
@@ -32,9 +32,9 @@ Public surface
 - :class:`ValidationResult` — aggregate result
 - :class:`ValidationDbContext` — pre-fetched DB rows needed by the
   checks (keeps the gate synchronous and testable)
-- :func:`validate_construction` — run all 17 and aggregate
+- :func:`validate_construction` — run all 18 and aggregate
 
-The 17 checks
+The 18 checks
 -------------
 1. weights-sum-to-one
 2. no-stale-nav
@@ -90,13 +90,13 @@ class ValidationCheck:
 
 @dataclass(frozen=True, slots=True)
 class ValidationResult:
-    """Aggregate of the 17 checks."""
+    """Aggregate of the 18 checks."""
 
     passed: bool
     """True if no block-severity check failed."""
 
     checks: list[ValidationCheck]
-    """All 17 checks in stable order."""
+    """All 18 checks in stable order."""
 
     warnings: list[ValidationCheck] = field(default_factory=list)
     """Subset of ``checks`` where ``severity='warn'`` and ``passed=False``."""
@@ -884,6 +884,62 @@ def _check_cvar_enforcement(
     )
 
 
+# ── Check #18: NAV synthesis coverage (PR-Q146 C-06) ──────────────
+
+
+def _check_nav_synthesis(
+    run_payload: dict[str, Any],
+    _db: ValidationDbContext,
+) -> ValidationCheck:
+    """Check #18: NAV synthesis produced at least 1 date.
+
+    PR-Q146 (C-06): ``synthesize_portfolio_nav`` may return
+    ``status='no_fund_data'`` with ``dates_computed=0`` when none of the
+    instruments have price data.  Warn severity when the shortfall is
+    solo (no other failures); callers combine with the run-level
+    ``degraded`` escalation for compound failures.
+    """
+    nav_synthesis = (run_payload.get("statistical_inputs") or {}).get(
+        "portfolio_nav_synthesis",
+    )
+    if nav_synthesis is None:
+        return ValidationCheck(
+            id="nav_synthesis_check",
+            label="NAV synthesis coverage",
+            passed=True,
+            severity="warn",
+            value=None,
+            threshold=1,
+            explanation="NAV synthesis not applicable (propose mode or pre-construction).",
+        )
+    dates_computed = nav_synthesis.get("dates_computed", 0)
+    nav_status = nav_synthesis.get("status", "unknown")
+    has_instruments = bool(run_payload.get("weights_proposed"))
+    if dates_computed == 0 and nav_status == "no_fund_data" and has_instruments:
+        return ValidationCheck(
+            id="nav_synthesis_check",
+            label="NAV synthesis coverage",
+            passed=False,
+            severity="warn",
+            value=0,
+            threshold=1,
+            explanation=(
+                f"NAV synthesis returned 0 dates (status={nav_status}). "
+                "None of the portfolio instruments have price data in the "
+                "lookback window."
+            ),
+        )
+    return ValidationCheck(
+        id="nav_synthesis_check",
+        label="NAV synthesis coverage",
+        passed=True,
+        severity="warn",
+        value=dates_computed,
+        threshold=1,
+        explanation=f"NAV synthesis OK: {dates_computed} dates computed.",
+    )
+
+
 # ── Check registry — stable order for JSONB serialization ─────────
 
 
@@ -905,6 +961,7 @@ CHECKS: Final[list[tuple[str, Callable[[dict[str, Any], ValidationDbContext], Va
     ("factor_model_r_squared",          _check_factor_model_r_squared),
     ("taa_bands_within_ips",            _check_taa_bands_within_ips),
     ("cvar_enforcement",                _check_cvar_enforcement),
+    ("nav_synthesis_check",             _check_nav_synthesis),
 ]
 
 
@@ -934,6 +991,7 @@ _INTENDED_SEVERITY: Final[dict[str, Severity]] = {
     "factor_model_r_squared": "warn",
     "taa_bands_within_ips": "block",
     "cvar_enforcement": "block",
+    "nav_synthesis_check": "warn",
 }
 
 
@@ -941,7 +999,7 @@ def validate_construction(
     run_payload: dict[str, Any],
     db_context: ValidationDbContext | None = None,
 ) -> ValidationResult:
-    """Run all 17 checks against the construction run payload.
+    """Run all 18 checks against the construction run payload.
 
     **No fail-fast.** Every check is evaluated so the UI can show
     the full health panel. Aggregation rule:

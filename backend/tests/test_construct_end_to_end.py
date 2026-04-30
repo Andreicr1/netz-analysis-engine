@@ -275,6 +275,7 @@ async def _insert_calibration(
 async def _run_executor_with_mock(
     portfolio_id: uuid.UUID,
     mock_output: dict,
+    nav_summary: dict | None = None,
 ) -> dict:
     """Call ``execute_construction_run`` with a patched ``_run_construction_async``.
 
@@ -289,11 +290,25 @@ async def _run_executor_with_mock(
     async def _mocked(*_args, **_kwargs):
         return mock_output
 
+    # PR-Q146 (C-06): mock NAV synthesis to return a healthy summary
+    # since the test DB has no seeded NAV data. Without this, the
+    # executor escalates to degraded because no_fund_data fires.
+    async def _mock_nav_synthesis(_db, _portfolio, *, commit=True):
+        return nav_summary or {
+            "portfolio_id": str(portfolio_id),
+            "status": "ok",
+            "dates_computed": 100,
+            "final_nav": 1050.0,
+        }
+
     # The executor imports _run_construction_async lazily from the
     # routes module; patch at that exact reference.
     with patch(
         "app.domains.wealth.routes.model_portfolios._run_construction_async",
         side_effect=_mocked,
+    ), patch(
+        "app.domains.wealth.workers.portfolio_nav_synthesizer.synthesize_portfolio_nav",
+        side_effect=_mock_nav_synthesis,
     ):
         async with async_session_factory() as session:
             # Set RLS context for the executor's writes.
@@ -331,6 +346,36 @@ async def _run_executor_with_mock(
     result = dict(row)
     result["_returned_status"] = status
     return result
+
+
+@pytest.mark.asyncio
+async def test_construct_e2e_nav_synthesis_warning_persisted(seeded_portfolio):
+    """Executor-provided NAV synthesis feeds validation check #18."""
+    await _insert_calibration(
+        seeded_portfolio, advisor_enabled=True, max_single_fund_weight=0.25,
+    )
+    row = await _run_executor_with_mock(
+        seeded_portfolio,
+        _HAPPY_OPTIMIZER_OUTPUT,
+        nav_summary={
+            "portfolio_id": str(seeded_portfolio),
+            "status": "no_fund_data",
+            "dates_computed": 0,
+        },
+    )
+
+    assert row["status"] == "degraded"
+
+    statistical_inputs = json.loads(row["statistical_inputs"])
+    assert statistical_inputs["portfolio_nav_synthesis"]["status"] == "no_fund_data"
+
+    validation = json.loads(row["validation"])
+    nav_check = next(
+        c for c in validation["checks"] if c["id"] == "nav_synthesis_check"
+    )
+    assert nav_check["passed"] is False
+    assert nav_check["severity"] == "warn"
+    assert nav_check["value"] == 0
 
 
 # ── Path 1: Happy path ───────────────────────────────────────────
@@ -373,11 +418,11 @@ async def test_construct_e2e_happy_path(seeded_portfolio):
     assert narrative["schema_version"] == 2
     assert len(narrative["technical"]["headline"]) > 0
 
-    # Validation section — aggregate + list of 17 checks
+    # Validation section — aggregate + list of 18 checks
     validation = json.loads(row["validation"])
     assert "passed" in validation
     assert "checks" in validation
-    assert validation["summary"]["total"] == 17
+    assert validation["summary"]["total"] == 18
 
     # Stress results — 4 preset scenarios were run
     stress_results = json.loads(row["stress_results"])
