@@ -198,6 +198,45 @@ def _compute_sortino(returns: np.ndarray, days: int, risk_free_rate: float = 0.0
     )
 
 
+def _compute_information_ratio(
+    fund_returns: np.ndarray,
+    benchmark_returns: np.ndarray,
+    days: int = 252,
+) -> float | None:
+    """Information ratio = annualized active return / annualized tracking error.
+
+    Uses real benchmark returns (from benchmark_nav via block_id), NOT the
+    risk-free rate.  Subtracting a constant (rf) from returns doesn't change
+    std, so IR-vs-rf ≡ Sharpe — which double-counts when scoring weights both
+    IR (0.15) and Sharpe (0.25).
+
+    Parameters
+    ----------
+    fund_returns : np.ndarray
+        Fund daily returns (date-aligned with benchmark_returns).
+    benchmark_returns : np.ndarray
+        Benchmark daily returns (same dates, same length).
+    days : int
+        Window size (default 252 = 1 year).
+
+    Returns None when data is insufficient or tracking error < MIN_ANNUALIZED_VOL.
+
+    WMJ-021: Previously phantom — column existed but was never computed.
+    Codex P1: Must use a real benchmark, not rf (which collapses to Sharpe).
+    """
+    n = min(len(fund_returns), len(benchmark_returns))
+    if n < days:
+        return None
+    fund_window = fund_returns[-days:]
+    bench_window = benchmark_returns[-days:]
+    active = fund_window - bench_window
+    te = float(np.std(active, ddof=1)) * np.sqrt(TRADING_DAYS_PER_YEAR)
+    if te < MIN_ANNUALIZED_VOL:
+        return None
+    ann_active = float(np.mean(active)) * TRADING_DAYS_PER_YEAR
+    return round(ann_active / te, 6)
+
+
 async def _batch_resolve_return_types(
     db: AsyncSession,
     fund_ids: list[uuid.UUID],
@@ -587,6 +626,8 @@ def _compute_metrics_from_returns(
     metrics["sharpe_1y"] = _round_or_none(_compute_sharpe(returns, 252, risk_free_rate))
     metrics["sharpe_3y"] = _round_or_none(_compute_sharpe(returns, 3 * 252, risk_free_rate))
     metrics["sortino_1y"] = _round_or_none(_compute_sortino(returns, 252, risk_free_rate))
+
+    # information_ratio_1y computed in Pass 1.85 (needs benchmark returns by block_id)
 
     # Robust Sharpe (Cornish-Fisher adjusted + Opdyke 95% CI). Populated
     # ALWAYS per PR-Q1 — read by scoring_service only when flag is ON.
@@ -1738,6 +1779,7 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
 
             # Pass 1.6: compute regime-conditional CVaR (BL-9)
             # Reads HMM-classified RISK_OFF/CRISIS dates from macro_regime_history.
+            dated_returns_by_fund: dict[str, list[tuple[date, float]]] = {}
             stress_dates = await _fetch_stress_dates(db, start_date, eval_date)
             logger.info("Regime stress dates fetched", n_stress_dates=len(stress_dates))
 
@@ -1855,6 +1897,53 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                     metrics["inflation_beta"] = round(alt_result.inflation_beta, 4) if alt_result.inflation_beta is not None else None
                     metrics["inflation_beta_r2"] = round(alt_result.inflation_beta_r2, 4) if alt_result.inflation_beta_r2 is not None else None
                 logger.info("alt_analytics_computed", alt_funds=len(alt_fund_ids))
+
+            # Pass 1.85: Information Ratio vs real benchmark (WMJ-021 + Codex P1)
+            # IR = annualized_active_return / tracking_error, where active = fund - benchmark.
+            # Each fund's benchmark is resolved via block_id → allocation_blocks.benchmark_ticker
+            # → benchmark_nav daily returns. Funds without a block or benchmark get IR = None
+            # (honest degradation in scoring — better than double-counting Sharpe).
+            unique_blocks = {bid for bid in block_id_map.values() if bid}
+            bench_returns_by_block: dict[str, list[tuple[date, float]]] = {}
+            for bid in unique_blocks:
+                bench_returns_by_block[bid] = await _fetch_benchmark_dated_returns(
+                    db, bid, start_date, eval_date,
+                )
+            # Batch-fetch dated fund returns if not yet loaded by earlier passes
+            # (avoids N+1 per-fund queries when stress_dates is empty and no FI/alt funds).
+            if not dated_returns_by_fund:
+                dated_returns_by_fund = await _batch_fetch_dated_returns(
+                    db, all_fund_ids, return_type_by_fund, start_date, eval_date,
+                )
+            ir_computed = 0
+            for fund, metrics in computed:
+                fid_str = str(fund.instrument_id)
+                bid = block_id_map.get(fid_str)
+                if not bid or bid not in bench_returns_by_block:
+                    metrics["information_ratio_1y"] = None
+                    continue
+                bench_dated = bench_returns_by_block[bid]
+                if not bench_dated:
+                    metrics["information_ratio_1y"] = None
+                    continue
+                fund_dated = dated_returns_by_fund.get(fid_str)
+                if not fund_dated:
+                    metrics["information_ratio_1y"] = None
+                    continue
+                fund_by_date = {d: r for d, r in fund_dated}
+                bench_by_date = {d: r for d, r in bench_dated}
+                common_dates = sorted(fund_by_date.keys() & bench_by_date.keys())
+                if len(common_dates) < 252:
+                    metrics["information_ratio_1y"] = None
+                    continue
+                fund_arr = np.array([fund_by_date[d] for d in common_dates])
+                bench_arr = np.array([bench_by_date[d] for d in common_dates])
+                metrics["information_ratio_1y"] = _round_or_none(
+                    _compute_information_ratio(fund_arr, bench_arr, 252),
+                )
+                if metrics["information_ratio_1y"] is not None:
+                    ir_computed += 1
+            logger.info("information_ratio_computed", n_ir=ir_computed, n_funds=len(computed))
 
             # Assign scoring_model = "equity" for funds not covered by FI, Cash, or Alternatives
             for fund, metrics in computed:

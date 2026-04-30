@@ -388,6 +388,12 @@ def compute_correlation_regime(
     corr_recent = cov_recent / np.outer(d, d)
     np.fill_diagonal(corr_recent, 1.0)
 
+    # WMJ-015: Save raw (pre-denoising) correlation for display fidelity.
+    # Denoised matrix is used ONLY for eigenvalue concentration and contagion
+    # detection — display-facing correlation_matrix and average_correlation
+    # reflect the raw sample correlations (post-shrinkage, pre-denoising).
+    corr_recent_raw = corr_recent.copy()
+
     # Denoising
     if cfg["apply_denoising"] and N > 1:
         q = N / len(recent_returns)
@@ -408,11 +414,16 @@ def compute_correlation_regime(
         corr_baseline = cov_base / np.outer(d_base, d_base)
         np.fill_diagonal(corr_baseline, 1.0)
 
+        # WMJ-015 / Codex P2: save raw baseline before denoising so that
+        # avg_corr_base is on the same transform as avg_corr (both raw).
+        corr_baseline_raw = corr_baseline.copy()
+
         if cfg["apply_denoising"] and N > 1:
             q_base = N / len(baseline_returns)
             corr_baseline = _marchenko_pastur_denoise(corr_baseline, q_base)
     else:
-        corr_baseline = corr_recent  # fallback
+        corr_baseline = corr_recent  # fallback (denoised)
+        corr_baseline_raw = corr_recent_raw  # fallback (raw)
 
     # Pair correlations
     pairs = []
@@ -444,11 +455,11 @@ def compute_correlation_regime(
     # Strict less-than: DR = 1.2 exactly is NOT alert
     dr_alert = dr < cfg["dr_alert_threshold"]
 
-    # Average correlations (upper triangle)
+    # Average correlations (upper triangle) — use RAW (pre-denoising) for display fidelity
     if N > 1:
-        upper_tri = corr_recent[np.triu_indices(N, k=1)]
+        upper_tri = corr_recent_raw[np.triu_indices(N, k=1)]
         avg_corr = float(np.mean(upper_tri))
-        upper_tri_base = corr_baseline[np.triu_indices(N, k=1)]
+        upper_tri_base = corr_baseline_raw[np.triu_indices(N, k=1)]
         avg_corr_base = float(np.mean(upper_tri_base))
     else:
         avg_corr = 0.0
@@ -457,9 +468,9 @@ def compute_correlation_regime(
     # Regime shift — PR-Q36 F03: symmetric detection (both contagion and dispersion)
     regime_shift = abs(avg_corr - avg_corr_base) > cfg["contagion_threshold"]
 
-    # Convert correlation matrix to nested tuples
+    # Convert correlation matrix to nested tuples — RAW for display fidelity (WMJ-015)
     corr_tuples = tuple(
-        tuple(round(float(v), 6) for v in row) for row in corr_recent
+        tuple(round(float(v), 6) for v in row) for row in corr_recent_raw
     )
 
     return CorrelationRegimeResult(
