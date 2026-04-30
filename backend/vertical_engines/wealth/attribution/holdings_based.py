@@ -23,7 +23,7 @@ from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from sqlalchemy import bindparam, text
+from sqlalchemy import text
 
 from vertical_engines.wealth.attribution.models import (
     AttributionRequest,
@@ -35,6 +35,23 @@ if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
+
+
+def _normalize_cik(cik: str | None) -> str | None:
+    """Zero-pad a CIK string to exactly 10 digits. Returns None for invalid input.
+
+    SEC CIKs are at most 10 digits. Values longer than 10 after stripping
+    leading zeros are rejected to prevent silent matview lookup misses.
+    """
+    if not cik:
+        return None
+    stripped = str(cik).strip()
+    if not stripped.isdigit():
+        return None
+    canonical = stripped.lstrip("0") or "0"
+    if len(canonical) > 10:
+        return None
+    return canonical.zfill(10)
 
 
 def cik_variants(cik: str) -> tuple[str, str]:
@@ -107,15 +124,23 @@ async def latest_period_for_cik(
 ) -> date | None:
     """Return the latest matview period_of_report for this CIK, or None.
 
+    After migration 0198, ``filer_cik`` in the matview is always 10-digit
+    zero-padded (sourced from ``cik_padded``), so a single equality check
+    against the normalized CIK suffices.  Returns ``None`` when the CIK
+    cannot be normalized (malformed / overlength) — no fallback to raw
+    CIK (Codex P2).
+
     When *asof* is provided the SQL enforces ``period_of_report <= asof``
     so that backdated attribution requests never pick up filings that
     post-date the analysis date (WMJ-007 point-in-time correctness).
     """
-    candidates = cik_variants(cik)
+    padded = _normalize_cik(cik)
+    if padded is None:
+        return None
 
-    # Build WHERE clauses dynamically based on supplied bounds.
-    clauses = ["filer_cik IN :candidates"]
-    params: dict = {"candidates": list(candidates)}
+    clauses = ["filer_cik = :cik"]
+    params: dict = {"cik": padded}
+
 
     if not_before is not None:
         clauses.append("period_of_report >= :not_before")
@@ -129,8 +154,7 @@ async def latest_period_for_cik(
         SELECT MAX(period_of_report)
         FROM mv_nport_sector_attribution
         WHERE {where}
-    """).bindparams(bindparam("candidates", expanding=True))
-
+    """)
     row = (await db.execute(stmt, params)).first()
     if row is None:
         return None
@@ -140,7 +164,16 @@ async def latest_period_for_cik(
 async def fetch_sector_weights(
     db: "AsyncSession", cik: str, period: date,
 ) -> tuple[list[SectorWeight], float]:
-    """Read one matview period and return (sectors, aum_total)."""
+    """Read one matview period and return (sectors, aum_total).
+
+    After migration 0198, ``filer_cik`` is always 10-digit padded.
+    Normalizes the input CIK defensively so callers outside
+    ``run_holdings_rail`` (e.g. ``benchmark_proxy``) don't need to pad.
+    Returns empty result when the CIK cannot be normalized.
+    """
+    padded = _normalize_cik(cik)
+    if padded is None:
+        return [], 0.0
     rows = (await db.execute(text("""
         SELECT issuer_category, industry_sector,
                aum_usd, weight, holdings_count
@@ -149,7 +182,7 @@ async def fetch_sector_weights(
           AND period_of_report = :period
         ORDER BY weight DESC
         LIMIT :lim
-    """), {"cik": cik, "period": period, "lim": MAX_SECTOR_ROWS})).mappings().all()
+    """), {"cik": padded, "period": period, "lim": MAX_SECTOR_ROWS})).mappings().all()
 
     sectors = [
         SectorWeight(
@@ -204,8 +237,12 @@ async def run_holdings_rail(
     and returning a cik-or-None; defaults to :func:`resolve_fund_cik`.
     """
     resolver = cik_resolver or resolve_fund_cik
-    cik = await resolver(db, request.fund_instrument_id)
-    if not cik:
+    raw_cik = await resolver(db, request.fund_instrument_id)
+    if not raw_cik:
+        return None
+    # Ensure padded 10-digit CIK for matview queries (post migration 0198).
+    cik = _normalize_cik(raw_cik)
+    if cik is None:
         return None
 
     not_before = request.asof - timedelta(days=int(30.4375 * max_filing_age_months))
