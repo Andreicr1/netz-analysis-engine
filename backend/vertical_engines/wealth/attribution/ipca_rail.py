@@ -36,8 +36,7 @@ async def load_latest_ipca_fit(
     stmt = text(
         """
         SELECT k_factors, gamma_loadings, factor_returns,
-               oos_r_squared, converged, n_iterations,
-               degraded, degraded_reason
+               oos_r_squared, converged, n_iterations
         FROM factor_model_fits
         WHERE engine = 'ipca'
           AND asset_class = :asset_class
@@ -50,7 +49,7 @@ async def load_latest_ipca_fit(
     row = res.first()
     if not row:
         return None
-        
+
     factor_returns_dict = row.factor_returns
     # Extract factor_returns matrix and dates
     # Assuming factor_returns is stored as {"dates": [...], "values": [[...], ...]}
@@ -58,18 +57,27 @@ async def load_latest_ipca_fit(
     dates = pd.DatetimeIndex(dates_str) if dates_str else None
     factor_returns = np.array(factor_returns_dict.get("values", []))
 
+    # WMJ-013: infer degraded status from existing columns. The DB table
+    # has no `degraded` column (Codex P1); reconstruct from converged +
+    # oos_r_squared which are the two dominant degraded drivers in
+    # fit_universe(). The WHERE clause guarantees (converged OR oos_r2>0),
+    # so a non-converged row here has positive OOS R² but hit max_iter.
+    oos_r2 = float(row.oos_r_squared) if row.oos_r_squared is not None else 0.0
+    is_degraded = not row.converged
+    degraded_reason = "final_fit_did_not_converge" if is_degraded else None
+
     return IPCAFit(
         gamma=np.array(row.gamma_loadings),
         factor_returns=factor_returns,
         K=row.k_factors,
         intercept=False,
         r_squared=0.0,
-        oos_r_squared=float(row.oos_r_squared) if row.oos_r_squared is not None else 0.0,
+        oos_r_squared=oos_r2,
         converged=row.converged,
         n_iterations=row.n_iterations,
         dates=dates,
-        degraded=bool(row.degraded) if row.degraded is not None else False,
-        degraded_reason=row.degraded_reason,
+        degraded=is_degraded,
+        degraded_reason=degraded_reason,
     )
 
 

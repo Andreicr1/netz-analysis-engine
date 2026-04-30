@@ -125,13 +125,12 @@ def _nav_rows_spanning_2024_to_2026():
 _FitRow = namedtuple("_FitRow", [
     "k_factors", "gamma_loadings", "factor_returns",
     "oos_r_squared", "converged", "n_iterations",
-    "degraded", "degraded_reason",
 ])
 
 
 @pytest.mark.asyncio
-async def test_load_ipca_fit_propagates_degraded_flag():
-    """1. load_latest_ipca_fit propagates degraded/degraded_reason from DB row."""
+async def test_load_ipca_fit_infers_degraded_from_converged():
+    """1. Non-converged fit → degraded=True inferred from converged column."""
     K = 3
     gamma = np.eye(K).tolist()
     factor_returns_dict = {
@@ -143,10 +142,8 @@ async def test_load_ipca_fit_propagates_degraded_flag():
         gamma_loadings=gamma,
         factor_returns=factor_returns_dict,
         oos_r_squared=0.03,
-        converged=True,
-        n_iterations=50,
-        degraded=True,
-        degraded_reason="insufficient_dates_40_lt_72",
+        converged=False,
+        n_iterations=200,
     )
 
     async def mock_execute(stmt, params=None):
@@ -158,12 +155,12 @@ async def test_load_ipca_fit_propagates_degraded_flag():
     fit = await load_latest_ipca_fit(db, "Equity")
     assert fit is not None
     assert fit.degraded is True
-    assert fit.degraded_reason == "insufficient_dates_40_lt_72"
+    assert fit.degraded_reason == "final_fit_did_not_converge"
 
 
 @pytest.mark.asyncio
-async def test_load_ipca_fit_defaults_degraded_false():
-    """1b. When DB row has degraded=None, IPCAFit defaults to False."""
+async def test_load_ipca_fit_converged_not_degraded():
+    """1b. Converged fit → degraded=False."""
     K = 3
     gamma = np.eye(K).tolist()
     factor_returns_dict = {
@@ -177,8 +174,6 @@ async def test_load_ipca_fit_defaults_degraded_false():
         oos_r_squared=0.05,
         converged=True,
         n_iterations=50,
-        degraded=None,
-        degraded_reason=None,
     )
 
     async def mock_execute(stmt, params=None):
