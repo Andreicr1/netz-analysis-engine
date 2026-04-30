@@ -123,20 +123,24 @@ class AttributionService:
         benchmark_returns = np.array([benchmark_returns_by_block[bid] for bid in block_ids])
         labels = [block_labels.get(bid, bid) for bid in block_ids]
 
-        # Weight normalization check
+        # Weight normalization check — compute residuals independently
         bw_sum = float(np.sum(benchmark_weights))
-        if abs(bw_sum - 1.0) > _WEIGHT_SUM_TOLERANCE and bw_sum > 0:
-            residual = 1.0 - bw_sum
-            benchmark_weights = np.append(benchmark_weights, residual)
-            portfolio_weights = np.append(portfolio_weights, residual)
+        pw_sum = float(np.sum(portfolio_weights))
+        needs_cash = (abs(bw_sum - 1.0) > _WEIGHT_SUM_TOLERANCE and bw_sum > 0) or \
+                     (abs(pw_sum - 1.0) > _WEIGHT_SUM_TOLERANCE and pw_sum > 0)
+        if needs_cash:
+            benchmark_weights = np.append(benchmark_weights, 1.0 - bw_sum)
+            portfolio_weights = np.append(portfolio_weights, 1.0 - pw_sum)
             portfolio_returns = np.append(portfolio_returns, 0.0)
             benchmark_returns = np.append(benchmark_returns, 0.0)
             labels.append(_CASH_LABEL)
             block_ids.append(_CASH_LABEL)
             logger.info(
                 "attribution_weight_normalization",
-                original_sum=bw_sum,
-                residual=residual,
+                bw_original_sum=bw_sum,
+                pw_original_sum=pw_sum,
+                bw_residual=1.0 - bw_sum,
+                pw_residual=1.0 - pw_sum,
             )
 
         return compute_attribution(
@@ -521,6 +525,7 @@ def _cache_key(request: AttributionRequest) -> str:
             "basket": basket,
             "lookback": request.lookback_months,
             "min": request.min_months,
+            "asset_class": request.fund_asset_class,
         },
         sort_keys=True,
     ).encode()
