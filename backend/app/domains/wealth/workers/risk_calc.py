@@ -1909,6 +1909,12 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                 bench_returns_by_block[bid] = await _fetch_benchmark_dated_returns(
                     db, bid, start_date, eval_date,
                 )
+            # Batch-fetch dated fund returns if not yet loaded by earlier passes
+            # (avoids N+1 per-fund queries when stress_dates is empty and no FI/alt funds).
+            if not dated_returns_by_fund:
+                dated_returns_by_fund = await _batch_fetch_dated_returns(
+                    db, all_fund_ids, return_type_by_fund, start_date, eval_date,
+                )
             ir_computed = 0
             for fund, metrics in computed:
                 fid_str = str(fund.instrument_id)
@@ -1920,14 +1926,7 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                 if not bench_dated:
                     metrics["information_ratio_1y"] = None
                     continue
-                # Align fund and benchmark on common dates
-                fund_dated = dated_returns_by_fund.get(fid_str) if dated_returns_by_fund else None
-                if not fund_dated:
-                    # Fetch on-demand if not yet loaded by earlier passes
-                    fund_dated_raw = await _batch_fetch_dated_returns(
-                        db, [fund.instrument_id], return_type_by_fund, start_date, eval_date,
-                    )
-                    fund_dated = fund_dated_raw.get(fid_str, [])
+                fund_dated = dated_returns_by_fund.get(fid_str)
                 if not fund_dated:
                     metrics["information_ratio_1y"] = None
                     continue
