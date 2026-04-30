@@ -100,9 +100,9 @@ class ValidationStatus:
     """Minimal projection of a construction run's validation result.
 
     Used by ``compute_allowed_actions`` to decide whether ``approve`` is
-    a valid action when the portfolio is in ``constructed`` state. Only
-    the two booleans matter — the full ``ValidationResult`` lives in the
-    construction run record (Phase 3 Task 3.1).
+    a valid action when the portfolio is in ``constructed`` state. The
+    full ``ValidationResult`` lives in the construction run record
+    (Phase 3 Task 3.1).
     """
 
     has_run: bool
@@ -111,6 +111,12 @@ class ValidationStatus:
     passed: bool
     """True if the most recent construction run's validation gate passed
     with zero block-severity failures."""
+
+    run_status: str | None = None
+    """PR-Q140 (C-01): construction run terminal status. When
+    ``mandate_infeasible``, the approve action is blocked regardless of
+    ``passed`` — the universe cannot satisfy the configured CVaR limit,
+    so progressing to approval is semantically invalid."""
 
 
 @dataclass(frozen=True)
@@ -176,11 +182,20 @@ def compute_allowed_actions(
     elif state == "constructed":
         # ``validate`` is always available — it just re-runs the gate.
         actions.append(ACTION_VALIDATE)
-        # Soft-block per OD-5: keep ``approve`` visible even if validation
-        # is failing — the route captures the override rationale.
-        if validation is not None and validation.has_run:
-            if validation.passed or not policy.require_construction_for_approve:
-                actions.append(ACTION_APPROVE)
+        # PR-Q140 (C-01): mandate_infeasible blocks approval unconditionally.
+        # The universe cannot satisfy the configured CVaR limit — progressing
+        # to approval is semantically invalid; operator must expand universe
+        # or relax the limit first.
+        _mandate_infeasible = (
+            validation is not None
+            and validation.run_status == "mandate_infeasible"
+        )
+        if not _mandate_infeasible:
+            # Soft-block per OD-5: keep ``approve`` visible even if validation
+            # is failing — the route captures the override rationale.
+            if validation is not None and validation.has_run:
+                if validation.passed or not policy.require_construction_for_approve:
+                    actions.append(ACTION_APPROVE)
         actions.append(ACTION_REJECT)
         actions.append(ACTION_REBUILD_DRAFT)
 

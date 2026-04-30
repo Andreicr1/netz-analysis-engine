@@ -438,14 +438,15 @@ _PHASE_PUBLIC_KEY: dict[str, str] = {
 # - Phase 1/2 win → succeeded
 # - Phase 3 winner WITHIN cvar_limit → succeeded (rare — Phase 1 usually
 #   wins whenever the universe supports it)
-# - Phase 3 winner ABOVE cvar_limit → degraded (universe floor binds)
+# - Phase 3 winner ABOVE cvar_limit → mandate_infeasible (PR-Q140: universe
+#   floor binds — engine working correctly, configured limit unreachable)
 # - Upstream heuristic (compute_fund_level_inputs failed before cascade) → degraded
 # - Constraint polytope empty (block bands sum > 1) → failed
 _STATUS_BY_SUMMARY: dict[str, str] = {
     "phase_1_succeeded": "succeeded",
     "phase_2_robust_succeeded": "succeeded",
     "phase_3_min_cvar_within_limit": "succeeded",
-    "phase_3_min_cvar_above_limit": "degraded",
+    "phase_3_min_cvar_above_limit": "mandate_infeasible",
     "upstream_heuristic": "degraded",
     "constraint_polytope_empty": "failed",
 }
@@ -483,7 +484,7 @@ def _build_cascade_telemetry(
     -------
     (telemetry_dict, run_status)
         ``telemetry_dict`` matches the shape in PR-A11 Section A.2.
-        ``run_status`` is one of ``succeeded|degraded|failed``.
+        ``run_status`` is one of ``succeeded|mandate_infeasible|degraded|failed``.
     """
     block = cascade_block or {}
     raw_attempts: list[dict[str, Any]] = list(block.get("phase_attempts") or [])
@@ -1646,18 +1647,19 @@ async def execute_construction_run(
         )
         return run
 
-    # PR-A12 cascade summary enum drives run.status. Post-A12 there is no
-    # cvar-blind fallback that produced weights — Phase 3 always runs
-    # CVaR-aware, so ``phase_3_min_cvar_above_limit`` and ``upstream_heuristic``
-    # are the only ``degraded`` outcomes; ``constraint_polytope_empty`` is the
-    # only remaining terminal failure. The legacy solver-string check stays
+    # PR-A12 / PR-Q140 cascade summary enum drives run.status.
+    # Post-A12 there is no cvar-blind fallback that produced weights —
+    # Phase 3 always runs CVaR-aware, so ``phase_3_min_cvar_above_limit``
+    # yields ``mandate_infeasible`` (PR-Q140: engine working, configured
+    # limit unreachable), ``upstream_heuristic`` yields ``degraded``
+    # (technical fallback), ``constraint_polytope_empty`` is the only
+    # remaining terminal failure. The legacy solver-string check stays
     # as a defensive fallback for empty cascade_telemetry (pre-A11 mocks).
     telemetry_summary = (run.cascade_telemetry or {}).get("cascade_summary")
     solver = (run.optimizer_trace or {}).get("solver")
-    if telemetry_summary in (
-        "phase_3_min_cvar_above_limit",
-        "upstream_heuristic",
-    ):
+    if telemetry_summary == "phase_3_min_cvar_above_limit":
+        run.status = "mandate_infeasible"
+    elif telemetry_summary == "upstream_heuristic":
         run.status = "degraded"
     elif telemetry_summary == "constraint_polytope_empty":
         run.status = "failed"

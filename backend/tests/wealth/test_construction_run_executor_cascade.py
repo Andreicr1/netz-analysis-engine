@@ -56,13 +56,14 @@ def _phase_3_above_limit_block() -> dict:
     }
 
 
-def test_phase_3_above_limit_yields_degraded_and_floor_signal() -> None:
+def test_phase_3_above_limit_yields_mandate_infeasible_and_floor_signal() -> None:
     telemetry, status = _build_cascade_telemetry(
         cascade_block=_phase_3_above_limit_block(),
         optimizer_trace={"status": "degraded"},
         cvar_limit=0.05,
     )
-    assert status == "degraded"
+    # PR-Q140: mandate infeasibility is distinct from technical degradation.
+    assert status == "mandate_infeasible"
     assert telemetry["cascade_summary"] == "phase_3_min_cvar_above_limit"
     assert telemetry["min_achievable_cvar"] == 0.0635
     band = telemetry["achievable_return_band"]
