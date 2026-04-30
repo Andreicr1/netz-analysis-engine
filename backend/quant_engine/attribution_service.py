@@ -175,24 +175,38 @@ def compute_multi_period_attribution(
     R_p_total = float(np.prod([1 + r for r in portfolio_period_returns]) - 1)
     R_b_total = float(np.prod([1 + r for r in benchmark_period_returns]) - 1)
 
-    # Carino smoothing factors
-    def _carino_factor(r: float) -> float:
-        if abs(r) < 1e-10:
-            return 1.0
-        return float(np.log(1 + r) / r)
+    # Carino (1999) smoothing factors — full formula:
+    #   k_t = (ln(1 + R_p_t) - ln(1 + R_b_t)) / (R_p_t - R_b_t)
+    # When portfolio and benchmark returns are nearly equal, L'Hopital
+    # gives k_t -> 1 / (1 + R_p_t).
+    def _carino_factor(r_p: float, r_b: float) -> float:
+        diff = r_p - r_b
+        if abs(diff) < 1e-10:
+            return 1.0 / (1.0 + r_p) if abs(1.0 + r_p) > 1e-10 else 1.0
+        return float((np.log(1 + r_p) - np.log(1 + r_b)) / diff)
 
-    k_total = _carino_factor(R_p_total - R_b_total) if abs(R_p_total - R_b_total) > 1e-10 else 1.0
+    # Per-period Carino factors and arithmetic excess returns
+    k_values = [
+        _carino_factor(portfolio_period_returns[t], benchmark_period_returns[t])
+        for t in range(len(period_results))
+    ]
+    excess_values = [
+        portfolio_period_returns[t] - benchmark_period_returns[t]
+        for t in range(len(period_results))
+    ]
+
+    # K is data-driven: weighted average of k_t by excess_t (exact by construction)
+    excess_total = R_p_total - R_b_total
+    if abs(excess_total) > 1e-10:
+        K = sum(k * e for k, e in zip(k_values, excess_values, strict=False)) / excess_total
+    else:
+        K = 1.0
 
     # Aggregate sector-level effects with Carino linking
     sector_map: dict[str, dict[str, float]] = {}
 
     for t, result in enumerate(period_results):
-        r_p_t = portfolio_period_returns[t]
-        r_b_t = benchmark_period_returns[t]
-        excess_t = r_p_t - r_b_t
-
-        k_t = _carino_factor(excess_t) if abs(excess_t) > 1e-10 else 1.0
-        scale = k_t / k_total if abs(k_total) > 1e-10 else 1.0
+        scale = k_values[t] / K if abs(K) > 1e-10 else 1.0
 
         for s in result.sectors:
             if s.sector not in sector_map:

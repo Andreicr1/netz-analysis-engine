@@ -198,12 +198,12 @@ class AttributionService:
 
         # Aggregate sector effects as simple average
         sector_map: dict[str, dict[str, float]] = {}
-        total_p = 0.0
-        total_b = 0.0
+
+        # Geometric compounding for total returns (F-S12-08 fix)
+        total_p = float(np.prod([1 + r.total_portfolio_return for r in period_results]) - 1)
+        total_b = float(np.prod([1 + r.total_benchmark_return for r in period_results]) - 1)
 
         for r in period_results:
-            total_p += r.total_portfolio_return
-            total_b += r.total_benchmark_return
             for s in r.sectors:
                 if s.sector not in sector_map:
                     sector_map[s.sector] = {
@@ -228,16 +228,14 @@ class AttributionService:
                 ),
             )
 
-        avg_p = total_p / n
-        avg_b = total_b / n
         alloc_t = sum(s.allocation_effect for s in sectors)
         select_t = sum(s.selection_effect for s in sectors)
         interact_t = sum(s.interaction_effect for s in sectors)
 
         return AttributionResult(
-            total_portfolio_return=round(avg_p, 6),
-            total_benchmark_return=round(avg_b, 6),
-            total_excess_return=round(avg_p - avg_b, 6),
+            total_portfolio_return=round(total_p, 6),
+            total_benchmark_return=round(total_b, 6),
+            total_excess_return=round(total_p - total_b, 6),
             sectors=sectors,
             allocation_total=round(alloc_t, 6),
             selection_total=round(select_t, 6),
