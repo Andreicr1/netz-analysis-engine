@@ -284,3 +284,108 @@ class TestCarinoFactorMath:
             + result.interaction_total
         )
         assert abs(effects_sum - (R_p - R_b)) < 1e-5
+
+
+def _make_unavailable_period(p_ret: float) -> AttributionResult:
+    """Build a period with benchmark_available=False (NaN benchmark return).
+
+    Mirrors what the service emits on the unavailable branch (Catch A):
+    fund return is observed (real number), benchmark is NaN, sectors empty.
+    """
+    return AttributionResult(
+        total_portfolio_return=p_ret,
+        total_benchmark_return=float("nan"),
+        total_excess_return=float("nan"),
+        sectors=[],
+        allocation_total=0.0,
+        selection_total=0.0,
+        interaction_total=0.0,
+        n_periods=1,
+        benchmark_available=False,
+    )
+
+
+class TestSimpleAverageLinkingUnavailablePeriods:
+    """Codex P1 (Q155 hotfix): NaN benchmark returns from unavailable periods
+    must NOT propagate through ``_simple_average_linking``.
+    """
+
+    def test_simple_average_linking_skips_unavailable_periods(self):
+        """3 periods (2 available + 1 unavailable) — linker must produce a
+        finite linked benchmark return computed only from the available
+        periods, while the linked portfolio return reflects all 3.
+        """
+        svc = AttributionService()
+
+        # Two available periods with equal small excess so the linker hits
+        # the simple-average fallback (|total_excess| < 1e-10).
+        r1 = _make_period(0.03, 0.03, [("Equity", 0.0, 0.0, 0.0)])
+        r2 = _make_period(0.04, 0.04, [("Equity", 0.0, 0.0, 0.0)])
+        # One unavailable period — fund return observed, benchmark NaN.
+        r3 = _make_unavailable_period(0.02)
+
+        # Drive the fallback via b_returns equal to p_returns (excess = 0).
+        # Catch B in the route would have recomputed b_ret for the unavailable
+        # period; we mimic that by passing the same value as p (so total
+        # excess across all three is exactly zero).
+        result = svc.compute_multi_period(
+            [r1, r2, r3],
+            [0.03, 0.04, 0.02],
+            [0.03, 0.04, 0.02],
+        )
+
+        # Linked benchmark must be finite — geometric compound of the two
+        # available periods only.
+        assert np.isfinite(result.total_benchmark_return), (
+            f"NaN leaked into linked benchmark: {result.total_benchmark_return}"
+        )
+        expected_bench = 1.03 * 1.04 - 1  # 0.0712
+        assert result.total_benchmark_return == pytest.approx(expected_bench, abs=1e-6)
+
+        # Portfolio return reflects ALL 3 periods (Catch A guarantees fund
+        # performance survives the unavailable branch).
+        expected_p = 1.03 * 1.04 * 1.02 - 1
+        assert result.total_portfolio_return == pytest.approx(expected_p, abs=1e-6)
+
+        # benchmark_available is True because at least one period had a
+        # benchmark observation.
+        assert result.benchmark_available is True
+        assert np.isfinite(result.total_excess_return)
+
+    def test_simple_average_linking_all_unavailable_returns_unavailable(self):
+        """3 periods all benchmark_available=False — linked result must
+        signal benchmark unavailability with NaN, but preserve the linked
+        fund return (geometric compound across all periods).
+        """
+        svc = AttributionService()
+
+        r1 = _make_unavailable_period(0.03)
+        r2 = _make_unavailable_period(0.05)
+        r3 = _make_unavailable_period(-0.02)
+
+        # Force the simple-average fallback path: b_returns equal to p_returns
+        # so total excess is exactly zero. (In practice, the route would pass
+        # b_ret = 0.0 for every unavailable period when no benchmark dict
+        # exists — same trigger.)
+        result = svc.compute_multi_period(
+            [r1, r2, r3],
+            [0.03, 0.05, -0.02],
+            [0.03, 0.05, -0.02],
+        )
+
+        # Benchmark genuinely unknown — surface NaN, NOT a fabricated zero.
+        assert result.benchmark_available is False
+        assert np.isnan(result.total_benchmark_return)
+        assert np.isnan(result.total_excess_return)
+
+        # Fund return must remain valid: geometric compound across all 3.
+        expected_p = 1.03 * 1.05 * 0.98 - 1
+        assert np.isfinite(result.total_portfolio_return)
+        assert result.total_portfolio_return == pytest.approx(expected_p, abs=1e-6)
+
+        # No sector effects for all-unavailable case.
+        assert result.sectors == []
+        assert result.allocation_total == 0.0
+        assert result.selection_total == 0.0
+        assert result.interaction_total == 0.0
+        assert result.n_periods == 3

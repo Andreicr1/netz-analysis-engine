@@ -298,19 +298,57 @@ class AttributionService:
         self,
         period_results: list[AttributionResult],
     ) -> AttributionResult:
-        """Fallback when Carino diverges: simple average of period effects."""
+        """Fallback when Carino diverges: simple average of period effects.
+
+        Codex P1 (Q155 hotfix): periods with ``benchmark_available=False`` carry
+        ``total_benchmark_return = NaN`` to signal "unknown benchmark" in
+        single-period results. When this fallback path runs over multi-period
+        windows that include such periods, NaN must NOT propagate into the
+        linked benchmark/excess outputs. We therefore split the aggregation:
+
+          * ``total_portfolio_return``: geometric-compounded across ALL periods
+            (every period's fund return is real per Catch A).
+          * ``total_benchmark_return`` / sector effects / per-period averaging:
+            computed only over the subset where ``benchmark_available is True``.
+          * If NO period has an observed benchmark, return
+            ``benchmark_available=False`` with a NaN benchmark return — the
+            multi-period window is genuinely unknown on the benchmark side.
+        """
         n = len(period_results)
         if n == 0:
             return AttributionResult()
 
-        # Aggregate sector effects as simple average
-        sector_map: dict[str, dict[str, float]] = {}
-
-        # Geometric compounding for total returns (F-S12-08 fix)
+        # Always compound fund return across every period — fund performance
+        # is observed even when the benchmark stream is unknown.
         total_p = float(np.prod([1 + r.total_portfolio_return for r in period_results]) - 1)
-        total_b = float(np.prod([1 + r.total_benchmark_return for r in period_results]) - 1)
 
-        for r in period_results:
+        # Filter for benchmark-aware aggregation
+        bench_periods = [r for r in period_results if r.benchmark_available]
+
+        if not bench_periods:
+            # Every period unavailable — preserve fund return, signal NaN bench
+            return AttributionResult(
+                total_portfolio_return=round(total_p, 6),
+                total_benchmark_return=float("nan"),
+                total_excess_return=float("nan"),
+                sectors=[],
+                allocation_total=0.0,
+                selection_total=0.0,
+                interaction_total=0.0,
+                n_periods=n,
+                benchmark_available=False,
+            )
+
+        # Aggregate sector effects as simple average over available periods only
+        sector_map: dict[str, dict[str, float]] = {}
+        n_bench = len(bench_periods)
+
+        # Geometric compounding for benchmark total over available periods
+        # (F-S12-08 fix). NaN periods are skipped — they would otherwise
+        # poison the product.
+        total_b = float(np.prod([1 + r.total_benchmark_return for r in bench_periods]) - 1)
+
+        for r in bench_periods:
             for s in r.sectors:
                 if s.sector not in sector_map:
                     sector_map[s.sector] = {
@@ -318,9 +356,9 @@ class AttributionService:
                         "selection": 0.0,
                         "interaction": 0.0,
                     }
-                sector_map[s.sector]["allocation"] += s.allocation_effect / n
-                sector_map[s.sector]["selection"] += s.selection_effect / n
-                sector_map[s.sector]["interaction"] += s.interaction_effect / n
+                sector_map[s.sector]["allocation"] += s.allocation_effect / n_bench
+                sector_map[s.sector]["selection"] += s.selection_effect / n_bench
+                sector_map[s.sector]["interaction"] += s.interaction_effect / n_bench
 
         sectors = []
         for label, effects in sector_map.items():
