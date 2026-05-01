@@ -166,8 +166,7 @@ def upgrade() -> None:
     # (UNIQUE on ``portfolio_id`` alone), so the legacy ``aggressive``
     # value is a free-form artefact. Plain UPDATE is collision-free.
     op.execute(
-        "UPDATE portfolio_calibration SET mandate = 'growth' "
-        "WHERE mandate = 'aggressive'",
+        "UPDATE portfolio_calibration SET mandate = 'growth' WHERE mandate = 'aggressive'",
     )
 
 
