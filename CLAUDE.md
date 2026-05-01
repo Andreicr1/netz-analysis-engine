@@ -388,6 +388,8 @@ Portfolio is asset-centric post-conversion. Tenor/basis/covenant are deal-level 
 
 Immutable audit logging via `write_audit_event()` in `backend/app/core/db/audit.py`. Records CREATE/UPDATE/DELETE with before/after JSONB snapshots, correlated via `request_id`. Model: `AuditEvent` in `backend/app/core/db/models.py` (RLS-scoped). Used across 17+ modules for entity-level change tracking.
 
+- **`audit_events` is a TimescaleDB hypertable with columnstore (compression) enabled** — RLS state cannot be toggled while compression is on (PR-Q11 Phase 5 incompatibility, same constraint as `fund_risk_metrics`). The table is treated as **Option A: WHERE-clause-filtered, helper-enforced**. All writers MUST use `write_audit_event()`, which injects `organization_id` from the active RLS `SET LOCAL` context (or accepts it explicitly for global pipelines via `allow_global=True` per migration 0195). All readers MUST filter by `WHERE organization_id = (SELECT current_setting('app.current_organization_id', true))::uuid` — every callsite is enforced by code review, since the policy that the table carries (migration 0195) is not guaranteed to be active. Direct `INSERT INTO audit_events` outside the helper is forbidden.
+
 ## Instrument Identity Layer (PR-Q11, 2026-04-26)
 
 Canonical resolver for CIK / CUSIP / ticker / ISIN / FIGI / series_id / class_id / CRD / private_fund_id / LEI lookups. Lives at `backend/data_providers/identity/resolver.py`. Backed by global table `instrument_identity` (current state, listing/share-class grain) plus append-only `instrument_identity_history` for SCD audit.

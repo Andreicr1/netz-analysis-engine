@@ -131,11 +131,16 @@ def _make_db_for_approve(
     # Approvals supersede/insert — no RETURNING, so bare MagicMock ok.
     generic_result = MagicMock()
 
-    first_call = {"done": False}
+    state = {"run_consumed": False}
 
     async def _execute(stmt, params: dict | None = None):
-        if not first_call["done"]:
-            first_call["done"] = True
+        # PR-BE-3: handler now takes ``pg_advisory_xact_lock`` first.
+        sql = str(getattr(stmt, "text", stmt))
+        if "pg_advisory_xact_lock" in sql:
+            return generic_result
+        # The run lookup is the next non-lock SQL call.
+        if not state["run_consumed"]:
+            state["run_consumed"] = True
             return run_result
         # SA band update calls carry "block_id" in params.
         if params and "block_id" in params:
@@ -143,6 +148,9 @@ def _make_db_for_approve(
         return generic_result
 
     db.execute = AsyncMock(side_effect=_execute)
+    # PR-BE-3: write_audit_event() calls db.add(event) + db.flush().
+    db.add = MagicMock()
+    db.flush = AsyncMock()
     return db
 
 
