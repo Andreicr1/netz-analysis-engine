@@ -14,12 +14,15 @@
 	import { workspace } from "@investintell/ii-terminal-core/state/portfolio-workspace.svelte";
 	import type { ModelPortfolio } from "@investintell/ii-terminal-core/types/model-portfolio";
 	import StressTab from "@investintell/ii-terminal-core/components/terminal/builder/StressTab.svelte";
+	import PortfolioGateNotice from "@investintell/ii-terminal-core/components/portfolio/PortfolioGateNotice.svelte";
 
 	interface Props {
 		portfolios: ModelPortfolio[];
+		/** Active allocation profile slug — drives empty-state copy. */
+		profile: string;
 	}
 
-	let { portfolios }: Props = $props();
+	let { portfolios, profile }: Props = $props();
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -42,9 +45,7 @@
 
 <div class="stress">
 	{#if portfolios.length === 0}
-		<div class="stress__empty">
-			No portfolios available — create one in PORTFOLIO tab first.
-		</div>
+		<PortfolioGateNotice {profile} />
 	{:else}
 		<StressTab />
 	{/if}
@@ -58,17 +59,5 @@
 		padding: var(--terminal-space-3);
 		font-family: var(--terminal-font-mono);
 		color: var(--terminal-fg-primary);
-	}
-	.stress__empty {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		min-height: 200px;
-		color: var(--terminal-fg-tertiary);
-		font-size: var(--terminal-text-11);
-		letter-spacing: var(--terminal-tracking-caps);
-		text-transform: uppercase;
-		border: var(--terminal-border-hairline);
-		background: var(--terminal-bg-panel);
 	}
 </style>
