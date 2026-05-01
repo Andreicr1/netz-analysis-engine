@@ -22,10 +22,13 @@ from typing import Any, Final
 import numpy as np
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.config_service import ConfigService
+from app.core.runtime.gates import get_idempotency_storage
+from app.core.runtime.idempotency import idempotent
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.allocation import StrategicAllocation
@@ -202,11 +205,50 @@ _DEFAULT_MAX_SINGLE_FUND: dict[str, float] = {
 router = APIRouter(prefix="/model-portfolios", tags=["model-portfolios"])
 
 
+def _create_portfolio_idempotency_key(
+    body: ModelPortfolioCreate,
+    *_args: Any,
+    **kwargs: Any,
+) -> str:
+    """Derive an idempotency key for ``POST /model-portfolios``.
+
+    Two creates with the same ``(org_id, display_name)`` are logically
+    the same mutation — a retry. ``display_name`` is unique per org
+    (migration 0201 ``uq_model_portfolios_org_display_name``) so it is
+    a safe natural key. ``copy_from`` is intentionally excluded from
+    the key: a retry that omits ``copy_from`` after a network glitch
+    must still hit the cache and return the original portfolio.
+    """
+    org_id = kwargs["org_id"]
+    return f"create_portfolio:{org_id}:{body.display_name}"
+
+
+def _create_portfolio_advisory_lock_key(
+    org_id: uuid.UUID,
+    display_name: str,
+) -> int:
+    """CRC32 of ``(org_id, display_name)`` for ``pg_advisory_xact_lock``.
+
+    Per Stability Guardrails §3, advisory lock keys MUST use
+    ``zlib.crc32`` rather than Python's built-in ``hash()`` (which is
+    non-deterministic across processes). The lock provides the third
+    layer of dedup behind Redis (decorator) and ``SingleFlightLock``
+    (in-process).
+    """
+    payload = f"create_portfolio:{org_id}:{display_name}".encode("utf-8")
+    return zlib.crc32(payload) & 0xFFFFFFFF
+
+
 @router.post(
     "",
     response_model=ModelPortfolioRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create a model portfolio",
+)
+@idempotent(
+    key=_create_portfolio_idempotency_key,
+    ttl_s=600,
+    storage=get_idempotency_storage(),
 )
 async def create_model_portfolio(
     body: ModelPortfolioCreate,
@@ -214,7 +256,7 @@ async def create_model_portfolio(
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
     org_id: uuid.UUID = Depends(get_org_id),
-) -> ModelPortfolioRead:
+) -> dict[str, Any]:
     """Create a new model portfolio (Phase 5 Task 5.1).
 
     Requires IC role. The new row starts in ``state='draft'`` (column
@@ -231,6 +273,19 @@ async def create_model_portfolio(
     (the source must belong to the same org — RLS guarantees that).
     """
     _require_ic_role(actor)
+
+    # ── Triple-layer dedup (Stability Guardrails §3 P5 Idempotent) ──
+    # The ``@idempotent`` decorator above provides Redis-backed result
+    # caching (cross-process, 600s TTL). The transaction-scoped
+    # advisory lock here is the third layer that serialises
+    # concurrent inserts that miss the Redis cache (e.g. two app
+    # instances behind a load balancer that both lose the cache race).
+    # Lock auto-releases at commit/rollback.
+    advisory_key = _create_portfolio_advisory_lock_key(org_id, body.display_name)
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(:k)"),
+        {"k": advisory_key},
+    )
 
     # Optional clone source — fetch first so a 404 happens before any
     # writes hit the DB.
@@ -269,7 +324,25 @@ async def create_model_portfolio(
         # so the optimizer cascade will re-run before activation.
         portfolio.fund_selection_schema = dict(source_portfolio.fund_selection_schema)
     db.add(portfolio)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        # Map the migration 0201 UNIQUE (org_id, display_name) violation
+        # to a structured 409 the PR-UX-4 dialog can render inline.
+        # Other integrity errors (FK, CHECK) are propagated unchanged.
+        msg = str(exc.orig) if exc.orig is not None else str(exc)
+        if "uq_model_portfolios_org_display_name" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "duplicate_display_name",
+                    "message": (
+                        f"Portfolio name '{body.display_name}' already "
+                        "exists in this organization."
+                    ),
+                },
+            ) from exc
+        raise
     await db.refresh(portfolio)
 
     # Seed the paired calibration row. Default values come from
@@ -320,7 +393,23 @@ async def create_model_portfolio(
         copy_from=str(body.copy_from) if body.copy_from else None,
     )
 
-    return await _serialize_with_actions(db, portfolio)
+    # ── @idempotent + orjson serialization contract (Codex P1 fix) ──
+    # The ``@idempotent`` decorator persists the return value via
+    # ``orjson.dumps(result)`` so a retry within the 600s TTL replays
+    # the same response. ``orjson`` cannot encode Pydantic models,
+    # ``Decimal``, ``datetime`` or ``UUID`` directly — passing a
+    # ``ModelPortfolioRead`` here would raise ``TypeError``, the
+    # decorator would log ``idempotency_store_result_failed`` and
+    # skip the cache write, and the *next* call within TTL would
+    # re-execute the handler and trip the duplicate display_name 409
+    # — silently degrading idempotency.
+    #
+    # ``model_dump(mode='json')`` produces a fully orjson-safe dict
+    # (Decimals → strings, datetimes → ISO, UUIDs → strings) which
+    # FastAPI re-validates against ``response_model=ModelPortfolioRead``
+    # transparently — the wire format is identical.
+    rendered = await _serialize_with_actions(db, portfolio)
+    return rendered.model_dump(mode="json")
 
 
 # PR-BE-2 — bounded list ceiling (Stability Guardrails §3 P1 Bounded).
@@ -4449,8 +4538,6 @@ async def get_current_regime_endpoint(
 # Shadow OMS — Phase 9 Block D
 # ──────────────────────────────────────────────────────────────────
 
-from app.core.runtime.gates import get_idempotency_storage
-from app.core.runtime.idempotency import idempotent
 from app.core.security.clerk_auth import require_role
 from app.domains.wealth.models.shadow_oms import (
     PortfolioActualHoldings,
