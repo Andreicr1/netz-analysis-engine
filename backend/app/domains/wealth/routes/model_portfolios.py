@@ -26,6 +26,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.config_service import ConfigService
+from app.core.db.audit import write_audit_event
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.allocation import StrategicAllocation
@@ -313,6 +314,33 @@ async def create_model_portfolio(
     db.add(calibration)
     await db.flush()
 
+    # PR-BE-3 — emit audit row inside the same transaction as the
+    # ModelPortfolio + PortfolioCalibration insert. Forensic record for
+    # who created which portfolio, when, and from which optional source.
+    await write_audit_event(
+        db,
+        action="model_portfolio_created",
+        entity_type="ModelPortfolio",
+        entity_id=str(portfolio.id),
+        actor_id=actor.actor_id,
+        actor_roles=[r.value for r in actor.roles],
+        organization_id=org_id,
+        after={
+            "portfolio_id": str(portfolio.id),
+            "profile": portfolio.profile,
+            "display_name": portfolio.display_name,
+            "description": portfolio.description,
+            "benchmark_composite": portfolio.benchmark_composite,
+            "inception_date": portfolio.inception_date,
+            "backtest_start_date": portfolio.backtest_start_date,
+            "status": portfolio.status,
+            "state": portfolio.state,
+            "copy_from": (
+                str(body.copy_from) if body.copy_from is not None else None
+            ),
+        },
+    )
+
     logger.info(
         "model_portfolio_created",
         portfolio_id=str(portfolio.id),
@@ -514,11 +542,35 @@ async def update_model_portfolio(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Portfolio not found")
 
     update_data = body.model_dump(exclude_none=True)
+
+    # PR-BE-3 — capture before-state for the diff snapshot. Only the
+    # fields the client actually sent are recorded so the audit row is
+    # a focused diff, not a noisy dump of every column.
+    before_state = {field: getattr(portfolio, field) for field in update_data}
+
     for field, value in update_data.items():
         setattr(portfolio, field, value)
 
     await db.flush()
     await db.refresh(portfolio)
+
+    # PR-BE-3 — emit audit row in the same transaction. Skip if nothing
+    # actually changed so re-runs of an idempotent client don't emit
+    # spurious "no-op" rows.
+    after_state = {field: getattr(portfolio, field) for field in update_data}
+    if before_state != after_state:
+        await write_audit_event(
+            db,
+            action="model_portfolio_updated",
+            entity_type="ModelPortfolio",
+            entity_id=str(portfolio.id),
+            actor_id=actor.actor_id,
+            actor_roles=[r.value for r in actor.roles],
+            organization_id=portfolio.organization_id,
+            before=before_state,
+            after=after_state,
+        )
+
     return ModelPortfolioRead.model_validate(portfolio)
 
 
@@ -956,6 +1008,15 @@ async def update_portfolio_calibration(
 
     data = payload.model_dump(exclude_unset=True)
 
+    # PR-BE-3 — capture before-state for the audit diff. Only the fields
+    # actually present in the payload are recorded so the row is a
+    # focused diff. ``expert_overrides`` is captured as the pre-merge
+    # blob so the audit row records exactly what the merge displaced.
+    audit_keys = [k for k in data if k in _BASIC_FIELDS + _ADVANCED_FIELDS]
+    before_state: dict[str, Any] = {k: getattr(row, k, None) for k in audit_keys}
+    if "expert_overrides" in data and data["expert_overrides"] is not None:
+        before_state["expert_overrides"] = dict(row.expert_overrides or {})
+
     # Typed Basic + Advanced columns — assign only provided fields.
     for field in _BASIC_FIELDS + _ADVANCED_FIELDS:
         if field in data and data[field] is not None:
@@ -979,6 +1040,25 @@ async def update_portfolio_calibration(
 
     await db.flush()
     await db.refresh(row)
+
+    # PR-BE-3 — emit audit row in the same transaction. Skip on no-op
+    # so an idempotent re-PUT with identical values does not produce a
+    # noise row.
+    after_state: dict[str, Any] = {k: getattr(row, k, None) for k in audit_keys}
+    if "expert_overrides" in data and data["expert_overrides"] is not None:
+        after_state["expert_overrides"] = dict(row.expert_overrides or {})
+    if before_state != after_state:
+        await write_audit_event(
+            db,
+            action="portfolio_calibration_updated",
+            entity_type="PortfolioCalibration",
+            entity_id=str(portfolio_id),
+            actor_id=actor.actor_id,
+            actor_roles=[r.value for r in actor.roles],
+            organization_id=org_id,
+            before=before_state,
+            after=after_state,
+        )
 
     logger.info(
         "portfolio_calibration_updated",
@@ -5299,6 +5379,25 @@ async def approve_proposal(
             ),
         )
 
+    # PR-BE-3 — serialize concurrent approvals for the same (org, profile).
+    # CLAUDE.md mandates ``zlib.crc32`` (Python's built-in ``hash()`` is
+    # non-deterministic across processes once ``PYTHONHASHSEED`` is
+    # randomised). The lock is transaction-scoped so it auto-releases on
+    # commit/rollback. A second operator pressing Approve at the same
+    # millisecond will block here, then re-read the run and find that the
+    # prior approval has already superseded the active row in
+    # ``allocation_approvals``. Their UPDATE/INSERT is still applied
+    # (the API contract treats a redundant approval as the new active
+    # row), but the lock prevents lost updates on
+    # ``strategic_allocation``.
+    lock_key = zlib.crc32(
+        f"approve:{org_id}:{profile_lc}".encode("utf-8"),
+    ) & 0x7FFFFFFF
+    await db.execute(
+        _sa_text("SELECT pg_advisory_xact_lock(:k)"),
+        {"k": lock_key},
+    )
+
     run_stmt = (
         select(PortfolioConstructionRun)
         .join(
@@ -5444,6 +5543,37 @@ async def approve_proposal(
     )
 
     await db.flush()
+
+    # PR-BE-3 — emit audit row inside the same transaction as the
+    # supersede + insert + 18 strategic_allocation updates. This is the
+    # forensic record of who approved which proposal for which profile,
+    # complete with the proposal_metrics snapshot that decided
+    # cvar_feasible_at_approval.
+    await write_audit_event(
+        db,
+        action="strategic_allocation_approved",
+        entity_type="AllocationApproval",
+        entity_id=str(approval_id),
+        actor_id=actor.actor_id,
+        actor_roles=[r.value for r in actor.roles],
+        organization_id=org_id,
+        after={
+            "approval_id": str(approval_id),
+            "run_id": str(run_id),
+            "profile": profile_lc,
+            "winner_signal": winner_signal_raw,
+            "cvar_at_approval": proposal_metrics.get("target_cvar"),
+            "expected_return_at_approval": proposal_metrics.get(
+                "expected_return",
+            ),
+            "cvar_feasible_at_approval": bool(
+                proposal_metrics.get("cvar_feasible", True),
+            ),
+            "confirm_cvar_infeasible": bool(body.confirm_cvar_infeasible),
+            "operator_message": body.operator_message,
+            "n_blocks_updated": len(updated_rows),
+        },
+    )
 
     snapshot = [
         StrategicAllocationRow(
