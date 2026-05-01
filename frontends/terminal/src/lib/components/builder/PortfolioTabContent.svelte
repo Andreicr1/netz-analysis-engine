@@ -44,13 +44,31 @@
 	import ActivationBar from "@investintell/ii-terminal-core/components/terminal/builder/ActivationBar.svelte";
 	import CalibrationPanel from "@investintell/ii-terminal-core/components/portfolio/CalibrationPanel.svelte";
 	import PortfolioPicker from "@investintell/ii-terminal-core/components/portfolio/PortfolioPicker.svelte";
+	import IPSGateNotice from "@investintell/ii-terminal-core/components/portfolio/IPSGateNotice.svelte";
 
 	interface Props {
 		portfolios: ModelPortfolio[];
+		/** Active allocation profile slug — drives IPS gate copy. */
+		profile: string;
+		/**
+		 * IPS approval gate signal. Today derived from
+		 * `strategic.has_active_approval`; PR-BE-6 will introduce the
+		 * canonical `ips_state` taxonomy and the parent will collapse
+		 * it into this boolean before passing it down.
+		 */
+		ipsApproved: boolean;
+		/** Invoked when the IPS gate CTA is clicked. */
+		onOpenStrategic: () => void;
 		onCreatePortfolio?: () => void;
 	}
 
-	let { portfolios, onCreatePortfolio }: Props = $props();
+	let {
+		portfolios,
+		profile,
+		ipsApproved,
+		onOpenStrategic,
+		onCreatePortfolio,
+	}: Props = $props();
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -149,6 +167,15 @@
 	});
 </script>
 
+{#if !ipsApproved}
+	<!-- TODO(PR-BE-6): consume canonical `ips_state` taxonomy here.
+	     Today the parent collapses `strategic.has_active_approval`
+	     into `ipsApproved`; once PR-BE-6 lands the gate switches to
+	     `data.strategic.data?.ips_state === "approved"`. -->
+	<div class="builder-gate">
+		<IPSGateNotice {profile} {onOpenStrategic} />
+	</div>
+{:else}
 <div class="builder-shell">
 	<!-- LEFT COLUMN (40%) — Command Panel -->
 	<div class="builder-left">
@@ -236,6 +263,7 @@
 		<ActivationBar />
 	</div>
 </div>
+{/if}
 
 <style>
 	/*
@@ -251,6 +279,19 @@
 		background: var(--terminal-bg-void);
 		font-family: var(--terminal-font-mono);
 		color: var(--terminal-fg-secondary);
+	}
+
+	/* Gate wrapper — owns the full builder-shell footprint when the
+	   profile's IPS is not yet approved, so the empty-state notice
+	   replaces (not overlays) the 40/60 command-center grid. */
+	.builder-gate {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 100%;
+		min-height: 0;
+		padding: var(--terminal-space-3);
+		background: var(--terminal-bg-void);
 	}
 
 	.builder-left {

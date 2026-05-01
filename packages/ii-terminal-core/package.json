@@ -64,7 +64,8 @@
   "scripts": {
     "build": "svelte-package -i ./src/lib -o ./dist",
     "prepublishOnly": "pnpm build",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run"
   },
   "peerDependencies": {
     "@investintell/ui": "workspace:*",
@@ -82,10 +83,12 @@
     "@investintell/ui": "workspace:*"
   },
   "devDependencies": {
+    "@sveltejs/kit": "^2.0.0",
     "@sveltejs/package": "^2.0.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@testing-library/svelte": "^5.3.1",
     "@types/uuid": "^10.0.0",
+    "happy-dom": "^20.8.4",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
     "typescript": "^5.5.0",

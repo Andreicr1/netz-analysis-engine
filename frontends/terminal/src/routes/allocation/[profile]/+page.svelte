@@ -178,9 +178,24 @@
 					/>
 				</div>
 			{:else if activeTab === "portfolio"}
-				<PortfolioTabContent portfolios={data.portfolios} />
+				<!--
+				  TODO(PR-BE-6): replace `has_active_approval` with the
+				  canonical `ips_state` taxonomy once the backend ships
+				  it on `StrategicAllocationResponse`. Until then we
+				  collapse the legacy boolean into `ipsApproved` so the
+				  PortfolioTabContent gate stays a single signal.
+				-->
+				<PortfolioTabContent
+					portfolios={data.portfolios}
+					profile={profile ?? "moderate"}
+					ipsApproved={!!strategic?.has_active_approval}
+					onOpenStrategic={() => setTab("strategic")}
+				/>
 			{:else if activeTab === "stress"}
-				<StressTabContent portfolios={data.portfolios} />
+				<StressTabContent
+					portfolios={data.portfolios}
+					profile={profile ?? "moderate"}
+				/>
 			{/if}
 		</div>
 	{/if}
