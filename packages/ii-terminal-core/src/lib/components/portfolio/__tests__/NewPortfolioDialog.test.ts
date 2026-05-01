@@ -90,11 +90,17 @@ describe("NewPortfolioDialog — token + label discipline", () => {
 		) as HTMLSelectElement;
 		expect(select).not.toBeNull();
 		const optionLabels = Array.from(select.options).map((o) => o.text);
-		expect(optionLabels).toContain("Conservative");
-		expect(optionLabels).toContain("Moderate");
-		expect(optionLabels).toContain("Balanced");
-		expect(optionLabels).toContain("Dynamic Growth");
+		// Canonical 3-profile taxonomy enforced by the terminal allocation
+		// route validation. PR-UX-4 Codex P1 removed the legacy `balanced`
+		// slug — submitting it would route `onCreated` to
+		// `/allocation/balanced` which the loader rejects.
+		expect(optionLabels).toEqual([
+			"Conservative",
+			"Moderate",
+			"Dynamic Growth",
+		]);
 		expect(optionLabels.some((t) => /aggressive/i.test(t))).toBe(false);
+		expect(optionLabels.some((t) => /balanced/i.test(t))).toBe(false);
 	});
 
 	test("form renders Name + Mandate + Description + Copy from labels", () => {
@@ -122,7 +128,6 @@ describe("NewPortfolioDialog — token + label discipline", () => {
 		expect(profileDisplayLabel("growth", "full")).toBe("Dynamic Growth");
 		expect(profileDisplayLabel("conservative", "full")).toBe("Conservative");
 		expect(profileDisplayLabel("moderate", "full")).toBe("Moderate");
-		expect(profileDisplayLabel("balanced", "full")).toBe("Balanced");
 	});
 });
 
@@ -370,7 +375,13 @@ describe("NewPortfolioDialog — 409 conflict path", () => {
 		expect(err?.textContent).toContain("Network timeout");
 	});
 
-	test("create returning null → fallback error rendered", async () => {
+	test("create returning null → session-expired fallback rendered", async () => {
+		// Post-Codex-P2 (PR-UX-4): the only path through which
+		// `workspace.createPortfolio` resolves with `null` is the
+		// pre-Clerk token-missing guard, which surfaces to the user as
+		// a session-expired condition. Every transport / 4xx / 5xx
+		// failure now throws (covered by the ConflictError + generic
+		// Error tests above).
 		const create = vi.fn().mockResolvedValueOnce(null);
 
 		const { container } = render(NewPortfolioDialog, {
@@ -397,7 +408,49 @@ describe("NewPortfolioDialog — 409 conflict path", () => {
 		const err = container.querySelector(
 			'[data-testid="npd-submit-error"]',
 		);
-		expect(err?.textContent).toContain("Failed to create portfolio");
+		expect(err?.textContent).toContain("Session expired");
+	});
+
+	test("ServerError from create → backend message bubbles inline (Codex P2)", async () => {
+		// Codex P2 — once `workspace.createPortfolio` rethrows, any
+		// non-409 4xx/5xx error class (ServerError, ValidationError, …)
+		// must surface its message to the user. The dialog falls
+		// through to the `err instanceof Error` branch and renders
+		// `err.message`. This regression-tests the rethrow contract:
+		// a backend "detail.message" is no longer collapsed to a
+		// generic fallback.
+		const { ServerError } = await import("@investintell/ui/utils");
+		const create = vi
+			.fn()
+			.mockRejectedValueOnce(
+				new ServerError("Calibration profile is locked.", 423),
+			);
+
+		const { container } = render(NewPortfolioDialog, {
+			props: {
+				open: true,
+				onOpenChange: () => {},
+				profile: "growth",
+				portfolios: [],
+				create,
+				onCreated: () => {},
+			},
+		});
+
+		const nameInput = container.querySelector(
+			'[data-testid="npd-name-input"]',
+		) as HTMLInputElement;
+		await fireEvent.input(nameInput, { target: { value: "Locked" } });
+
+		const form = container.querySelector(
+			'[data-testid="new-portfolio-dialog"]',
+		) as HTMLFormElement;
+		await fireEvent.submit(form);
+
+		const err = container.querySelector(
+			'[data-testid="npd-submit-error"]',
+		);
+		expect(err?.textContent).toContain("Calibration profile is locked.");
 	});
 });
 

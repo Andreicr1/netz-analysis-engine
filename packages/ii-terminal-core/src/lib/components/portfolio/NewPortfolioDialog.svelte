@@ -20,11 +20,18 @@
       offered here (use the wealth surface for forks across mandates).
 
   Mandate dropdown:
-    - Slugs: `{conservative, moderate, balanced, growth}`. Display
-      labels flow through the canonical `profileDisplayLabel(value,
-      "full")` helper from `quant-labels.ts` (PR-UX-5 / PR-BE-7) so
-      `growth` renders as "Dynamic Growth" and never as the legacy
-      `aggressive` slug.
+    - Slugs: `{conservative, moderate, growth}` — the canonical
+      3-profile taxonomy enforced by the terminal allocation route
+      validation (`frontends/terminal/src/routes/allocation/[profile]/+page.server.ts`)
+      and `ALLOCATION_PROFILES` in `types/allocation-page.ts`. A 4th
+      `balanced` slug was carried over from the legacy wealth dialog
+      and removed in PR-UX-4 remediation: submitting `balanced` would
+      have routed `onCreated` to `/allocation/balanced`, which the
+      route loader rejects as `Unknown allocation profile`.
+    - Display labels flow through the canonical `profileDisplayLabel(
+      value, "full")` helper from `quant-labels.ts` (PR-UX-5 /
+      PR-BE-7) so `growth` renders as "Dynamic Growth" and never as
+      the legacy `aggressive` slug.
     - Defaults to the URL-bound `profile` prop. Institutional users
       may override the mandate (e.g. fork a draft from one profile to
       another) — the active profile context is informational, not a
@@ -106,11 +113,17 @@
 	}: Props = $props();
 
 	// ── Mandate enum + labels ───────────────────────────────────
-	type MandateSlug = "conservative" | "moderate" | "balanced" | "growth";
+	// Canonical 3-profile taxonomy — must stay in lockstep with
+	// `ALLOCATION_PROFILES` in `types/allocation-page.ts` and the
+	// `+page.server.ts` validation in the terminal allocation route.
+	// A `balanced` slug was carried over from the legacy wealth
+	// dialog and removed in PR-UX-4 remediation (Codex P1): a
+	// successful `balanced` submit would route `onCreated` to
+	// `/allocation/balanced` which the loader rejects.
+	type MandateSlug = "conservative" | "moderate" | "growth";
 	const MANDATE_SLUGS: ReadonlyArray<MandateSlug> = [
 		"conservative",
 		"moderate",
-		"balanced",
 		"growth",
 	];
 
@@ -225,7 +238,14 @@
 		try {
 			const created = await create(payload);
 			if (!created) {
-				submitError = "Failed to create portfolio.";
+				// Post-Codex-P2: `workspace.createPortfolio` now rethrows
+				// every transport / 4xx / 5xx error. The only path that
+				// still resolves with `null` is the pre-Clerk guard
+				// (`!this._getToken`), which from the user's perspective
+				// reads as a session-expired condition. Render a neutral
+				// fallback and keep the dialog open so the user can
+				// recover after refreshing auth.
+				submitError = "Session expired. Please refresh and try again.";
 				isSubmitting = false;
 				return;
 			}
