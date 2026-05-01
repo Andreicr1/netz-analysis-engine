@@ -171,15 +171,27 @@ export class NetzApiClient {
 		const url = buildUrl(this.baseUrl, path, params);
 		const headers = await this.headers();
 		const signal = options?.signal ?? AbortSignal.timeout(this.timeoutMs);
-		// GET is idempotent — retry once on timeout/network error
+		// GET is idempotent — retry once on timeout/network error,
+		// BUT only when we own the timeout. If the caller supplied a
+		// signal (manual abort or AbortSignal.timeout), that signal IS
+		// the deadline contract — retrying past it would silently
+		// extend the caller's hard cap (e.g. a 4s cap becoming
+		// 4s + this.timeoutMs ≈ 19s on TimeoutError).
 		try {
 			const res = await fetch(url, { headers, signal });
 			return handleResponse<T>(res);
 		} catch (err) {
-			// Don't retry if caller aborted
-			if (options?.signal && err instanceof DOMException && err.name === "AbortError") throw err;
+			// Caller-supplied signal is authoritative — never retry past
+			// its deadline, regardless of whether it tripped via abort()
+			// (AbortError) or AbortSignal.timeout (TimeoutError).
+			if (
+				options?.signal
+				&& err instanceof DOMException
+				&& (err.name === "AbortError" || err.name === "TimeoutError")
+			) throw err;
+
+			// Default-timeout path only: GET is idempotent, retry once.
 			if (err instanceof DOMException && err.name === "TimeoutError") {
-				// Retry once
 				const res = await fetch(url, { headers, signal: AbortSignal.timeout(this.timeoutMs) });
 				return handleResponse<T>(res);
 			}

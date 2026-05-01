@@ -190,7 +190,7 @@
 
 	<button
 		type="button"
-		class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm hover:bg-primary/90 disabled:opacity-50"
+		class="propose-cta"
 		onclick={() => void propose()}
 		disabled={running}
 	>
@@ -214,3 +214,37 @@
 		<p class="mt-2 text-xs text-destructive">{errorMsg}</p>
 	{/if}
 </section>
+
+<style>
+	/* Propose CTA — terminal token styling.
+	   Mirrors `.pp-create-btn` in PortfolioPicker.svelte (truth source):
+	   transparent background, status-success border + text, mono caps,
+	   hover tint via color-mix. Replaces Tailwind `bg-primary` utilities
+	   to keep the allocation surface aligned with terminal tokens. */
+	.propose-cta {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--terminal-space-2);
+		padding: var(--terminal-space-2) var(--terminal-space-4);
+		background: transparent;
+		border: 1px solid var(--terminal-status-success);
+		color: var(--terminal-status-success);
+		font-family: var(--terminal-font-mono);
+		font-size: var(--terminal-text-11);
+		font-weight: 600;
+		letter-spacing: var(--terminal-tracking-caps);
+		text-transform: uppercase;
+		cursor: pointer;
+	}
+	.propose-cta:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--terminal-status-success) 10%, transparent);
+	}
+	.propose-cta:focus-visible {
+		outline: var(--terminal-border-focus);
+		outline-offset: 2px;
+	}
+	.propose-cta:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+</style>
