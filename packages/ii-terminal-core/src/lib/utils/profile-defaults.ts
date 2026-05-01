@@ -45,7 +45,7 @@ export function profileLabel(profile: string | null | undefined): string {
 	const raw = (profile ?? "").toLowerCase();
 	const canonical = raw === "aggressive" ? "growth" : raw;
 	if (canonical === "conservative") return "Conservative";
-	if (canonical === "moderate") return "Moderate";
+	if (canonical === "moderate") return "Balanced";
 	if (canonical === "growth") return "Dynamic Growth";
-	return profile ?? "Moderate";
+	return profile ?? "Balanced";
 }

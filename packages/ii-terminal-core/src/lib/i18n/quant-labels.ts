@@ -258,7 +258,7 @@ type DisplayContext = "dense" | "full";
 
 const PROFILE_DISPLAY: Readonly<Record<ProfileSlug, Record<DisplayContext, string>>> = {
 	conservative: { dense: "Conservative", full: "Conservative" },
-	moderate: { dense: "Moderate", full: "Moderate" },
+	moderate: { dense: "Balanced", full: "Balanced" },
 	growth: { dense: "Dynamic", full: "Dynamic Growth" },
 };
 

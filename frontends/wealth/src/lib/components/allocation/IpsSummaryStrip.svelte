@@ -39,8 +39,8 @@
 
 	const PROFILE_PILL_LABEL: Record<AllocationProfile, string> = {
 		conservative: "Conservative",
-		moderate: "Moderate",
-		growth: "Growth",
+		moderate: "Balanced",
+		growth: "Dynamic Growth",
 	};
 
 	const cvarPillLabel = $derived(

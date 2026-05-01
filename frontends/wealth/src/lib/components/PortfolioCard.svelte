@@ -60,8 +60,8 @@
 	// Profile display label
 	const profileLabels: Record<string, string> = {
 		conservative: "Conservative",
-		moderate: "Moderate",
-		growth: "Aggressive",
+		moderate: "Balanced",
+		growth: "Dynamic Growth",
 	};
 	let profileLabel = $derived(profileLabels[profile] ?? profile);
 </script>

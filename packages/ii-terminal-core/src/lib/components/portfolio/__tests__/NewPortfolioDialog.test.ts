@@ -90,17 +90,19 @@ describe("NewPortfolioDialog — token + label discipline", () => {
 		) as HTMLSelectElement;
 		expect(select).not.toBeNull();
 		const optionLabels = Array.from(select.options).map((o) => o.text);
+		const optionValues = Array.from(select.options).map((o) => o.value);
 		// Canonical 3-profile taxonomy enforced by the terminal allocation
-		// route validation. PR-UX-4 Codex P1 removed the legacy `balanced`
-		// slug — submitting it would route `onCreated` to
-		// `/allocation/balanced` which the loader rejects.
+		// route validation. The mandate slug `moderate` is rendered as
+		// "Balanced" — the institutional name for the middle risk profile.
 		expect(optionLabels).toEqual([
 			"Conservative",
-			"Moderate",
+			"Balanced",
 			"Dynamic Growth",
 		]);
-		expect(optionLabels.some((t) => /aggressive/i.test(t))).toBe(false);
-		expect(optionLabels.some((t) => /balanced/i.test(t))).toBe(false);
+		// Slug-level regression: only `{conservative, moderate, growth}`
+		// are valid VALUES — `balanced` and `aggressive` are display-only
+		// labels that must never appear as enum values.
+		expect(optionValues).toEqual(["conservative", "moderate", "growth"]);
 	});
 
 	test("form renders Name + Mandate + Description + Copy from labels", () => {
@@ -127,7 +129,7 @@ describe("NewPortfolioDialog — token + label discipline", () => {
 		);
 		expect(profileDisplayLabel("growth", "full")).toBe("Dynamic Growth");
 		expect(profileDisplayLabel("conservative", "full")).toBe("Conservative");
-		expect(profileDisplayLabel("moderate", "full")).toBe("Moderate");
+		expect(profileDisplayLabel("moderate", "full")).toBe("Balanced");
 	});
 });
 
