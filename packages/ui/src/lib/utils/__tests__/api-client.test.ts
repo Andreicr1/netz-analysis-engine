@@ -25,7 +25,10 @@ function jsonResponse(status: number, body: unknown = {}): Response {
 }
 
 beforeEach(() => {
-	vi.clearAllMocks();
+	// resetAllMocks clears both call history AND queued return values
+	// (clearAllMocks only clears history, leaking unused .mockXxxValueOnce
+	// queue entries into the next test).
+	vi.resetAllMocks();
 	resetRedirectGate();
 	setAuthRedirectHandler(null as unknown as () => void);
 	setConflictHandler(null as unknown as (msg: string) => void);
@@ -159,6 +162,61 @@ describe("409 conflict handling", () => {
 				"Resource was modified by another user",
 			);
 		}
+	});
+});
+
+describe("GET timeout / retry semantics", () => {
+	function timeoutError(): DOMException {
+		return new DOMException("The operation was aborted due to timeout", "TimeoutError");
+	}
+
+	function abortError(): DOMException {
+		return new DOMException("The user aborted a request.", "AbortError");
+	}
+
+	it("retries once on TimeoutError when no caller signal is supplied", async () => {
+		mockFetch.mockRejectedValueOnce(timeoutError());
+		mockFetch.mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+
+		const client = createServerApiClient("http://api.test", "tok");
+		const result = await client.get<{ ok: boolean }>("/slow");
+
+		expect(result).toEqual({ ok: true });
+		expect(mockFetch).toHaveBeenCalledTimes(2);
+	});
+
+	it("does NOT retry on TimeoutError when caller supplied a signal (caller deadline is authoritative)", async () => {
+		// Codex P2 hotfix: a caller-supplied AbortSignal.timeout(4000)
+		// must give a hard 4s cap. The previous retry path silently
+		// extended that to 4s + this.timeoutMs (≈ 19s) on TimeoutError.
+		mockFetch.mockRejectedValueOnce(timeoutError());
+		mockFetch.mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+
+		const client = createServerApiClient("http://api.test", "tok");
+		const ctrl = new AbortController();
+		await expect(
+			client.get<{ ok: boolean }>("/slow", undefined, { signal: ctrl.signal }),
+		).rejects.toThrow(DOMException);
+		expect(mockFetch).toHaveBeenCalledTimes(1);
+	});
+
+	it("does NOT retry on AbortError when caller supplied a signal", async () => {
+		mockFetch.mockRejectedValueOnce(abortError());
+
+		const client = createServerApiClient("http://api.test", "tok");
+		const ctrl = new AbortController();
+		await expect(
+			client.get("/x", undefined, { signal: ctrl.signal }),
+		).rejects.toThrow(DOMException);
+		expect(mockFetch).toHaveBeenCalledTimes(1);
+	});
+
+	it("does NOT retry on non-timeout errors regardless of caller signal", async () => {
+		mockFetch.mockRejectedValueOnce(new TypeError("network down"));
+
+		const client = createServerApiClient("http://api.test", "tok");
+		await expect(client.get("/x")).rejects.toThrow(TypeError);
+		expect(mockFetch).toHaveBeenCalledTimes(1);
 	});
 });
 
