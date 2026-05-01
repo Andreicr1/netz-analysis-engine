@@ -134,8 +134,8 @@ def upgrade() -> None:
         """,
     )
 
-    # ── Phase 2 — full sweep of profile-column tables ──────────────
-    # Every public-schema table with a ``profile`` column must be
+    # ── Phase 2 — full sweep of stored profile slugs ───────────────
+    # Every public-schema table with a stored profile slug must be
     # rewritten in lockstep with the route-layer alias normaliser —
     # otherwise queries canonicalised to ``growth`` would silently
     # miss legacy ``aggressive`` rows during the 180-day compatibility
@@ -143,6 +143,8 @@ def upgrade() -> None:
     # on PR #463). Audit source:
     #   SELECT table_name FROM information_schema.columns
     #   WHERE table_schema='public' AND column_name='profile';
+    #   SELECT table_name FROM information_schema.columns
+    #   WHERE table_schema='public' AND column_name='portfolio_profile';
     _PROFILE_TABLES = (
         "model_portfolios",
         "strategic_allocation",
@@ -159,6 +161,18 @@ def upgrade() -> None:
             f"UPDATE {table} SET profile = 'growth' "
             f"WHERE profile = 'aggressive'",
         )
+
+    # Blended benchmarks use ``portfolio_profile`` instead of ``profile``.
+    # Keep stored data aligned with ``routes/blended_benchmark.py`` where
+    # legacy URL params are canonicalised through ``_validate_profile`` before
+    # querying by ``portfolio_profile``.
+    op.execute(
+        """
+        UPDATE blended_benchmarks
+        SET portfolio_profile = 'growth'
+        WHERE portfolio_profile = 'aggressive'
+        """,
+    )
 
     # ── Phase 3 — mandate namespace ────────────────────────────────
     # ``portfolio_calibration.mandate`` is a ``String(64)`` column with
