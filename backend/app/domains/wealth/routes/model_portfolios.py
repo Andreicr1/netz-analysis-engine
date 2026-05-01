@@ -10,10 +10,12 @@ from StrategicAllocation and CVaR limit from profile config.
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import math
 import uuid
 import zlib
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Final
 
@@ -33,6 +35,7 @@ from app.domains.wealth.models.model_portfolio import (
     PortfolioConstructionRun,
 )
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
+from app.domains.wealth.routes._profile_normalizer import normalize_profile_param
 from app.domains.wealth.schemas.generated_report import ReportGenerateRequest
 from app.domains.wealth.schemas.model_portfolio import (
     ApprovalHistoryEntry,
@@ -50,6 +53,7 @@ from app.domains.wealth.schemas.model_portfolio import (
     JobCreatedResponse,
     LatestProposalResponse,
     ModelPortfolioCreate,
+    ModelPortfolioListResponse,
     ModelPortfolioRead,
     ModelPortfolioUpdate,
     OverlapResultRead,
@@ -319,35 +323,147 @@ async def create_model_portfolio(
     return await _serialize_with_actions(db, portfolio)
 
 
+# PR-BE-2 — bounded list ceiling (Stability Guardrails §3 P1 Bounded).
+# 200 is generous: the Builder workspace renders one card per portfolio
+# in a left rail (~40px each); past ~50 the user is already paginating
+# visually. The 422 ceiling exists so a misbehaving client can never
+# request a 10k row scan.
+_LIST_PORTFOLIOS_DEFAULT_LIMIT: Final[int] = 100
+_LIST_PORTFOLIOS_MAX_LIMIT: Final[int] = 200
+
+
+def _encode_portfolio_cursor(created_at: datetime, portfolio_id: uuid.UUID) -> str:
+    """Encode a keyset cursor as ``base64(created_at_iso|uuid)``.
+
+    Opaque to clients — they round-trip the value via ``?cursor=`` on
+    the next request and never inspect it. Using URL-safe base64
+    ensures the cursor survives proxies that might mangle ``+`` / ``/``.
+    """
+    raw = f"{created_at.isoformat()}|{portfolio_id}"
+    return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
+
+
+def _decode_portfolio_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
+    """Decode a cursor from ``_encode_portfolio_cursor``.
+
+    Raises ``HTTPException(400)`` on any malformed input — a tampered
+    or stale cursor must never reach SQL as an unparsable UUID and
+    surface as a 500.
+    """
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
+        created_at_str, id_str = raw.split("|", 1)
+        return datetime.fromisoformat(created_at_str), uuid.UUID(id_str)
+    except (ValueError, UnicodeDecodeError, binascii.Error) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_cursor", "message": "Cursor is malformed."},
+        ) from exc
+
+
 @router.get(
     "",
-    response_model=list[ModelPortfolioRead],
-    summary="List model portfolios",
+    response_model=ModelPortfolioListResponse,
+    summary="List model portfolios (profile-filtered, bounded, keyset-paginated)",
 )
 async def list_model_portfolios(
+    profile: str | None = Query(
+        default=None,
+        description=(
+            "Restrict the response to one allocation profile "
+            "(``conservative`` / ``moderate`` / ``growth``). The legacy "
+            "``aggressive`` slug is rewritten to ``growth`` (sunset 2026-10-30)."
+        ),
+    ),
+    limit: int = Query(
+        default=_LIST_PORTFOLIOS_DEFAULT_LIMIT,
+        ge=1,
+        le=_LIST_PORTFOLIOS_MAX_LIMIT,
+        description=(
+            f"Page size, bounded at {_LIST_PORTFOLIOS_MAX_LIMIT}. Requests "
+            "exceeding the ceiling are rejected with 422 (P1 Bounded — "
+            "Stability Guardrails §3)."
+        ),
+    ),
+    cursor: str | None = Query(
+        default=None,
+        description=(
+            "Opaque keyset cursor returned as ``next_cursor`` on the "
+            "previous page. Encodes the last seen ``created_at + id`` "
+            "tuple — clients must round-trip it verbatim."
+        ),
+    ),
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     org_id: uuid.UUID = Depends(get_org_id),
-) -> list[ModelPortfolioRead]:
-    """List all model portfolios for the organization.
+) -> ModelPortfolioListResponse:
+    """List model portfolios for the organization, profile-filtered and bounded.
 
-    Each portfolio is hydrated with ``allowed_actions`` from the
-    state machine (DL3 — Phase 1 Task 1.4). The approval policy is
-    resolved once per request and reused across all rows. Validation
-    status is fetched per-portfolio from ``portfolio_construction_runs``
-    via a single batched lookup keyed on the latest run.
+    Builder Workspace redesign (PR-BE-2 — §4.1 / §5.3 / §10):
+
+    * ``?profile=`` restricts results to one canonical allocation
+      profile. Validation goes through the shared
+      :func:`normalize_profile_param`, so the legacy ``aggressive``
+      slug is rewritten to ``growth`` (with structured deprecation
+      log) and any other unknown slug is rejected with 400 — the
+      caller never silently sees an empty list because of a typo.
+    * ``?limit=`` is mandatory and bounded by ``_LIST_PORTFOLIOS_MAX_LIMIT``
+      (P1 Bounded). FastAPI's ``Query(le=...)`` enforces the ceiling
+      and emits 422 on overflow.
+    * ``?cursor=`` enables keyset pagination on
+      ``(created_at DESC, id DESC)``. The tiebreak on ``id`` makes the
+      ordering total even when two portfolios are inserted in the
+      same millisecond.
+
+    Each row is hydrated with ``allowed_actions`` (DL3 — Phase 1
+    Task 1.4); the approval policy is resolved once per request.
     """
-    result = await db.execute(
-        select(ModelPortfolio).order_by(ModelPortfolio.created_at.desc()),
+    canonical_profile = (
+        normalize_profile_param(profile) if profile is not None else None
     )
-    portfolios = result.scalars().all()
-    if not portfolios:
-        return []
+
+    stmt = select(ModelPortfolio)
+    if canonical_profile is not None:
+        stmt = stmt.where(ModelPortfolio.profile == canonical_profile)
+    if cursor is not None:
+        cursor_created_at, cursor_id = _decode_portfolio_cursor(cursor)
+        # Keyset on (created_at DESC, id DESC): a row appears AFTER the
+        # cursor iff its created_at is strictly older OR (equal and id
+        # is strictly smaller). The tuple form mirrors the SQL row
+        # comparison ``(created_at, id) < (?, ?)`` so the b-tree index
+        # on (created_at, id) is range-scanned — no full sort.
+        stmt = stmt.where(
+            (ModelPortfolio.created_at < cursor_created_at)
+            | (
+                (ModelPortfolio.created_at == cursor_created_at)
+                & (ModelPortfolio.id < cursor_id)
+            ),
+        )
+    # Fetch limit + 1 so we know whether a next page exists without a
+    # second COUNT(*) round-trip.
+    stmt = stmt.order_by(
+        ModelPortfolio.created_at.desc(),
+        ModelPortfolio.id.desc(),
+    ).limit(limit + 1)
+
+    result = await db.execute(stmt)
+    fetched = list(result.scalars().all())
+    has_next = len(fetched) > limit
+    page = fetched[:limit]
+
+    if not page:
+        return ModelPortfolioListResponse(items=[], next_cursor=None)
 
     policy = await _resolve_approval_policy(db, org_id)
-    return [
-        await _serialize_with_actions(db, p, policy=policy) for p in portfolios
+    items = [
+        await _serialize_with_actions(db, p, policy=policy) for p in page
     ]
+    next_cursor = (
+        _encode_portfolio_cursor(page[-1].created_at, page[-1].id)
+        if has_next
+        else None
+    )
+    return ModelPortfolioListResponse(items=items, next_cursor=next_cursor)
 
 
 @router.get(

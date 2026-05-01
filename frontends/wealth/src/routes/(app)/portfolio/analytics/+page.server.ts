@@ -16,7 +16,10 @@
 
 import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
-import type { ModelPortfolio } from "$lib/types/model-portfolio";
+import type {
+	ModelPortfolio,
+	ModelPortfolioListResponse,
+} from "$lib/types/model-portfolio";
 
 /** Lightweight shape returned by GET /universe — only the fields the
  *  FilterRail subject list needs. */
@@ -40,8 +43,10 @@ export const load: PageServerLoad = async ({ parent }) => {
 	const api = createServerApiClient(token);
 
 	const [portfolios, approvedFunds] = await Promise.all([
+		// PR-BE-2 — bounded list, returns { items, next_cursor }.
 		api
-			.get<ModelPortfolio[]>("/model-portfolios")
+			.get<ModelPortfolioListResponse>("/model-portfolios", { limit: 200 })
+			.then((resp) => resp.items ?? [])
 			.catch(() => [] as ModelPortfolio[]),
 		api
 			.get<ApprovedUniverseFund[]>("/universe")

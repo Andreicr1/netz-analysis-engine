@@ -123,6 +123,25 @@ class PortfolioTransitionRequest(BaseModel):
     metadata: dict[str, Any] | None = None
 
 
+class ModelPortfolioListResponse(BaseModel):
+    """Bounded paginated list of model portfolios (PR-BE-2).
+
+    Returned by ``GET /model-portfolios`` per the Builder Workspace
+    redesign (§4.1, §5.3). Wraps the list with a keyset ``next_cursor``
+    so the frontend can page beyond the per-call ``limit`` ceiling
+    without an unbounded scan (P1 Bounded — Stability Guardrails §3).
+
+    The cursor is an opaque base64-encoded ``{created_at, id}`` tuple
+    captured from the last row of the previous page; clients must not
+    parse it. ``next_cursor`` is ``None`` on the final page.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    items: list[ModelPortfolioRead]
+    next_cursor: str | None = None
+
+
 class ModelPortfolioCreate(BaseModel):
     """Phase 5 Task 5.1 — Builder ``NewPortfolioDialog`` create payload.
 

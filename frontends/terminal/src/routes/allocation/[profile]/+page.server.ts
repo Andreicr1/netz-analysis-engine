@@ -23,7 +23,10 @@ import {
 	type LatestProposalResponse,
 	type StrategicAllocationResponse,
 } from "@investintell/ii-terminal-core/types/allocation-page";
-import type { ModelPortfolio } from "@investintell/ii-terminal-core/types/model-portfolio";
+import type {
+	ModelPortfolio,
+	ModelPortfolioListResponse,
+} from "@investintell/ii-terminal-core/types/model-portfolio";
 
 const FETCH_TIMEOUT_MS = 8000;
 
@@ -151,10 +154,19 @@ export const load: PageServerLoad = async ({
 		}))
 		.catch(() => null);
 
+	// PR-BE-2 — pass ?profile so the backend filters server-side, and
+	// apply a defensive client-side filter on the response so a stale
+	// cache or backend regression can never blank the workspace with a
+	// wrong-profile portfolio (§6.2.2 PortfolioTabContent).
 	const portfoliosPromise = api
-		.get<ModelPortfolio[]>("/model-portfolios", undefined, {
-			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-		})
+		.get<ModelPortfolioListResponse>(
+			"/model-portfolios",
+			{ profile, limit: 200 },
+			{ signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+		)
+		.then((resp): ModelPortfolio[] =>
+			(resp.items ?? []).filter((p) => p.profile === profile),
+		)
 		.catch((): ModelPortfolio[] => []);
 
 	const [strategic, history, proposal, regime, portfolios] =
