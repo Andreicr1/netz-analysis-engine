@@ -13,7 +13,15 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+import structlog
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+logger = structlog.get_logger()
+
+# PR-BE-7 — sunset 2026-10-30 (180d post-merge). Legacy ``aggressive``
+# clients are rewritten to ``growth`` BEFORE Literal validation so the
+# request body alias contract holds end-to-end (Codex P1 catch on #463).
+_LEGACY_MANDATE_ALIASES: dict[str, str] = {"aggressive": "growth"}
 
 
 class PreviewCvarRequest(BaseModel):
@@ -29,6 +37,22 @@ class PreviewCvarRequest(BaseModel):
 
     cvar_limit: float = Field(..., ge=0.0005, le=0.20)
     mandate: Literal["conservative", "moderate", "growth"] | None = None
+
+    @field_validator("mandate", mode="before")
+    @classmethod
+    def _rewrite_legacy_mandate(cls, value: object) -> object:
+        if isinstance(value, str):
+            lc = value.strip().lower()
+            canonical = _LEGACY_MANDATE_ALIASES.get(lc)
+            if canonical is not None:
+                logger.info(
+                    "legacy_mandate_payload_alias",
+                    received=value,
+                    canonical=canonical,
+                    sunset_at="2026-10-30",
+                )
+                return canonical
+        return value
 
 
 class AchievableReturnBandDTO(BaseModel):

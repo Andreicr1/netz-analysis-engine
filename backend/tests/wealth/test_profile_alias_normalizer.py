@@ -98,3 +98,45 @@ def test_validate_profile_unknown_slug_rejected() -> None:
     with pytest.raises(HTTPException) as exc:
         validate_profile("speculative")
     assert exc.value.status_code == 400
+
+
+# ── Pydantic payload alias (Codex P1 catch on PR #463) ───────────────
+
+
+def test_preview_cvar_request_aggressive_payload_rewritten_to_growth() -> None:
+    """Legacy ``mandate: 'aggressive'`` payload is rewritten before Literal validation.
+
+    Older clients still POSTing ``aggressive`` to /portfolios/{id}/preview-cvar
+    must succeed (with structured deprecation log) instead of failing 400 at
+    Pydantic validation. Sunset 2026-10-30.
+    """
+    from app.domains.wealth.schemas.preview import PreviewCvarRequest
+
+    req = PreviewCvarRequest.model_validate({"cvar_limit": 0.10, "mandate": "aggressive"})
+    assert req.mandate == "growth"
+
+
+def test_preview_cvar_request_aggressive_uppercase_payload_rewritten() -> None:
+    """Case-insensitive payload normalisation."""
+    from app.domains.wealth.schemas.preview import PreviewCvarRequest
+
+    req = PreviewCvarRequest.model_validate({"cvar_limit": 0.10, "mandate": "AGGRESSIVE"})
+    assert req.mandate == "growth"
+
+
+@pytest.mark.parametrize("mandate", ["conservative", "moderate", "growth", None])
+def test_preview_cvar_request_canonical_mandate_passthrough(mandate: str | None) -> None:
+    from app.domains.wealth.schemas.preview import PreviewCvarRequest
+
+    req = PreviewCvarRequest.model_validate({"cvar_limit": 0.10, "mandate": mandate})
+    assert req.mandate == mandate
+
+
+def test_preview_cvar_request_truly_invalid_mandate_still_rejected() -> None:
+    """Non-alias unknown mandates still raise validation error."""
+    from pydantic import ValidationError
+
+    from app.domains.wealth.schemas.preview import PreviewCvarRequest
+
+    with pytest.raises(ValidationError):
+        PreviewCvarRequest.model_validate({"cvar_limit": 0.10, "mandate": "speculative"})
