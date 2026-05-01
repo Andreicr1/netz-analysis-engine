@@ -47,6 +47,9 @@ dev = [
     "ruff>=0.9",
     "mypy>=1.14",
     "import-linter>=2.1",
+    # Architectural analysis (backend/scripts/analyze_import_graph.py)
+    "networkx>=3.0",
+    "matplotlib>=3.8",
 ]
 ai = [
     "openai>=1.60",
@@ -342,8 +345,10 @@ forbidden_modules = [
     "vertical_engines.wealth.model_portfolio.track_record",
 ]
 
-# Vertical-agnostic quant services: all 16 covered. DB queries that previously
+# Vertical-agnostic quant services: all 19 covered. DB queries that previously
 # lived in quant_engine were extracted to app.domains.wealth.services.quant_queries.
+# factor_model_service was retro-fitted in PR-Q?? — its remaining DB reads use
+# raw SQL against benchmark_nav + allocation_blocks (both global tables).
 [[tool.importlinter.contracts]]
 name = "Vertical-agnostic quant services must not import wealth domain models"
 type = "forbidden"
@@ -352,6 +357,7 @@ source_modules = [
     "quant_engine.cvar_service",
     "quant_engine.evt",
     "quant_engine.attribution_service",
+    "quant_engine.factor_model_service",
     "quant_engine.fred_service",
     "quant_engine.portfolio_metrics_service",
     "quant_engine.regional_macro_service",
