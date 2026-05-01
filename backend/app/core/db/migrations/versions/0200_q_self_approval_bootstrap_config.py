@@ -93,6 +93,19 @@ _OVERRIDES_CONFIG_TYPES_PRIOR = (
     "'screening_layer3'"
 )
 
+# `ck_*_vertical` was set in 0004 to ('private_credit', 'liquid_funds')
+# and never widened, even though `app.core.config.registry` registers
+# domains under `_admin` and `wealth` as well. The bootstrap insert
+# below uses vertical='wealth' (per the wealth model-portfolio
+# lifecycle), so this migration is the first to actually exercise the
+# latent gap. We widen both vertical CHECK constraints to the actual
+# registry superset; downgrade restores the 0004 baseline. `_admin` is
+# included because it's already a registered cross-vertical domain in
+# `registry.py` and would fail the same way the moment any admin
+# config row is written.
+_VERTICALS_NEW = "'private_credit', 'liquid_funds', 'wealth', '_admin'"
+_VERTICALS_PRIOR = "'private_credit', 'liquid_funds'"
+
 # Bootstrap-only override payload. Field shape mirrors the dataclass in
 # vertical_engines/wealth/model_portfolio/state_machine.py::ApprovalPolicy.
 _BOOTSTRAP_APPROVAL_POLICY: dict = {
@@ -105,7 +118,28 @@ _BOOTSTRAP_APPROVAL_POLICY: dict = {
 
 
 def upgrade() -> None:
-    # ── Widen CHECK constraints to allow 'approval_policy' ──────────
+    # ── Widen vertical CHECK constraints to registry superset ───────
+    # MUST run before the override INSERT below — that row carries
+    # vertical='wealth' which the 0004 baseline rejects.
+    op.execute("ALTER TABLE vertical_config_defaults DROP CONSTRAINT IF EXISTS ck_defaults_vertical")
+    op.execute(
+        f"""
+        ALTER TABLE vertical_config_defaults
+        ADD CONSTRAINT ck_defaults_vertical
+        CHECK (vertical IN ({_VERTICALS_NEW}))
+        """,
+    )
+
+    op.execute("ALTER TABLE vertical_config_overrides DROP CONSTRAINT IF EXISTS ck_overrides_vertical")
+    op.execute(
+        f"""
+        ALTER TABLE vertical_config_overrides
+        ADD CONSTRAINT ck_overrides_vertical
+        CHECK (vertical IN ({_VERTICALS_NEW}))
+        """,
+    )
+
+    # ── Widen config_type CHECK constraints to allow 'approval_policy' ──
     op.execute("ALTER TABLE vertical_config_defaults DROP CONSTRAINT IF EXISTS ck_defaults_config_type")
     op.execute(
         f"""
@@ -171,7 +205,7 @@ def downgrade() -> None:
         """,
     )
 
-    # 2. Restore prior CHECK constraints (without 'approval_policy').
+    # 2. Restore prior config_type CHECK constraints (no 'approval_policy').
     op.execute("ALTER TABLE vertical_config_defaults DROP CONSTRAINT IF EXISTS ck_defaults_config_type")
     op.execute(
         f"""
@@ -187,5 +221,33 @@ def downgrade() -> None:
         ALTER TABLE vertical_config_overrides
         ADD CONSTRAINT ck_overrides_config_type
         CHECK (config_type IN ({_OVERRIDES_CONFIG_TYPES_PRIOR}))
+        """,
+    )
+
+    # 3. Drop any rows under newly-allowed verticals so the narrowed
+    #    vertical CHECK can be re-added without violation.
+    op.execute(
+        f"""
+        DELETE FROM vertical_config_overrides WHERE vertical NOT IN ({_VERTICALS_PRIOR});
+        DELETE FROM vertical_config_defaults  WHERE vertical NOT IN ({_VERTICALS_PRIOR});
+        """,
+    )
+
+    # 4. Restore prior vertical CHECK constraints (0004 baseline).
+    op.execute("ALTER TABLE vertical_config_defaults DROP CONSTRAINT IF EXISTS ck_defaults_vertical")
+    op.execute(
+        f"""
+        ALTER TABLE vertical_config_defaults
+        ADD CONSTRAINT ck_defaults_vertical
+        CHECK (vertical IN ({_VERTICALS_PRIOR}))
+        """,
+    )
+
+    op.execute("ALTER TABLE vertical_config_overrides DROP CONSTRAINT IF EXISTS ck_overrides_vertical")
+    op.execute(
+        f"""
+        ALTER TABLE vertical_config_overrides
+        ADD CONSTRAINT ck_overrides_vertical
+        CHECK (vertical IN ({_VERTICALS_PRIOR}))
         """,
     )
