@@ -67,7 +67,16 @@ def collapse_to_package(module: str, depth: int = LAYER_DEPTH) -> str:
 
 
 def parse_imports(path: Path, current_module: str) -> set[str]:
-    """Return the set of fully-qualified module names imported by ``path``."""
+    """Return the set of fully-qualified module names imported by ``path``.
+
+    Relative-import resolution must distinguish ``__init__.py`` (where the
+    module name IS the package) from regular modules (where the module's own
+    segment must be stripped to obtain the package).  Without this, level-1
+    imports inside ``pkg/__init__.py`` were resolved to ``.x`` and silently
+    dropped by ``is_internal``, hiding real cross-package edges.
+    """
+    is_init = path.name == "__init__.py"
+
     try:
         tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
     except SyntaxError:
@@ -80,8 +89,17 @@ def parse_imports(path: Path, current_module: str) -> set[str]:
                 imports.add(alias.name)
         elif isinstance(node, ast.ImportFrom):
             if node.level:  # relative import
-                base_parts = current_module.split(".")
-                base = ".".join(base_parts[: -node.level]) if node.level <= len(base_parts) else ""
+                base_parts = current_module.split(".") if current_module else []
+                # For __init__.py, current_module equals the package name, so
+                # level=1 means "self"; for regular modules, level=1 strips the
+                # module's own segment.  Subtract one stripping step for packages.
+                levels_to_strip = node.level - (1 if is_init else 0)
+                if levels_to_strip <= 0:
+                    base = current_module
+                elif levels_to_strip <= len(base_parts):
+                    base = ".".join(base_parts[:-levels_to_strip])
+                else:
+                    base = ""
                 target = f"{base}.{node.module}" if node.module else base
             else:
                 target = node.module or ""
