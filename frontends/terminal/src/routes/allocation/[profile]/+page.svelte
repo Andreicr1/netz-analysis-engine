@@ -49,11 +49,20 @@
 	import StressTabContent from "../../../lib/components/builder/StressTabContent.svelte";
 	import RegimeContextStrip from "@investintell/ii-terminal-core/components/allocation/RegimeContextStrip.svelte";
 	import StrategicApprovalBanner from "@investintell/ii-terminal-core/components/allocation/StrategicApprovalBanner.svelte";
+	import NewPortfolioDialog from "@investintell/ii-terminal-core/components/portfolio/NewPortfolioDialog.svelte";
 	import { approval } from "@investintell/ii-terminal-core/state/workspace-approval.svelte";
+	import { workspace } from "@investintell/ii-terminal-core/state/portfolio-workspace.svelte";
+	import type { ModelPortfolio } from "@investintell/ii-terminal-core/types/model-portfolio";
 
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
+
+	// PR-UX-4 — NewPortfolioDialog mount state. Opened by
+	// PortfolioPicker's onCreate (proxied via PortfolioTabContent's
+	// `onCreatePortfolio` callback). Form state lives inside the
+	// dialog component (DL15 — `$state` only, no localStorage).
+	let dialogOpen = $state(false);
 
 	const strategic = $derived(data.strategic.data);
 	const strategicErr = $derived(data.strategic.error);
@@ -127,6 +136,14 @@
 		}
 	});
 
+	// Wire the shared portfolio workspace so `workspace.createPortfolio`
+	// (used by the NewPortfolioDialog mount below) has a token resolver
+	// regardless of which tab is currently rendered. PortfolioTabContent
+	// also sets this when it mounts; the duplicate call is idempotent.
+	$effect(() => {
+		workspace.setGetToken(getToken);
+	});
+
 	// Resolve the selected portfolio's display name for the breadcrumb
 	// badge — only relevant on PORTFOLIO / STRESS tabs where a portfolio
 	// is actually in play.
@@ -190,6 +207,7 @@
 					profile={profile ?? "moderate"}
 					ipsApproved={!!strategic?.has_active_approval}
 					onOpenStrategic={() => setTab("strategic")}
+					onCreatePortfolio={() => (dialogOpen = true)}
 				/>
 			{:else if activeTab === "stress"}
 				<StressTabContent
@@ -200,6 +218,31 @@
 		</div>
 	{/if}
 </div>
+
+<!--
+  PR-UX-4 — NewPortfolioDialog mount.
+  Lives at the page root (outside the tab switch) so the dialog
+  Portal renders on top of every tab. `onCreated` invalidates loader
+  data + navigates to the new draft on the PORTFOLIO tab.
+-->
+<NewPortfolioDialog
+	open={dialogOpen}
+	onOpenChange={(v: boolean) => (dialogOpen = v)}
+	profile={profile ?? "moderate"}
+	portfolios={data.portfolios}
+	create={(payload: Record<string, unknown>) =>
+		workspace.createPortfolio(payload)}
+	onCreated={async (created: ModelPortfolio) => {
+		await invalidateAll();
+		const search = new URLSearchParams();
+		search.set("portfolio_id", created.id);
+		search.set("tab", "portfolio");
+		await goto(
+			resolve(`/allocation/${created.profile}?${search.toString()}`),
+			{ keepFocus: true },
+		);
+	}}
+/>
 
 <style>
 	.workspace {
