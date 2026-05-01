@@ -52,10 +52,18 @@ depends_on = None
 BOOTSTRAP_ORG_ID = "403d8392-ebfa-5890-b740-45da49c556eb"
 
 # CHECK constraint values — keep in sync with `app.core.config.registry`.
-# Defaults CHECK was last updated in 0128 (added taa_bands).
-# Overrides CHECK was last updated in 0007 (added governance_policy).
-# Both lists below include every value that has been allowed historically
-# in the respective constraint, plus 'approval_policy'.
+# Defaults CHECK was last updated in 0128 (added taa_bands; itself a
+# superset of 0012's V4 which added branding + screening_layer1/2/3).
+# Overrides CHECK was last updated in 0012 (V4 loop iterates BOTH
+# defaults AND overrides — so branding + screening_layer1/2/3 were
+# also applied to the overrides constraint, even though no migration
+# since has touched the overrides side specifically).
+# Both PRIOR lists below MUST mirror the actual on-disk superset
+# immediately before this migration runs — narrowing them would
+# regress a real environment that already holds rows for those types
+# (e.g. branding overrides seeded by 0009 PHASE C extensions, screening
+# overrides seeded by 0011 PHASE B/C). Both NEW lists add only
+# 'approval_policy' on top of that superset.
 _DEFAULTS_CONFIG_TYPES = (
     "'calibration', 'scoring', 'blocks', 'chapters', "
     "'portfolio_profiles', 'prompts', 'model_routing', 'tone', "
@@ -74,12 +82,15 @@ _OVERRIDES_CONFIG_TYPES = (
     "'calibration', 'scoring', 'blocks', 'chapters', "
     "'portfolio_profiles', 'prompts', 'model_routing', 'tone', "
     "'evaluation', 'macro_intelligence', 'governance_policy', "
-    "'approval_policy'"
+    "'branding', 'screening_layer1', 'screening_layer2', "
+    "'screening_layer3', 'approval_policy'"
 )
 _OVERRIDES_CONFIG_TYPES_PRIOR = (
     "'calibration', 'scoring', 'blocks', 'chapters', "
     "'portfolio_profiles', 'prompts', 'model_routing', 'tone', "
-    "'evaluation', 'macro_intelligence', 'governance_policy'"
+    "'evaluation', 'macro_intelligence', 'governance_policy', "
+    "'branding', 'screening_layer1', 'screening_layer2', "
+    "'screening_layer3'"
 )
 
 # Bootstrap-only override payload. Field shape mirrors the dataclass in
