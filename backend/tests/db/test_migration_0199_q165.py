@@ -71,6 +71,32 @@ def test_upgrade_rewrites_mandate_in_portfolio_calibration() -> None:
     )
 
 
+# ── Phase 1 — pre-UPDATE dedup (Codex P3 catch on PR #463) ───────────
+# Five tables enforce uniqueness on a key tuple that includes ``profile``;
+# the migration must DELETE colliding aggressive rows BEFORE the UPDATE
+# loop so a legacy environment with both ``growth`` and ``aggressive``
+# rows for the same logical key does not abort with unique-violation.
+
+@pytest.mark.parametrize("table,join_predicate", [
+    ("model_portfolios", "mp_g.organization_id = mp_a.organization_id"),
+    ("portfolio_snapshots", "ps_g.snapshot_date = ps_a.snapshot_date"),
+    ("rebalance_events", "re_g.event_type = 'drift_rebalance'"),
+    ("taa_regime_state", "ts_g.as_of_date = ts_a.as_of_date"),
+    ("tactical_positions", "tp_g.block_id = tp_a.block_id"),
+])
+def test_upgrade_dedups_before_rewriting(table: str, join_predicate: str) -> None:
+    src = _MIGRATION_PATH.read_text(encoding="utf-8")
+    assert f"DELETE FROM {table}" in src, (
+        f"upgrade must DELETE colliding aggressive rows from {table} "
+        "BEFORE the UPDATE loop (unique-key collision risk)."
+    )
+    assert join_predicate in src, (
+        f"DELETE on {table} must scope by the partial-index key "
+        f"({join_predicate!r}) so non-colliding aggressive rows survive "
+        "to be rewritten in phase 2."
+    )
+
+
 def test_downgrade_explicitly_rejects_reversal() -> None:
     src = _MIGRATION_PATH.read_text(encoding="utf-8")
     assert "raise NotImplementedError" in src

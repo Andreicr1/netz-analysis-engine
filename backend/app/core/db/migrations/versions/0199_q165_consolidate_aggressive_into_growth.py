@@ -30,7 +30,111 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # ── Profile namespace (full sweep) ─────────────────────────────
+    # ── Phase 1 — pre-UPDATE collision dedup (Codex P2/P3 catches) ──
+    # Five public-schema tables enforce uniqueness on a key tuple that
+    # includes ``profile``. On environments with both ``aggressive``
+    # AND ``growth`` rows for the same logical key, the blanket UPDATE
+    # in phase 2 would raise a unique-violation and abort the whole
+    # migration. Strategy: ``aggressive`` is a development artefact
+    # per the F1 audit narrative (2026-04-30); on a true collision we
+    # delete the ``aggressive`` row and keep ``growth`` as canonical.
+    # Each DELETE is scoped to the same partial-index predicate as
+    # the unique constraint it shadows, so non-colliding rows survive
+    # and get rewritten in phase 2.
+    #
+    # Conflict surfaces:
+    #   model_portfolios     | uq_model_portfolios_org_profile_active
+    #                          (organization_id, profile)
+    #                          WHERE status IN ('draft','backtesting','live')
+    #   portfolio_snapshots  | uq_portfolio_snapshots_org_profile_date
+    #                          (organization_id, profile, snapshot_date)
+    #   rebalance_events     | uq_rebalance_event_pending_drift_per_profile
+    #                          (organization_id, profile)
+    #                          WHERE status='pending'
+    #                            AND event_type='drift_rebalance'
+    #   taa_regime_state     | uq_taa_regime_state_org_profile_date
+    #                          (organization_id, profile, as_of_date)
+    #   tactical_positions   | uq_tactical_one_active_per_block
+    #                          (organization_id, profile, block_id)
+    #                          WHERE valid_to IS NULL
+
+    # model_portfolios — collide on (org, status_active)
+    op.execute(
+        """
+        DELETE FROM model_portfolios mp_a
+        WHERE mp_a.profile = 'aggressive'
+          AND mp_a.status IN ('draft', 'backtesting', 'live')
+          AND EXISTS (
+              SELECT 1 FROM model_portfolios mp_g
+              WHERE mp_g.organization_id = mp_a.organization_id
+                AND mp_g.profile = 'growth'
+                AND mp_g.status IN ('draft', 'backtesting', 'live')
+          )
+        """,
+    )
+
+    # portfolio_snapshots — collide on (org, snapshot_date)
+    op.execute(
+        """
+        DELETE FROM portfolio_snapshots ps_a
+        WHERE ps_a.profile = 'aggressive'
+          AND EXISTS (
+              SELECT 1 FROM portfolio_snapshots ps_g
+              WHERE ps_g.organization_id = ps_a.organization_id
+                AND ps_g.profile = 'growth'
+                AND ps_g.snapshot_date = ps_a.snapshot_date
+          )
+        """,
+    )
+
+    # rebalance_events — collide on (org) within pending drift partial index
+    op.execute(
+        """
+        DELETE FROM rebalance_events re_a
+        WHERE re_a.profile = 'aggressive'
+          AND re_a.status = 'pending'
+          AND re_a.event_type = 'drift_rebalance'
+          AND EXISTS (
+              SELECT 1 FROM rebalance_events re_g
+              WHERE re_g.organization_id = re_a.organization_id
+                AND re_g.profile = 'growth'
+                AND re_g.status = 'pending'
+                AND re_g.event_type = 'drift_rebalance'
+          )
+        """,
+    )
+
+    # taa_regime_state — collide on (org, as_of_date)
+    op.execute(
+        """
+        DELETE FROM taa_regime_state ts_a
+        WHERE ts_a.profile = 'aggressive'
+          AND EXISTS (
+              SELECT 1 FROM taa_regime_state ts_g
+              WHERE ts_g.organization_id = ts_a.organization_id
+                AND ts_g.profile = 'growth'
+                AND ts_g.as_of_date = ts_a.as_of_date
+          )
+        """,
+    )
+
+    # tactical_positions — collide on (org, block_id) within active partial index
+    op.execute(
+        """
+        DELETE FROM tactical_positions tp_a
+        WHERE tp_a.profile = 'aggressive'
+          AND tp_a.valid_to IS NULL
+          AND EXISTS (
+              SELECT 1 FROM tactical_positions tp_g
+              WHERE tp_g.organization_id = tp_a.organization_id
+                AND tp_g.profile = 'growth'
+                AND tp_g.block_id = tp_a.block_id
+                AND tp_g.valid_to IS NULL
+          )
+        """,
+    )
+
+    # ── Phase 2 — full sweep of profile-column tables ──────────────
     # Every public-schema table with a ``profile`` column must be
     # rewritten in lockstep with the route-layer alias normaliser —
     # otherwise queries canonicalised to ``growth`` would silently
@@ -56,10 +160,11 @@ def upgrade() -> None:
             f"WHERE profile = 'aggressive'",
         )
 
-    # ── Mandate namespace ──────────────────────────────────────────
+    # ── Phase 3 — mandate namespace ────────────────────────────────
     # ``portfolio_calibration.mandate`` is a ``String(64)`` column with
-    # no DB-level CHECK constraint, so the legacy ``aggressive`` value
-    # is a free-form artefact. Same hygienic UPDATE pattern.
+    # no DB-level CHECK constraint and no profile-based uniqueness
+    # (UNIQUE on ``portfolio_id`` alone), so the legacy ``aggressive``
+    # value is a free-form artefact. Plain UPDATE is collision-free.
     op.execute(
         "UPDATE portfolio_calibration SET mandate = 'growth' "
         "WHERE mandate = 'aggressive'",
