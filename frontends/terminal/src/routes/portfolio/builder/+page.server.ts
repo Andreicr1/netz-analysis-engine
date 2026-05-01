@@ -29,6 +29,7 @@ import type { PageServerLoad } from "./$types";
 import {
 	DEFAULT_PROFILE,
 	buildBuilderRedirect,
+	extractCanonicalPortfolioId,
 } from "@investintell/ii-terminal-core/utils/builder-redirect";
 
 const FETCH_TIMEOUT_MS = 4000;
@@ -57,10 +58,10 @@ async function fetchPortfolioProfile(
 export const load: PageServerLoad = async ({ url, parent }) => {
 	const { token } = await parent();
 
-	// Extract portfolio_id (or legacy id) without consuming the iterator
-	// — buildBuilderRedirect re-walks the params for normalization.
-	const portfolioId =
-		url.searchParams.get("portfolio_id") ?? url.searchParams.get("id");
+	// Resolve the canonical id via the same helper buildBuilderRedirect
+	// uses to emit it — guaranteeing lookup and redirect agree even if
+	// the URL contains both ?portfolio_id= and ?id=, or repeated keys.
+	const portfolioId = extractCanonicalPortfolioId(url.searchParams);
 
 	let resolvedProfile: string | null = null;
 	if (portfolioId && token) {

@@ -6,6 +6,7 @@ import { describe, expect, test } from "vitest";
 import {
 	DEFAULT_PROFILE,
 	buildBuilderRedirect,
+	extractCanonicalPortfolioId,
 	normalizeProfile,
 } from "./builder-redirect.js";
 
@@ -92,5 +93,75 @@ describe("buildBuilderRedirect", () => {
 		const dest = buildBuilderRedirect(params, null);
 		// Source-provided tab wins because it iterates after the seed.
 		expect(dest).toContain("tab=stress");
+	});
+
+	// ── Regression: lookup ↔ emit must agree on canonical id ──────
+	// Codex P2: previously the loader read get("portfolio_id") ?? get("id")
+	// while the builder iterated source params with set() last-write-wins,
+	// so URLs combining both keys (or repeating one) could land on the
+	// /allocation/{profile} route for the wrong portfolio.
+
+	test("URL with both portfolio_id then id keeps portfolio_id as canonical (id-after-portfolio_id ordering)", () => {
+		const params = new URLSearchParams("portfolio_id=BBBB&id=AAAA");
+		const dest = buildBuilderRedirect(params, "growth");
+		const query = new URLSearchParams(dest.split("?")[1] ?? "");
+		expect(query.getAll("portfolio_id")).toEqual(["BBBB"]);
+		expect(query.has("id")).toBe(false);
+	});
+
+	test("URL with id then portfolio_id keeps portfolio_id as canonical (portfolio_id-after-id ordering)", () => {
+		const params = new URLSearchParams("id=AAAA&portfolio_id=BBBB");
+		const dest = buildBuilderRedirect(params, "growth");
+		const query = new URLSearchParams(dest.split("?")[1] ?? "");
+		expect(query.getAll("portfolio_id")).toEqual(["BBBB"]);
+		expect(query.has("id")).toBe(false);
+	});
+
+	test("repeated portfolio_id collapses to the first value (matches URLSearchParams.get precedence)", () => {
+		const params = new URLSearchParams(
+			"portfolio_id=AAAA&portfolio_id=BBBB",
+		);
+		const dest = buildBuilderRedirect(params, "growth");
+		const query = new URLSearchParams(dest.split("?")[1] ?? "");
+		expect(query.getAll("portfolio_id")).toEqual(["AAAA"]);
+	});
+
+	test("repeated legacy id collapses to the first value", () => {
+		const params = new URLSearchParams("id=AAAA&id=BBBB");
+		const dest = buildBuilderRedirect(params, "growth");
+		const query = new URLSearchParams(dest.split("?")[1] ?? "");
+		expect(query.getAll("portfolio_id")).toEqual(["AAAA"]);
+		expect(query.has("id")).toBe(false);
+	});
+
+	test("no id keys present omits portfolio_id from destination", () => {
+		const params = new URLSearchParams("foo=bar");
+		const dest = buildBuilderRedirect(params, null);
+		const query = new URLSearchParams(dest.split("?")[1] ?? "");
+		expect(query.has("portfolio_id")).toBe(false);
+		expect(query.has("id")).toBe(false);
+		expect(query.get("foo")).toBe("bar");
+	});
+});
+
+describe("extractCanonicalPortfolioId", () => {
+	test("prefers portfolio_id over id", () => {
+		const params = new URLSearchParams("id=AAAA&portfolio_id=BBBB");
+		expect(extractCanonicalPortfolioId(params)).toBe("BBBB");
+	});
+
+	test("falls back to legacy id when portfolio_id absent", () => {
+		const params = new URLSearchParams("id=AAAA");
+		expect(extractCanonicalPortfolioId(params)).toBe("AAAA");
+	});
+
+	test("returns first value when key is repeated", () => {
+		const params = new URLSearchParams("portfolio_id=AAAA&portfolio_id=BBBB");
+		expect(extractCanonicalPortfolioId(params)).toBe("AAAA");
+	});
+
+	test("returns null when neither key is present", () => {
+		const params = new URLSearchParams("foo=bar");
+		expect(extractCanonicalPortfolioId(params)).toBeNull();
 	});
 });
