@@ -37,6 +37,11 @@ const FETCH_TIMEOUT_MS = 4000;
 /**
  * Lookup a portfolio's profile by id. Returns ``null`` on any failure
  * — caller falls back to ``DEFAULT_PROFILE``.
+ *
+ * ``portfolioId`` MUST already be a UUID validated by
+ * ``extractCanonicalPortfolioId``; ``encodeURIComponent`` is applied
+ * here as defense in depth so any future caller that bypasses the
+ * helper still cannot inject path separators into the API path.
  */
 async function fetchPortfolioProfile(
 	token: string,
@@ -45,7 +50,7 @@ async function fetchPortfolioProfile(
 	try {
 		const api = createServerApiClient(token);
 		const portfolio = await api.get<ModelPortfolio>(
-			`/model-portfolios/${portfolioId}`,
+			`/model-portfolios/${encodeURIComponent(portfolioId)}`,
 			undefined,
 			{ signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
 		);

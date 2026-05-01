@@ -30,23 +30,56 @@ export function normalizeProfile(
 }
 
 /**
+ * RFC 4122 UUID (v1–v5, any version digit, any variant). The
+ * /model-portfolios endpoint always issues UUIDs as ids, so anything
+ * that isn't a UUID is either malformed or a path-traversal attempt
+ * (e.g. ``..``, ``foo/bar``, ``%2e%2e``) and must NOT be interpolated
+ * into the API path or echoed into the redirect destination.
+ */
+const UUID_RE =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidPortfolioId(
+	raw: string | null | undefined,
+): raw is string {
+	return typeof raw === "string" && UUID_RE.test(raw);
+}
+
+/**
  * Extract the canonical portfolio_id from a URLSearchParams, applying
  * the precedence rule shared by lookup and redirect emit:
  *
- *   1. First value of ``portfolio_id`` if present.
- *   2. Else first value of ``id`` (legacy wealth callers).
+ *   1. First value of ``portfolio_id`` if present AND a valid UUID.
+ *   2. Else first value of ``id`` (legacy wealth callers) if a valid
+ *      UUID.
  *   3. Else ``null``.
  *
- * Centralizing this avoids the regression where the loader fetches
- * the profile for one id while the redirect carries another (e.g.
- * URL contains both ``?portfolio_id=B&id=A`` or repeated keys, which
- * would have been resolved differently by ``URLSearchParams.get``
- * vs. last-write-wins iteration in ``buildBuilderRedirect``).
+ * Centralizing this avoids two regressions:
+ *   - Loader and redirect drifting on which id is canonical when both
+ *     keys are present or repeated (P2 hotfix #1).
+ *   - Crafted ids containing path separators (``..``, ``/``, encoded
+ *     equivalents) reaching ``/model-portfolios/${id}`` and triggering
+ *     authenticated GETs against unrelated backend routes (P2 hotfix
+ *     #2). UUID validation here means both the lookup and the
+ *     redirect emit ignore non-UUID values entirely.
  */
 export function extractCanonicalPortfolioId(
 	source: URLSearchParams,
 ): string | null {
-	return source.get("portfolio_id") ?? source.get("id");
+	// Try each candidate key in precedence order and return the first
+	// VALID UUID. We deliberately fall through on a present-but-invalid
+	// portfolio_id so that a malformed canonical key doesn't shadow a
+	// usable legacy id — e.g. ``?portfolio_id=garbage&id=<uuid>`` still
+	// resolves to <uuid> instead of dropping both. Any non-UUID input is
+	// rejected entirely, so this fallback can never widen the
+	// path-traversal attack surface.
+	for (const candidate of [
+		source.get("portfolio_id"),
+		source.get("id"),
+	]) {
+		if (isValidPortfolioId(candidate)) return candidate;
+	}
+	return null;
 }
 
 /**
