@@ -141,7 +141,7 @@ async def test_uncovered_block_with_no_catalog_candidates() -> None:
         catalog_tickers={},
     )
 
-    report = await validate_block_coverage(session, org_id, "aggressive")
+    report = await validate_block_coverage(session, org_id, "growth")
     assert report.is_sufficient is False
     assert len(report.gaps) == 1
     gap = report.gaps[0]

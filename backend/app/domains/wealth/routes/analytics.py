@@ -138,7 +138,7 @@ async def create_backtest(
     user: CurrentUser = Depends(get_current_user),
     org_id: uuid.UUID = Depends(get_org_id),
 ) -> BacktestRunRead:
-    _validate_profile(body.profile)
+    body.profile = _validate_profile(body.profile)
 
     # If cv=True in params, run walk-forward backtest synchronously (on-demand analytics)
     cv_metrics = None
@@ -236,7 +236,7 @@ async def optimize(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> OptimizeResult:
-    _validate_profile(body.profile)
+    body.profile = _validate_profile(body.profile)
 
     # Get strategic allocation blocks for this profile
     today = date.today()
@@ -336,7 +336,7 @@ async def optimize_pareto(
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
 ) -> ParetoOptimizeResult:
-    _validate_profile(body.profile)
+    body.profile = _validate_profile(body.profile)
 
     today = date.today()
     alloc_stmt = (
@@ -669,7 +669,7 @@ async def get_risk_budget(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> RiskBudgetResponse:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
 
     allocations, block_ids, block_names, weights = await _resolve_profile_weights(db, profile)
 
@@ -736,7 +736,7 @@ async def get_factor_analysis(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> FactorAnalysisResponse:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
 
     _, block_ids, _, weights = await _resolve_profile_weights(db, profile)
 

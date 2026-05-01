@@ -65,7 +65,7 @@ async def get_portfolio(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioSummary:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     snap = await get_latest_snapshot(db, profile)
     return _snapshot_to_summary(profile, snap)
 
@@ -81,7 +81,7 @@ async def get_snapshot(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioSnapshotRead | None:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     snap = await get_latest_snapshot(db, profile)
     if snap is None:
         return None
@@ -105,7 +105,7 @@ async def get_history(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[PortfolioSnapshotRead]:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     stmt = select(PortfolioSnapshot).where(PortfolioSnapshot.profile == profile)
     if from_date is not None:
         stmt = stmt.where(PortfolioSnapshot.snapshot_date >= from_date)
@@ -135,7 +135,7 @@ async def trigger_rebalance(
     user: CurrentUser = Depends(get_current_user),
     org_id: uuid.UUID = Depends(get_org_id),
 ) -> RebalanceEventRead:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     snap = await get_latest_snapshot(db, profile)
 
     event = RebalanceEvent(
@@ -169,7 +169,7 @@ async def list_rebalance_events(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[RebalanceEventRead]:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     stmt = select(RebalanceEvent).where(RebalanceEvent.profile == profile)
     if event_status is not None:
         stmt = stmt.where(RebalanceEvent.status == event_status)
@@ -190,7 +190,7 @@ async def get_rebalance_event(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> RebalanceEventRead:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     stmt = select(RebalanceEvent).where(
         RebalanceEvent.event_id == event_id,
         RebalanceEvent.profile == profile,
@@ -217,7 +217,7 @@ async def approve_rebalance(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(require_ic_member()),
 ) -> RebalanceEventRead:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     # SELECT FOR UPDATE to prevent concurrent approval race condition
     stmt = (
         select(RebalanceEvent)
@@ -269,7 +269,7 @@ async def execute_rebalance(
     3. Transition event to 'executed'
     4. Publish SSE alert
     """
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
 
     from quant_engine.rebalance_service import validate_status_transition
 

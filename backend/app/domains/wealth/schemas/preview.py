@@ -28,7 +28,7 @@ class PreviewCvarRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     cvar_limit: float = Field(..., ge=0.0005, le=0.20)
-    mandate: Literal["conservative", "moderate", "growth", "aggressive"] | None = None
+    mandate: Literal["conservative", "moderate", "growth"] | None = None
 
 
 class AchievableReturnBandDTO(BaseModel):

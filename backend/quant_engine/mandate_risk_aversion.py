@@ -50,14 +50,35 @@ RA_MAX = 10.0                # upper bound — beyond this, optimizer scaling fa
 # Pre-compiled normaliser: collapse runs of whitespace + dashes into one underscore.
 _KEY_NORMALISER = re.compile(r"[\s\-]+")
 
+# PR-BE-7 — backward-compat alias for the legacy ``aggressive`` mandate.
+# The dict ``_MANDATE_RISK_AVERSION`` keeps the key so any direct lookups
+# elsewhere keep working, but normalised input is rewritten to ``growth``
+# with a deprecation log. Sunset 2026-10-30 (180d post-merge). Atomic
+# (compound) keys like ``moderate_aggressive`` are NOT touched — those
+# are independent ladder rungs, not the legacy artefact.
+_MANDATE_ALIASES: dict[str, str] = {"aggressive": "growth"}
+_MANDATE_SUNSET_DATE = "2026-10-30"
+
 
 def _normalise_mandate(mandate: str) -> str:
     """Normalise a free-text mandate label to the canonical dict key.
 
     Collapses runs of whitespace and dashes (e.g., '  ', '--', ' - ')
-    into single underscores. Idempotent.
+    into single underscores. Idempotent. The legacy ``aggressive``
+    mandate is rewritten to ``growth`` (PR-BE-7) with a structured
+    deprecation log.
     """
-    return _KEY_NORMALISER.sub("_", mandate.strip().lower())
+    key = _KEY_NORMALISER.sub("_", mandate.strip().lower())
+    if key in _MANDATE_ALIASES:
+        canonical = _MANDATE_ALIASES[key]
+        logger.info(
+            "legacy_mandate_alias_used",
+            received=key,
+            canonical=canonical,
+            sunset_at=_MANDATE_SUNSET_DATE,
+        )
+        return canonical
+    return key
 
 
 def resolve_risk_aversion(

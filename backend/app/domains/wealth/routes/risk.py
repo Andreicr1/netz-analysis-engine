@@ -195,7 +195,7 @@ async def get_cvar(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> CVaRStatus:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     snap = await get_latest_snapshot(db, profile)
     cvar = _snap_to_cvar(profile, snap)
 
@@ -248,7 +248,7 @@ async def get_cvar_history(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[CVaRPoint]:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
 
     today = date.today()
     # Default: last 6 months if no from_date — avoids full hypertable scan

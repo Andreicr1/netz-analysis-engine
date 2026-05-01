@@ -52,7 +52,7 @@ async def get_strategic(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[StrategicAllocationRead]:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     today = date.today()
     stmt = (
         select(StrategicAllocation)
@@ -80,7 +80,7 @@ async def update_strategic(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(require_ic_member),
 ) -> list[StrategicAllocationRead]:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     today = date.today()
 
     # Expire current allocations
@@ -133,7 +133,7 @@ async def get_tactical(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[TacticalPositionRead]:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     today = date.today()
     stmt = (
         select(TacticalPosition)
@@ -160,7 +160,7 @@ async def update_tactical(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(require_ic_member),
 ) -> list[TacticalPositionRead]:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     today = date.today()
 
     # Expire current positions
@@ -206,7 +206,7 @@ async def get_effective(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[EffectiveAllocationRead]:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     today = date.today()
 
     # Get strategic allocations
@@ -281,7 +281,7 @@ async def simulate_allocation(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> SimulationResult:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
 
     # --- validate weights sum ≈ 1.0 ---
     weights_sum = sum(body.weights.values())
@@ -540,7 +540,7 @@ async def get_regime_bands(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> RegimeBandsRead:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
 
     # Fetch latest taa_regime_state row
     stmt = (
@@ -615,7 +615,7 @@ async def get_taa_history(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> TaaHistoryRead:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
 
     # Total count
     count_stmt = (
@@ -653,7 +653,7 @@ async def get_effective_with_regime(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[EffectiveAllocationWithRegimeRead]:
-    _validate_profile(profile)
+    profile = _validate_profile(profile)
     today = date.today()
 
     # Get strategic allocations

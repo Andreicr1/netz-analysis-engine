@@ -152,3 +152,10 @@ export function regimeLabel(raw: string | null | undefined): string {
  * used in chart titles and section headings.
  */
 export const MARKET_REGIME_HEADER = "Market Regime: Expansion / Cautious / Stress";
+
+// PR-BE-7 — Profile display label, owned by terminal-core. Re-exported
+// here so wealth call sites can keep importing from
+// ``$wealth/i18n/quant-labels`` without taking a hard dependency on the
+// terminal-core path. Canonisation lives in terminal-core; this is a
+// pass-through.
+export { profileDisplayLabel } from "@investintell/ii-terminal-core/i18n/quant-labels";
