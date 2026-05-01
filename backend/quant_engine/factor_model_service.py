@@ -22,13 +22,17 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import structlog
-from sqlalchemy import select
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.audit import write_audit_event
-from app.domains.wealth.models.benchmark_nav import BenchmarkNav
-from app.domains.wealth.models.block import AllocationBlock
 from app.shared.models import MacroData
+
+# benchmark_nav + allocation_blocks are global tables (no RLS, shared across all
+# tenants — see CLAUDE.md "Global tables").  We query them via raw SQL instead
+# of importing the wealth-domain ORM models, which would breach the
+# import-linter contract "Vertical-agnostic quant services must not import
+# wealth domain models" (pyproject.toml).
 
 logger = structlog.get_logger()
 
@@ -64,20 +68,27 @@ async def build_fundamental_factor_returns(
     OAS_TICKERS = ["BAMLH0A0HYM2", "BAMLHEOPHYM2"]
 
     # ── 1. Benchmark NAV LEVELS (PR-Q15 Fix 1: levels, not return_1d) ────
-    benchmark_stmt = (
-        select(
-            BenchmarkNav.nav_date,
-            AllocationBlock.benchmark_ticker,
-            BenchmarkNav.nav,
-        )
-        .join(AllocationBlock, BenchmarkNav.block_id == AllocationBlock.block_id)
-        .where(BenchmarkNav.nav_date >= start_date)
-        .where(BenchmarkNav.nav_date <= end_date)
-        .where(AllocationBlock.benchmark_ticker.in_(
-            ["SPY", "IEF", "HYG", "IWM", "IWD", "IWF", "EFA"] + OAS_TICKERS
-        ))
+    # Raw SQL keeps quant_engine independent of app.domains.wealth ORM models
+    # (import-linter contract).  benchmark_nav + allocation_blocks are global
+    # (no RLS) so the lack of ORM-mediated tenancy filters is intentional.
+    benchmark_stmt = text(
+        """
+        SELECT bn.nav_date, ab.benchmark_ticker, bn.nav
+        FROM benchmark_nav AS bn
+        JOIN allocation_blocks AS ab ON bn.block_id = ab.block_id
+        WHERE bn.nav_date >= :start_date
+          AND bn.nav_date <= :end_date
+          AND ab.benchmark_ticker IN :tickers
+        """
+    ).bindparams(bindparam("tickers", expanding=True))
+    benchmark_res = await db.execute(
+        benchmark_stmt,
+        {
+            "start_date": start_date,
+            "end_date": end_date,
+            "tickers": ["SPY", "IEF", "HYG", "IWM", "IWD", "IWF", "EFA"] + OAS_TICKERS,
+        },
     )
-    benchmark_res = await db.execute(benchmark_stmt)
     benchmark_rows = benchmark_res.all()
 
     # Defensive filter (PR-Q35 F06): OAS levels are not total returns. Previously
