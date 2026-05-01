@@ -41,16 +41,34 @@ def test_revision_chain_anchored_at_0198_head() -> None:
     ), "PR-BE-7 must rebase on the current alembic head (0198_q159)."
 
 
-@pytest.mark.parametrize("table,column", [
-    ("model_portfolios", "profile"),
-    ("strategic_allocation", "profile"),
-    ("allocation_approvals", "profile"),
-    ("portfolio_calibration", "mandate"),
+# Profile-column tables are rewritten via a loop over ``_PROFILE_TABLES``;
+# the test asserts each table name is present in the tuple literal.
+@pytest.mark.parametrize("table", [
+    "model_portfolios",
+    "strategic_allocation",
+    "allocation_approvals",
+    "allocation_template_audit",
+    "backtest_runs",
+    "portfolio_snapshots",
+    "rebalance_events",
+    "taa_regime_state",
+    "tactical_positions",
 ])
-def test_upgrade_targets_each_known_table(table: str, column: str) -> None:
+def test_upgrade_covers_each_profile_column_table(table: str) -> None:
     src = _MIGRATION_PATH.read_text(encoding="utf-8")
-    expected = f"UPDATE {table} SET {column} = 'growth'"
-    assert expected in src, f"upgrade missing rewrite for {table}.{column}"
+    assert f'"{table}",' in src, (
+        f"upgrade _PROFILE_TABLES must include {table!r} — Codex P2 "
+        "catch on PR #463 required full sweep of profile-column tables "
+        "to honour the 180-day alias compat contract."
+    )
+
+
+def test_upgrade_rewrites_mandate_in_portfolio_calibration() -> None:
+    src = _MIGRATION_PATH.read_text(encoding="utf-8")
+    assert (
+        "UPDATE portfolio_calibration SET mandate = 'growth' "
+        "WHERE mandate = 'aggressive'" in src
+    )
 
 
 def test_downgrade_explicitly_rejects_reversal() -> None:

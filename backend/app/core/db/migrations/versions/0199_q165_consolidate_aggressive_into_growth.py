@@ -30,22 +30,31 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # ── Profile namespace ──────────────────────────────────────────
-    # Three tables carry a ``profile`` column whose canonical enum was
-    # ``conservative`` / ``moderate`` / ``growth`` / ``aggressive``.
-    # PR-BE-7 collapses ``aggressive`` into ``growth``.
-    op.execute(
-        "UPDATE model_portfolios SET profile = 'growth' "
-        "WHERE profile = 'aggressive'",
+    # ── Profile namespace (full sweep) ─────────────────────────────
+    # Every public-schema table with a ``profile`` column must be
+    # rewritten in lockstep with the route-layer alias normaliser —
+    # otherwise queries canonicalised to ``growth`` would silently
+    # miss legacy ``aggressive`` rows during the 180-day compatibility
+    # window, producing a data-visibility regression (Codex P2 catch
+    # on PR #463). Audit source:
+    #   SELECT table_name FROM information_schema.columns
+    #   WHERE table_schema='public' AND column_name='profile';
+    _PROFILE_TABLES = (
+        "model_portfolios",
+        "strategic_allocation",
+        "allocation_approvals",
+        "allocation_template_audit",
+        "backtest_runs",
+        "portfolio_snapshots",
+        "rebalance_events",
+        "taa_regime_state",
+        "tactical_positions",
     )
-    op.execute(
-        "UPDATE strategic_allocation SET profile = 'growth' "
-        "WHERE profile = 'aggressive'",
-    )
-    op.execute(
-        "UPDATE allocation_approvals SET profile = 'growth' "
-        "WHERE profile = 'aggressive'",
-    )
+    for table in _PROFILE_TABLES:
+        op.execute(
+            f"UPDATE {table} SET profile = 'growth' "
+            f"WHERE profile = 'aggressive'",
+        )
 
     # ── Mandate namespace ──────────────────────────────────────────
     # ``portfolio_calibration.mandate`` is a ``String(64)`` column with
