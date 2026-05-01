@@ -16,6 +16,7 @@
 import type { PageServerLoad } from "./$types";
 import { okData, errData, type RouteData } from "@investintell/ui/runtime";
 import { createServerApiClient } from "@investintell/ii-terminal-core/api/client";
+import { fetchAllModelPortfolios } from "@investintell/ii-terminal-core/api/model-portfolios";
 import {
 	ALLOCATION_PROFILES,
 	type AllocationProfile,
@@ -25,7 +26,6 @@ import {
 } from "@investintell/ii-terminal-core/types/allocation-page";
 import type {
 	ModelPortfolio,
-	ModelPortfolioListResponse,
 } from "@investintell/ii-terminal-core/types/model-portfolio";
 
 const FETCH_TIMEOUT_MS = 8000;
@@ -154,18 +154,16 @@ export const load: PageServerLoad = async ({
 		}))
 		.catch(() => null);
 
-	// PR-BE-2 — pass ?profile so the backend filters server-side, and
-	// apply a defensive client-side filter on the response so a stale
-	// cache or backend regression can never blank the workspace with a
-	// wrong-profile portfolio (§6.2.2 PortfolioTabContent).
-	const portfoliosPromise = api
-		.get<ModelPortfolioListResponse>(
-			"/model-portfolios",
-			{ profile, limit: 200 },
-			{ signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
-		)
-		.then((resp): ModelPortfolio[] =>
-			(resp.items ?? []).filter((p) => p.profile === profile),
+	// Pass ?profile so the backend filters server-side, then follow
+	// next_cursor until exhaustion. Keep the defensive client-side
+	// profile filter for stale cache or backend regressions.
+	const portfoliosPromise = fetchAllModelPortfolios(
+		api,
+		{ profile, limit: 200 },
+		() => ({ signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+	)
+		.then((items): ModelPortfolio[] =>
+			items.filter((p) => p.profile === profile),
 		)
 		.catch((): ModelPortfolio[] => []);
 

@@ -65,12 +65,8 @@
     "build": "svelte-package -i ./src/lib -o ./dist",
     "prepublishOnly": "pnpm build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-<<<<<<< HEAD
-    "test": "vitest run"
-=======
     "test": "vitest run",
     "test:watch": "vitest"
->>>>>>> origin/main
   },
   "peerDependencies": {
     "@investintell/ui": "workspace:*",

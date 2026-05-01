@@ -8,11 +8,9 @@
  */
 
 import type { PageServerLoad } from "./$types";
+import { fetchAllModelPortfolios } from "@investintell/ii-terminal-core/api/model-portfolios";
 import { createServerApiClient } from "$lib/api/client";
-import type {
-	ModelPortfolio,
-	ModelPortfolioListResponse,
-} from "$lib/types/model-portfolio";
+import type { ModelPortfolio } from "$lib/types/model-portfolio";
 
 export const load: PageServerLoad = async ({ parent, url }) => {
 	const { token } = await parent();
@@ -21,10 +19,7 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 	}
 
 	const api = createServerApiClient(token);
-	// PR-BE-2 — bounded list, returns { items, next_cursor }.
-	const portfolios = await api
-		.get<ModelPortfolioListResponse>("/model-portfolios", { limit: 200 })
-		.then((resp) => resp.items ?? [])
+	const portfolios = await fetchAllModelPortfolios(api, { limit: 200 })
 		.catch(() => [] as ModelPortfolio[]);
 
 	// Pre-load selected portfolio data if ID in query params
