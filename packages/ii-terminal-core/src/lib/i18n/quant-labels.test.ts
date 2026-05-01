@@ -33,9 +33,9 @@ describe("profileDisplayLabel", () => {
 		expect(profileDisplayLabel("conservative", "full")).toBe("Conservative");
 	});
 
-	test("moderate dense + full identical", () => {
-		expect(profileDisplayLabel("moderate", "dense")).toBe("Moderate");
-		expect(profileDisplayLabel("moderate", "full")).toBe("Moderate");
+	test("moderate dense + full identical (display label is 'Balanced')", () => {
+		expect(profileDisplayLabel("moderate", "dense")).toBe("Balanced");
+		expect(profileDisplayLabel("moderate", "full")).toBe("Balanced");
 	});
 
 	test("unknown profile falls through to title-case", () => {

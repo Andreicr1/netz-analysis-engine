@@ -94,8 +94,7 @@
 	// ── Option catalogs (OD-22 locked for regime labels) ──────────
 	const MANDATE_OPTIONS = [
 		{ value: "conservative", label: "Conservative" },
-		{ value: "moderate", label: "Moderate" },
-		{ value: "balanced", label: "Balanced" },
+		{ value: "moderate", label: "Balanced" },
 		{ value: "growth", label: "Dynamic Growth" },
 	] as const;
 

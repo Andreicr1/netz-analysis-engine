@@ -5,7 +5,7 @@
  * Specs:
  *   - Title resolves the profile via `profileDisplayLabel(_, "full")`
  *     so all 3 default profiles render their canonical marketing
- *     phrasing ("Conservative", "Moderate", "Dynamic Growth").
+ *     phrasing ("Conservative", "Balanced", "Dynamic Growth").
  *   - CTA "Open Strategic IPS" fires the `onOpenStrategic` callback.
  *   - Wrapper is `role="status"` so screen readers pick it up as a
  *     live region.
@@ -32,7 +32,7 @@ describe("IPSGateNotice", () => {
 		const { container } = render(IPSGateNotice, {
 			props: { profile: "moderate", onOpenStrategic: () => {} },
 		});
-		expect(container.textContent ?? "").toContain("Moderate");
+		expect(container.textContent ?? "").toContain("Balanced");
 	});
 
 	test("renders title with profileDisplayLabel('growth', 'full') = 'Dynamic Growth'", () => {

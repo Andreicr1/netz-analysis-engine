@@ -1496,12 +1496,16 @@ export class PortfolioWorkspaceState {
 			);
 			return created;
 		} catch (err) {
+			// PR-UX-4 Codex P2 — rethrow so NewPortfolioDialog's 409
+			// inline-error path actually fires. Mirror of the canonical
+			// terminal-core implementation at
+			// `packages/ii-terminal-core/src/lib/state/portfolio-workspace.svelte.ts`.
 			this.lastError = {
 				action: "create-portfolio",
 				message: err instanceof Error ? err.message : "Failed to create portfolio",
 				timestamp: Date.now(),
 			};
-			return null;
+			throw err;
 		}
 	}
 
