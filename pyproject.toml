@@ -47,6 +47,9 @@ dev = [
     "ruff>=0.9",
     "mypy>=1.14",
     "import-linter>=2.1",
+    # Architectural analysis (backend/scripts/analyze_import_graph.py)
+    "networkx>=3.0",
+    "matplotlib>=3.8",
 ]
 ai = [
     "openai>=1.60",
