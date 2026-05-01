@@ -27,7 +27,6 @@ import { createServerApiClient } from "@investintell/ii-terminal-core/api/client
 import type { ModelPortfolio } from "@investintell/ii-terminal-core/types/model-portfolio";
 import type { PageServerLoad } from "./$types";
 import {
-	DEFAULT_PROFILE,
 	buildBuilderRedirect,
 	extractCanonicalPortfolioId,
 } from "@investintell/ii-terminal-core/utils/builder-redirect";
@@ -77,6 +76,10 @@ export const load: PageServerLoad = async ({ url, parent }) => {
 	throw redirect(307, dest);
 };
 
-// Re-export so deep-link debugging tools can introspect the fallback
-// profile without re-importing the helper module directly.
-export { DEFAULT_PROFILE };
+// NOTE: DEFAULT_PROFILE is intentionally NOT re-exported here.
+// SvelteKit +page.server.ts modules accept only a fixed export
+// surface (load, prerender, csr, ssr, trailingSlash, config, entries,
+// actions). Arbitrary re-exports are rejected by the SvelteKit build
+// step. Consumers needing the fallback profile constant must import
+// it directly from
+// "@investintell/ii-terminal-core/utils/builder-redirect".
