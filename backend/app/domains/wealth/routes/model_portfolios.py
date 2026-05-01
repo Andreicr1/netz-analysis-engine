@@ -354,7 +354,7 @@ def _decode_portfolio_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
         raw = base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
         created_at_str, id_str = raw.split("|", 1)
         return datetime.fromisoformat(created_at_str), uuid.UUID(id_str)
-    except (ValueError, UnicodeDecodeError, binascii.Error) as exc:
+    except (ValueError, UnicodeError, binascii.Error) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": "invalid_cursor", "message": "Cursor is malformed."},

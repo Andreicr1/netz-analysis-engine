@@ -354,6 +354,19 @@ def test_decode_malformed_cursor_returns_400() -> None:
     assert exc.value.status_code == 400
 
 
+def test_decode_non_ascii_cursor_returns_400() -> None:
+    """Non-ASCII cursor → 400 (catches ``UnicodeEncodeError``).
+
+    ``cursor.encode("ascii")`` raises ``UnicodeEncodeError`` (subclass
+    of ``UnicodeError``, NOT ``UnicodeDecodeError``) on chars above
+    U+007F, so the except tuple must use ``UnicodeError`` to convert
+    the failure into the documented 400 instead of leaking a 500.
+    """
+    with pytest.raises(HTTPException) as exc:
+        _decode_portfolio_cursor("café")
+    assert exc.value.status_code == 400
+
+
 # ── 6. Default ordering when no params ───────────────────────────────
 
 
