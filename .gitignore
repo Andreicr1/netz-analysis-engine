@@ -27,6 +27,10 @@ node_modules/
 **/*.js.map
 **/*.css.map
 
+# Package build outputs (svelte-package + tsc) — never commit generated bundles
+packages/*/dist/
+packages/*/.svelte-kit/__package__/
+
 # Lock files (tracked by pnpm — not source code)
 pnpm-lock.yaml
 
