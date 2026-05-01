@@ -80,15 +80,82 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Drop the new constraints in reverse order, then restore the
-    # legacy partial unique exactly as migration 0008 created it so a
-    # rollback returns the schema to the pre-0201 shape.
+    """Refuse downgrade if multi-active state exists (Codex P2 fix).
+
+    The legacy ``uq_model_portfolios_org_profile_active`` partial unique
+    keyed on ``status IN ('draft','backtesting','live')`` cannot coexist
+    with the post-0201 multi-draft pattern: re-creating it on a DB that
+    has accumulated two or more drafts per ``(organization_id, profile)``
+    would fail with a duplicate-key error and leave the rollback halfway
+    applied (legacy unique missing, new constraints already dropped).
+
+    Rather than silently mutate or destroy production data — which would
+    be opaque to the operator and irrecoverable — we refuse the
+    downgrade with a structured ``RuntimeError`` listing the offending
+    ``(organization_id, profile)`` pair. The operator must consciously
+    archive the duplicate non-live rows (or delete drafts) before
+    retrying the rollback. Suggested cleanup:
+
+    .. code-block:: sql
+
+        -- Inspect the duplicates
+        SELECT organization_id, profile, COUNT(*) AS dup
+        FROM model_portfolios
+        WHERE status IN ('draft', 'backtesting', 'live')
+        GROUP BY 1, 2
+        HAVING COUNT(*) > 1;
+
+        -- Archive duplicates per (org, profile), keeping the most recent
+        UPDATE model_portfolios SET status = 'archived'
+        WHERE id IN (
+            SELECT id FROM (
+                SELECT id, ROW_NUMBER() OVER (
+                    PARTITION BY organization_id, profile
+                    ORDER BY created_at DESC
+                ) AS rn
+                FROM model_portfolios
+                WHERE status IN ('draft', 'backtesting', 'live')
+            ) ranked WHERE rn > 1
+        );
+
+    On a fresh DB (no model_portfolios rows) this pre-check returns no
+    rows and the downgrade proceeds normally — preserving symmetry with
+    upgrade for dev / CI workflows.
+    """
     op.execute(
         "DROP INDEX IF EXISTS uq_model_portfolios_org_display_name"
     )
     op.execute(
         "DROP INDEX IF EXISTS uq_model_portfolios_primary_live"
     )
+
+    # ── Pre-check: refuse on multi-active state ──────────────────────
+    conn = op.get_bind()
+    duplicate = conn.execute(
+        sa.text(
+            """
+            SELECT organization_id, profile, COUNT(*) AS dup
+            FROM model_portfolios
+            WHERE status IN ('draft', 'backtesting', 'live')
+            GROUP BY 1, 2
+            HAVING COUNT(*) > 1
+            ORDER BY dup DESC
+            LIMIT 1
+            """
+        )
+    ).fetchone()
+    if duplicate is not None:
+        raise RuntimeError(
+            "Cannot downgrade migration 0201 — multi-active portfolios "
+            f"detected (organization_id={duplicate[0]}, "
+            f"profile={duplicate[1]!r}, count={duplicate[2]}). "
+            "Recreating the legacy uq_model_portfolios_org_profile_active "
+            "unique index would fail on duplicate keys. "
+            "Manual cleanup required: archive the duplicate non-live rows "
+            "before retrying the rollback. See the docstring of this "
+            "migration for the cleanup SQL."
+        )
+
     op.create_index(
         "uq_model_portfolios_org_profile_active",
         "model_portfolios",

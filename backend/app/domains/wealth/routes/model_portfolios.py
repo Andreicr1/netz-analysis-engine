@@ -256,7 +256,7 @@ async def create_model_portfolio(
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
     org_id: uuid.UUID = Depends(get_org_id),
-) -> ModelPortfolioRead:
+) -> dict[str, Any]:
     """Create a new model portfolio (Phase 5 Task 5.1).
 
     Requires IC role. The new row starts in ``state='draft'`` (column
@@ -393,7 +393,23 @@ async def create_model_portfolio(
         copy_from=str(body.copy_from) if body.copy_from else None,
     )
 
-    return await _serialize_with_actions(db, portfolio)
+    # ── @idempotent + orjson serialization contract (Codex P1 fix) ──
+    # The ``@idempotent`` decorator persists the return value via
+    # ``orjson.dumps(result)`` so a retry within the 600s TTL replays
+    # the same response. ``orjson`` cannot encode Pydantic models,
+    # ``Decimal``, ``datetime`` or ``UUID`` directly — passing a
+    # ``ModelPortfolioRead`` here would raise ``TypeError``, the
+    # decorator would log ``idempotency_store_result_failed`` and
+    # skip the cache write, and the *next* call within TTL would
+    # re-execute the handler and trip the duplicate display_name 409
+    # — silently degrading idempotency.
+    #
+    # ``model_dump(mode='json')`` produces a fully orjson-safe dict
+    # (Decimals → strings, datetimes → ISO, UUIDs → strings) which
+    # FastAPI re-validates against ``response_model=ModelPortfolioRead``
+    # transparently — the wire format is identical.
+    rendered = await _serialize_with_actions(db, portfolio)
+    return rendered.model_dump(mode="json")
 
 
 # PR-BE-2 — bounded list ceiling (Stability Guardrails §3 P1 Bounded).

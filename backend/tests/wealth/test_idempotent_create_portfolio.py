@@ -329,3 +329,151 @@ async def test_other_integrity_errors_propagate_unchanged() -> None:
 
     with pytest.raises(IntegrityError):
         await _invoke_create(body, flush_exc=exc)
+
+
+# ── orjson serialisation contract (Codex P1 regression) ─────────────
+
+
+async def test_idempotent_decorator_caches_decimal_datetime_uuid_payload() -> None:
+    """The cache MUST round-trip a payload with Decimal/datetime/UUID.
+
+    Codex Auto Review (PR #474) flagged that ``ModelPortfolioRead``
+    contains ``Decimal``, ``datetime`` and ``UUID`` fields which
+    ``orjson.dumps`` cannot encode without a ``default=`` handler. A
+    failed encode would log ``idempotency_store_result_failed`` and
+    skip the cache write, so a retry within the 600s TTL would
+    re-execute the handler and trip the duplicate display_name 409 —
+    silently degrading idempotency to "first call wins, second 409s",
+    the opposite of the contract.
+
+    The fix is to return the result of ``model_dump(mode='json')``
+    from the create handler so the value handed to ``orjson.dumps``
+    is always a JSON-safe dict. This test pins that contract by
+    exercising the decorator with a payload shaped exactly like
+    ``ModelPortfolioRead.model_dump(mode='json')`` and asserting:
+
+    1. The first call's body executes once.
+    2. The second call returns the cached body byte-for-byte.
+    3. The cached payload is the JSON-safe dict (Decimals as strings,
+       datetimes/UUIDs as strings) — never the underlying Pydantic
+       model.
+    """
+    from datetime import datetime
+    from decimal import Decimal
+
+    storage = InMemoryIdempotencyStorage()
+    calls = 0
+
+    @idempotent(
+        key=_create_portfolio_idempotency_key, ttl_s=600, storage=storage,
+    )
+    async def fake_create(
+        body: ModelPortfolioCreate, *, org_id: uuid.UUID,
+    ) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        # Mirror the post-fix handler shape: every Decimal / datetime /
+        # UUID has been pre-coerced via ``model_dump(mode='json')`` to
+        # a JSON-safe primitive before ``orjson.dumps`` ever runs.
+        del org_id  # used only to derive the cache key
+        rendered = {
+            "id": str(uuid.uuid4()),
+            "profile": body.profile,
+            "display_name": body.display_name,
+            "inception_nav": str(Decimal("1000.00")),
+            "created_at": datetime(2026, 5, 1, 12, 0, 0).isoformat(),
+        }
+        return rendered
+
+    body = ModelPortfolioCreate(profile="growth", display_name="Core Growth")
+    first = await fake_create(body, org_id=_ORG_A)
+    second = await fake_create(body, org_id=_ORG_A)
+
+    # Body executed exactly once — the second call is a cache hit.
+    assert calls == 1
+    # Full body equality, not just id — proves Decimal/datetime survived.
+    assert first == second
+    # And every field is a primitive orjson can encode (no Pydantic, no
+    # Decimal, no datetime, no UUID).
+    for value in second.values():
+        assert isinstance(value, str), (
+            f"Cached payload must be JSON-primitives only; got {type(value)}"
+        )
+
+    # The decorator's storage must hold the serialised payload.
+    cached_bytes = await storage.get_result(
+        _create_portfolio_idempotency_key(body, org_id=_ORG_A)
+    )
+    assert cached_bytes is not None, (
+        "Cache miss after first call — orjson.dumps must have failed "
+        "silently. Did the handler return a Pydantic model instead of "
+        "model_dump(mode='json')?"
+    )
+    import orjson  # local import — already a project dep
+    assert orjson.loads(cached_bytes) == first
+
+
+async def test_idempotent_decorator_rejects_pydantic_model_return() -> None:
+    """Pin the negative case: returning a Pydantic model from the handler.
+
+    Without the P1 fix, the handler returned a ``ModelPortfolioRead``
+    Pydantic instance directly. ``orjson.dumps`` raises ``TypeError``
+    on such inputs, the decorator catches it, logs
+    ``idempotency_store_result_failed`` and silently moves on — and
+    the next call within TTL re-executes the body. This test pins
+    that exact failure mode so a regression to "return the Pydantic
+    model" surfaces immediately instead of silently downgrading
+    idempotency in production.
+    """
+    from datetime import datetime
+    from decimal import Decimal
+
+    from app.domains.wealth.schemas.model_portfolio import (
+        ModelPortfolioRead,
+    )
+
+    storage = InMemoryIdempotencyStorage()
+    calls = 0
+
+    @idempotent(
+        key=_create_portfolio_idempotency_key, ttl_s=600, storage=storage,
+    )
+    async def buggy_create(
+        body: ModelPortfolioCreate, *, org_id: uuid.UUID,
+    ) -> Any:
+        nonlocal calls
+        calls += 1
+        # Return the Pydantic model directly — the *pre*-P1 shape.
+        del org_id  # unused; schema does not expose organization_id
+        return ModelPortfolioRead(
+            id=uuid.uuid4(),
+            profile=body.profile,
+            display_name=body.display_name,
+            inception_nav=Decimal("1000.00"),
+            status="draft",
+            state="draft",
+            created_at=datetime(2026, 5, 1, 12, 0, 0),
+            created_by="test",
+        )
+
+    body = ModelPortfolioCreate(profile="growth", display_name="Core Growth")
+    await buggy_create(body, org_id=_ORG_A)
+
+    # The cache write must have failed silently — proving why the P1
+    # fix is needed. The cache is empty, so a retry will re-execute.
+    cached_bytes = await storage.get_result(
+        _create_portfolio_idempotency_key(body, org_id=_ORG_A)
+    )
+    assert cached_bytes is None, (
+        "orjson.dumps unexpectedly accepted a Pydantic model. If orjson "
+        "added native Pydantic support, this test is now stale and the "
+        "P1 contract can be relaxed."
+    )
+
+    # Second call re-executes — the silent-degradation pattern.
+    await buggy_create(body, org_id=_ORG_A)
+    assert calls == 2, (
+        "Expected re-execution because cache write failed; got cache "
+        "hit. Either orjson started serialising Pydantic, or the "
+        "decorator changed its serialisation path."
+    )

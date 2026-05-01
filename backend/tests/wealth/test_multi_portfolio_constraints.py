@@ -248,3 +248,125 @@ async def test_duplicate_display_name_cross_org_allowed():
             assert count == 1, (
                 f"Expected exactly one 'Core Growth' for org {org}, got {count}"
             )
+
+
+# ── Downgrade safety (Codex P2 regression) ──────────────────────────
+
+
+async def test_downgrade_pre_check_refuses_on_multi_active():
+    """The migration 0201 downgrade pre-check must refuse multi-active state.
+
+    Codex Auto Review (PR #474) flagged that the downgrade body
+    re-creates the legacy ``uq_model_portfolios_org_profile_active``
+    partial unique on ``status IN ('draft','backtesting','live')`` —
+    but the post-0201 system now allows multiple non-live rows per
+    ``(organization_id, profile)``. Re-creating that index after
+    duplicates accumulate would raise a duplicate-key error and leave
+    rollback halfway applied (the new constraints already dropped,
+    the legacy one missing). The downgrade was therefore unusable in
+    exactly the scenario the upgrade enables.
+
+    The fix is a pre-check that raises ``RuntimeError`` listing the
+    offending pair before any structural change happens. Operator
+    must consciously archive the duplicates before retrying.
+
+    This test exercises the same SQL the migration uses, against
+    seeded multi-active state, and asserts the pre-check returns the
+    expected diagnostic row.
+    """
+    pre_check_sql = text(
+        """
+        SELECT organization_id, profile, COUNT(*) AS dup
+        FROM model_portfolios
+        WHERE status IN ('draft', 'backtesting', 'live')
+        GROUP BY 1, 2
+        HAVING COUNT(*) > 1
+        ORDER BY dup DESC
+        LIMIT 1
+        """
+    )
+
+    # Seed two drafts for the same (org, profile) — exactly the
+    # multi-active state that the post-0201 system permits but the
+    # legacy unique cannot tolerate.
+    async with async_session_factory() as db:
+        await _set_org(db, _ORG_A)
+        await _insert_portfolio(
+            db, org_id=_ORG_A, profile="growth",
+            display_name="Multi A", state="draft", status="draft",
+        )
+        await _insert_portfolio(
+            db, org_id=_ORG_A, profile="growth",
+            display_name="Multi B", state="draft", status="draft",
+        )
+        await db.commit()
+
+    # Pre-check fires — operator sees a structured row.
+    async with async_session_factory() as db:
+        await _set_org(db, _ORG_A)
+        result = (await db.execute(pre_check_sql)).fetchone()
+    assert result is not None, (
+        "Pre-check missed the seeded multi-active state — downgrade "
+        "would silently corrupt rollback by recreating a unique index "
+        "on top of duplicates."
+    )
+    assert result[0] == _ORG_A
+    assert result[1] == "growth"
+    assert result[2] == 2
+
+    # Cleanup: archive one, pre-check now passes (no duplicates).
+    async with async_session_factory() as db:
+        await _set_org(db, _ORG_A)
+        await db.execute(
+            text(
+                "UPDATE model_portfolios SET status='archived', "
+                "state='archived' WHERE display_name = 'Multi B' "
+                "AND created_by = 'be4-test'"
+            )
+        )
+        await db.commit()
+
+    async with async_session_factory() as db:
+        await _set_org(db, _ORG_A)
+        result_after = (await db.execute(pre_check_sql)).fetchone()
+    assert result_after is None, (
+        "After archiving the duplicate, the pre-check should return "
+        "no rows so the downgrade can proceed."
+    )
+
+
+async def test_downgrade_pre_check_passes_on_clean_state():
+    """Empty / single-active DB — pre-check returns no rows, downgrade safe.
+
+    On a fresh dev DB or a tenant with no multi-portfolio state, the
+    pre-check must allow the downgrade through so CI can roll the
+    migration forward and back without manual cleanup. Pins the
+    no-op-on-clean contract.
+    """
+    pre_check_sql = text(
+        """
+        SELECT organization_id, profile, COUNT(*) AS dup
+        FROM model_portfolios
+        WHERE status IN ('draft', 'backtesting', 'live')
+        GROUP BY 1, 2
+        HAVING COUNT(*) > 1
+        LIMIT 1
+        """
+    )
+
+    # Single draft — not a duplicate.
+    async with async_session_factory() as db:
+        await _set_org(db, _ORG_A)
+        await _insert_portfolio(
+            db, org_id=_ORG_A, profile="growth",
+            display_name="Solo", state="draft", status="draft",
+        )
+        await db.commit()
+
+    async with async_session_factory() as db:
+        await _set_org(db, _ORG_A)
+        result = (await db.execute(pre_check_sql)).fetchone()
+    assert result is None, (
+        "Single draft per (org, profile) should not trigger the "
+        "pre-check — only multi-active state must refuse downgrade."
+    )
