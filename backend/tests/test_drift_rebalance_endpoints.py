@@ -210,10 +210,10 @@ async def test_drift_returns_report(client: AsyncClient):
         "/api/v1/model-portfolios",
         headers=DEV_ACTOR_HEADER,
     )
-    if list_resp.status_code != 200 or not list_resp.json():
+    if list_resp.status_code != 200 or not list_resp.json().get("items"):
         pytest.skip("No model portfolios in test DB")
 
-    portfolio_id = list_resp.json()[0]["id"]
+    portfolio_id = list_resp.json()["items"][0]["id"]
     resp = await client.get(
         f"/api/v1/model-portfolios/{portfolio_id}/drift",
         headers=DEV_ACTOR_HEADER,
@@ -257,12 +257,12 @@ async def test_live_drift_returns_response(client: AsyncClient):
         "/api/v1/model-portfolios",
         headers=DEV_ACTOR_HEADER,
     )
-    if list_resp.status_code != 200 or not list_resp.json():
+    if list_resp.status_code != 200 or not list_resp.json().get("items"):
         pytest.skip("No model portfolios in test DB")
 
     # Find a portfolio with fund_selection_schema
     portfolio_id = None
-    for p in list_resp.json():
+    for p in list_resp.json()["items"]:
         if p.get("fund_selection_schema") and p["fund_selection_schema"].get("funds"):
             portfolio_id = p["id"]
             break
@@ -290,12 +290,12 @@ async def test_live_drift_400_no_fund_selection(client: AsyncClient):
         "/api/v1/model-portfolios",
         headers=DEV_ACTOR_HEADER,
     )
-    if list_resp.status_code != 200 or not list_resp.json():
+    if list_resp.status_code != 200 or not list_resp.json().get("items"):
         pytest.skip("No model portfolios in test DB")
 
     # Find a draft portfolio without fund_selection_schema
     portfolio_id = None
-    for p in list_resp.json():
+    for p in list_resp.json()["items"]:
         if not p.get("fund_selection_schema") or not p["fund_selection_schema"].get("funds"):
             portfolio_id = p["id"]
             break
