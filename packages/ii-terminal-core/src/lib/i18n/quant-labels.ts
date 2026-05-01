@@ -152,3 +152,49 @@ export function regimeLabel(raw: string | null | undefined): string {
  * used in chart titles and section headings.
  */
 export const MARKET_REGIME_HEADER = "Market Regime: Expansion / Cautious / Stress";
+
+// ── PR-BE-7 — Profile display labels ─────────────────────────────────
+//
+// Slugs (``conservative`` / ``moderate`` / ``growth``) are stable in
+// code, URL, and DB. Product copy ("Dynamic Growth" for ``growth``)
+// flows through this helper so the marketing label stays decoupled
+// from the persisted slug. ``aggressive`` is rewritten to ``growth``
+// (sunset 2026-10-30, 180 days post-merge) — see PR-BE-7.
+//
+// Mirror of the Pydantic helper
+// ``app.domains.wealth.schemas.sanitized.profile_display_label``.
+
+type ProfileSlug = "conservative" | "moderate" | "growth";
+type DisplayContext = "dense" | "full";
+
+const PROFILE_DISPLAY: Readonly<Record<ProfileSlug, Record<DisplayContext, string>>> = {
+	conservative: { dense: "Conservative", full: "Conservative" },
+	moderate: { dense: "Moderate", full: "Moderate" },
+	growth: { dense: "Dynamic", full: "Dynamic Growth" },
+};
+
+/**
+ * Resolve a profile slug to its institutional display label.
+ *
+ * ``context="dense"`` yields the short form ("Dynamic"), used in
+ * chips, badges, and tight chart legends. ``context="full"`` yields
+ * the marketing name ("Dynamic Growth"), used in copy that has room
+ * for the longer phrasing. ``conservative`` and ``moderate`` are
+ * identical across contexts.
+ *
+ * Unknown slugs (e.g. tenant-scoped custom profiles introduced via
+ * ConfigService in v2 / post-GA) fall through to a title-cased
+ * version of the raw slug — never silently dropped.
+ */
+export function profileDisplayLabel(
+	profile: string,
+	context: DisplayContext = "full",
+): string {
+	const lc = profile.toLowerCase();
+	const canonical = lc === "aggressive" ? "growth" : lc;
+	if (canonical in PROFILE_DISPLAY) {
+		return PROFILE_DISPLAY[canonical as ProfileSlug][context];
+	}
+	if (!profile) return profile;
+	return profile.charAt(0).toUpperCase() + profile.slice(1);
+}

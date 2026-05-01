@@ -18,8 +18,13 @@ def test_growth_default() -> None:
     assert default_cvar_limit_for_profile("growth") == Decimal("0.1000")
 
 
-def test_aggressive_default() -> None:
-    assert default_cvar_limit_for_profile("aggressive") == Decimal("0.1250")
+def test_aggressive_alias_resolves_to_growth() -> None:
+    """PR-BE-7 — legacy ``aggressive`` slug normalises to ``growth`` (0.1000).
+
+    The previous A12.2 mapping (0.1250) was specific to the aggressive
+    profile that the engine has consolidated into Dynamic Growth.
+    """
+    assert default_cvar_limit_for_profile("aggressive") == Decimal("0.1000")
 
 
 def test_unknown_profile_falls_back_to_moderate() -> None:

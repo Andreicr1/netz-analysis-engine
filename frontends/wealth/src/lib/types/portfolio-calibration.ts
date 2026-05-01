@@ -14,7 +14,16 @@
  * from ``JARGON_TRANSLATION`` when that table lands.
  */
 
-export type CalibrationMandate = "conservative" | "moderate" | "aggressive" | "balanced";
+/**
+ * Calibration mandate slugs.
+ *
+ * PR-BE-7 (2026-04-30) — ``aggressive`` was a development artefact and
+ * is no longer a canonical product mandate. ``growth`` (display label
+ * "Dynamic Growth", resolved via ``profileDisplayLabel``) replaces it.
+ * The legacy slug is normalised to ``growth`` in profile-defaults
+ * helpers and on the backend through 2026-10-30 (180-day sunset).
+ */
+export type CalibrationMandate = "conservative" | "moderate" | "balanced" | "growth";
 
 export type CalibrationRegimeOverride =
 	| "auto"

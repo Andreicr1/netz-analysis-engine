@@ -4886,8 +4886,32 @@ async def _set_cached_mc(cache_key: str, result: dict, ttl: int = 3600) -> None:
 
 
 _PROPOSE_VALID_PROFILES: frozenset[str] = frozenset(
-    {"conservative", "moderate", "growth", "aggressive"},
+    {"conservative", "moderate", "growth"},
 )
+
+# PR-BE-7 — backward-compat alias for the legacy ``aggressive`` slug on
+# propose-mode endpoints. Sunset 2026-10-30 (180d post-merge). Mirrored
+# from ``app.domains.wealth.routes.common._LEGACY_PROFILE_ALIASES`` so
+# the propose endpoints (which validate against their own
+# ``_PROPOSE_VALID_PROFILES`` frozenset rather than the shared
+# ``validate_profile`` helper) inherit the same normalisation surface.
+_PROPOSE_LEGACY_ALIASES: dict[str, str] = {"aggressive": "growth"}
+
+
+def _normalize_propose_profile(profile: str) -> str:
+    """Normalise a propose-mode profile slug, accepting the legacy alias."""
+    lc = profile.strip().lower()
+    if lc in _PROPOSE_LEGACY_ALIASES:
+        canonical = _PROPOSE_LEGACY_ALIASES[lc]
+        logger.info(
+            "legacy_profile_url_alias",
+            received=profile,
+            canonical=canonical,
+            sunset_at="2026-10-30",
+            scope="propose_mode",
+        )
+        return canonical
+    return lc
 
 
 async def _resolve_propose_target_portfolio(
@@ -4961,7 +4985,7 @@ async def propose_allocation(
 
     _require_ic_role(actor)
 
-    profile_lc = profile.strip().lower()
+    profile_lc = _normalize_propose_profile(profile)
     if profile_lc not in _PROPOSE_VALID_PROFILES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -5016,7 +5040,7 @@ async def latest_proposal(
     pair. ``proposed_bands`` carries one entry per canonical block
     (excluded blocks emit ``target_weight = 0`` with rationale).
     """
-    profile_lc = profile.strip().lower()
+    profile_lc = _normalize_propose_profile(profile)
     if profile_lc not in _PROPOSE_VALID_PROFILES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -5149,7 +5173,7 @@ async def approve_proposal(
 
     _require_ic_role(actor)
 
-    profile_lc = profile.strip().lower()
+    profile_lc = _normalize_propose_profile(profile)
     if profile_lc not in _PROPOSE_VALID_PROFILES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -5380,7 +5404,7 @@ async def set_override(
 
     _require_ic_role(actor)
 
-    profile_lc = profile.strip().lower()
+    profile_lc = _normalize_propose_profile(profile)
     if profile_lc not in _PROPOSE_VALID_PROFILES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -5507,7 +5531,7 @@ async def get_strategic_allocation(
         humanize_block,
     )
 
-    profile_lc = profile.strip().lower()
+    profile_lc = _normalize_propose_profile(profile)
     if profile_lc not in _PROPOSE_VALID_PROFILES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -5660,7 +5684,7 @@ async def get_approval_history(
     """
     from sqlalchemy import text as _sa_text
 
-    profile_lc = profile.strip().lower()
+    profile_lc = _normalize_propose_profile(profile)
     if profile_lc not in _PROPOSE_VALID_PROFILES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -263,6 +263,46 @@ METRIC_LABELS: dict[str, str] = {
     "dtw_drift": "Strategy Deviation Score",
 }
 
+# PR-BE-7 — Profile display labels.
+#
+# Slugs (``conservative`` / ``moderate`` / ``growth``) are stable in
+# code, URL, and DB; product copy ("Dynamic Growth" for ``growth``) is
+# resolved here so backend-driven copy stays consistent with the
+# frontend ``profileDisplayLabel`` helper. ``aggressive`` is rewritten
+# to ``growth`` (sunset 2026-10-30) — see PR-BE-7.
+_PROFILE_DISPLAY_FULL: dict[str, str] = {
+    "conservative": "Conservative",
+    "moderate": "Moderate",
+    "growth": "Dynamic Growth",
+}
+_PROFILE_DISPLAY_DENSE: dict[str, str] = {
+    "conservative": "Conservative",
+    "moderate": "Moderate",
+    "growth": "Dynamic",
+}
+_PROFILE_LEGACY_ALIASES: dict[str, str] = {"aggressive": "growth"}
+
+
+def profile_display_label(
+    profile: str,
+    context: Literal["dense", "full"] = "full",
+) -> str:
+    """Return the user-facing label for a profile slug.
+
+    ``context="dense"`` renders the short form ("Dynamic"), used in
+    chips, badges, and tight headers. ``context="full"`` renders the
+    institutional name ("Dynamic Growth") used in copy that has room
+    for the marketing label. Unknown slugs (e.g. tenant-scoped custom
+    profiles introduced via ConfigService in v2) fall through to a
+    title-cased version of the raw slug — never silently dropped.
+    """
+    canonical = _PROFILE_LEGACY_ALIASES.get(profile.lower(), profile.lower())
+    table = _PROFILE_DISPLAY_DENSE if context == "dense" else _PROFILE_DISPLAY_FULL
+    if canonical in table:
+        return table[canonical]
+    return profile[:1].upper() + profile[1:] if profile else profile
+
+
 # Backend emits SCREAMING_SNAKE enums; the institutional reading is
 # the three-state Expansion / Cautious / Stress phrasing.
 REGIME_LABELS: dict[str, str] = {

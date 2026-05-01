@@ -43,7 +43,7 @@
 
 	// ── Form state ───────────────────────────────────────────────
 	let name = $state("");
-	let mandate = $state<"conservative" | "moderate" | "balanced" | "aggressive">("moderate");
+	let mandate = $state<"conservative" | "moderate" | "balanced" | "growth">("moderate");
 	let description = $state("");
 	let copyFrom = $state<string>(""); // empty string means "no clone"
 
@@ -54,7 +54,7 @@
 		{ value: "conservative", label: "Conservative" },
 		{ value: "moderate", label: "Moderate" },
 		{ value: "balanced", label: "Balanced" },
-		{ value: "aggressive", label: "Aggressive" },
+		{ value: "growth", label: "Dynamic Growth" },
 	];
 
 	const copyFromOptions = $derived.by(() => {

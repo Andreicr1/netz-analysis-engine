@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.clerk_auth import CurrentUser, get_current_user, require_ic_member
 from app.core.tenancy.middleware import get_db_with_rls
+from app.domains.wealth.routes.common import validate_profile as _validate_profile
 from app.domains.wealth.schemas.blended_benchmark import (
     BlendedBenchmarkCreate,
     BlendedBenchmarkNAV,
@@ -46,6 +47,7 @@ async def get_benchmark(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> BlendedBenchmarkRead | None:
+    profile = _validate_profile(profile)
     return await svc.get_active_benchmark(db, profile)
 
 
@@ -61,6 +63,7 @@ async def create_benchmark(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(require_ic_member),
 ) -> BlendedBenchmarkRead:
+    profile = _validate_profile(profile)
     return await svc.create_blended_benchmark(db, profile, body)
 
 

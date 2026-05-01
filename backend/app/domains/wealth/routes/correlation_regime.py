@@ -20,6 +20,7 @@ from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.model_portfolio import ModelPortfolio
 from app.domains.wealth.models.nav import NavTimeseries
+from app.domains.wealth.routes.common import validate_profile as _validate_profile
 from app.domains.wealth.schemas.correlation_regime import (
     ConcentrationRead,
     CorrelationRegimeRead,
@@ -44,6 +45,7 @@ async def get_correlation_regime(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> CorrelationRegimeRead:
+    profile = _validate_profile(profile)
     # 1. Load live model portfolio
     mp_stmt = select(ModelPortfolio).where(
         ModelPortfolio.profile == profile,
@@ -220,6 +222,7 @@ async def get_pair_correlation(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> PairCorrelationTimeseriesRead:
+    profile = _validate_profile(profile)
     # Load instrument names
     inst_stmt = select(Instrument.instrument_id, Instrument.name).where(
         Instrument.instrument_id.in_([inst_a, inst_b]),

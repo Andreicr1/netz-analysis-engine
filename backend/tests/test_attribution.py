@@ -94,7 +94,7 @@ class TestModels:
             benchmark_approach="policy",
         )
         with pytest.raises(AttributeError):
-            par.profile = "aggressive"  # type: ignore[misc]
+            par.profile = "growth"  # type: ignore[misc]
 
     def test_portfolio_attribution_result_uses_tuple(self):
         par = PortfolioAttributionResult(
@@ -670,7 +670,7 @@ class TestAttributionSchemas:
         from app.domains.wealth.schemas.attribution import AttributionRead
 
         schema = AttributionRead(
-            profile="aggressive",
+            profile="growth",
             start_date=date(2025, 6, 1),
             end_date=date(2025, 12, 1),
             granularity="quarterly",

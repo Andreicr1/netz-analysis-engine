@@ -64,8 +64,12 @@ async def test_factor_analysis_returns_200_when_nav_data_insufficient() -> None:
         "app.domains.wealth.routes.analytics._resolve_profile_weights",
         return_value=(None, ["na_equity_large"], None, [1.0]),
     ), patch(
+        # PR-BE-7: ``_validate_profile`` returns the canonical slug now
+        # (with legacy ``aggressive`` rewritten to ``growth``). The mock
+        # must echo the canonical value back so callers downstream of
+        # the validator receive the same string the test passed in.
         "app.domains.wealth.routes.analytics._validate_profile",
-        return_value=None,
+        return_value="growth",
     ):
         db = AsyncMock()
 

@@ -16,11 +16,14 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
+import structlog
 from sqlalchemy import Boolean, Date, DateTime, Integer, Numeric, String, Text, Uuid, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db.base import Base, OrganizationScopedMixin
+
+logger = structlog.get_logger()
 
 
 class ModelPortfolio(OrganizationScopedMixin, Base):
@@ -75,8 +78,15 @@ _CVAR_DEFAULT_BY_PROFILE: dict[str, Decimal] = {
     "conservative": Decimal("0.0500"),  # PR-A18: was 0.0250 (A12.2)
     "moderate": Decimal("0.0750"),      # PR-A18: was 0.0500
     "growth": Decimal("0.1000"),        # PR-A18: was 0.0800
-    "aggressive": Decimal("0.1250"),    # PR-A18: was 0.1000
 }
+
+# PR-BE-7 (2026-04-30) — `aggressive` was a development artefact and not
+# a canonical product profile. Legacy callers may still pass it; we
+# normalise to `growth` (the canonical Dynamic Growth profile) and emit
+# a structured deprecation log so the sunset dashboard can track residual
+# usage. Sunset target: 2026-10-30 (180 days post-merge).
+_LEGACY_PROFILE_ALIASES: dict[str, str] = {"aggressive": "growth"}
+_LEGACY_PROFILE_SUNSET_DATE = "2026-10-30"
 
 
 def default_cvar_limit_for_profile(profile: str | None) -> Decimal:
@@ -85,11 +95,22 @@ def default_cvar_limit_for_profile(profile: str | None) -> Decimal:
     Falls back to ``Decimal("0.0750")`` (moderate, PR-A18) for None /
     unknown values so code paths without a resolved profile (legacy
     fixtures, future profiles not yet calibrated) get a safe value
-    rather than KeyError. Lookup is case-insensitive.
+    rather than KeyError. Lookup is case-insensitive. ``aggressive``
+    is normalised to ``growth`` (PR-BE-7) with a deprecation log.
     """
     if profile is None:
         return Decimal("0.0750")
-    return _CVAR_DEFAULT_BY_PROFILE.get(profile.lower(), Decimal("0.0750"))
+    received = profile.lower()
+    canonical = _LEGACY_PROFILE_ALIASES.get(received, received)
+    if canonical != received:
+        logger.info(
+            "legacy_profile_alias_used",
+            received=profile,
+            canonical=canonical,
+            sunset_at=_LEGACY_PROFILE_SUNSET_DATE,
+            source="default_cvar_limit_for_profile",
+        )
+    return _CVAR_DEFAULT_BY_PROFILE.get(canonical, Decimal("0.0750"))
 
 
 class PortfolioCalibration(OrganizationScopedMixin, Base):

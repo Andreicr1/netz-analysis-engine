@@ -25,6 +25,7 @@ from app.domains.wealth.models.block import AllocationBlock
 from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.model_portfolio import ModelPortfolio
 from app.domains.wealth.models.nav import NavTimeseries
+from app.domains.wealth.routes.common import validate_profile as _validate_profile
 from app.domains.wealth.schemas.attribution import AttributionRead, SectorAttributionRead
 
 logger = structlog.get_logger()
@@ -71,6 +72,7 @@ async def get_attribution(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> AttributionRead:
+    profile = _validate_profile(profile)
     effective_end = end_date or date.today()
     effective_start = start_date or _add_months(effective_end, -12)
 
