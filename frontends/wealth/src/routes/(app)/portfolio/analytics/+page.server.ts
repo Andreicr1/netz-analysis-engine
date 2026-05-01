@@ -15,6 +15,7 @@
  */
 
 import type { PageServerLoad } from "./$types";
+import { fetchAllModelPortfolios } from "@investintell/ii-terminal-core/api/model-portfolios";
 import { createServerApiClient } from "$lib/api/client";
 import type { ModelPortfolio } from "$lib/types/model-portfolio";
 
@@ -40,8 +41,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 	const api = createServerApiClient(token);
 
 	const [portfolios, approvedFunds] = await Promise.all([
-		api
-			.get<ModelPortfolio[]>("/model-portfolios")
+		fetchAllModelPortfolios(api, { limit: 200 })
 			.catch(() => [] as ModelPortfolio[]),
 		api
 			.get<ApprovedUniverseFund[]>("/universe")

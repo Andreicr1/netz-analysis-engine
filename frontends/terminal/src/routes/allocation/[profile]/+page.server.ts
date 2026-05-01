@@ -16,6 +16,7 @@
 import type { PageServerLoad } from "./$types";
 import { okData, errData, type RouteData } from "@investintell/ui/runtime";
 import { createServerApiClient } from "@investintell/ii-terminal-core/api/client";
+import { fetchAllModelPortfolios } from "@investintell/ii-terminal-core/api/model-portfolios";
 import {
 	ALLOCATION_PROFILES,
 	type AllocationProfile,
@@ -23,7 +24,9 @@ import {
 	type LatestProposalResponse,
 	type StrategicAllocationResponse,
 } from "@investintell/ii-terminal-core/types/allocation-page";
-import type { ModelPortfolio } from "@investintell/ii-terminal-core/types/model-portfolio";
+import type {
+	ModelPortfolio,
+} from "@investintell/ii-terminal-core/types/model-portfolio";
 
 const FETCH_TIMEOUT_MS = 8000;
 
@@ -151,10 +154,17 @@ export const load: PageServerLoad = async ({
 		}))
 		.catch(() => null);
 
-	const portfoliosPromise = api
-		.get<ModelPortfolio[]>("/model-portfolios", undefined, {
-			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-		})
+	// Pass ?profile so the backend filters server-side, then follow
+	// next_cursor until exhaustion. Keep the defensive client-side
+	// profile filter for stale cache or backend regressions.
+	const portfoliosPromise = fetchAllModelPortfolios(
+		api,
+		{ profile, limit: 200 },
+		() => ({ signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+	)
+		.then((items): ModelPortfolio[] =>
+			items.filter((p) => p.profile === profile),
+		)
 		.catch((): ModelPortfolio[] => []);
 
 	const [strategic, history, proposal, regime, portfolios] =

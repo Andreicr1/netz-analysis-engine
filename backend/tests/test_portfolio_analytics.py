@@ -131,10 +131,10 @@ async def test_holdings_returns_list(client: AsyncClient):
         "/api/v1/model-portfolios",
         headers=DEV_ACTOR_HEADER,
     )
-    if list_resp.status_code != 200 or not list_resp.json():
+    if list_resp.status_code != 200 or not list_resp.json().get("items"):
         pytest.skip("No model portfolios in test DB")
 
-    portfolio_id = list_resp.json()[0]["id"]
+    portfolio_id = list_resp.json()["items"][0]["id"]
     resp = await client.get(
         f"/api/v1/model-portfolios/{portfolio_id}/holdings",
         headers=DEV_ACTOR_HEADER,
@@ -191,10 +191,10 @@ async def test_performance_returns_series(client: AsyncClient):
         "/api/v1/model-portfolios",
         headers=DEV_ACTOR_HEADER,
     )
-    if list_resp.status_code != 200 or not list_resp.json():
+    if list_resp.status_code != 200 or not list_resp.json().get("items"):
         pytest.skip("No model portfolios in test DB")
 
-    portfolio_id = list_resp.json()[0]["id"]
+    portfolio_id = list_resp.json()["items"][0]["id"]
     resp = await client.get(
         f"/api/v1/model-portfolios/{portfolio_id}/performance?timeframe=1Y",
         headers=DEV_ACTOR_HEADER,

@@ -10,6 +10,7 @@
 
 import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "@investintell/ii-terminal-core/api/client";
+import { fetchAllModelPortfolios } from "@investintell/ii-terminal-core/api/model-portfolios";
 import type { ModelPortfolio } from "@investintell/ii-terminal-core/types/model-portfolio";
 
 export const load: PageServerLoad = async ({ parent }) => {
@@ -20,9 +21,9 @@ export const load: PageServerLoad = async ({ parent }) => {
 
 	const api = createServerApiClient(token);
 	let portfolios: ModelPortfolio[] = [];
-	
+
 	try {
-		portfolios = await api.get<ModelPortfolio[]>("/model-portfolios");
+		portfolios = await fetchAllModelPortfolios(api, { limit: 200 });
 	} catch (e) {
 		console.error("Failed to load model portfolios in live workbench:", e);
 	}

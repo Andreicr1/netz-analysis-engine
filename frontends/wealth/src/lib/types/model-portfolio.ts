@@ -1,5 +1,20 @@
 /** Model Portfolio domain types — maps 1:1 to backend schemas. */
 
+/**
+ * Bounded paginated response from ``GET /model-portfolios`` (PR-BE-2).
+ *
+ * The list is keyset-paginated on ``(created_at DESC, id DESC)``;
+ * ``next_cursor`` is opaque (URL-safe base64 of the last row's
+ * ``created_at|id``) and must be round-tripped verbatim via
+ * ``?cursor=`` to fetch the next page. ``next_cursor`` is ``null`` on
+ * the final page.
+ */
+export interface ModelPortfolioListResponse {
+	items: ModelPortfolio[];
+	next_cursor: string | null;
+}
+
+
 /** Universal cash instrument ID — matches backend CASH_INSTRUMENT_ID. */
 export const CASH_INSTRUMENT_ID = "00000000-0000-0000-0000-000000000000";
 
