@@ -1,0 +1,253 @@
+"""PR-OPS-2 — bootstrap-only self-approval policy seed.
+
+Per `docs/plans/2026-04-30-builder-workspace-redesign-final.md` §1.1 +
+§9 (PR-OPS-2), the wealth model-portfolio lifecycle requires the
+canonical/bootstrap dev org to operate as a single-user shop while
+every external tenant defaults to the conservative posture
+(``allow_self_approval=False``).
+
+This migration:
+
+1. Expands the ``ck_defaults_config_type`` and ``ck_overrides_config_type``
+   CHECK constraints to allow ``'approval_policy'`` as a config_type
+   value. The (vertical='wealth', config_type='approval_policy') domain
+   was already declared in ``app.core.config.registry`` but no migration
+   had widened the CHECK enum to accept it as a stored value, which
+   would block the override INSERT below.
+
+2. Inserts the bootstrap org override granting ``allow_self_approval=true``
+   for org id ``403d8392-ebfa-5890-b740-45da49c556eb``. The same UUID is
+   used by 0160 to seed canonical-org instrument approvals — single
+   bootstrap org, multiple seeds.
+
+3. Does NOT insert a default row in ``vertical_config_defaults``. The
+   ``approval_policy`` domain is registered as ``required=False``, so
+   ``ConfigService.get`` returns a typed-miss (``MISSING_OPTIONAL``)
+   when no default exists, and ``_resolve_approval_policy`` already
+   degrades cleanly to the conservative ``ApprovalPolicy()`` default
+   (``allow_self_approval=False``, ``require_construction_for_approve=
+   True``). Keeping the default row absent is the institutional posture:
+   any new tenant must opt in via a per-org override, not inherit
+   self-approval globally.
+
+Idempotent — uses ``ON CONFLICT (organization_id, vertical, config_type)
+DO NOTHING`` against the ``uq_overrides_org_vertical_type`` unique key.
+
+Revision ID: 0200_q_self_approval_bootstrap_config
+Revises: 0199_q165_consolidate_aggressive_into_growth
+"""
+from __future__ import annotations
+
+import json
+
+import sqlalchemy as sa
+from alembic import op
+
+revision = "0200_q_self_approval_bootstrap_config"
+down_revision = "0199_q165_consolidate_aggressive_into_growth"
+branch_labels = None
+depends_on = None
+
+# Bootstrap / canonical dev org. Same UUID seeded by 0160.
+BOOTSTRAP_ORG_ID = "403d8392-ebfa-5890-b740-45da49c556eb"
+
+# CHECK constraint values — keep in sync with `app.core.config.registry`.
+# Defaults CHECK was last updated in 0128 (added taa_bands; itself a
+# superset of 0012's V4 which added branding + screening_layer1/2/3).
+# Overrides CHECK was last updated in 0012 (V4 loop iterates BOTH
+# defaults AND overrides — so branding + screening_layer1/2/3 were
+# also applied to the overrides constraint, even though no migration
+# since has touched the overrides side specifically).
+# Both PRIOR lists below MUST mirror the actual on-disk superset
+# immediately before this migration runs — narrowing them would
+# regress a real environment that already holds rows for those types
+# (e.g. branding overrides seeded by 0009 PHASE C extensions, screening
+# overrides seeded by 0011 PHASE B/C). Both NEW lists add only
+# 'approval_policy' on top of that superset.
+_DEFAULTS_CONFIG_TYPES = (
+    "'calibration', 'scoring', 'blocks', 'chapters', "
+    "'portfolio_profiles', 'prompts', 'model_routing', 'tone', "
+    "'evaluation', 'macro_intelligence', 'governance_policy', "
+    "'branding', 'screening_layer1', 'screening_layer2', "
+    "'screening_layer3', 'taa_bands', 'approval_policy'"
+)
+_DEFAULTS_CONFIG_TYPES_PRIOR = (
+    "'calibration', 'scoring', 'blocks', 'chapters', "
+    "'portfolio_profiles', 'prompts', 'model_routing', 'tone', "
+    "'evaluation', 'macro_intelligence', 'governance_policy', "
+    "'branding', 'screening_layer1', 'screening_layer2', "
+    "'screening_layer3', 'taa_bands'"
+)
+_OVERRIDES_CONFIG_TYPES = (
+    "'calibration', 'scoring', 'blocks', 'chapters', "
+    "'portfolio_profiles', 'prompts', 'model_routing', 'tone', "
+    "'evaluation', 'macro_intelligence', 'governance_policy', "
+    "'branding', 'screening_layer1', 'screening_layer2', "
+    "'screening_layer3', 'approval_policy'"
+)
+_OVERRIDES_CONFIG_TYPES_PRIOR = (
+    "'calibration', 'scoring', 'blocks', 'chapters', "
+    "'portfolio_profiles', 'prompts', 'model_routing', 'tone', "
+    "'evaluation', 'macro_intelligence', 'governance_policy', "
+    "'branding', 'screening_layer1', 'screening_layer2', "
+    "'screening_layer3'"
+)
+
+# `ck_*_vertical` was set in 0004 to ('private_credit', 'liquid_funds')
+# and never widened, even though `app.core.config.registry` registers
+# domains under `_admin` and `wealth` as well. The bootstrap insert
+# below uses vertical='wealth' (per the wealth model-portfolio
+# lifecycle), so this migration is the first to actually exercise the
+# latent gap. We widen both vertical CHECK constraints to the actual
+# registry superset; downgrade restores the 0004 baseline. `_admin` is
+# included because it's already a registered cross-vertical domain in
+# `registry.py` and would fail the same way the moment any admin
+# config row is written.
+_VERTICALS_NEW = "'private_credit', 'liquid_funds', 'wealth', '_admin'"
+_VERTICALS_PRIOR = "'private_credit', 'liquid_funds'"
+
+# Bootstrap-only override payload. Field shape mirrors the dataclass in
+# vertical_engines/wealth/model_portfolio/state_machine.py::ApprovalPolicy.
+_BOOTSTRAP_APPROVAL_POLICY: dict = {
+    "allow_self_approval": True,
+    # Keep the institutional construction-gate: even bootstrap requires a
+    # passing construction run before approve is offered. The single-user
+    # shop loosens *who* may approve, not *what* must be validated first.
+    "require_construction_for_approve": True,
+}
+
+
+def upgrade() -> None:
+    # ── Widen vertical CHECK constraints to registry superset ───────
+    # MUST run before the override INSERT below — that row carries
+    # vertical='wealth' which the 0004 baseline rejects.
+    op.execute("ALTER TABLE vertical_config_defaults DROP CONSTRAINT IF EXISTS ck_defaults_vertical")
+    op.execute(
+        f"""
+        ALTER TABLE vertical_config_defaults
+        ADD CONSTRAINT ck_defaults_vertical
+        CHECK (vertical IN ({_VERTICALS_NEW}))
+        """,
+    )
+
+    op.execute("ALTER TABLE vertical_config_overrides DROP CONSTRAINT IF EXISTS ck_overrides_vertical")
+    op.execute(
+        f"""
+        ALTER TABLE vertical_config_overrides
+        ADD CONSTRAINT ck_overrides_vertical
+        CHECK (vertical IN ({_VERTICALS_NEW}))
+        """,
+    )
+
+    # ── Widen config_type CHECK constraints to allow 'approval_policy' ──
+    op.execute("ALTER TABLE vertical_config_defaults DROP CONSTRAINT IF EXISTS ck_defaults_config_type")
+    op.execute(
+        f"""
+        ALTER TABLE vertical_config_defaults
+        ADD CONSTRAINT ck_defaults_config_type
+        CHECK (config_type IN ({_DEFAULTS_CONFIG_TYPES}))
+        """,
+    )
+
+    op.execute("ALTER TABLE vertical_config_overrides DROP CONSTRAINT IF EXISTS ck_overrides_config_type")
+    op.execute(
+        f"""
+        ALTER TABLE vertical_config_overrides
+        ADD CONSTRAINT ck_overrides_config_type
+        CHECK (config_type IN ({_OVERRIDES_CONFIG_TYPES}))
+        """,
+    )
+
+    # ── Seed bootstrap-only override ────────────────────────────────
+    bind = op.get_bind()
+    bind.execute(
+        sa.text(
+            """
+            INSERT INTO vertical_config_overrides
+                (id, organization_id, vertical, config_type, config, created_by)
+            VALUES (
+                gen_random_uuid(),
+                :org_id,
+                :vertical,
+                :config_type,
+                :config,
+                'migration:0200_self_approval_bootstrap'
+            )
+            ON CONFLICT (organization_id, vertical, config_type) DO NOTHING
+            """,
+        ),
+        {
+            "org_id": BOOTSTRAP_ORG_ID,
+            "vertical": "wealth",
+            "config_type": "approval_policy",
+            "config": json.dumps(_BOOTSTRAP_APPROVAL_POLICY),
+        },
+    )
+
+
+def downgrade() -> None:
+    # 1. Remove the bootstrap override BEFORE narrowing the CHECK.
+    op.execute(
+        f"""
+        DELETE FROM vertical_config_overrides
+         WHERE organization_id = '{BOOTSTRAP_ORG_ID}'::uuid
+           AND vertical = 'wealth'
+           AND config_type = 'approval_policy'
+        """,
+    )
+
+    # Defensive: in case anyone else added approval_policy rows on the
+    # downgrade path, drop them so the CHECK narrowing succeeds.
+    op.execute(
+        """
+        DELETE FROM vertical_config_overrides WHERE config_type = 'approval_policy';
+        DELETE FROM vertical_config_defaults  WHERE config_type = 'approval_policy';
+        """,
+    )
+
+    # 2. Restore prior config_type CHECK constraints (no 'approval_policy').
+    op.execute("ALTER TABLE vertical_config_defaults DROP CONSTRAINT IF EXISTS ck_defaults_config_type")
+    op.execute(
+        f"""
+        ALTER TABLE vertical_config_defaults
+        ADD CONSTRAINT ck_defaults_config_type
+        CHECK (config_type IN ({_DEFAULTS_CONFIG_TYPES_PRIOR}))
+        """,
+    )
+
+    op.execute("ALTER TABLE vertical_config_overrides DROP CONSTRAINT IF EXISTS ck_overrides_config_type")
+    op.execute(
+        f"""
+        ALTER TABLE vertical_config_overrides
+        ADD CONSTRAINT ck_overrides_config_type
+        CHECK (config_type IN ({_OVERRIDES_CONFIG_TYPES_PRIOR}))
+        """,
+    )
+
+    # 3. Drop any rows under newly-allowed verticals so the narrowed
+    #    vertical CHECK can be re-added without violation.
+    op.execute(
+        f"""
+        DELETE FROM vertical_config_overrides WHERE vertical NOT IN ({_VERTICALS_PRIOR});
+        DELETE FROM vertical_config_defaults  WHERE vertical NOT IN ({_VERTICALS_PRIOR});
+        """,
+    )
+
+    # 4. Restore prior vertical CHECK constraints (0004 baseline).
+    op.execute("ALTER TABLE vertical_config_defaults DROP CONSTRAINT IF EXISTS ck_defaults_vertical")
+    op.execute(
+        f"""
+        ALTER TABLE vertical_config_defaults
+        ADD CONSTRAINT ck_defaults_vertical
+        CHECK (vertical IN ({_VERTICALS_PRIOR}))
+        """,
+    )
+
+    op.execute("ALTER TABLE vertical_config_overrides DROP CONSTRAINT IF EXISTS ck_overrides_vertical")
+    op.execute(
+        f"""
+        ALTER TABLE vertical_config_overrides
+        ADD CONSTRAINT ck_overrides_vertical
+        CHECK (vertical IN ({_VERTICALS_PRIOR}))
+        """,
+    )
