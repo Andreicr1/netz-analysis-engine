@@ -14,29 +14,72 @@
  *   - ``?tab=portfolio`` → forced on the destination so users land
  *     on the builder surface, not the strategic governance tab.
  *
- * Profile resolution from ``?id=``: not performed here. Looking up
- * the portfolio's profile would require an extra authenticated round
- * trip on every redirect, and the new workspace does not yet surface
- * a per-portfolio profile filter. Redirecting to /allocation/moderate
- * is acceptable — users can switch profiles via the ProfileStrip on
- * arrival. Documented in the X3.1 PR body.
+ * PR-UX-2: profile resolution from ``?portfolio_id=<uuid>`` (or the
+ * legacy ``?id=<uuid>``). When a portfolio_id is present, fetch
+ * ``/model-portfolios/{id}`` to resolve the portfolio's profile and
+ * redirect into ``/allocation/{profile}`` instead of always landing
+ * on /allocation/moderate. Falls back to ``/allocation/moderate`` if
+ * the lookup fails (no token, fetch error, missing/invalid profile)
+ * — graceful degrade so a transient API blip never blocks the route.
  */
 import { redirect } from "@sveltejs/kit";
+import { createServerApiClient } from "@investintell/ii-terminal-core/api/client";
+import type { ModelPortfolio } from "@investintell/ii-terminal-core/types/model-portfolio";
 import type { PageServerLoad } from "./$types";
+import {
+	buildBuilderRedirect,
+	extractCanonicalPortfolioId,
+} from "@investintell/ii-terminal-core/utils/builder-redirect";
 
-export const load: PageServerLoad = async ({ url }) => {
-	const dest = new URL("/allocation/moderate", url.origin);
-	dest.searchParams.set("tab", "portfolio");
+const FETCH_TIMEOUT_MS = 4000;
 
-	for (const [key, value] of url.searchParams) {
-		if (key === "id") {
-			// Legacy name on wealth call sites — normalize to portfolio_id
-			// so the new workspace's PortfolioTabContent picks it up.
-			dest.searchParams.set("portfolio_id", value);
-			continue;
-		}
-		dest.searchParams.set(key, value);
+/**
+ * Lookup a portfolio's profile by id. Returns ``null`` on any failure
+ * — caller falls back to ``DEFAULT_PROFILE``.
+ *
+ * ``portfolioId`` MUST already be a UUID validated by
+ * ``extractCanonicalPortfolioId``; ``encodeURIComponent`` is applied
+ * here as defense in depth so any future caller that bypasses the
+ * helper still cannot inject path separators into the API path.
+ */
+async function fetchPortfolioProfile(
+	token: string,
+	portfolioId: string,
+): Promise<string | null> {
+	try {
+		const api = createServerApiClient(token);
+		const portfolio = await api.get<ModelPortfolio>(
+			`/model-portfolios/${encodeURIComponent(portfolioId)}`,
+			undefined,
+			{ signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+		);
+		return portfolio?.profile ?? null;
+	} catch {
+		return null;
+	}
+}
+
+export const load: PageServerLoad = async ({ url, parent }) => {
+	const { token } = await parent();
+
+	// Resolve the canonical id via the same helper buildBuilderRedirect
+	// uses to emit it — guaranteeing lookup and redirect agree even if
+	// the URL contains both ?portfolio_id= and ?id=, or repeated keys.
+	const portfolioId = extractCanonicalPortfolioId(url.searchParams);
+
+	let resolvedProfile: string | null = null;
+	if (portfolioId && token) {
+		resolvedProfile = await fetchPortfolioProfile(token, portfolioId);
 	}
 
-	throw redirect(307, dest.pathname + dest.search);
+	const dest = buildBuilderRedirect(url.searchParams, resolvedProfile);
+	throw redirect(307, dest);
 };
+
+// NOTE: DEFAULT_PROFILE is intentionally NOT re-exported here.
+// SvelteKit +page.server.ts modules accept only a fixed export
+// surface (load, prerender, csr, ssr, trailingSlash, config, entries,
+// actions). Arbitrary re-exports are rejected by the SvelteKit build
+// step. Consumers needing the fallback profile constant must import
+// it directly from
+// "@investintell/ii-terminal-core/utils/builder-redirect".
