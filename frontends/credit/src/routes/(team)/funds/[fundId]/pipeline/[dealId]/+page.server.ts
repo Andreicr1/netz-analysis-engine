@@ -18,7 +18,13 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 
 	if (deal.status === "rejected") {
 		return {
-			deal: {},
+			// Empty fallback intentionally typed as Record<string, unknown>
+			// (not literal {}) so consumers can safely access optional
+			// deal fields without forming a Record<string, unknown> | {}
+			// union — the latter rejects arbitrary property access on the
+			// {} branch and surfaces as "Property X does not exist" in
+			// svelte-check.
+			deal: {} as Record<string, unknown>,
 			stageTimeline: null,
 			icMemo: null,
 			votingStatus: null,
