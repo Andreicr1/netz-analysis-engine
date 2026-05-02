@@ -1,0 +1,123 @@
+# Railway deploy strategy
+#
+# Railway watches this repository directly and auto-deploys the configured
+# services on pushes to the deployment branch. GitLab CI intentionally has no
+# deploy jobs: push pipelines re-run validation only, matching the former
+# GitHub Actions deploy workflow behavior.
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+    - when: never
+
+stages:
+  - test
+
+.backend_rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - backend/**
+        - pyproject.toml
+        - .gitlab-ci.yml
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - backend/**
+        - pyproject.toml
+        - .gitlab-ci.yml
+    - when: never
+
+.frontend_rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - frontends/**
+        - packages/**
+        - pnpm-lock.yaml
+        - .gitlab-ci.yml
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - frontends/**
+        - packages/**
+        - pnpm-lock.yaml
+        - .gitlab-ci.yml
+    - when: never
+
+test-backend:
+  stage: test
+  image: python:3.12-bookworm
+  extends: .backend_rules
+  services:
+    - name: timescale/timescaledb:latest-pg16
+      alias: postgres
+    - name: redis:7
+      alias: redis
+  variables:
+    POSTGRES_USER: netz
+    POSTGRES_PASSWORD: password
+    POSTGRES_DB: netz_engine_test
+    DATABASE_URL: postgresql+asyncpg://netz:password@postgres:5432/netz_engine_test
+    DATABASE_URL_SYNC: postgresql+psycopg://netz:password@postgres:5432/netz_engine_test
+    REDIS_URL: redis://redis:6379/0
+    APP_ENV: development
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  cache:
+    key: "pip-${CI_JOB_IMAGE}"
+    paths:
+      - .cache/pip/
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends postgresql-client redis-tools
+    - python --version
+    - |
+      until pg_isready -h postgres -U netz -d netz_engine_test; do
+        echo "Waiting for postgres..."
+        sleep 2
+      done
+    - |
+      until redis-cli -h redis ping | grep -q PONG; do
+        echo "Waiting for redis..."
+        sleep 2
+      done
+    - PGPASSWORD=password psql -h postgres -U netz -d netz_engine_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
+  script:
+    - pip install -e ".[dev,ai,quant]"
+    - cd backend
+    - python -m alembic upgrade head
+    - python -m ruff check .
+    # Unit + route tests and integration tests run in separate pytest
+    # invocations so SQLAlchemy async pools bind to separate event loops.
+    - python -m pytest tests/ -v --tb=short --ignore=tests/test_macro_committee.py -m "not integration"
+    - python -m pytest tests/ -v --tb=short --ignore=tests/test_macro_committee.py -m "integration"
+
+check-frontends:
+  stage: test
+  image: node:22-bookworm
+  extends: .frontend_rules
+  variables:
+    NODE_OPTIONS: --max-old-space-size=4096
+    PNPM_STORE_PATH: "$CI_PROJECT_DIR/.pnpm-store"
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store/
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.28.1 --activate
+    - pnpm config set store-dir "$PNPM_STORE_PATH"
+    - node --version
+    - pnpm --version
+  script:
+    - pnpm install --frozen-lockfile
+    - pnpm --filter @netz/ui build
+    - pnpm --filter @investintell/ui build
+    - pnpm --filter @investintell/ii-terminal-core build
+    - pnpm --filter "./frontends/*" exec svelte-kit sync
+    - pnpm --filter netz-wealth-os --filter ii-terminal check
+    # GitLab supports allow_failure at job level, not per command. Keep only
+    # the credit type-check non-blocking until issue #277 is resolved.
+    - pnpm --filter netz-credit-intelligence check || true
+    - pnpm --filter "./frontends/*" build
