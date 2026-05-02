@@ -27,10 +27,11 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import JSONResponse
 
+from app.core.db.audit import write_audit_event
 from app.core.db.engine import async_session_factory
 from app.core.jobs.tracker import (
     clear_cancellation_flag,
@@ -45,6 +46,9 @@ from app.core.runtime.gates import get_idempotency_storage
 from app.core.runtime.idempotency import idempotent
 from app.core.runtime.single_flight import SingleFlightLock
 from app.core.security.clerk_auth import Actor, get_actor, require_ic_member
+from app.domains.wealth.models.allocation import AllocationApproval
+from app.domains.wealth.models.model_portfolio import ModelPortfolio
+from app.domains.wealth.routes._profile_normalizer import normalize_profile_param
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["portfolios"])
@@ -311,6 +315,7 @@ async def _build_portfolio_worker(
 @router.post(
     "/portfolios/{id}/build",
     summary="Trigger institutional portfolio construction",
+    status_code=status.HTTP_202_ACCEPTED,
 )
 @idempotent(
     key=_build_idempotency_key,
@@ -343,6 +348,13 @@ async def build_portfolio(
     requested_by = actor.actor_id or "unknown"
     job_id = str(uuid.uuid4())
 
+    await _assert_ips_approved_for_build(
+        portfolio_id=portfolio_uuid,
+        org_id=org_uuid,
+        actor=actor,
+        request=request,
+    )
+
     await register_job_owner(job_id, str(org_uuid))
 
     # B.8 — long-running worker must outlive the request. ``BackgroundTasks``
@@ -369,6 +381,88 @@ async def build_portfolio(
         "stream_url": f"/api/v1/jobs/{job_id}/stream",
         "status": "accepted",
     }
+
+
+def _actor_role_values(actor: Actor) -> list[str]:
+    return [str(getattr(role, "value", role)) for role in actor.roles]
+
+
+def _ips_not_approved_payload(profile: str) -> dict[str, str]:
+    return {
+        "error": "ips_not_approved",
+        "message": (
+            f"No approved Strategic IPS exists for profile '{profile}'. "
+            "Approve a proposal in the Strategic stage before constructing "
+            "this portfolio."
+        ),
+        "remediation_path": f"/api/v1/allocation/{profile}/approve-proposal",
+    }
+
+
+async def _assert_ips_approved_for_build(
+    *,
+    portfolio_id: uuid.UUID,
+    org_id: uuid.UUID,
+    actor: Actor,
+    request: Request,
+) -> None:
+    """Pre-kickoff Strategic IPS approval gate for ``POST /build``.
+
+    The executor keeps its own approval check as defense in depth; this
+    route-level gate stops the expensive worker before it can be queued and
+    writes a tenant-scoped audit event for the operator-visible denial.
+    """
+    async with async_session_factory() as session:
+        await _set_rls_org(session, org_id)
+
+        portfolio_result = await session.execute(
+            select(ModelPortfolio).where(
+                ModelPortfolio.id == portfolio_id,
+                ModelPortfolio.organization_id == org_id,
+            ),
+        )
+        portfolio = portfolio_result.scalar_one_or_none()
+        if portfolio is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="portfolio not found",
+            )
+
+        profile = normalize_profile_param(portfolio.profile)
+        approval_result = await session.execute(
+            select(AllocationApproval.id)
+            .where(
+                AllocationApproval.organization_id == org_id,
+                AllocationApproval.profile == profile,
+                AllocationApproval.superseded_at.is_(None),
+            )
+            .limit(1),
+        )
+        if approval_result.scalar_one_or_none() is not None:
+            return
+
+        payload = _ips_not_approved_payload(profile)
+        await write_audit_event(
+            session,
+            action="portfolio_build_ips_gate_blocked",
+            entity_type="ModelPortfolio",
+            entity_id=str(portfolio_id),
+            actor_id=actor.actor_id,
+            actor_roles=_actor_role_values(actor),
+            organization_id=org_id,
+            request_id=request.headers.get("X-Request-ID"),
+            after={
+                "portfolio_id": str(portfolio_id),
+                "profile": profile,
+                "error": payload["error"],
+                "remediation_path": payload["remediation_path"],
+            },
+        )
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=payload,
+        )
 
 
 def _accepted_response(payload: dict[str, Any]) -> JSONResponse:

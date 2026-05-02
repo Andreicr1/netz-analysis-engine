@@ -79,6 +79,21 @@ def patch_register_job_owner():
         yield
 
 
+@pytest.fixture(autouse=True)
+def patch_ips_gate_to_noop():
+    """Keep legacy SSE route-shape tests focused on job dispatch mechanics."""
+
+    async def _noop(**_kwargs: Any) -> None:
+        return None
+
+    p = patch(
+        "app.domains.wealth.routes.portfolios.builder._assert_ips_approved_for_build",
+        new=_noop,
+    )
+    with p:
+        yield
+
+
 @pytest.fixture
 def reset_idempotency_storage():
     """Swap the @idempotent decorator's storage methods for in-memory.
