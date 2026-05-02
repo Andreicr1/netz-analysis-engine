@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -179,9 +179,19 @@ async def get_decision_audit(
 ) -> DecisionAuditOut:
     await _get_deal_or_404(db, fund_id, deal_id)
 
+    # PR-BE-3 — explicit ``organization_id`` filter on audit_events.
+    # The table has RLS DISABLED (TimescaleDB columnstore incompatible),
+    # so the institutional pattern is helper-write + WHERE-filter-read.
+    # CLAUDE.md §audit_events.
+    if actor.organization_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Organization required",
+        )
     result = await db.execute(
         select(AuditEvent)
         .where(
+            AuditEvent.organization_id == actor.organization_id,
             AuditEvent.entity_type == "Deal",
             AuditEvent.entity_id == str(deal_id),
             AuditEvent.fund_id == fund_id,
