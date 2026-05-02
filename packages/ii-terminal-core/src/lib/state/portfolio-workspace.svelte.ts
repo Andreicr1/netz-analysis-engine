@@ -1474,6 +1474,18 @@ export class PortfolioWorkspaceState {
 	 *
 	 * Caller is responsible for navigating to the new portfolio —
 	 * this method only persists and returns the new row.
+	 *
+	 * Throwing contract (PR-UX-4 Codex P2):
+	 *   This method REthrows the underlying api-client error after
+	 *   capturing it on ``lastError`` for telemetry. The previous
+	 *   swallow-and-return-null pattern bypassed
+	 *   ``NewPortfolioDialog``'s 409 inline-error path entirely —
+	 *   ``ConflictError`` was caught here and the dialog only saw
+	 *   ``null``, so duplicate-name backend payloads were lost.
+	 *
+	 *   Returns ``null`` ONLY when no token is configured (the
+	 *   pre-Clerk guard); every other failure path now bubbles to the
+	 *   caller. Callers MUST wrap this in ``try { ... } catch``.
 	 */
 	async createPortfolio(payload: Record<string, unknown>): Promise<ModelPortfolio | null> {
 		if (!this._getToken) return null;
@@ -1491,7 +1503,7 @@ export class PortfolioWorkspaceState {
 				message: err instanceof Error ? err.message : "Failed to create portfolio",
 				timestamp: Date.now(),
 			};
-			return null;
+			throw err;
 		}
 	}
 

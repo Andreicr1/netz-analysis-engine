@@ -95,7 +95,6 @@
 	const MANDATE_OPTIONS = [
 		{ value: "conservative", label: "Conservative" },
 		{ value: "moderate", label: "Moderate" },
-		{ value: "balanced", label: "Balanced" },
 		{ value: "growth", label: "Dynamic Growth" },
 	] as const;
 

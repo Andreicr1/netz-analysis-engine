@@ -133,7 +133,7 @@ export const ALLOCATION_PROFILES: readonly AllocationProfile[] = [
 export const PROFILE_LABELS: Record<AllocationProfile, string> = {
 	conservative: "Conservative",
 	moderate: "Moderate",
-	growth: "Growth",
+	growth: "Dynamic Growth",
 };
 
 /** Block family grouping — drives donut/chart color buckets. */
